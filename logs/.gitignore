@@ -1,0 +1,3 @@
+# ignore everything in this dir other than the ignore file (So the dir is created)
+*
+!.gitignore
