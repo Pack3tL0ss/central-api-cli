@@ -4,4 +4,4 @@ The aim is to support a lot of the common work-flows via command line options / 
 
 Currently a Work in Progress, and only works with Central
 
-Addl documentation coming soon
+Addl documentation coming soon.
