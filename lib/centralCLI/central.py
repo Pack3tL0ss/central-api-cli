@@ -25,6 +25,7 @@ import requests
 import yaml
 import pprint
 import os
+import json
 from typing import Union
 import urllib.parse
 import csv
@@ -268,8 +269,30 @@ class CentralApi:
     def get_variablised_template(self, serialnum):
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
         header = {"authorization": f"Bearer {self.access_token}"}
-        resp = resp = requests.get(self.vars["base_url"] + url, headers=header)
-        print(resp.text)
+        resp = requests.get(self.vars["base_url"] + url, headers=header)
+        return(resp.text.split('\n'))
+
+    def get_variables(self, serialnum: str = None):
+        if serialnum:
+            url = f"/configuration/v1/devices/{serialnum}/template_variables"
+            params = {}
+        else:
+            url = "/configuration/v1/devices/template_variables"
+            params = {"limit": 20, "offset": 0}
+            # TODO generator for returns > 20 devices
+        header = {"authorization": f"Bearer {self.access_token}"}
+        resp = requests.get(self.vars["base_url"] + url, params=params, headers=header)
+        return(resp.json())
+
+    def update_variables(self, serialnum: str, var_dict: dict):
+        url = f"/configuration/v1/devices/{serialnum}/template_variables"
+        header = {
+                    "authorization": f"Bearer {self.access_token}",
+                    "Content-type": "application/json"
+                 }
+        var_dict = json.dumps(var_dict)
+        resp = requests.patch(self.vars["base_url"] + url, data=var_dict, headers=header)
+        return(resp.ok)
 
     def get_ssids_by_group(self, group):
         url = f"/monitoring/v1/networks?group={group}"
