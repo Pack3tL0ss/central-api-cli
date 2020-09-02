@@ -1,17 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from typing import Any
 from .utils import Utils
 utils = Utils()
 
-from .central import CentralApi  # NoQA
-from .central import BuildCLI  # NoQA
+# from .central import CentralApi  # NoQA
+# from .central import BuildCLI  # NoQA
 
 # import logging  # NoQA
 
 # LOGFILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs", 'centralcli.log'))
 # DEBUG = os.getenv('DEBUG', False)
 
+
+class Response:
+    '''Decorator class for requests.response object
+
+    Assigns commonly evaluated attributes regardless of success
+    Otherwise resp.ok will always be assigned and will be True or False
+    '''
+    # def __init__(self, function) -> Any:
+    #     self.function = function
+
+    def __init__(self, function, *args: Any, **kwargs: Any) -> Any:
+        try:
+            resp = function(*args, **kwargs)
+            self.ok = resp.ok
+            try:
+                self.output = resp.json()
+            except Exception:
+                self.output = resp.text
+            self.error = resp.reason
+            self.status_code = resp.status_code
+            # self.json = resp.json
+            # self.response = resp
+        except Exception as e:
+            self.ok = False
+            self.output = None
+            self.error = f"Exception occured {e.__class__}\n\t{e}"
+            self.status_code = 418
+            # self.json = None
+            # self.response = None
 
 # class Response():
 #     def __init__(self, ok: bool, output=None, error=None, status_code=None, state=None, do_json=False,  **kwargs):

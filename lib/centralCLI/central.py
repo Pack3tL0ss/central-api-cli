@@ -29,6 +29,7 @@ import json
 from typing import Union
 import urllib.parse
 import csv
+from . import Response
 
 try:
     from . import utils
@@ -42,7 +43,7 @@ _config_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 _bulk_edit_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", 'bulkedit.csv'))
 
 
-class CentralApi:
+class CentralApiAuth:
 
     def __init__(self, vars: Union[dict, None] = None):
         if utils.valid_file(_refresh_file):
@@ -57,6 +58,7 @@ class CentralApi:
             self.auth_code = self.authorize()
 
         self.access_token = self.tokens()
+        self.headers = {"authorization": f"Bearer {self.access_token}"}
 
     def login(self):
         """Build and post login call
@@ -160,7 +162,7 @@ class CentralApi:
         with open(_refresh_file, "w") as write_file:
             yaml.dump(data, write_file)
 
-    def get_call(self, url, header, params=None):
+    def get(self, url, params: dict = None, headers: dict = None):
         """Generic GET call
 
         :param vars: Imported variables
@@ -172,8 +174,18 @@ class CentralApi:
         :return: GET call response JSON
         :rtype: Python dict
         """
-        r = requests.get(self.vars["base_url"] + url, headers=header, params=params)
-        return r.json()
+        if headers is None:
+            headers = self.headers
+        f_url = self.vars["base_url"] + url
+        return Response(requests.get, f_url, params=params, headers=headers)
+
+
+class CentralApi:
+    def __init__(self, central: CentralApiAuth = CentralApiAuth()):
+        # if not central:
+        #     self.central =
+        # else:
+        self.central = central
 
     def get_ap(self):
         """GET call for AP data
@@ -182,22 +194,16 @@ class CentralApi:
         :type access_token: String
         """
         url = "/monitoring/v1/aps"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        return resp
+        return self.central.get(url)
 
     def get_swarms_by_group(self, group: str):
         url = "/monitoring/v1/swarms"
         params = {"group": group}
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header, params=params)
-        pprint.pprint(resp)
+        return self.central.get(url, params=params)
 
     def get_swarm_details(self, swarm_id: str):
         url = f"/monitoring/v1/swarms/{swarm_id}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(url)
 
     def get_wlan_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
                          serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> None:
@@ -209,9 +215,7 @@ class CentralApi:
                 params[k] = v
 
         url = "/monitoring/v1/clients/wireless"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header, params=params)
-        pprint.pprint(resp)
+        return self.central.get(url, params=params)
 
     def get_wired_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
                           serial: str = None, cluster_id: str = None, stack_id: str = None) -> None:
@@ -223,54 +227,51 @@ class CentralApi:
                 params[k] = v
 
         url = "/monitoring/v1/clients/wired"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header, params=params)
-        pprint.pprint(resp)
+        return self.central.get(url, params=params)
 
     def get_client_details(self, mac: str):
         url = f"/monitoring/v1/clients/wired/{urllib.parse.quote(mac)}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(url)
 
     def get_certificates(self):
-        url = "/configuration/v1/certificates?limit=20&offset=0"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        url = "/configuration/v1/certificates"
+        params = {"limit": 20, "offset": 0}
+        return self.central.get(url, params=params)
 
     def get_template(self, group, template):
         url = f"/configuration/v1/groups/{group}/templates/{template}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = requests.get(self.vars["base_url"] + url, headers=header)
-        print(resp.text)
+        # header = {"authorization": f"Bearer {self.access_token}"}
+        # resp = requests.get(self.auth.vars["base_url"] + url)
+        # print(resp.text)
+        return self.central.get(url)
 
     def get_all_groups(self):  # DONE
         url = "/configuration/v2/groups?limit=20&offset=0"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        return resp
+        params = {"limit": 20, "offset": 0}
+        # header = {"authorization": f"Bearer {self.access_token}"}
+        return self.central.get(url, params=params)
+        # return resp
 
     def get_sku_types(self):
-        url = "/platform/orders/v1/skus?sku_type=all"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        url = "/platform/orders/v1/skus"
+        params = {"sku_type": "all"}
+        return self.central.get(url, params=params)
 
     def get_dev_by_type(self, dev_type):
         url = "/platform/device_inventory/v1/devices"
         if dev_type.lower() in ["aps", "ap"]:
             dev_type = "iap"
         params = {"sku_type": dev_type}
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header, params)
-        return resp if "devices" not in resp else resp["devices"]
+        # header = {"authorization": f"Bearer {self.auth.access_token}"}
+        return self.central.get(url, params=params)
+        # resp = self.get_call(url, params)
+        # return resp if "devices" not in resp else resp["devices"]
 
     def get_variablised_template(self, serialnum):
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = requests.get(self.vars["base_url"] + url, headers=header)
-        return(resp.text.split('\n'))
+        # header = {"authorization": f"Bearer {self.access_token}"}
+        return self.central.get(url)
+        # return(resp.text.split('\n'))
 
     def get_variables(self, serialnum: str = None):
         if serialnum:
@@ -280,62 +281,52 @@ class CentralApi:
             url = "/configuration/v1/devices/template_variables"
             params = {"limit": 20, "offset": 0}
             # TODO generator for returns > 20 devices
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = requests.get(self.vars["base_url"] + url, params=params, headers=header)
-        return(resp.json())
+        return self.central.get(url, params=params)
+        # resp = requests.get(self.vars["base_url"] + url, params=params, headers=header)
+        # return(resp.json())
 
+    # TODO self.central.patch
     def update_variables(self, serialnum: str, var_dict: dict):
         url = f"/configuration/v1/devices/{serialnum}/template_variables"
         header = {
-                    "authorization": f"Bearer {self.access_token}",
+                    "authorization": f"Bearer {self.central.access_token}",
                     "Content-type": "application/json"
                  }
         var_dict = json.dumps(var_dict)
-        resp = requests.patch(self.vars["base_url"] + url, data=var_dict, headers=header)
+        resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
         return(resp.ok)
 
     def get_ssids_by_group(self, group):
-        url = f"/monitoring/v1/networks?group={group}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        url = "/monitoring/v1/networks"
+        params = {"group": group}
+        return self.central.get(url, params=params)
 
     def get_gateways_by_group(self, group):
-        url = f"/monitoring/v1/mobility_controllers?group={group}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        return resp if 'mcs' not in resp else resp['mcs']
+        url = "/monitoring/v1/mobility_controllers"
+        params = {"group": group}
+        return self.get.central.get(url, params=params)
+        # return resp if 'mcs' not in resp else resp['mcs']
 
     def get_group_for_dev_by_serial(self, serial_num):
-        url = f"/configuration/v1/devices/{serial_num}/group"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        return resp if "group" not in resp else resp["group"]
+        return self.central.get(f"/configuration/v1/devices/{serial_num}/group")
+        # return resp if "group" not in resp else resp["group"]
 
     def get_dhcp_client_info_by_gw(self, serial_num):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients?reservation=false"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
+        params = {"reservation": False}
+        return self.central.get(url, params)
 
     def get_vlan_info_by_gw(self, serial_num):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/vlan"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
 
-    def get_uplink_info_by_gw(self, serial_num):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks?timerange=3H"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        print(' -- 3H interval --')
-        pprint.pprint(resp)
+    def get_uplink_info_by_gw(self, serial_num, timerange: str = "3H"):
+        url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks"
+        params = {"timerange": timerange}
+        return self.central.get(url, params)
 
     def get_uplink_tunnel_stats_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks/tunnel_stats"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(url)
 
     def get_uplink_state_by_group(self, group):
         url = f"/monitoring/v1/mobility_controllers/uplinks/distribution?group={group}"
@@ -344,22 +335,15 @@ class CentralApi:
         pprint.pprint(resp)
 
     def get_all_sites(self):
-        url = "/central/v2/sites"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get("/central/v2/sites")
 
     def get_site_details(self, site_id: Union[str, int]):
-        url = f"/central/v2/sites/{site_id}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(f"/central/v2/sites/{site_id}")
 
     def get_events_by_group(self, group):
         url = f"/monitoring/v1/events?group={group}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        params = {"group": group}
+        return self.central.get(url, params=params)
 
     def bounce_poe(self, serial_num, port):
         # url = f"/device_management/v2/device/{serial_num}/action/bounce_poe_port"
@@ -371,7 +355,7 @@ class CentralApi:
         # resp = requests.post(self.vars["base_url"] + url, json=payload, headers=header)
         url = f"/device_management/v1/device/{serial_num}/action/bounce_poe_port/port/{port}"
         header = {"authorization": f"Bearer {self.access_token}"}
-        resp = requests.post(self.vars["base_url"] + url, headers=header)
+        resp = requests.post(self.central.vars["base_url"] + url, headers=header)
         pprint.pprint(resp.json())
 
     def kick_users(self, serial_num, kick_all=False, mac=None, ssid=None):
@@ -390,16 +374,13 @@ class CentralApi:
             payload = {}
 
         if payload:
-            resp = requests.post(self.vars["base_url"] + url, headers=header, json=payload)
+            resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
             pprint.pprint(resp.json())
         else:
             print("Missing Required Parameters")
 
     def get_task_status(self, task_id):
-        url = f"/device_management/v1/status/{task_id}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = self.get_call(url, header)
-        pprint.pprint(resp)
+        return self.central.get(f"/device_management/v1/status/{task_id}")
 
     def add_dev(self, mac: str, serial_num: str):
         """
@@ -420,11 +401,11 @@ class CentralApi:
                 }
             ]
         header = {
-            "authorization": f"Bearer {self.access_token}",
+            "authorization": f"Bearer {self.central.access_token}",
             "Content-type": "application/json"
         }
 
-        resp = requests.post(self.vars["base_url"] + url, headers=header, json=payload)
+        resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         pprint.pprint(resp.json())
 
     def verify_add_dev(self, mac: str, serial_num: str):
@@ -449,11 +430,11 @@ class CentralApi:
                 }
             ]
         header = {
-            "authorization": f"Bearer {self.access_token}",
+            "authorization": f"Bearer {self.central.access_token}",
             "Content-type": "application/json"
         }
 
-        resp = requests.post(self.vars["base_url"] + url, headers=header, json=payload)
+        resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         pprint.pprint(resp.json())
 
     def move_dev_to_group(self, group: str, serial_num: Union[str, list]):
@@ -465,11 +446,11 @@ class CentralApi:
                     "serials": serial_num
                   }
         header = {
-            "authorization": f"Bearer {self.access_token}",
+            "authorization": f"Bearer {self.central.access_token}",
             "Content-type": "application/json"
         }
 
-        resp = requests.post(self.vars["base_url"] + url, headers=header, json=payload)
+        resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         return resp.ok
 
     def caasapi(self, group_dev: str, cli_cmds: list = None):
@@ -481,18 +462,18 @@ class CentralApi:
         url = "/caasapi/v1/exec/cmd"
 
         params = {
-            "cid": self.vars.get('customer_id'),
+            "cid": self.central.vars.get('customer_id'),
             key: group_dev
         }
 
         header = {
-            "authorization": f"Bearer {self.access_token}",
+            "authorization": f"Bearer {self.central.access_token}",
             "Content-type": "application/json"
         }
 
         payload = {"cli_cmds": cli_cmds or []}
 
-        return requests.post(self.vars["base_url"] + url, params=params, headers=header, json=payload)
+        return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
         # TODO use my resp generator
 
 

@@ -9,12 +9,14 @@ from enum import Enum
 
 import typer
 # from typer.params import Argument
-from lib.centralCLI import CentralApi, BuildCLI, utils
+from lib.centralCLI.central import CentralApi, BuildCLI, utils
 import os
 
 _config_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config")
 _def_import_file = os.path.join(_config_dir, "stored-tasks.yaml")
-
+SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
+SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
+SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 # import click_spinner  # NoQA
 
 
@@ -65,7 +67,7 @@ except Exception:
 app = typer.Typer()
 
 
-class ShowLevel2(str, Enum):
+class ShowLevel1(str, Enum):
     devices = "devices"
     # devices = "dev"
     switch = "switch"
@@ -83,6 +85,15 @@ class TemplateLevel1(str, Enum):
     update = "update"
     delete = "delete"
     add = "add"
+
+
+def eval_resp(resp):
+    if not resp.ok:
+        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
+                   )
+    else:
+        return resp.output
 
 
 def caas_response(resp):
@@ -124,38 +135,6 @@ def caas_response(resp):
         print()
 
 
-# def _pretty(content: Union[str, list]):
-#     '''A Convenience Function for Colorizing and echoing Text
-
-#     Place text to be colorized in the text str as {{RED:This text will display as red}}
-#     i.e.: "An {{RED:ERROR}} occured"  or "An {{RED:BOLD:ERROR}} occured"
-#     With f strings: f"This is a {{RED:BOLD:{var}}} test."
-
-#     Args:
-#         content (str|list): Text to be colorized (or list of strings)
-#     '''
-#     if content.count("{") != content.count("}"):
-#         typer.echo(f"malformed str passed to _pretty function\n\t{content}")
-#     else:
-#         _this = content
-#         r_list = []
-#         while True:
-#             r_list.append(_this.split("{")[-1].split("}")[0])
-
-# rep = []
-# idx = 0
-# start = 1
-# while start > 0:
-#   start = x.find('{', idx) + 1
-#   end = x.find('}', start)
-#   idx = end + 1
-#   print(idx, start, end)
-#   if end > 0 and start > 0:
-#     rep.append((f"{{{x[start:end]}}}"))
-
-    # _msg = typer.style(f"{key} not found in {import_file}.  No Data to Process", fg=typer.colors.RED, bold=True)
-    # typer.echo(_msg)
-
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
     session = CentralApi()
@@ -169,10 +148,8 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 @app.command()
-def show(what: ShowLevel2 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None):
-    _data = None
-    _spin_txt = "Establishing Session with Aruba Central API Gateway..."
-    session = utils.spinner(_spin_txt, CentralApi)
+def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None):
+    session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
     if not dev_type:
         if what.startswith("gateway"):
@@ -184,54 +161,75 @@ def show(what: ShowLevel2 = typer.Argument(...), dev_type: str = typer.Argument(
         elif what.lower() == "switch":
             what, dev_type = "devices", "switch"
 
+    # -- // Peform GET Call \\ --
+    resp = None
     if what == "devices":
         if dev_type:
             dev_type = "gateway" if dev_type == "gateways" else dev_type
             if not group:
-                _data = session.get_dev_by_type(dev_type)
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, dev_type)
             else:
-                _data = session.get_gateways_by_group(group)
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
 
     elif what == "groups":
-        _data = session.get_all_groups()
+        resp = session.get_all_groups()
 
     elif what == "template":
         if dev_type:
             if group:
                 # dev_type is template name in this case
-                _data = session.get_template(group, dev_type)
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, dev_type)
             else:
                 # dev_type is device serial num in this case
-                _data = session.get_variablised_template(dev_type)
+                resp = session.get_variablised_template(dev_type)
 
     # if dev_type provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
-        _data = session.get_variables(dev_type)
+        resp = session.get_variables(dev_type)
 
-    # print(_data)
-    if _data:
+    data = None if not resp else eval_resp(resp)
+
+    if data:
         typer.echo("\n--")
-        if isinstance(_data, dict):
-            _data = _data.get("data", _data)
+        # Strip needless inconsistent json key from dict if present
+        if isinstance(data, dict):
+            data = data.get("data", data)
 
-        for _ in _data:
-            if isinstance(_, list) and len(_) == 1:
-                typer.echo(_[0])
+        if isinstance(data, dict):
+            data = data.get("devices", data)
 
-            elif isinstance(_, dict):
-                typer.echo("--")
-                # _c_id, _c_name = None, None
-                # if not cust_echo and k in ["customer_id", "customer_name"]:
-                for k, v in _.items():
-                    typer.echo(f"{k}: {v}")
-            elif isinstance(_, str):
-                if isinstance(_data, dict) and _data.get(_):
-                    _key = typer.style(_, fg=typer.colors.CYAN)
-                    typer.echo(f"{_key}:")
-                    for k, v in sorted(_data[_].items()):
-                        typer.echo(f"    {k}: {v}")
-                else:
-                    typer.echo(_)
+        if isinstance(data, dict):
+            data = data.get("mcs", data)
+
+        if isinstance(data, dict):
+            data = data.get("group", data)
+
+        if isinstance(data, str):
+            typer.echo_via_pager(data)
+        else:
+            _global_displayed = False
+            for _ in data:
+                if isinstance(_, list) and len(_) == 1:
+                    typer.echo(_[0])
+
+                elif isinstance(_, dict):
+                    if not _global_displayed and _.get("customer_id"):
+                        typer.echo(f"customer_id: {_['customer_id']}")
+                        typer.echo(f"customer_name: {_['customer_name']}")
+                        _global_displayed = True
+                    typer.echo("--")
+                    for k, v in _.items():
+                        # strip needless return keys from displayed output
+                        if k not in ["customer_id", "customer_name"]:
+                            typer.echo(f"{k}: {v}")
+                elif isinstance(_, str):
+                    if isinstance(data, dict) and data.get(_):
+                        _key = typer.style(_, fg=typer.colors.CYAN)
+                        typer.echo(f"{_key}:")
+                        for k, v in sorted(data[_].items()):
+                            typer.echo(f"    {k}: {v}")
+                    else:
+                        typer.echo(_)
 
         typer.echo("--\n")
 
@@ -247,8 +245,7 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
     if operation == "update":
         if what == "variable":
             if variable and value and device:
-                _spin_txt = "Establishing Session with Aruba Central API Gateway..."
-                ses = utils.spinner(_spin_txt, CentralApi)
+                ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
                 payload = {"variables": {variable: value}}
                 _resp = ses.update_variables(device, payload)
                 if _resp:
@@ -329,13 +326,10 @@ def batch(import_file: str = typer.Argument(_def_import_file),
         elif cmds:
             # if "!" not in cmds:
             #     cmds = '^!^'.join(cmds).split("^")
-            _spin_txt = "Establishing Session with Aruba Central API Gateway..."
             # with click_spinner.spinner():
-            ses = utils.spinner(_spin_txt, CentralApi)
+            ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
-
-            _spin_txt = "Sending Commands to Aruba Central API Gateway..."
-            resp = utils.spinner(_spin_txt, ses.caasapi, *args, **kwargs)
+            resp = utils.spinner(SPIN_TXT_CMDS, ses.caasapi, *args, **kwargs)
             caas_response(resp)
 
 
