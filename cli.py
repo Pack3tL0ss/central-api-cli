@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 from enum import Enum
+# from sys import argv
 # from pprint import pprint
 # from typing import Union
 # from pathlib import Path
 # from requests.sessions import session
 
 import typer
+# from typer.params import Argument
 from lib.centralCLI import CentralApi, BuildCLI, utils
 import os
 
@@ -34,7 +36,15 @@ try:
         if " " in sys.argv[1] or not sys.argv[1]:
             vsc_args = sys.argv.pop(1)
             if vsc_args:
-                sys.argv += vsc_args.split()
+                if "\\'" in vsc_args:
+                    _loc = vsc_args.find("\\'")
+                    _before = vsc_args[:_loc - 1]
+                    _str_end = vsc_args.find("\\'", _loc + 1)
+                    sys.argv += _before.split()
+                    sys.argv += [f"{vsc_args[_loc + 2:_str_end]}"]
+                    sys.argv += vsc_args[_str_end + 2:].split()
+                else:
+                    sys.argv += vsc_args.split()
 
     if len(sys.argv) > 2:
         _import_file, _import_key = None, None
@@ -65,6 +75,14 @@ class ShowLevel2(str, Enum):
     aps = "ap"
     gateway = "gateway"
     # gateways = "gateways"
+    template = "template"
+    variables = "variables"
+
+
+class TemplateLevel1(str, Enum):
+    update = "update"
+    delete = "delete"
+    add = "add"
 
 
 def caas_response(resp):
@@ -124,6 +142,17 @@ def caas_response(resp):
 #         while True:
 #             r_list.append(_this.split("{")[-1].split("}")[0])
 
+# rep = []
+# idx = 0
+# start = 1
+# while start > 0:
+#   start = x.find('{', idx) + 1
+#   end = x.find('}', start)
+#   idx = end + 1
+#   print(idx, start, end)
+#   if end > 0 and start > 0:
+#     rep.append((f"{{{x[start:end]}}}"))
+
     # _msg = typer.style(f"{key} not found in {import_file}.  No Data to Process", fg=typer.colors.RED, bold=True)
     # typer.echo(_msg)
 
@@ -144,8 +173,6 @@ def show(what: ShowLevel2 = typer.Argument(...), dev_type: str = typer.Argument(
     _data = None
     _spin_txt = "Establishing Session with Aruba Central API Gateway..."
     session = utils.spinner(_spin_txt, CentralApi)
-    # with click_spinner.spinner():
-    #     session = CentralApi()
 
     if not dev_type:
         if what.startswith("gateway"):
@@ -168,6 +195,19 @@ def show(what: ShowLevel2 = typer.Argument(...), dev_type: str = typer.Argument(
     elif what == "groups":
         _data = session.get_all_groups()
 
+    elif what == "template":
+        if dev_type:
+            if group:
+                # dev_type is template name in this case
+                _data = session.get_template(group, dev_type)
+            else:
+                # dev_type is device serial num in this case
+                _data = session.get_variablised_template(dev_type)
+
+    # if dev_type provided (serial_num) gets vars for that dev otherwise gets vars for all devs
+    elif what == "variables":
+        _data = session.get_variables(dev_type)
+
     # print(_data)
     if _data:
         typer.echo("\n--")
@@ -184,10 +224,37 @@ def show(what: ShowLevel2 = typer.Argument(...), dev_type: str = typer.Argument(
                 # if not cust_echo and k in ["customer_id", "customer_name"]:
                 for k, v in _.items():
                     typer.echo(f"{k}: {v}")
-            else:
-                typer.echo(_)
+            elif isinstance(_, str):
+                if isinstance(_data, dict) and _data.get(_):
+                    _key = typer.style(_, fg=typer.colors.CYAN)
+                    typer.echo(f"{_key}:")
+                    for k, v in sorted(_data[_].items()):
+                        typer.echo(f"    {k}: {v}")
+                else:
+                    typer.echo(_)
 
         typer.echo("--\n")
+
+
+@app.command()
+def template(operation: TemplateLevel1 = typer.Argument(...),
+             what: str = typer.Argument(...),
+             device: str = typer.Argument(None),
+             variable: str = typer.Argument(None),
+             value: str = typer.Argument(None)
+             ):
+
+    if operation == "update":
+        if what == "variable":
+            if variable and value and device:
+                _spin_txt = "Establishing Session with Aruba Central API Gateway..."
+                ses = utils.spinner(_spin_txt, CentralApi)
+                payload = {"variables": {variable: value}}
+                _resp = ses.update_variables(device, payload)
+                if _resp:
+                    typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
+                else:
+                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)}")
 
 
 @app.command()
