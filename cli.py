@@ -354,7 +354,8 @@ def _refresh_tokens():
     # access token in config is overriden stored in tok file in config dir
     session = CentralApi()
     central = session.central
-    central.token_store["path"] = _config_dir
+    # Commented out as I have no idea what it was doing. Maybe from a previous auth process? -mrose
+    # central.token_store["path"] = _config_dir
     token = central.loadToken()
     if token:
         # refresh token on every launch
