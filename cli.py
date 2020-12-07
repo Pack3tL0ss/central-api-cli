@@ -9,15 +9,23 @@ from enum import Enum
 
 import typer
 # from typer.params import Argument
+# from lib.centralCLI.central import CentralApi, BuildCLI, utils
+# from lib.centralCLI import utils
 from lib.centralCLI.central import CentralApi, BuildCLI, utils
+
+# from pycentral.workflows.workflows_utils import get_conn_from_file
+from pathlib import Path
 import os
 
-_config_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config")
-_def_import_file = os.path.join(_config_dir, "stored-tasks.yaml")
+_config_dir = Path.joinpath(Path(__file__).parent, "config")
+# _config_file = _config_dir.joinpath("config.yaml")
+_def_import_file = _config_dir.joinpath("stored-tasks.yaml")
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 # import click_spinner  # NoQA
+
+# central = get_conn_from_file(filename=_config_file)
 
 
 # -- break up arguments passed as single string from vscode promptString --
@@ -79,6 +87,7 @@ class ShowLevel1(str, Enum):
     # gateways = "gateways"
     template = "template"
     variables = "variables"
+    certs = "certs"
 
 
 class TemplateLevel1(str, Enum):
@@ -137,7 +146,7 @@ def caas_response(resp):
 
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    session = CentralApi()
+    # session = CentralApi()
     cli = BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
@@ -149,7 +158,7 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 @app.command()
 def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None):
-    session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+    # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
     if not dev_type:
         if what.startswith("gateway"):
@@ -186,6 +195,9 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     # if dev_type provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
         resp = session.get_variables(dev_type)
+
+    elif what == "certs":
+        resp = session.get_certificates()
 
     data = None if not resp else eval_resp(resp)
 
@@ -271,7 +283,7 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
             cmds += [f"priority {vrrp_pri}"]
         cmds += ["no shutdown", "!"]
 
-    session = CentralApi()
+    # session = CentralApi()
     # TODO move command gen to BuildCLI
     caas_response(session.caasapi(group_dev, cmds))
     # for c in cmds:
@@ -334,27 +346,29 @@ def batch(import_file: str = typer.Argument(_def_import_file),
 
 
 @app.command()
-def test():
-    # var = "XYZ"
+def refresh_tokens():
     pass
-    # _pretty(f"This is a {{RED:BOLD:{var}}} test.")
-    # group_dev = "20:4C:03:26:28:4c"
-    # mac = "20:4C:03:26:28:4c"
-    # serial = "CNF7JSP0N0"
-    # # show = "committed"
-    # # cmds = ["vlan 123"]
-    # ses = CentralApi()
-    # # resp = ses.caasapi(group_dev, cmds)
-    # # resp = ses.verify_add_dev(mac, serial)
-    # resp = ses.add_dev(mac, serial)
 
-    # pprint(resp)
 
-    # TODO move command gen to BuildCLI
-    # caas_response(session.caasapi(group_dev, cmds))
-    # for c in cmds:
-    #     typer.echo(c)
+def _refresh_tokens():
+    # access token in config is overriden stored in tok file in config dir
+    session = CentralApi()
+    central = session.central
+    central.token_store["path"] = _config_dir
+    token = central.loadToken()
+    if token:
+        # refresh token on every launch
+        token = central.refreshToken(token)
+        if token:
+            central.storeToken(token)
+            central.central_info["token"] = token
+
+    return session
 
 
 if __name__ == "__main__":
+    session = _refresh_tokens()
+    app()
+else:
+    session = _refresh_tokens()
     app()

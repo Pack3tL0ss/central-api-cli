@@ -37,7 +37,7 @@ class Response:
             # self.response = resp
         except Exception as e:
             self.ok = False
-            self.output = None
+            self.output = {}
             self.error = f"Exception occured {e.__class__}\n\t{e}"
             self.status_code = 418
             # self.json = None
