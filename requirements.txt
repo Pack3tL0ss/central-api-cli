@@ -1,3 +1,6 @@
+pycentral
+halo
+typer
 certifi
 chardet
 idna
