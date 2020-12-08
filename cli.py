@@ -207,7 +207,7 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     data = None if not resp else eval_resp(resp)
 
     if data:
-        typer.echo("\n--")
+        # typer.echo("\n--")
         # Strip needless inconsistent json key from dict if present
         if isinstance(data, dict):
             data = data.get("data", data)
