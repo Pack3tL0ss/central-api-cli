@@ -158,7 +158,7 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 @app.command()
 def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
-         json: bool = typer.Option(False, is_flag=True, allow_dash=True, help="Output in JSON")):
+         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON")):
     # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
     if not dev_type:
@@ -367,7 +367,7 @@ def _refresh_tokens():
     return session
 
 
-log.info("-- Script Starting --")  # just testing log can remove
+log.info("-- Script Starting --", show=False)  # just testing log can remove
 if __name__ == "__main__":
     session = _refresh_tokens()
     app()
