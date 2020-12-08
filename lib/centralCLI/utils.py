@@ -14,6 +14,7 @@ import json
 import socket
 from io import StringIO
 from halo import Halo
+from tabulate import tabulate
 
 try:
     loc_user = os.getlogin()
@@ -327,3 +328,17 @@ class Utils:
         if sys.stdin.isatty():
             with Halo(text=spin_txt, spinner=spinner):
                 return function(*args, **kwargs)
+
+    def output(self, outdata, tablefmt):
+        # pprint(outdata, indent=4)
+        if tablefmt == "json":
+            from pygments import highlight, lexers, formatters
+            json_data = json.dumps(outdata, sort_keys=True, indent=2)
+            table_data = highlight(bytes(json_data, 'UTF-8'), lexers.JsonLexer(), formatters.Terminal256Formatter(style='solarized-dark'))
+        elif tablefmt:
+            # print(tabulate(outdata, headers="keys", tablefmt=tablefmt))
+            table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
+        if tablefmt == "csv":
+        #TODO Add CSV output
+             pass
+        return table_data
