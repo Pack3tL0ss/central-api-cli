@@ -159,6 +159,7 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 @app.command()
 def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+        output: str = typer.Option("simple", help="Output to table format"),
         account: str = typer.Option("central_info", help="Pass the account name from the config file")
         ):
     session = _refresh_tokens(account)
@@ -206,7 +207,7 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     data = None if not resp else eval_resp(resp)
 
     if data:
-        typer.echo("\n--")
+        # typer.echo("\n--")
         # Strip needless inconsistent json key from dict if present
         if isinstance(data, dict):
             data = data.get("data", data)
@@ -222,33 +223,39 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
 
         if isinstance(data, str):
             typer.echo_via_pager(data)
+        # else:
+        #     _global_displayed = False
+        #     for _ in data:
+        #         if isinstance(_, list) and len(_) == 1:
+        #             typer.echo(_[0])
+
+        #         elif isinstance(_, dict):
+        #             if not _global_displayed and _.get("customer_id"):
+        #                 typer.echo(f"customer_id: {_['customer_id']}")
+        #                 typer.echo(f"customer_name: {_['customer_name']}")
+        #                 _global_displayed = True
+        #             typer.echo("--")
+        #             for k, v in _.items():
+        #                 # strip needless return keys from displayed output
+        #                 if k not in ["customer_id", "customer_name"]:
+        #                     typer.echo(f"{k}: {v}")
+        #         elif isinstance(_, str):
+        #             if isinstance(data, dict) and data.get(_):
+        #                 _key = typer.style(_, fg=typer.colors.CYAN)
+        #                 typer.echo(f"{_key}:")
+        #                 for k, v in sorted(data[_].items()):
+        #                     typer.echo(f"    {k}: {v}")
+        #             else:
+        #                 typer.echo(_)
+
+        # typer.echo("--\n")
+        if json == True:
+            tablefmt = "json"
+        elif output:
+            tablefmt = output
         else:
-            _global_displayed = False
-            for _ in data:
-                if isinstance(_, list) and len(_) == 1:
-                    typer.echo(_[0])
-
-                elif isinstance(_, dict):
-                    if not _global_displayed and _.get("customer_id"):
-                        typer.echo(f"customer_id: {_['customer_id']}")
-                        typer.echo(f"customer_name: {_['customer_name']}")
-                        _global_displayed = True
-                    typer.echo("--")
-                    for k, v in _.items():
-                        # strip needless return keys from displayed output
-                        if k not in ["customer_id", "customer_name"]:
-                            typer.echo(f"{k}: {v}")
-                elif isinstance(_, str):
-                    if isinstance(data, dict) and data.get(_):
-                        _key = typer.style(_, fg=typer.colors.CYAN)
-                        typer.echo(f"{_key}:")
-                        for k, v in sorted(data[_].items()):
-                            typer.echo(f"    {k}: {v}")
-                    else:
-                        typer.echo(_)
-
-        typer.echo("--\n")
-
+            tablefmt = "simple"
+        typer.echo(utils.output(data, tablefmt))
 
 @app.command()
 def template(operation: TemplateLevel1 = typer.Argument(...),
