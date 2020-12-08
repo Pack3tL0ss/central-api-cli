@@ -158,7 +158,10 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 @app.command()
 def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
-         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON")):
+        json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+        account: str = typer.Option("central_info", help="Pass the account name from the config file")
+        ):
+    session = _refresh_tokens(account)
     # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
     if not dev_type:
@@ -351,10 +354,11 @@ def refresh_tokens():
     pass
 
 
-def _refresh_tokens():
+def _refresh_tokens(account_name):
     # access token in config is overriden stored in tok file in config dir
-    session = CentralApi()
+    session = CentralApi(account_name)
     central = session.central
+
     # central.token_store["path"] = config.base_dir.joinpath(".token")
     token = central.loadToken()
     if token:
@@ -369,8 +373,10 @@ def _refresh_tokens():
 
 log.info("-- Script Starting --", show=False)  # just testing log can remove
 if __name__ == "__main__":
-    session = _refresh_tokens()
+    # Moved to methods above
+    # session = _refresh_tokens()
     app()
 else:
-    session = _refresh_tokens()
+    # Moved to methods above 
+    # session = _refresh_tokens()
     app()
