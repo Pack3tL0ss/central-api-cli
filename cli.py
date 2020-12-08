@@ -11,7 +11,7 @@ import typer
 # from typer.params import Argument
 # from lib.centralCLI.central import CentralApi, BuildCLI, utils
 # from lib.centralCLI import utils
-from lib.centralCLI.central import CentralApi, BuildCLI, utils
+from lib.centralCLI.central import CentralApi, BuildCLI, utils, config, log
 
 # from pycentral.workflows.workflows_utils import get_conn_from_file
 from pathlib import Path
@@ -157,7 +157,8 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 @app.command()
-def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None):
+def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
+         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON")):
     # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
     if not dev_type:
@@ -291,9 +292,9 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
 
 
 @app.command()
-def import_vlan(import_file: str = typer.Argument(_def_import_file),
+def import_vlan(import_file: str = typer.Argument(config.stored_tasks_file),
                 key: str = None):
-    if import_file == _def_import_file and not key:
+    if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
 
     data = utils.read_yaml(import_file)
@@ -307,7 +308,7 @@ def import_vlan(import_file: str = typer.Argument(_def_import_file),
 
 
 @app.command()
-def batch(import_file: str = typer.Argument(_def_import_file),
+def batch(import_file: str = typer.Argument(config.stored_tasks_file),
           command: str = None, key: str = None):
 
     if import_file == _def_import_file and not key:
@@ -354,8 +355,8 @@ def _refresh_tokens():
     # access token in config is overriden stored in tok file in config dir
     session = CentralApi()
     central = session.central
-    # Commented out as I have no idea what it was doing. Maybe from a previous auth process? -mrose
-    # central.token_store["path"] = _config_dir
+
+    # central.token_store["path"] = config.base_dir.joinpath(".token")
     token = central.loadToken()
     if token:
         # refresh token on every launch
@@ -367,6 +368,7 @@ def _refresh_tokens():
     return session
 
 
+log.info("-- Script Starting --", show=False)  # just testing log can remove
 if __name__ == "__main__":
     session = _refresh_tokens()
     app()
