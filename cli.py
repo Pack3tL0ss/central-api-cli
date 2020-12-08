@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 
 from enum import Enum
-# from sys import argv
-# from pprint import pprint
-# from typing import Union
-# from pathlib import Path
-# from requests.sessions import session
+
 
 import typer
-# from typer.params import Argument
-# from lib.centralCLI.central import CentralApi, BuildCLI, utils
-# from lib.centralCLI import utils
 from lib.centralCLI.central import CentralApi, BuildCLI, utils, config, log
 
-# from pycentral.workflows.workflows_utils import get_conn_from_file
-from pathlib import Path
-import os
+# from pathlib import Path
+# import os
 
-_config_dir = Path.joinpath(Path(__file__).parent, "config")
-# _config_file = _config_dir.joinpath("config.yaml")
-_def_import_file = _config_dir.joinpath("stored-tasks.yaml")
+
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-# import click_spinner  # NoQA
-
-# central = get_conn_from_file(filename=_config_file)
 
 
-# -- break up arguments passed as single string from vscode promptString --
-def get_arguments_from_import(import_file: str, key: str = None):
+def get_arguments_from_import(import_file: str, key: str = None) -> list:
+    """Get arguments from default import_file (stored_tasks.yaml)
+
+    Args:
+        import_file (str): name of import file
+        key (str, optional): return single value for specific key if provided. Defaults to None.
+
+    Returns:
+        list: updated sys.argv list.
+    """
     args = utils.read_yaml(_import_file)
     if key and key in args:
         args = args[key]
@@ -39,6 +34,7 @@ def get_arguments_from_import(import_file: str, key: str = None):
     return sys.argv
 
 
+# -- break up arguments passed as single string from vscode promptString --
 import sys  # NoQA
 sys.argv[0] = 'cencli'
 try:
@@ -61,8 +57,8 @@ try:
         if sys.argv[2].endswith((".yaml", ".yml")):
             _import_file = sys.argv.pop(2)
             if not utils.valid_file(_import_file):
-                if utils.valid_file(os.path.join(_config_dir, _import_file)):
-                    _import_file = os.path.join(_config_dir, _import_file)
+                if utils.valid_file(config.dir.joinpath(_import_file)):
+                    _import_file = config.dir.joinpath(_import_file)
 
             if len(sys.argv) > 2:
                 _import_key = sys.argv.pop(2)
@@ -76,15 +72,13 @@ app = typer.Typer()
 
 
 class ShowLevel1(str, Enum):
-    devices = "devices"
-    # devices = "dev"
+    devices = "dev"
     switch = "switch"
     groups = "groups"
     sites = "sites"
     clients = "clients"
-    aps = "ap"
+    ap = "ap"
     gateway = "gateway"
-    # gateways = "gateways"
     template = "template"
     variables = "variables"
     certs = "certs"
@@ -204,6 +198,11 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     elif what == "certs":
         resp = session.get_certificates()
 
+    elif what == "clients":
+        resp = session.get_wlan_clients()
+        # wired = session.get_wired_clients()
+        # resp = {**wlan.output, **wired.output}
+
     data = None if not resp else eval_resp(resp)
 
     if data:
@@ -220,6 +219,7 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
 
         if isinstance(data, dict):
             data = data.get("group", data)
+            data = data.get("clients", data)
 
         if isinstance(data, str):
             typer.echo_via_pager(data)
@@ -321,9 +321,9 @@ def import_vlan(import_file: str = typer.Argument(config.stored_tasks_file),
 def batch(import_file: str = typer.Argument(config.stored_tasks_file),
           command: str = None, key: str = None):
 
-    if import_file == _def_import_file and not key:
+    if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
-        # typer.Exit()
+        raise typer.exit()
 
     data = utils.read_yaml(import_file)
     if key:
