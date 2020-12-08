@@ -30,10 +30,10 @@ import json
 from typing import Union
 import urllib.parse
 import csv
-from . import Response
+from . import MyLogger, Response, config, log
 # Get instance of ArubaCentralBase from the central_filename
-from pycentral.workflows.workflows_utils import get_conn_from_file
-from pathlib import Path
+# from pycentral.workflows.workflows_utils import get_conn_from_file
+# from pathlib import Path
 
 try:
     from . import utils
@@ -44,155 +44,51 @@ except ImportError:
 
 # _refresh_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", ".refresh_token.yaml"))
 # _refresh_file = Path.joinpath(Path(__file__), "config", ".refresh_token.yaml")
-_config_file = Path.joinpath(Path(__file__).parent.parent.parent, "config", "config.yaml")
-_bulk_edit_file = _config_file.parent.joinpath('bulkedit.csv')
+# _config_file = Path.joinpath(Path(__file__).parent.parent.parent, "config", "config.yaml")
+# _bulk_edit_file = _config_file.parent.joinpath('bulkedit.csv')
 
 # TODO build own function for this so we can set token_store vs overriding it in cli.py
-central = get_conn_from_file(filename=_config_file)
+# central = get_conn_from_file(filename=config.config_file)
+DEFAULT_TOKEN_STORE = {
+  "type": "local",
+  "path": f"{config.dir.joinpath('.token')}"
+}
 
 
-# class CentralApiAuth:
+def get_conn_from_file(logger: MyLogger = log):
+    """Creates an instance of class`pycentral.ArubaCentralBase` based on the information
+    provided in the YAML/JSON file. \n
+        * keyword central_info: A dict containing arguments as accepted by class`pycentral.ArubaCentralBase` \n
+        * keyword ssl_verify: A boolean when set to True, the python client validates Aruba Central's SSL certs. \n
+        * keyword token_store: Optional. Defaults to None. \n
 
-#     def __init__(self, vars: Union[dict, None] = None):
-#         if utils.valid_file(_refresh_file):
-#             self.refresh_token = utils.read_yaml(_refresh_file)
+    :param filename: Name of a JSON/YAML file containing the keywords required for class:`pycentral.ArubaCentralBase`
+    :type filename: str
+    :return: An instance of class:`pycentral.ArubaCentralBase` to make API calls and manage access tokens.
+    :rtype: class:`pycentral.ArubaCentralBase`
+    """
+    conn = None
+    if "central_info" not in config.data:
+        exit(f"exiting... central_info missing from {config.file}")
+    central_info = config.data["central_info"]
+    token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
+    ssl_verify = config.get("ssl_verify", True)
 
-#         if utils.valid_file(_config_file):
-#             self.vars = utils.read_yaml(_config_file)
-
-#         if not self.refresh_token:
-#             print("No refresh token located, attempting full authentication workflow")
-#             self.login_data = self.login()
-#             self.auth_code = self.authorize()
-
-#         self.access_token = self.tokens()
-#         self.headers = {"authorization": f"Bearer {self.access_token}"}
-
-#     def login(self):
-#         """Build and post login call
-
-#        :param vars: imported variables
-#        :type vars: Python dict
-#        :return: CSRF and Session data
-#        :rtype: Python dict
-#        """
-#         login_url = self.vars["base_url"] + "/oauth2/authorize/central/api/login"
-#         params = {"client_id": self.vars["client_id"]}
-#         payload = {"username": self.vars["username"], "password": getpass.getpass()}
-#         resp = requests.post(login_url, params=params, json=payload, timeout=10)
-#         if resp.json()["status"]:
-#             print("Login Successful")
-#         else:
-#             print("Login Failed")
-#             exit()
-#         login_data = {"csrf": resp.cookies["csrftoken"], "ses": resp.cookies["session"]}
-#         return login_data
-
-#     def authorize(self):
-#         """Build and post authorization grant call
-
-#         :param vars: imported variables
-#         :type vars: Python dict
-#         :param login_data: Data from login function
-#         :type login_data: Python dict
-#         :return: Authorization code
-#         :rtype: String
-#         """
-#         auth_url = self.vars["base_url"] + "/oauth2/authorize/central/api"
-#         ses = "session=" + self.login_data["ses"]
-#         headers = {
-#             "X-CSRF-TOKEN": self.login_data["csrf"],
-#             "Content-type": "application/json",
-#             "Cookie": ses,
-#         }
-#         payload = {"customer_id": self.vars["customer_id"]}
-#         params = {
-#             "client_id": self.vars["client_id"],
-#             "response_type": "code",
-#             "scope": "all",
-#         }
-#         resp = requests.post(auth_url, params=params, json=payload, headers=headers)
-#         return resp.json()["auth_code"]
-
-#     def tokens(self):
-#         """Import refresh token, post call, write new refresh and return access token.
-
-#         :param vars: Imported variables for client
-#         :type vars: Python dict
-#         :return: Access token
-#         :rtype: String
-#         """
-#         token_url = self.vars["base_url"] + "/oauth2/token"
-#         data = {
-#             "grant_type": "refresh_token",
-#             "refresh_token": str(self.refresh_token["refresh_token"]),
-#         }
-#         resp = requests.post(
-#             token_url,
-#             data=data,
-#             auth=(self.vars["client_id"], self.vars["client_secret"]),
-#         )
-#         refresh_token = resp.json()["refresh_token"]
-#         access_token = resp.json()["access_token"]
-#         self.write_to_file(refresh_token)
-#         return access_token
-
-#     def full_tokens(self):
-#         """Build & post call for access & refresh tokens. Write refresh token
-
-#         :param vars: Imported variables
-#         :type vars: Python dict
-#         :param auth_code: Authorization code from authorization func
-#         :type auth_code: String
-#         :return: Access token
-#         :rtype: String
-#         """
-#         auth_url = self.vars["base_url"] + "/oauth2/token"
-#         data = {"grant_type": "authorization_code", "code": self.auth_code}
-#         resp = requests.post(
-#             auth_url,
-#             data=data,
-#             auth=(self.vars["client_id"], self.vars["client_secret"]),
-#         )
-#         refresh_token = resp.json()["refresh_token"]
-#         access_token = resp.json()["access_token"]
-#         self.write_to_file(refresh_token)
-#         return access_token
-
-#     def write_to_file(self, token):
-#         """Write refresh token to local yaml file
-
-#         :param token: Refresh token
-#         :type token: String
-#         """
-#         data = {"refresh_token": token}
-#         # TODO log print(f"Writing refresh token to {_refresh_file}")
-#         with open(_refresh_file, "w") as write_file:
-#             yaml.dump(data, write_file)
-
-#     def get(self, url, params: dict = None, headers: dict = None):
-#         """Generic GET call
-
-#         :param vars: Imported variables
-#         :type vars: Python dict
-#         :param url: GET call URL
-#         :type url: String
-#         :param header: GET call parameters
-#         :type header: Python dict
-#         :return: GET call response JSON
-#         :rtype: Python dict
-#         """
-#         if headers is None:
-#             headers = self.headers
-#         f_url = self.vars["base_url"] + url
-#         return Response(requests.get, f_url, params=params, headers=headers)
+    conn = ArubaCentralBase(central_info=central_info,
+                            token_store=token_store,
+                            ssl_verify=ssl_verify,
+                            logger=logger
+                            )
+    return conn
 
 
 class CentralApi:
+    log = log
+
     # def __init__(self, central: CentralApiAuth = CentralApiAuth()):
-    def __init__(self, central: ArubaCentralBase = central):
-        self.central = central
-        self.headers = {"authorization": f"Bearer {central.central_info['token']['access_token']}"}
+    def __init__(self, central: ArubaCentralBase = None):
+        self.central = central or get_conn_from_file()
+        self.headers = {"authorization": f"Bearer {self.central.central_info['token']['access_token']}"}
         # Temp Refactor to use ArubaBaseClass without changing all my methods
         # self.central.get = self.get
         self.central.get = self.get
@@ -553,7 +449,7 @@ class CentralApi:
 
 class BuildCLI:
     def __init__(self, data: dict = None, session=None, filename: str = None):
-        filename = filename or _bulk_edit_file
+        filename = filename or config.bulk_edit_file
 
         self.session = session
         self.dev_info = None
@@ -564,7 +460,8 @@ class BuildCLI:
         self.cmds = []
         self.build_cmds()
 
-    def get_bulkedit_data(self, filename: str):
+    @staticmethod
+    def get_bulkedit_data(filename: str):
         cli_data = {}
         _common = {}
         _vlans = []
