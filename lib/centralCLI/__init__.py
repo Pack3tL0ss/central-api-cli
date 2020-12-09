@@ -114,6 +114,7 @@ class MyLogger:
 
     def setLevel(self, level):
         getattr(self._log, 'setLevel')(level)
+        pass
 
 
 _calling_script = Path(argv[0])
