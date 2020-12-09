@@ -268,7 +268,7 @@ class CentralApi:
     def get_all_sites(self):
         return self.central.get("/central/v2/sites")
 
-    def get_site_details(self, site_id: Union[str, int]):
+    def get_site_details(self, site_id):
         return self.central.get(f"/central/v2/sites/{site_id}")
 
     def get_events_by_group(self, group):
