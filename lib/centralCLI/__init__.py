@@ -30,7 +30,7 @@ class Response:
         except Exception as e:
             self.ok = False
             self.output = {}
-            self.error = f"Exception occured {e.__class__}\n\t{e}"
+            self.error = f"Exception occurred {e.__class__}\n\t{e}"
             self.status_code = 418
 
 
@@ -78,11 +78,13 @@ class MyLogger:
     def show(self, msgs: Union[list, str], log: bool = False, show: bool = True, *args, **kwargs) -> None:
         self.log_print(msgs, show=show, log=log, *args, **kwargs)
 
-    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = False, *args, **kwargs) -> None:
+    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
     # -- more verbose debugging - primarily to get json dumps
-    def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = False, *args, **kwargs) -> None:
+    def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
@@ -118,4 +120,4 @@ _calling_script = Path(argv[0])
 log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
 
 config = Config(base_dir=_calling_script.resolve().parent)
-log = MyLogger(log_file, debug=config.DEBUG, show=False)
+log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)
