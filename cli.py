@@ -102,10 +102,10 @@ def eval_resp(resp):
 
 def caas_response(resp):
     if not resp.ok:
-        typer.echo(f"[{resp.status_code}] {resp.text} {resp.reason}")
+        typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
         return
     else:
-        resp = resp.json()
+        resp = resp.output
 
     print()
     lines = "-" * 22
@@ -369,9 +369,9 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
             # if "!" not in cmds:
             #     cmds = '^!^'.join(cmds).split("^")
             # with click_spinner.spinner():
-            ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+            # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
-            resp = utils.spinner(SPIN_TXT_CMDS, ses.caasapi, *args, **kwargs)
+            resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
             caas_response(resp)
 
 
@@ -382,16 +382,16 @@ def refresh_tokens():
 
 def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
-    session = utils.spinner(SPIN_TXT_AUTH, CentralApi(account_name))
+    session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name)
     central = session.central
 
     token = central.loadToken()
     if token:  # Verifying we don't need to refresh at every launch
         # refresh token on every launch
-        # token = central.refreshToken(token)
-        # if token:
-        central.storeToken(token)
-        central.central_info["token"] = token
+        token = central.refreshToken(token)
+        if token:
+            central.storeToken(token)
+            central.central_info["token"] = token
 
     return session
 
