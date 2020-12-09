@@ -382,7 +382,11 @@ def refresh_tokens():
 
 def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
-    session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name)
+    if not config.DEBUG:
+        session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name)
+    else:
+        session = CentralApi(account_name)
+
     central = session.central
 
     token = central.loadToken()
@@ -410,8 +414,8 @@ if account not in config.data:
 
 # debug flag ~ additional loggin, and all logs are echoed to tty
 if "--debug" in sys.argv:
-    config.DEBUG = True
-    log.setLevel(10)  # DEBUG
+    config.DEBUG = log.DEBUG = log.show = True
+    log.setLevel("DEBUG")  # DEBUG
     _ = sys.argv.pop(sys.argv.index("--debug"))
 
 log.debug(" ".join(sys.argv))
