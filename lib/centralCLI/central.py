@@ -51,7 +51,7 @@ except ImportError:
 # central = get_conn_from_file(filename=config.config_file)
 DEFAULT_TOKEN_STORE = {
   "type": "local",
-  "path": f"{config.dir.joinpath('.token')}"
+  "path": f"{config.dir.joinpath('.cache')}"
 }
 
 
