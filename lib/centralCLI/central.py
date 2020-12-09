@@ -51,7 +51,7 @@ except ImportError:
 # central = get_conn_from_file(filename=config.config_file)
 DEFAULT_TOKEN_STORE = {
   "type": "local",
-  "path": f"{config.dir.joinpath('.token')}"
+  "path": f"{config.dir.joinpath('.cache')}"
 }
 
 
@@ -385,6 +385,8 @@ class CentralApi:
         return resp.ok
 
     def caasapi(self, group_dev: str, cli_cmds: list = None):
+        cfg_dict = self.central.central_info
+        tok_dict = cfg_dict["token"]
         if ":" in group_dev and len(group_dev) == 17:
             key = "node_name"
         else:
@@ -393,18 +395,21 @@ class CentralApi:
         url = "/caasapi/v1/exec/cmd"
 
         params = {
-            "cid": self.central.vars.get('customer_id'),
+            "cid": cfg_dict["customer_id"],
             key: group_dev
         }
 
-        header = {
-            "authorization": f"Bearer {self.central.access_token}",
+        headers = {
+            "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
             "Content-type": "application/json"
         }
 
         payload = {"cli_cmds": cli_cmds or []}
 
-        return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
+        f_url = self.central.central_info["base_url"] + url
+        return Response(requests.post, f_url, params=params, json=payload, headers=headers)
+
+        # return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
         # TODO use my resp generator
 
 
