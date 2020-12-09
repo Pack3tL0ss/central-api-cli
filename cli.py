@@ -72,7 +72,7 @@ app = typer.Typer()
 
 
 class ShowLevel1(str, Enum):
-    devices = "dev"
+    devices = "devices"
     switch = "switch"
     groups = "groups"
     sites = "sites"
@@ -140,7 +140,7 @@ def caas_response(resp):
 
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    # session = CentralApi()
+    session = _refresh_tokens(account)
     cli = BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
@@ -384,6 +384,6 @@ if __name__ == "__main__":
     # session = _refresh_tokens()
     app()
 else:
-    # Moved to methods above 
+    # Moved to methods above
     # session = _refresh_tokens()
     app()
