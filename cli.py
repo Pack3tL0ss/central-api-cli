@@ -76,6 +76,7 @@ class ShowLevel1(str, Enum):
     switch = "switch"
     groups = "groups"
     sites = "sites"
+    site_details = "site_details"
     clients = "clients"
     ap = "ap"
     gateway = "gateway"
@@ -151,14 +152,16 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 @app.command()
-def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
+def show(what: ShowLevel1 = typer.Argument(...), 
+        dev_type: str = typer.Argument(None), 
+        group: str = None,
         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
         output: str = typer.Option("simple", help="Output to table format"),
-        account: str = typer.Option("central_info", help="Pass the account name from the config file")
+        account: str = typer.Option("central_info", help="Pass the account name from the config file"),
+        id: int = typer.Option(False, help="ID field used for certain commands")
         ):
-    session = _refresh_tokens(account)
-    # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
 
+    session = _refresh_tokens(account)
     if not dev_type:
         if what.startswith("gateway"):
             what, dev_type = "devices", "gateway"
@@ -181,6 +184,12 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
 
     elif what == "groups":
         resp = session.get_all_groups()
+
+    elif what == "sites":
+        resp = session.get_all_sites()
+    
+    elif what == "site_details":
+        resp = session.get_site_details(id)
 
     elif what == "template":
         if dev_type:
@@ -221,6 +230,15 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
             data = data.get("group", data)
             data = data.get("clients", data)
 
+        if isinstance(data, dict):
+            data = data.get("sites", data)
+
+        if isinstance(data, dict): #site_details is returned as a dict instead of a list
+            data = [data]
+
+        # if isinstance(data, dict):
+        #     data = data.get("site_details", data)
+        # print(data)
         if isinstance(data, str):
             typer.echo_via_pager(data)
         # else:
