@@ -19,6 +19,8 @@ class Config:
                 break
         self.bulk_edit_file = self.dir.joinpath("bulkedit.csv")
         self.stored_tasks_file = self.dir.joinpath("stored-tasks.yaml")
+        self.cache_file = self.dir.joinpath(".cache", "cache.yaml")
+        self.cache_dir = self.cache_file.parent
         self.data = self.get_config_data(self.file) or {}
         self.DEBUG = self.data.get("debug", os.getenv("DEBUG", False))
 
