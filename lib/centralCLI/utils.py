@@ -295,7 +295,8 @@ class Utils:
     def listify(self, var):
         return var if isinstance(var, list) or var is None else [var]
 
-    def read_yaml(self, filename):
+    @staticmethod
+    def read_yaml(filename):
         """Read variables from local yaml file
 
         :param filename: local yaml file, defaults to 'vars.yaml'
