@@ -81,6 +81,7 @@ class ShowLevel1(str, Enum):
     switch = "switch"
     groups = "groups"
     sites = "sites"
+    site_details = "site_details"
     clients = "clients"
     aps = "ap"
     gateway = "gateway"
@@ -157,10 +158,16 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 @app.command()
-def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None,
-         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON")):
-    # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+def show(what: ShowLevel1 = typer.Argument(...), 
+        dev_type: str = typer.Argument(None), 
+        group: str = None,
+        json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+        output: str = typer.Option("simple", help="Output to table format"),
+        account: str = typer.Option("central_info", help="Pass the account name from the config file"),
+        id: int = typer.Option(False, help="ID field used for certain commands")
+        ):
 
+    session = _refresh_tokens(account)
     if not dev_type:
         if what.startswith("gateway"):
             what, dev_type = "devices", "gateway"
@@ -184,6 +191,12 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     elif what == "groups":
         resp = session.get_all_groups()
 
+    elif what == "sites":
+        resp = session.get_all_sites()
+    
+    elif what == "site_details":
+        resp = session.get_site_details(id)
+
     elif what == "template":
         if dev_type:
             if group:
@@ -203,7 +216,7 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
     data = None if not resp else eval_resp(resp)
 
     if data:
-        typer.echo("\n--")
+        # typer.echo("\n--")
         # Strip needless inconsistent json key from dict if present
         if isinstance(data, dict):
             data = data.get("data", data)
@@ -217,35 +230,50 @@ def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(
         if isinstance(data, dict):
             data = data.get("group", data)
 
+        if isinstance(data, dict):
+            data = data.get("sites", data)
+
+        if isinstance(data, dict): #site_details is returned as a dict instead of a list
+            data = [data]
+
+        # if isinstance(data, dict):
+        #     data = data.get("site_details", data)
+        # print(data)
         if isinstance(data, str):
             typer.echo_via_pager(data)
+        # else:
+        #     _global_displayed = False
+        #     for _ in data:
+        #         if isinstance(_, list) and len(_) == 1:
+        #             typer.echo(_[0])
+
+        #         elif isinstance(_, dict):
+        #             if not _global_displayed and _.get("customer_id"):
+        #                 typer.echo(f"customer_id: {_['customer_id']}")
+        #                 typer.echo(f"customer_name: {_['customer_name']}")
+        #                 _global_displayed = True
+        #             typer.echo("--")
+        #             for k, v in _.items():
+        #                 # strip needless return keys from displayed output
+        #                 if k not in ["customer_id", "customer_name"]:
+        #                     typer.echo(f"{k}: {v}")
+        #         elif isinstance(_, str):
+        #             if isinstance(data, dict) and data.get(_):
+        #                 _key = typer.style(_, fg=typer.colors.CYAN)
+        #                 typer.echo(f"{_key}:")
+        #                 for k, v in sorted(data[_].items()):
+        #                     typer.echo(f"    {k}: {v}")
+        #             else:
+        #                 typer.echo(_)
+
+        # typer.echo("--\n")
+        if json == True:
+            tablefmt = "json"
+        elif output:
+            tablefmt = output
         else:
-            _global_displayed = False
-            for _ in data:
-                if isinstance(_, list) and len(_) == 1:
-                    typer.echo(_[0])
-
-                elif isinstance(_, dict):
-                    if not _global_displayed and _.get("customer_id"):
-                        typer.echo(f"customer_id: {_['customer_id']}")
-                        typer.echo(f"customer_name: {_['customer_name']}")
-                        _global_displayed = True
-                    typer.echo("--")
-                    for k, v in _.items():
-                        # strip needless return keys from displayed output
-                        if k not in ["customer_id", "customer_name"]:
-                            typer.echo(f"{k}: {v}")
-                elif isinstance(_, str):
-                    if isinstance(data, dict) and data.get(_):
-                        _key = typer.style(_, fg=typer.colors.CYAN)
-                        typer.echo(f"{_key}:")
-                        for k, v in sorted(data[_].items()):
-                            typer.echo(f"    {k}: {v}")
-                    else:
-                        typer.echo(_)
-
-        typer.echo("--\n")
-
+            tablefmt = "simple"
+        typer.echo(utils.output(data, tablefmt))
 
 @app.command()
 def template(operation: TemplateLevel1 = typer.Argument(...),
@@ -351,10 +379,11 @@ def refresh_tokens():
     pass
 
 
-def _refresh_tokens():
+def _refresh_tokens(account_name):
     # access token in config is overriden stored in tok file in config dir
-    session = CentralApi()
+    session = CentralApi(account_name)
     central = session.central
+
     # central.token_store["path"] = config.base_dir.joinpath(".token")
     token = central.loadToken()
     if token:
@@ -369,8 +398,10 @@ def _refresh_tokens():
 
 log.info("-- Script Starting --", show=False)  # just testing log can remove
 if __name__ == "__main__":
-    session = _refresh_tokens()
+    # Moved to methods above
+    # session = _refresh_tokens()
     app()
 else:
-    session = _refresh_tokens()
+    # Moved to methods above 
+    # session = _refresh_tokens()
     app()

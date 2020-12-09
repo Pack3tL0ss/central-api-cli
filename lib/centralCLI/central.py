@@ -55,7 +55,7 @@ DEFAULT_TOKEN_STORE = {
 }
 
 
-def get_conn_from_file(logger: MyLogger = log):
+def get_conn_from_file(account_name, logger: MyLogger = log):
     """Creates an instance of class`pycentral.ArubaCentralBase` based on the information
     provided in the YAML/JSON file. \n
         * keyword central_info: A dict containing arguments as accepted by class`pycentral.ArubaCentralBase` \n
@@ -68,9 +68,9 @@ def get_conn_from_file(logger: MyLogger = log):
     :rtype: class:`pycentral.ArubaCentralBase`
     """
     conn = None
-    if "central_info" not in config.data:
-        exit(f"exiting... central_info missing from {config.file}")
-    central_info = config.data["central_info"]
+    if account_name not in config.data:
+        exit(f"exiting... {account_name} missing from {config.file}")
+    central_info = config.data[account_name]
     token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
     ssl_verify = config.get("ssl_verify", True)
 
@@ -86,9 +86,9 @@ class CentralApi:
     log = log
 
     # def __init__(self, central: CentralApiAuth = CentralApiAuth()):
-    def __init__(self, central: ArubaCentralBase = None):
-        self.central = central or get_conn_from_file()
-        self.headers = {"authorization": f"Bearer {self.central.central_info['token']['access_token']}"}
+    def __init__(self, account_name):
+        self.central = get_conn_from_file(account_name)
+        # self.headers = {"authorization": f"Bearer {self.central.central_info['token']['access_token']}"}
         # Temp Refactor to use ArubaBaseClass without changing all my methods
         # self.central.get = self.get
         self.central.get = self.get
@@ -110,8 +110,8 @@ class CentralApi:
         :return: GET call response JSON
         :rtype: Python dict
         """
-        if headers is None:
-            headers = self.headers
+        # if headers is None:
+        #     headers = self.headers
         f_url = self.central.central_info["base_url"] + url
         # return Response(requests.get, f_url, params=params, headers=headers)
         return Response(self.central.requestUrl, f_url, params=params, headers=headers)
@@ -268,7 +268,7 @@ class CentralApi:
     def get_all_sites(self):
         return self.central.get("/central/v2/sites")
 
-    def get_site_details(self, site_id: Union[str, int]):
+    def get_site_details(self, site_id):
         return self.central.get(f"/central/v2/sites/{site_id}")
 
     def get_events_by_group(self, group):
