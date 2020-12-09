@@ -1,0 +1,98 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "inputs": [
+        {
+          "type": "promptString",
+          "id": "cliArgs",
+          "description": "Select Arguments",
+          "default": "show switch --debug"
+        //   "default": "batch --key test-acl"
+        },
+      ],
+    "configurations": [
+        {
+            "name": "cli interactive arg selection",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["${input:cliArgs}"],
+            "argsExpansion": "shell"
+        },
+        {
+            "name": "ana-cli interactive arg selection",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["${input:cliArgs}"],
+            "argsExpansion": "shell"
+        },
+        {
+            "name": "cli interactive arg selection WIP",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "preLaunchTask": "central cli arguments",
+            "args": ["${env:$PREV_ARGS}"]
+        },
+        {
+            "name": "Python: central.py bulk-edit",
+            "type": "python",
+            "request": "launch",
+            "program": "lib/centralCLI/central.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "bulk-edit"
+            ]
+        },
+        {
+            "name": "Python: cli.py interactive",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "${input:cliArgs}"
+            ]
+        },
+        {
+            "name": "Python: cli.py bulk-edit",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "bulk-edit"
+            ]
+        },
+        {
+            "name": "Python: cli.py show dev gateways",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "show", "devices", "gateways"
+            ]
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

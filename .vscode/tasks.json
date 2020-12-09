@@ -1,0 +1,43 @@
+{
+    "version": "2.0.0",
+    // None of this is used
+    // sed -i 's/"default": .*/"default": "show poop"/' .vscode/launch.json
+    "tasks": [
+      {
+        "label": "central cli arguments",
+        "type": "shell",
+        // "command": "echo ${workspaceFolder}/.vscode/envvars; read -p 'Press Enter To Continue'"
+        "command": "[ -f ${workspaceFolder}/.vscode/envvars ] && . ${workspaceFolder}/.vscode/envvars; echo export PREV_ARGS=\\'${input:command}\\' > ${workspaceFolder}/.vscode/envvars"
+        // "command": "echo export PREV_ARGS=\\'${input:command}\\' > ${workspaceFolder}/.vscode/envvars"
+        // "command": "export PREV_ARGS=(${input:command}); echo ${PREV_ARGS[@]}; sleep 5"
+        // ...
+      },
+      {
+        "label": "stash cur arg",
+        "type": "shell",
+        // "command": "echo ${workspaceFolder}/.vscode/envvars; read -p 'Press Enter To Continue'"
+        "command": "echo ${args}"
+        // "command": "echo export PREV_ARGS=\\'${input:command}\\' > ${workspaceFolder}/.vscode/envvars"
+        // "command": "echo export PREV_ARGS=\\'${input:command}\\' > ${workspaceFolder}/.vscode/envvars"
+        // "command": "export PREV_ARGS=(${input:command}); echo ${PREV_ARGS[@]}; sleep 5"
+        // ...
+      },
+      {
+        "label": "get prev args",
+        "type": "shell",
+        // "command": "echo ${workspaceFolder}/.vscode/envvars; read -p 'Press Enter To Continue'"
+        "command": "[ -f ${workspaceFolder}/.vscode/envvars ] && . ${workspaceFolder}/.vscode/envvars"
+        // "command": "export PREV_ARGS=(${input:command}); echo ${PREV_ARGS[@]}; sleep 5"
+        // ...
+      }
+    ],
+    "inputs": [
+      {
+        "description": "arguments to pass to Aruba Central CLI",
+        "id": "command",
+        "type": "promptString",
+        "default": "${env:PREV_ARGS}"
+        // type specific configuration attributes
+      }
+    ]
+  }
