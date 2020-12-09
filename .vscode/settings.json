@@ -1,0 +1,11 @@
+{
+    "python.pythonPath": "venv/bin/python",
+    "python.linting.flake8Enabled": true,
+    "python.linting.enabled": true,
+    "python.linting.flake8Args": [
+        "--max-line-length=130"
+    ],
+    "python.formatting.blackArgs": ["--line-length", "130"],
+    "python.languageServer": "Pylance",
+    "editor.renderWhitespace": "all",
+}
