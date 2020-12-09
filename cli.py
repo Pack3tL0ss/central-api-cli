@@ -76,7 +76,7 @@ class ShowLevel1(str, Enum):
     switch = "switch"
     groups = "groups"
     sites = "sites"
-    site_details = "site_details"
+    # site_details = "site_details"
     clients = "clients"
     ap = "ap"
     gateway = "gateway"
@@ -141,7 +141,7 @@ def caas_response(resp):
 
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    session = _refresh_tokens(account)
+    # session = _refresh_tokens(account)
     cli = BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
@@ -152,16 +152,16 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 @app.command()
-def show(what: ShowLevel1 = typer.Argument(...), 
-        dev_type: str = typer.Argument(None), 
-        group: str = None,
-        json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
-        output: str = typer.Option("simple", help="Output to table format"),
-        account: str = typer.Option("central_info", help="Pass the account name from the config file"),
-        id: int = typer.Option(False, help="ID field used for certain commands")
-        ):
+def show(what: ShowLevel1 = typer.Argument(...),
+         dev_type: str = typer.Argument(None),
+         group: str = None,
+         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+         output: str = typer.Option("simple", help="Output to table format"),
+         #  account: str = typer.Option("central_info", help="Pass the account name from the config file"),
+         id: int = typer.Option(None, help="ID field used for certain commands")
+         ):
 
-    session = _refresh_tokens(account)
+    # session = _refresh_tokens(account)
     if not dev_type:
         if what.startswith("gateway"):
             what, dev_type = "devices", "gateway"
@@ -186,10 +186,13 @@ def show(what: ShowLevel1 = typer.Argument(...),
         resp = session.get_all_groups()
 
     elif what == "sites":
-        resp = session.get_all_sites()
-    
-    elif what == "site_details":
-        resp = session.get_site_details(id)
+        if id is None:
+            resp = session.get_all_sites()
+        else:
+            resp = session.get_site_details(id)
+
+    # elif what == "site_details":
+    #     resp = session.get_site_details(id)
 
     elif what == "template":
         if dev_type:
@@ -233,7 +236,7 @@ def show(what: ShowLevel1 = typer.Argument(...),
         if isinstance(data, dict):
             data = data.get("sites", data)
 
-        if isinstance(data, dict): #site_details is returned as a dict instead of a list
+        if isinstance(data, dict):  # site_details is returned as a dict instead of a list
             data = [data]
 
         # if isinstance(data, dict):
@@ -267,13 +270,14 @@ def show(what: ShowLevel1 = typer.Argument(...),
         #                 typer.echo(_)
 
         # typer.echo("--\n")
-        if json == True:
+        if json is True:
             tablefmt = "json"
         elif output:
             tablefmt = output
         else:
             tablefmt = "simple"
         typer.echo(utils.output(data, tablefmt))
+
 
 @app.command()
 def template(operation: TemplateLevel1 = typer.Argument(...),
@@ -312,11 +316,8 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
             cmds += [f"priority {vrrp_pri}"]
         cmds += ["no shutdown", "!"]
 
-    # session = CentralApi()
     # TODO move command gen to BuildCLI
     caas_response(session.caasapi(group_dev, cmds))
-    # for c in cmds:
-    #     typer.echo(c)
 
 
 @app.command()
@@ -379,29 +380,41 @@ def refresh_tokens():
     pass
 
 
-def _refresh_tokens(account_name):
+def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
-    session = CentralApi(account_name)
+    session = utils.spinner(SPIN_TXT_AUTH, CentralApi(account_name))
     central = session.central
 
-    # central.token_store["path"] = config.base_dir.joinpath(".token")
     token = central.loadToken()
-    if token:
+    if token:  # Verifying we don't need to refresh at every launch
         # refresh token on every launch
-        token = central.refreshToken(token)
-        if token:
-            central.storeToken(token)
-            central.central_info["token"] = token
+        # token = central.refreshToken(token)
+        # if token:
+        central.storeToken(token)
+        central.central_info["token"] = token
 
     return session
 
 
-log.info("-- Script Starting --", show=False)  # just testing log can remove
-if __name__ == "__main__":
-    # Moved to methods above
-    # session = _refresh_tokens()
-    app()
-else:
-    # Moved to methods above
-    # session = _refresh_tokens()
-    app()
+# extract account from arguments
+account = "central_info"
+if "--account" in sys.argv:
+    idx = sys.argv.index("--account")
+    for i in range(idx, idx + 2):
+        account = sys.argv.pop(idx)
+
+
+if account not in config.data:
+    typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+               f"The specified account: '{account}' not defined in config.")
+
+# debug flag ~ additional loggin, and all logs are echoed to tty
+if "--debug" in sys.argv:
+    config.DEBUG = True
+    log.setLevel(10)  # DEBUG
+    _ = sys.argv.pop(sys.argv.index("--debug"))
+
+log.debug(" ".join(sys.argv))
+session = _refresh_tokens(account)
+
+app()
