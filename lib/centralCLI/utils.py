@@ -15,6 +15,7 @@ import socket
 from io import StringIO
 from halo import Halo
 from tabulate import tabulate
+from pygments import highlight, lexers, formatters
 
 try:
     loc_user = os.getlogin()
@@ -312,7 +313,8 @@ class Utils:
             data = yaml.load(input_file, Loader=yaml.FullLoader)
         return data
 
-    def get_host_short(self, host):
+    @staticmethod
+    def get_host_short(host):
         """Extract hostname from fqdn
 
         Arguments:
@@ -327,7 +329,8 @@ class Utils:
             else host
         )
 
-    def spinner(self, spin_txt, function, *args, **kwargs):
+    @staticmethod
+    def spinner(spin_txt, function, *args, **kwargs):
         spinner = kwargs.get("spinner", "dots")
         if sys.stdin.isatty():
             with Halo(text=spin_txt, spinner=spinner):
@@ -335,9 +338,8 @@ class Utils:
 
     def output(self, outdata, tablefmt):
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
-        table_data = "No output returned" if not outdata else outdata
         if tablefmt == "json":
-            from pygments import highlight, lexers, formatters
+            # from pygments import highlight, lexers, formatters
             json_data = json.dumps(outdata, sort_keys=True, indent=2)
             table_data = highlight(bytes(json_data, 'UTF-8'),
                                    lexers.JsonLexer(),
@@ -354,8 +356,14 @@ class Utils:
                                     ])
                                 for d in outdata
                             ])
+        elif tablefmt in ["yml", "yaml"]:
+            table_data = highlight(bytes(yaml.dump(outdata, sort_keys=True, ), 'UTF-8'),
+                                   lexers.YamlLexer(),
+                                   formatters.Terminal256Formatter(style='solarized-dark')
+                                   )
         else:
             customer_id = customer_name = ""
+            outdata = self.listify(outdata)
             if outdata and isinstance(outdata, list) and isinstance(outdata[0], dict):
                 customer_id = outdata[0].get("customer_id", "")
                 customer_name = outdata[0].get("customer_name", "")
