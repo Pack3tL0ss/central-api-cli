@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Union
 from sys import argv
 import logging
+from . import constants  # NoQA
 utils = Utils()
 
 
