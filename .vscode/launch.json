@@ -8,7 +8,8 @@
           "type": "promptString",
           "id": "cliArgs",
           "description": "Select Arguments",
-          "default": "show gateway"
+        //   "default": "show gateway"
+          "default": "show ap --group Branch1"
         //   "default": "batch --key test-acl"
         },
       ],
@@ -20,8 +21,7 @@
             "program": "cli.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["${input:cliArgs}"],
-            "argsExpansion": "shell"
+            "args": ["${input:cliArgs}"]
         },
         {
             "name": "ana-cli interactive arg selection",
@@ -30,8 +30,7 @@
             "program": "main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["${input:cliArgs}"],
-            "argsExpansion": "shell"
+            "args": ["${input:cliArgs}"]
         },
         {
             "name": "cli interactive arg selection WIP",
