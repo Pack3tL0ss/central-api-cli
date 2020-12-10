@@ -110,11 +110,17 @@ class CentralApi:
         :return: GET call response JSON
         :rtype: Python dict
         """
-        # if headers is None:
-        #     headers = self.headers
         f_url = self.central.central_info["base_url"] + url
-        # return Response(requests.get, f_url, params=params, headers=headers)
         return Response(self.central.requestUrl, f_url, params=params, headers=headers)
+
+    def post(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+        f_url = self.central.central_info["base_url"] + url
+        return Response(self.central.requestUrl, f_url, data=payload, params=params, headers=headers, **kwargs)
+
+    # doesn't appear to work. referenced in swagger to get listing of types (New Device Inventory: Get Devices...)
+    def get_dev_types(self):
+        url = "/platform/orders/v1/skus?sku_type=all"
+        return self.central.get(url)
 
     def get_ap(self):
         """GET call for AP data
@@ -188,38 +194,28 @@ class CentralApi:
 
     def get_template(self, group, template):
         url = f"/configuration/v1/groups/{group}/templates/{template}"
-        # header = {"authorization": f"Bearer {self.access_token}"}
-        # resp = requests.get(self.auth.vars["base_url"] + url)
-        # print(resp.text)
         return self.central.get(url)
 
     def get_all_groups(self):  # DONE
         url = "/configuration/v2/groups?limit=20&offset=0"
         params = {"limit": 20, "offset": 0}
-        # header = {"authorization": f"Bearer {self.access_token}"}
         return self.central.get(url, params=params)
-        # return resp
 
     def get_sku_types(self):
         url = "/platform/orders/v1/skus"
         params = {"sku_type": "all"}
         return self.central.get(url, params=params)
 
-    def get_dev_by_type(self, dev_type):
+    def get_dev_by_type(self, dev_type: str):
         url = "/platform/device_inventory/v1/devices"
         if dev_type.lower() in ["aps", "ap"]:
             dev_type = "iap"
         params = {"sku_type": dev_type}
-        # header = {"authorization": f"Bearer {self.auth.access_token}"}
         return self.central.get(url, params=params)
-        # resp = self.get_call(url, params)
-        # return resp if "devices" not in resp else resp["devices"]
 
-    def get_variablised_template(self, serialnum):
+    def get_variablised_template(self, serialnum: str) -> Response:
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
-        # header = {"authorization": f"Bearer {self.access_token}"}
         return self.central.get(url)
-        # return(resp.text.split('\n'))
 
     def get_variables(self, serialnum: str = None):
         if serialnum:
@@ -230,8 +226,6 @@ class CentralApi:
             params = {"limit": 20, "offset": 0}
             # TODO generator for returns > 20 devices
         return self.central.get(url, params=params)
-        # resp = requests.get(self.vars["base_url"] + url, params=params, headers=header)
-        # return(resp.json())
 
     # TODO self.central.patch
     def update_variables(self, serialnum: str, var_dict: dict):
@@ -244,6 +238,14 @@ class CentralApi:
         resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
         return(resp.ok)
 
+    def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
+                    status: str = None, fields: list = None, show_stats: bool = False, calc_clients: bool = False,
+                    pub_ip: str = None, limit: int = None, offset: int = None, sort: str = None):
+        _strip = ["self", "dev_type", "url", "_strip"]
+        params = {k: v for k, v in locals().items() if k not in _strip and v}
+        url = f"/monitoring/v1/{dev_type}"
+        return self.central.get(url, params=params)
+
     def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"
         params = {"group": group}
@@ -253,11 +255,9 @@ class CentralApi:
         url = "/monitoring/v1/mobility_controllers"
         params = {"group": group}
         return self.central.get(url, params=params)
-        # return resp if 'mcs' not in resp else resp['mcs']
 
     def get_group_for_dev_by_serial(self, serial_num):
         return self.central.get(f"/configuration/v1/devices/{serial_num}/group")
-        # return resp if "group" not in resp else resp["group"]
 
     def get_dhcp_client_info_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
@@ -278,10 +278,7 @@ class CentralApi:
 
     def get_uplink_state_by_group(self, group):
         url = f"/monitoring/v1/mobility_controllers/uplinks/distribution?group={group}"
-        # header = {"authorization": f"Bearer {self.access_token}"}
-        # resp = self.get_call(url, header)
-        resp = self.central.get(url)
-        pprint.pprint(resp)
+        return self.central.get(url)
 
     def get_all_sites(self):
         return self.central.get("/central/v2/sites")
@@ -294,18 +291,9 @@ class CentralApi:
         params = {"group": group}
         return self.central.get(url, params=params)
 
-    def bounce_poe(self, serial_num, port):
-        # url = f"/device_management/v2/device/{serial_num}/action/bounce_poe_port"
-        # header = {
-        #     "authorization": f"Bearer {self.access_token}",
-        #     "Content-type": "application/json"
-        # }
-        # payload = {"port": port}
-        # resp = requests.post(self.vars["base_url"] + url, json=payload, headers=header)
+    def bounce_poe(self, serial_num: str, port: Union[str, int]) -> Response:
         url = f"/device_management/v1/device/{serial_num}/action/bounce_poe_port/port/{port}"
-        header = {"authorization": f"Bearer {self.access_token}"}
-        resp = requests.post(self.central.vars["base_url"] + url, headers=header)
-        pprint.pprint(resp.json())
+        return self.central.post(url)
 
     def kick_users(self, serial_num, kick_all=False, mac=None, ssid=None):
         url = f"/device_management/v1/device/{serial_num}/action/disconnect_user"
