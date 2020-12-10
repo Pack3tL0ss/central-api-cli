@@ -21,6 +21,9 @@ try:
 except Exception:
     loc_user = os.getenv("SUDO_USER", os.getenv("USER"))
 
+# removed from output and placed at top (provided with each item returned)
+CUST_KEYS = ["customer_id", "customer_name"]
+
 
 class Convert:
     def __init__(self, mac):
@@ -331,14 +334,33 @@ class Utils:
                 return function(*args, **kwargs)
 
     def output(self, outdata, tablefmt):
-        # pprint(outdata, indent=4)
+        # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
+        table_data = "No output returned" if not outdata else outdata
         if tablefmt == "json":
             from pygments import highlight, lexers, formatters
             json_data = json.dumps(outdata, sort_keys=True, indent=2)
-            table_data = highlight(bytes(json_data, 'UTF-8'), lexers.JsonLexer(), formatters.Terminal256Formatter(style='solarized-dark'))
-        elif tablefmt:
+            table_data = highlight(bytes(json_data, 'UTF-8'),
+                                   lexers.JsonLexer(),
+                                   formatters.Terminal256Formatter(style='solarized-dark')
+                                   )
+        elif tablefmt == "csv":
+            table_data = "\n".join(
+                            [
+                                ",".join(
+                                    [
+                                        k if outdata.index(d) == 0 else str(v)
+                                        for k, v in d.items()
+                                        if k not in CUST_KEYS
+                                    ])
+                                for d in outdata
+                            ])
+        else:
+            customer_id = customer_name = ""
+            if outdata and isinstance(outdata, list) and isinstance(outdata[0], dict):
+                customer_id = outdata[0].get("customer_id", "")
+                customer_name = outdata[0].get("customer_name", "")
+            outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
             table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
-        if tablefmt == "csv":
-        #TODO Add CSV output
-             pass
+            table_data = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n{table_data}"
+
         return table_data
