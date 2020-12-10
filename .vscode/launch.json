@@ -9,11 +9,22 @@
           "id": "cliArgs",
           "description": "Select Arguments",
         //   "default": "show gateway"
-          "default": "show ap --group Branch1"
+          "default": "show ap group Branch1"
+        //   "default": "show ap --group Branch1"
         //   "default": "batch --key test-acl"
         },
       ],
     "configurations": [
+        {
+            "name": "DEVCLI interactive arg selection",
+            "type": "python",
+            "request": "launch",
+            "program": "devcli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},
+            "args": ["${input:cliArgs}"]
+        },
         {
             "name": "cli interactive arg selection",
             "type": "python",
