@@ -135,6 +135,24 @@ class CentralApi:
         url = f"/monitoring/v1/swarms/{swarm_id}"
         return self.central.get(url)
 
+    def get_all_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
+                        serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> None:
+        params = {}
+        for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "os_type", "cluster_id", "band"],
+                        [group, swarm_id, label, ssid, serial, os_type, cluster_id, band]
+                        ):
+            if v:
+                params[k] = v
+
+        # return structure:  {'clients': [], 'count': 0}
+        resp = self.get_wlan_clients(**params)
+        if resp.ok:
+            wlan_resp = resp
+            resp = self.get_wired_clients(**params)
+            if resp.ok:
+                resp.output = wlan_resp.output.get("clients") + resp.output.get("clients")
+        return resp
+
     def get_wlan_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
                          serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> None:
         params = {}
