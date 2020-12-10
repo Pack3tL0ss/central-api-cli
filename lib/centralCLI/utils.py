@@ -337,7 +337,6 @@ class Utils:
             json_data = json.dumps(outdata, sort_keys=True, indent=2)
             table_data = highlight(bytes(json_data, 'UTF-8'), lexers.JsonLexer(), formatters.Terminal256Formatter(style='solarized-dark'))
         elif tablefmt:
-            # print(tabulate(outdata, headers="keys", tablefmt=tablefmt))
             table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
         if tablefmt == "csv":
         #TODO Add CSV output

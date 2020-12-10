@@ -7,8 +7,7 @@ import typer
 from lib.centralCLI.central import CentralApi, BuildCLI, utils, config, log
 
 # from pathlib import Path
-# import os
-
+from os import environ
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
@@ -400,8 +399,12 @@ def _refresh_tokens(account_name: str) -> CentralApi:
     return session
 
 
-# extract account from arguments
-account = "central_info"
+# extract account from arguments or environment variables
+if environ.get('ARUBACLI_ACCOUNT') is None:
+    account = "central_info"
+else:
+    account = environ.get('ARUBACLI_ACCOUNT')
+
 if "--account" in sys.argv:
     idx = sys.argv.index("--account")
     for i in range(idx, idx + 2):
@@ -413,10 +416,11 @@ if account not in config.data:
                f"The specified account: '{account}' not defined in config.")
 
 # debug flag ~ additional loggin, and all logs are echoed to tty
-if "--debug" in sys.argv:
+if ("--debug" in sys.argv) or (environ.get('ARUBACLI_DEBUG') == "1"):
     config.DEBUG = log.DEBUG = log.show = True
     log.setLevel("DEBUG")  # DEBUG
-    _ = sys.argv.pop(sys.argv.index("--debug"))
+    if "--debug" in sys.argv:
+        _ = sys.argv.pop(sys.argv.index("--debug"))
 
 log.debug(" ".join(sys.argv))
 session = _refresh_tokens(account)
