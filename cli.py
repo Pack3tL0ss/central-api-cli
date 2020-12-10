@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
 from enum import Enum
-
-
-import typer
-from lib.centralCLI.central import CentralApi, BuildCLI, utils, config, log
-
-# from pathlib import Path
 from os import environ
 
-STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites"]
+import typer
+
+from lib.centralCLI import config, constants, log, utils
+from lib.centralCLI.central import BuildCLI, CentralApi
+
+
+STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
@@ -36,6 +36,7 @@ def get_arguments_from_import(import_file: str, key: str = None) -> list:
 
 # -- break up arguments passed as single string from vscode promptString --
 import sys  # NoQA
+
 sys.argv[0] = 'cencli'
 try:
     if len(sys.argv) > 1:
@@ -179,7 +180,9 @@ def show(what: ShowLevel1 = typer.Argument(...),
             if not group:
                 resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, dev_type)
             else:
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+                # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+                dev_url = constants.dev_to_url.get(dev_type, dev_type)
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, dev_url, group=group)
 
     elif what == "groups":
         resp = session.get_all_groups()
@@ -215,7 +218,6 @@ def show(what: ShowLevel1 = typer.Argument(...),
     data = None if not resp else eval_resp(resp)
 
     if data:
-        # typer.echo("\n--")
         # Strip needless inconsistent json key from dict if present
         if isinstance(data, dict):
             for wtf in STRIP_KEYS:
@@ -223,55 +225,9 @@ def show(what: ShowLevel1 = typer.Argument(...),
                     data = data[wtf]
                     break
 
-        #     data = data.get("data", data)
-
-        # if isinstance(data, dict):
-        #     data = data.get("devices", data)
-
-        # if isinstance(data, dict):
-        #     data = data.get("mcs", data)
-
-        # if isinstance(data, dict):
-        #     data = data.get("group", data)
-        #     data = data.get("clients", data)
-
-        # if isinstance(data, dict):
-        #     data = data.get("sites", data)
-
-        # if isinstance(data, dict):  # site_details is returned as a dict instead of a list
-        #     data = [data]
-
-        # if isinstance(data, dict):
-        #     data = data.get("site_details", data)
-        # print(data)
         if isinstance(data, str):
             typer.echo_via_pager(data)
-        # else:
-        #     _global_displayed = False
-        #     for _ in data:
-        #         if isinstance(_, list) and len(_) == 1:
-        #             typer.echo(_[0])
 
-        #         elif isinstance(_, dict):
-        #             if not _global_displayed and _.get("customer_id"):
-        #                 typer.echo(f"customer_id: {_['customer_id']}")
-        #                 typer.echo(f"customer_name: {_['customer_name']}")
-        #                 _global_displayed = True
-        #             typer.echo("--")
-        #             for k, v in _.items():
-        #                 # strip needless return keys from displayed output
-        #                 if k not in ["customer_id", "customer_name"]:
-        #                     typer.echo(f"{k}: {v}")
-        #         elif isinstance(_, str):
-        #             if isinstance(data, dict) and data.get(_):
-        #                 _key = typer.style(_, fg=typer.colors.CYAN)
-        #                 typer.echo(f"{_key}:")
-        #                 for k, v in sorted(data[_].items()):
-        #                     typer.echo(f"    {k}: {v}")
-        #             else:
-        #                 typer.echo(_)
-
-        # typer.echo("--\n")
         if json is True:
             tablefmt = "json"
         elif output:
@@ -279,6 +235,8 @@ def show(what: ShowLevel1 = typer.Argument(...),
         else:
             tablefmt = "simple"
         typer.echo(utils.output(data, tablefmt))
+    else:
+        typer.echo("No Data Returned")
 
 
 @app.command()
