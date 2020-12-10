@@ -13,7 +13,8 @@ class Config:
     def __init__(self, base_dir: Path = None):
         self.base_dir = base_dir or Path(__file__).parent.parent.parent
         self.dir = self.base_dir.joinpath("config")
-        for ext in ["yaml", "yml", "json"]:
+        self.file = self.dir.joinpath("config.yaml")
+        for ext in ["yml", "json"]:
             if self.dir.joinpath(f"config.{ext}").exists():
                 self.file = self.dir.joinpath(f"config.{ext}")
                 break
