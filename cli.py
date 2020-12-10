@@ -9,6 +9,7 @@ from lib.centralCLI.central import CentralApi, BuildCLI, utils, config, log
 # from pathlib import Path
 from os import environ
 
+STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
@@ -72,10 +73,10 @@ app = typer.Typer()
 
 class ShowLevel1(str, Enum):
     devices = "devices"
+    device = "device"
     switch = "switch"
     groups = "groups"
     sites = "sites"
-    # site_details = "site_details"
     clients = "clients"
     ap = "ap"
     gateway = "gateway"
@@ -153,14 +154,13 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 @app.command()
 def show(what: ShowLevel1 = typer.Argument(...),
          dev_type: str = typer.Argument(None),
-         group: str = None,
+         group: str = typer.Option(None, help="Filter Output by group"),
          json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
          output: str = typer.Option("simple", help="Output to table format"),
-         #  account: str = typer.Option("central_info", help="Pass the account name from the config file"),
+         # account: str = typer.Option(None, "account", help="Pass the account name from the config file"),
          id: int = typer.Option(None, help="ID field used for certain commands")
          ):
 
-    # session = _refresh_tokens(account)
     if not dev_type:
         if what.startswith("gateway"):
             what, dev_type = "devices", "gateway"
@@ -173,7 +173,7 @@ def show(what: ShowLevel1 = typer.Argument(...),
 
     # -- // Peform GET Call \\ --
     resp = None
-    if what == "devices":
+    if what in ["devices", "device"]:
         if dev_type:
             dev_type = "gateway" if dev_type == "gateways" else dev_type
             if not group:
@@ -210,9 +210,7 @@ def show(what: ShowLevel1 = typer.Argument(...),
         resp = session.get_certificates()
 
     elif what == "clients":
-        resp = session.get_wlan_clients()
-        # wired = session.get_wired_clients()
-        # resp = {**wlan.output, **wired.output}
+        resp = session.get_all_clients()
 
     data = None if not resp else eval_resp(resp)
 
@@ -220,23 +218,28 @@ def show(what: ShowLevel1 = typer.Argument(...),
         # typer.echo("\n--")
         # Strip needless inconsistent json key from dict if present
         if isinstance(data, dict):
-            data = data.get("data", data)
+            for wtf in STRIP_KEYS:
+                if wtf in data:
+                    data = data[wtf]
+                    break
 
-        if isinstance(data, dict):
-            data = data.get("devices", data)
+        #     data = data.get("data", data)
 
-        if isinstance(data, dict):
-            data = data.get("mcs", data)
+        # if isinstance(data, dict):
+        #     data = data.get("devices", data)
 
-        if isinstance(data, dict):
-            data = data.get("group", data)
-            data = data.get("clients", data)
+        # if isinstance(data, dict):
+        #     data = data.get("mcs", data)
 
-        if isinstance(data, dict):
-            data = data.get("sites", data)
+        # if isinstance(data, dict):
+        #     data = data.get("group", data)
+        #     data = data.get("clients", data)
 
-        if isinstance(data, dict):  # site_details is returned as a dict instead of a list
-            data = [data]
+        # if isinstance(data, dict):
+        #     data = data.get("sites", data)
+
+        # if isinstance(data, dict):  # site_details is returned as a dict instead of a list
+        #     data = [data]
 
         # if isinstance(data, dict):
         #     data = data.get("site_details", data)

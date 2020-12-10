@@ -8,7 +8,7 @@
           "type": "promptString",
           "id": "cliArgs",
           "description": "Select Arguments",
-          "default": "show switch --debug"
+          "default": "show gateway"
         //   "default": "batch --key test-acl"
         },
       ],
