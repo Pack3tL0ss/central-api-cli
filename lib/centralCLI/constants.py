@@ -28,14 +28,18 @@ devices = ["switch", "aps", "gateway", "mcd"]
 
 class ArgToWhat:
     def __init__(self):
+        """Mapping object to map supported variations of input for 'what' argument
+
+        Central uses different variations depending on the method (age of method)
+        This CLI uses this standard set (whatever is newer of more prevelent) in
+        central.  If the API method uses a different one, we'll convert from our
+        std set in the method invoking the API call.
+        """
         self.gateway = self.gateways = "gateway"
         self.ap = self.aps = self.iap = "aps"
         self.switch = self.switches = "switch"
         self.group = self.groups = "group"
-        self.sites = self.site = "site"
-
-    # def __call__(func, *args, **kwargs):
-    #     return func(*args, **kwargs)
+        self.site = self.sites = "sites"
 
     def get(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
