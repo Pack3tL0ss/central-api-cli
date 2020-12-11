@@ -2,10 +2,12 @@
 
 import string
 import subprocess
+import shutil
 import shlex
 import time
 import os
 import sys
+from typing import Any
 import yaml
 # import stat
 # import grp
@@ -16,6 +18,7 @@ from io import StringIO
 from halo import Halo
 from tabulate import tabulate
 from pygments import highlight, lexers, formatters
+import urllib.parse
 
 try:
     loc_user = os.getlogin()
@@ -38,6 +41,7 @@ class Convert:
         self.dots = '.'.join(self.clean[i:i+4] for i in range(0, 12, 4))
         self.tag = f"ztp-{self.clean[-4:]}"
         self.dec = int(self.clean, 16) if self.ok else 0
+        self.url = urllib.parse.quote(mac)
 
 
 class Mac(Convert):
@@ -268,10 +272,25 @@ class Utils:
     def json_print(self, obj):
         print(json.dumps(obj, indent=4, sort_keys=True))
 
-    def get_tty_size(self):
-        size = subprocess.run(["stty", "size"], stdout=subprocess.PIPE)
-        rows, cols = size.stdout.decode("UTF-8").split()
-        return int(rows), int(cols)
+    class TTY:
+        def __init__(self):
+            self._rows, self._cols = self.get_tty_size()
+
+        def get_tty_size(self):
+            s = shutil.get_terminal_size()
+            return s.lines, s.columns
+
+        @property
+        def rows(self):
+            self._rows, self._cols = self.get_tty_size()
+            return self._rows
+
+        @property
+        def cols(self):
+            self._rows, self._cols = self.get_tty_size()
+            return self._cols
+
+    tty = TTY()
 
     # TODO check if using kwarg sort added to fix re-order of error_msgs
     def unique(self, _list, sort=False):
@@ -336,17 +355,26 @@ class Utils:
             with Halo(text=spin_txt, spinner=spinner):
                 return function(*args, **kwargs)
 
+    class Output:
+        def __init__(self, rawdata: str = "", prettydata: str = ""):
+            self.file = rawdata    # found typer.unstyle AFTER I built this
+            self.tty = prettydata
+
+        def __len__(self):
+            return len(str(self.file).splitlines())
+
+        def __str__(self):
+            return self.tty
+
     def output(self, outdata, tablefmt):
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
+        _lexer = raw_data = table_data = None
         if tablefmt == "json":
             # from pygments import highlight, lexers, formatters
-            json_data = json.dumps(outdata, sort_keys=True, indent=2)
-            table_data = highlight(bytes(json_data, 'UTF-8'),
-                                   lexers.JsonLexer(),
-                                   formatters.Terminal256Formatter(style='solarized-dark')
-                                   )
+            raw_data = json.dumps(outdata, sort_keys=True, indent=2)
+            _lexer = lexers.JsonLexer
         elif tablefmt == "csv":
-            table_data = "\n".join(
+            raw_data = table_data = "\n".join(
                             [
                                 ",".join(
                                     [
@@ -357,10 +385,8 @@ class Utils:
                                 for d in outdata
                             ])
         elif tablefmt in ["yml", "yaml"]:
-            table_data = highlight(bytes(yaml.dump(outdata, sort_keys=True, ), 'UTF-8'),
-                                   lexers.YamlLexer(),
-                                   formatters.Terminal256Formatter(style='solarized-dark')
-                                   )
+            raw_data = yaml.dump(outdata, sort_keys=True, )
+            _lexer = lexers.YamlLexer
         else:
             customer_id = customer_name = ""
             outdata = self.listify(outdata)
@@ -369,6 +395,14 @@ class Utils:
                 customer_name = outdata[0].get("customer_name", "")
             outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
             table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
-            table_data = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n{table_data}"
+            raw_data = table_data = f"--\n{'Customer ID:':15}{customer_id}\n" \
+                                    f"{'Customer Name:':15} {customer_name}\n--\n" \
+                                    f"{table_data}"
 
-        return table_data
+        if _lexer and raw_data:
+            table_data = highlight(bytes(raw_data, 'UTF-8'),
+                                   _lexer(),
+                                   formatters.Terminal256Formatter(style='solarized-dark')
+                                   )
+
+        return self.Output(rawdata=raw_data, prettydata=table_data)
