@@ -1,0 +1,5 @@
+# ignore everything in this dir
+*
+
+# except self
+!.gitignore
