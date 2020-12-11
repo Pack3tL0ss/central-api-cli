@@ -2,6 +2,7 @@
 from enum import Enum
 from os import environ
 from pathlib import Path
+from typing import List
 
 import typer
 
@@ -316,7 +317,7 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
 
     if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
-        raise typer.exit()
+        raise typer.Exit()
 
     data = utils.read_yaml(import_file)
     if key:
@@ -352,6 +353,34 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
 @app.command()
 def refresh_tokens():
     pass
+
+@app.command()
+def method_test(method: str = typer.Argument(...),
+                kwargs: List[str] = typer.Argument(None)
+                ):
+    """dev testing commands to run CentralApi methods from command line
+
+    Args:
+        method (str, optional): CentralAPI method to test.
+        kwargs (List[str], optional): list of args kwargs to pass to function.
+
+    format: arg1 arg2 keyword=value keyword2=value
+        or  arg1, arg2, keyword = value, keyword2=value
+
+    Displays all attributes of Response object
+   """
+    if not hasattr(session, method):
+        typer.secho(f"{method} does not exist", fg="red")
+        raise typer.Exit(1)
+    args = [k for k in kwargs if "=" not in k]
+    kwargs = [k.replace(" =", "=").replace("= ", "=").replace(",", " ").replace("  ", " ") for k in kwargs]
+    kwargs = [k.split("=") for k in kwargs if "=" in k]
+    kwargs = {k[0]: k[1] for k in kwargs}
+
+    typer.secho(f"session.{method}({(args)}, {kwargs})", fg="green")
+    resp = getattr(session, method)(*args, **kwargs)
+    for k, v in resp.__dict__.items():
+        typer.echo(f"{k}: {v}")
 
 
 def _refresh_tokens(account_name: str) -> CentralApi:
