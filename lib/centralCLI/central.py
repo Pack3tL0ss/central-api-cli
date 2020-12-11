@@ -27,7 +27,7 @@ import requests
 import pprint
 # import os
 import json
-from typing import Union
+from typing import List, Tuple, Union
 import urllib.parse
 import csv
 from . import MyLogger, Response, config, log
@@ -141,8 +141,27 @@ class CentralApi:
         url = f"/monitoring/v1/swarms/{swarm_id}"
         return self.central.get(url)
 
-    def get_all_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
-                        serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> None:
+    def get_clients(self, *args: Tuple[str], group: str = None, swarm_id: str = None,
+                    label: str = None, ssid: str = None,
+                    serial: str = None, os_type: str = None,
+                    cluster_id: str = None, band: str = None, mac: str = None) -> Response:
+        if not args.count(str) > 0 or "all" in args:
+            return self._get_all_clients()
+        elif "wired" in args:
+            return self._get_wired_clients()
+        elif "wireless" in args:
+            return self._get_wireless_clients()
+        elif mac:
+            mac = utils.Mac(args)
+            if mac.ok:
+                return self._get_client_details(mac)
+            else:
+                print(f"Invalid mac {mac}")
+        else:
+            print(f"Invalid arg {args}")
+
+    def _get_all_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
+                         serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> Response:
         params = {}
         for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "os_type", "cluster_id", "band"],
                         [group, swarm_id, label, ssid, serial, os_type, cluster_id, band]
@@ -151,16 +170,16 @@ class CentralApi:
                 params[k] = v
 
         # return structure:  {'clients': [], 'count': 0}
-        resp = self.get_wlan_clients(**params)
+        resp = self._get_wireless_clients(**params)
         if resp.ok:
             wlan_resp = resp
-            resp = self.get_wired_clients(**params)
+            resp = self._get_wired_clients(**params)
             if resp.ok:
                 resp.output = wlan_resp.output.get("clients") + resp.output.get("clients")
         return resp
 
-    def get_wlan_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
-                         serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> None:
+    def _get_wireless_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
+                              serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> Response:
         params = {}
         for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "os_type", "cluster_id", "band"],
                         [group, swarm_id, label, ssid, serial, os_type, cluster_id, band]
@@ -171,8 +190,8 @@ class CentralApi:
         url = "/monitoring/v1/clients/wireless"
         return self.central.get(url, params=params)
 
-    def get_wired_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
-                          serial: str = None, cluster_id: str = None, stack_id: str = None) -> None:
+    def _get_wired_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
+                           serial: str = None, cluster_id: str = None, stack_id: str = None) -> Response:
         params = {}
         for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "cluster_id", "stack_id"],
                         [group, swarm_id, label, ssid, serial, cluster_id, stack_id]
@@ -183,9 +202,13 @@ class CentralApi:
         url = "/monitoring/v1/clients/wired"
         return self.central.get(url, params=params)
 
-    def get_client_details(self, mac: str):
-        url = f"/monitoring/v1/clients/wired/{urllib.parse.quote(mac)}"
-        return self.central.get(url)
+    def _get_client_details(self, mac: utils.Mac) -> Response:
+        url = f"/monitoring/v1/clients/wired/{mac.url}"
+        resp = self.central.get(url)
+        return resp
+        # TODO need to check wireless if doesn't exist there check wired or see if there is generic wired/wlan method
+        # if resp.ok
+        #     if not resp.output:
 
     def get_certificates(self):
         url = "/configuration/v1/certificates"
