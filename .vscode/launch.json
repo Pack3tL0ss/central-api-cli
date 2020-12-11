@@ -9,7 +9,8 @@
           "id": "cliArgs",
           "description": "Select Arguments",
         //   "default": "show gateway"
-          "default": "show ap group Branch1"
+        //   "default": "show ap --group Branch1"
+          "default": "show switches --yaml --outfile switches.yaml"
         //   "default": "show ap --group Branch1"
         //   "default": "batch --key test-acl"
         },
@@ -32,6 +33,7 @@
             "program": "cli.py",
             "console": "integratedTerminal",
             "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},
             "args": ["${input:cliArgs}"]
         },
         {

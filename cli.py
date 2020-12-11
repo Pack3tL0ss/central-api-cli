@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-
+print("imports...", end="")  # check cost/timing
 from enum import Enum
 from os import environ
+from pathlib import Path
+from typing import List, Tuple
 
 import typer
+print("Typer Done...", end="")
 
 from lib.centralCLI import config, constants, log, utils
 from lib.centralCLI.central import BuildCLI, CentralApi
-
+from lib.centralCLI.constants import ShowArgs, SortOptions, StatusOptions, dev_to_url, arg_to_what, devices
+print("All Done")
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
+tty = utils.tty
 
 
 def get_arguments_from_import(import_file: str, key: str = None) -> list:
@@ -70,20 +75,6 @@ except Exception:
 
 
 app = typer.Typer()
-
-
-class ShowLevel1(str, Enum):
-    devices = "devices"
-    device = "device"
-    switch = "switch"
-    groups = "groups"
-    sites = "sites"
-    clients = "clients"
-    ap = "ap"
-    gateway = "gateway"
-    template = "template"
-    variables = "variables"
-    certs = "certs"
 
 
 class TemplateLevel1(str, Enum):
@@ -152,68 +143,72 @@ def bulk_edit(input_file: str = typer.Argument(None)):
             caas_response(resp)
 
 
-@app.command()
-def show(what: ShowLevel1 = typer.Argument(...),
-         dev_type: str = typer.Argument(None),
-         group: str = typer.Option(None, help="Filter Output by group"),
-         json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
-         output: str = typer.Option("simple", help="Output to table format"),
-         # account: str = typer.Option(None, "account", help="Pass the account name from the config file"),
-         id: int = typer.Option(None, help="ID field used for certain commands")
-         ):
+# @app.command()
+# def show(what: ShowLevel1 = typer.Argument(...),
+#          dev_type: str = typer.Argument(None),
+#          group: str = typer.Option(None, help="Filter Output by group"),
+#          json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+#          output: str = typer.Option("simple", help="Output to table format"),
+#          # account: str = typer.Option(None, "account", help="Pass the account name from the config file"),
+#          id: int = typer.Option(None, help="ID field used for certain commands")
+#          ):
 
-    if not dev_type:
-        if what.startswith("gateway"):
-            what, dev_type = "devices", "gateway"
 
-        elif what.lower() in ["iap", "ap", "aps"]:
-            what, dev_type = "devices", "iap"
+show_dev_opts = ["switch[es]", "ap[s]", "gateway[s]", "controller[s]"]
+@app.command(short_help="Show Details about Aruba Central Objects")
+def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opts)}]"),
+        #  args: List[str] = typer.Argument(None, hidden=True),
+         args: str = typer.Argument(None, hidden=True),
+         group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
+         label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+         dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
+         status: StatusOptions = typer.Option(None, help="Filter by device status"),
+         pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
+         do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+         do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+         do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+         do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client ..."),
+         outfile: Path = typer.Option(None, writable=True),
+         sort_by: SortOptions = typer.Option(None, "--sort")):
 
-        elif what.lower() == "switch":
-            what, dev_type = "devices", "switch"
+    what = arg_to_what.get(what)
 
     # -- // Peform GET Call \\ --
     resp = None
-    if what in ["devices", "device"]:
-        if dev_type:
-            dev_type = "gateway" if dev_type == "gateways" else dev_type
-            if not group:
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, dev_type)
-            else:
-                # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
-                dev_url = constants.dev_to_url.get(dev_type, dev_type)
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, dev_url, group=group)
+    if what in devices:
+        if not group:
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
+        else:
+            # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, group=group)
 
     elif what == "groups":
         resp = session.get_all_groups()
 
     elif what == "sites":
-        if id is None:
+        if dev_id is None:
             resp = session.get_all_sites()
         else:
             resp = session.get_site_details(id)
 
-    # elif what == "site_details":
-    #     resp = session.get_site_details(id)
-
     elif what == "template":
-        if dev_type:
-            if group:
-                # dev_type is template name in this case
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, dev_type)
-            else:
-                # dev_type is device serial num in this case
-                resp = session.get_variablised_template(dev_type)
+        if group:
+            # args is template name in this case
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, args)
+        else:
+            # args is device serial num in this case
+            resp = session.get_variablised_template(args)
 
-    # if dev_type provided (serial_num) gets vars for that dev otherwise gets vars for all devs
+    # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
-        resp = session.get_variables(dev_type)
+        resp = session.get_variables(args)
 
     elif what == "certs":
         resp = session.get_certificates()
 
     elif what == "clients":
-        resp = session.get_all_clients()
+        resp = session.get_clients(args)
 
     data = None if not resp else eval_resp(resp)
 
@@ -226,15 +221,33 @@ def show(what: ShowLevel1 = typer.Argument(...),
                     break
 
         if isinstance(data, str):
-            typer.echo_via_pager(data)
+            typer.echo_via_pager(data) if len(data) > tty.rows else typer.echo(data)
 
-        if json is True:
+        if do_json is True:
             tablefmt = "json"
-        elif output:
-            tablefmt = output
+        elif do_yaml is True:
+            tablefmt = "yaml"
+        elif do_csv is True:
+            tablefmt = "csv"
+        # elif output:
+        #     tablefmt = output
         else:
             tablefmt = "simple"
-        typer.echo(utils.output(data, tablefmt))
+        outdata = utils.output(data, tablefmt)
+        typer.echo_via_pager(outdata) if len(outdata) > tty.rows else typer.echo(outdata)
+
+        # -- // Output to file \\ --
+        if outfile and outdata:
+            if not outfile.parent.is_absolute():
+                outfile = config.outdir / outfile
+
+            print(
+                typer.style(f"\nWriting output to {outfile.resolve()}... ", fg="cyan"),
+                end=""
+            )
+            outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
+            typer.secho("Done", fg="green")
+
     else:
         typer.echo("No Data Returned")
 

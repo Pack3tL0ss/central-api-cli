@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
+import ipaddress
 from enum import Enum
 from typing import List
 from pathlib import Path
 import sys
+from click.termui import style
 import typer
+from typing import Dict
 
-app = typer.Typer()
+app = typer.Typer(options_metavar="WHAT TO SHOW")
 
 
-app = typer.Typer()
+app = typer.Typer(options_metavar="Filtering and output flags")
 # show_app = typer.Typer()
 # app.add_typer(show_app, name="show")
 # users_app = typer.Typer()
@@ -26,6 +29,7 @@ class ShowLevel1(str, Enum):
     ap = "ap"
     aps = "aps"
     gateway = "gateway"
+    gateways = "gateways"
     template = "template"
     variables = "variables"
     certs = "certs"
@@ -53,19 +57,21 @@ class SortOptions(str, Enum):
     serial_des = "-serial"
 
 
-class Filter:
-    def __init__(self):
-        self.group: str = typer.Argument(None)
-        self.label: str = typer.Argument(None)
-        self.stackid: str = typer.Argument(None)  # stack_id
-        self.status: str = typer.Argument(None)
-        self.fields: str = typer.Argument(None)
-        # show_stats  -s
-        # calc_clients -n
-        self.pub_ip: str = typer.Argument(None)
-        self.limit: str = typer.Argument(None)
-        self.offset: str = typer.Argument(None)
+class ACStatus(str, Enum):
+    up = "up"
+    down = "down"
 
+
+# Enum(valid_filters = [
+#     group: str = typer.Argument(None),
+#     label: str = typer.Argument(None),
+#     stack_id: str = typer.Argument("stackid", None),
+#     status: str = typer.Argument(None),
+#     fields: str = typer.Argument(None),
+#     pub_ip: str = typer.Argument(None),
+#     limit: str = typer.Argument(None),
+#     offset: str = typer.Argument(None)
+# ])
 
 def massage_args() -> List[str]:
     sys.argv[0] = Path(__file__).stem
@@ -89,22 +95,43 @@ def massage_args() -> List[str]:
         return sys.argv
 
 
-# show_dev_opts = ["switches", "switch", "ap", "aps", "gateway", "gateway", "controller", "controllers"]
+# switch_meta = ["switches", "switch", "ap", "aps", "gateway", "gateway", "controller", "controllers"]
+L = typer.style("[", fg="cyan")
+R = typer.style("]", fg="cyan")
+M = typer.style("|", fg="cyan")
+show_dev_opts = [f"switch[es]", f"ap[s]", f"gateway[s]", f"controller[s]"]
+# # show_stats  -s
+# # calc_clients -n
 @app.command()
-def show2(what: ShowLevel1 = typer.Argument(..., ), filters: List[str] = typer.Argument(None),
-          json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON")):
-    #  sort_by: str = typer.Option(None, "-sort")):
-    # filters = sort_by = ""
-    typer.echo(f"Show {what} {filters} {'sort_by'}")
-
-
-@app.command()
-def show(what: ShowLevel1 = typer.Argument(...), filters: List[str] = typer.Argument(None),
-         do_json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
-         do_yaml: bool = typer.Option(False, "-y", is_flag=True, help="Output in YAML"),
+def show(what: ShowLevel1 = typer.Argument(..., metavar=f"{L}{f'{M}'.join(show_dev_opts)}{R}"),
+         group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
+         label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+         id: int = typer.Option(None, metavar="<id>", help="Filter by id"),
+         status: ACStatus = typer.Option(None, help="Filter by device status"),
+         pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
+        #  limit: int = typer.Option(None),
+        #  offset: int = typer.Option(None),
+         do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+         do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+         do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+         do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client ..."),
          sort_by: SortOptions = typer.Option(None, "--sort")):
+        # _filter_names = ["group", "label", "stack_id", "status", "fields", "pub_ip", "limit", "offset"]
+        # _valid_filters = [group, label, stackid, status, fields, pub_ip, limit, offset]
+        # filters = [f"{k}: {v} " for k, v in zip(_filter_names, _valid_filters) if v]
+        # typer.echo(f"Show {what} {filters} sort_by: {sort_by} json:{do_json}, yaml:{do_yaml} csv:{do_csv}")
+    _ = {typer.echo(f"{typer.style(k, fg='green')}: {v}") for k, v in locals().items()}
+    pass
+
+
+@app.command()
+def show2(what: ShowLevel1 = typer.Argument(...), filters: List[str] = typer.Argument(None),
+          do_json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+          do_yaml: bool = typer.Option(False, "-y", is_flag=True, help="Output in YAML"),
+          sort_by: SortOptions = typer.Option(None, "--sort")):
     # filters = sort_by = ""
-    typer.echo(f"Show {what} {filters} {'sort_by'}")
+    typer.echo(f"Show {what} {filters} sort_by: {sort_by} json:{do_json}, yaml:{do_yaml}")
 
 
 # @show_app.command("delete")
@@ -132,7 +159,8 @@ def main(ctx: typer.Context):
     """
     Central API CLI App.
     """
-    typer.echo(f"About to execute command: {ctx.invoked_subcommand}")
+    # typer.echo(f"About to execute command: {ctx.invoked_subcommand}")
+    typer.secho(f"{' '.join(sys.argv[1:])}", fg='green')
 
 
 if __name__ == "__main__":
