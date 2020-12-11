@@ -20,20 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# import getpass
 from pycentral.base import ArubaCentralBase
 import requests
-# import yaml
 import pprint
-# import os
 import json
-from typing import List, Tuple, Union
-import urllib.parse
+from typing import Tuple, Union
 import csv
 from . import MyLogger, Response, config, log
-# Get instance of ArubaCentralBase from the central_filename
-# from pycentral.workflows.workflows_utils import get_conn_from_file
-# from pathlib import Path
 
 try:
     from . import utils
@@ -42,13 +35,6 @@ except ImportError:
     utils = Utils()
 
 
-# _refresh_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", ".refresh_token.yaml"))
-# _refresh_file = Path.joinpath(Path(__file__), "config", ".refresh_token.yaml")
-# _config_file = Path.joinpath(Path(__file__).parent.parent.parent, "config", "config.yaml")
-# _bulk_edit_file = _config_file.parent.joinpath('bulkedit.csv')
-
-# TODO build own function for this so we can set token_store vs overriding it in cli.py
-# central = get_conn_from_file(filename=config.config_file)
 DEFAULT_TOKEN_STORE = {
   "type": "local",
   "path": f"{config.dir.joinpath('.cache')}"
@@ -56,11 +42,12 @@ DEFAULT_TOKEN_STORE = {
 
 
 def get_conn_from_file(account_name, logger: MyLogger = log):
-    """Creates an instance of class`pycentral.ArubaCentralBase` based on the information
-    provided in the YAML/JSON file. \n
-        * keyword central_info: A dict containing arguments as accepted by class`pycentral.ArubaCentralBase` \n
-        * keyword ssl_verify: A boolean when set to True, the python client validates Aruba Central's SSL certs. \n
-        * keyword token_store: Optional. Defaults to None. \n
+    """Creates an instance of class`pycentral.ArubaCentralBase` based on config file
+
+    provided in the YAML/JSON config file:
+        * keyword central_info: A dict containing arguments as accepted by class`pycentral.ArubaCentralBase`
+        * keyword ssl_verify: A boolean when set to True, the python client validates Aruba Central's SSL certs.
+        * keyword token_store: Optional. Defaults to None.
 
     :param filename: Name of a JSON/YAML file containing the keywords required for class:`pycentral.ArubaCentralBase`
     :type filename: str
@@ -83,20 +70,16 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
 
 class CentralApi:
-    log = log
-
-    # def __init__(self, central: CentralApiAuth = CentralApiAuth()):
     def __init__(self, account_name):
         self.central = get_conn_from_file(account_name)
-        # self.headers = {"authorization": f"Bearer {self.central.central_info['token']['access_token']}"}
+
         # Temp Refactor to use ArubaBaseClass without changing all my methods
-        # self.central.get = self.get
         self.central.get = self.get
 
-    # def get(self, url: str, params: dict = {}, data: dict = {},
-    #         headers: dict = {}, files: dict = {}, retry_api_call: bool = True) -> dict:
-    #     return self.central.command("GET", apiPath=url, apiData=data, apiParams=params,
-    #                                 headers=headers, files=files, retry_api_call=retry_api_call)
+        # def get(self, url: str, params: dict = {}, data: dict = {},
+        #         headers: dict = {}, files: dict = {}, retry_api_call: bool = True) -> dict:
+        #     return self.central.command("GET", apiPath=url, apiData=data, apiParams=params,
+        #                                 headers=headers, files=files, retry_api_call=retry_api_call)
 
     def get(self, url, params: dict = None, headers: dict = None):
         """Generic GET call
@@ -220,9 +203,12 @@ class CentralApi:
         return self.central.get(url)
 
     def get_all_groups(self):  # DONE
-        url = "/configuration/v2/groups?limit=20&offset=0"
-        params = {"limit": 20, "offset": 0}
-        return self.central.get(url, params=params)
+        url = "/configuration/v2/groups"
+        params = {"limit": 20, "offset": 0}  # 20 is the max
+        resp = self.central.get(url, params=params)
+        if resp.ok and resp.get("data"):
+            resp["data"] = [g for _ in resp["data"] for g in _ if g != "unprovisioned"]
+        return resp
 
     def get_sku_types(self):
         url = "/platform/orders/v1/skus"
@@ -304,7 +290,14 @@ class CentralApi:
         return self.central.get(url)
 
     def get_all_sites(self):
-        return self.central.get("/central/v2/sites")
+        resp = self.central.get("/central/v2/sites")
+
+        # strip visualrrf_default site from response
+        if resp.ok:
+            _ = resp.output.get("sites", "")
+            resp["sites"] = [s for s in _ if s.get("site_name", "") != "visualrf_default"]
+
+        return resp
 
     def get_site_details(self, site_id):
         return self.central.get(f"/central/v2/sites/{site_id}")
