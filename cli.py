@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-print("imports...", end="")  # check cost/timing
 from enum import Enum
 from os import environ
 from pathlib import Path
-from typing import List, Tuple
 
 import typer
-print("Typer Done...", end="")
 
-from lib.centralCLI import config, constants, log, utils
+from lib.centralCLI import config, log, utils
 from lib.centralCLI.central import BuildCLI, CentralApi
-from lib.centralCLI.constants import ShowArgs, SortOptions, StatusOptions, dev_to_url, arg_to_what, devices
+from lib.centralCLI.constants import (ShowArgs, SortOptions, StatusOptions,
+                                      arg_to_what, devices)
+
 print("All Done")
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
@@ -30,7 +29,7 @@ def get_arguments_from_import(import_file: str, key: str = None) -> list:
     Returns:
         list: updated sys.argv list.
     """
-    args = utils.read_yaml(_import_file)
+    args = utils.read_yaml(import_file)
     if key and key in args:
         args = args[key]
 
@@ -155,9 +154,11 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 
 show_dev_opts = ["switch[es]", "ap[s]", "gateway[s]", "controller[s]"]
+
+
 @app.command(short_help="Show Details about Aruba Central Objects")
 def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opts)}]"),
-        #  args: List[str] = typer.Argument(None, hidden=True),
+         #  args: List[str] = typer.Argument(None, hidden=True),
          args: str = typer.Argument(None, hidden=True),
          group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
          label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
@@ -238,7 +239,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
 
         # -- // Output to file \\ --
         if outfile and outdata:
-            if not outfile.parent.is_absolute():
+            if outfile.parent.resolve() == config.base_dir.resolve():
                 outfile = config.outdir / outfile
 
             print(
