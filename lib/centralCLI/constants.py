@@ -10,6 +10,7 @@ class ShowArgs(str, Enum):
     # devices = "devices"
     switch = "switch"
     switches = "switches"
+    group = "group"
     groups = "groups"
     sites = "sites"
     clients = "clients"
@@ -38,7 +39,7 @@ class ArgToWhat:
         self.gateway = self.gateways = "gateway"
         self.ap = self.aps = self.iap = "aps"
         self.switch = self.switches = "switch"
-        self.group = self.groups = "group"
+        self.groups = self.group = "groups"
         self.site = self.sites = "sites"
 
     def get(self, key: Union[ShowArgs, str], default: str = None) -> str:
@@ -56,6 +57,7 @@ class ShowArg2(str, Enum):
     devices = "devices"
     switch = "switch"
     switches = "switches"
+    group = "group"
     groups = "groups"
     sites = "sites"
     clients = "clients"
