@@ -26,6 +26,9 @@ class ShowArgs(str, Enum):
 
 devices = ["switch", "aps", "gateway", "mcd"]
 
+# wrapping keys from return for some calls that have no value
+STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
+
 
 class ArgToWhat:
     def __init__(self):
@@ -37,7 +40,7 @@ class ArgToWhat:
         std set in the method invoking the API call.
         """
         self.gateway = self.gateways = "gateway"
-        self.ap = self.aps = self.iap = "aps"
+        self.aps = self.ap = self.iap = "aps"
         self.switch = self.switches = "switch"
         self.groups = self.group = "groups"
         self.site = self.sites = "sites"
