@@ -95,13 +95,6 @@ class MyLogger:
         pass
 
 
-_calling_script = Path(argv[0])
-log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
-
-config = Config(base_dir=_calling_script.resolve().parent)
-log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)
-
-
 class Response:
     '''wrapper for requests.response object
 
@@ -141,6 +134,17 @@ class Response:
     def __getitem__(self, key):
         return self.output[key]
 
+    def __getattr__(self, name: str) -> Any:
+        print(f"hit {name}")
+        if hasattr(self, "output") and self.output:
+            if name in self.output:
+                return self.output[name]
+            else:
+                # return from 2nd level of dict
+                _keys = [k for k in constants.STRIP_KEYS if k in self.output]
+                if _keys and name in self.output[_keys[0]] and isinstance(self.output[_keys[0]], dict):
+                    return self.output[_keys[0]]
+
     def __iter__(self):
         for k, v in self.output.items():
             yield k, v
@@ -150,3 +154,22 @@ class Response:
 
     def keys(self):
         return self.output.keys()
+
+    # not implemented yet
+    def clean_response(self):
+        _keys = [k for k in constants.STRIP_KEYS if k in self.output]
+        if len(_keys) == 1:
+            return self.output[_keys[0]]
+        else:
+            print(f"More wrapping keys than expected from return {_keys}")
+
+
+_calling_script = Path(argv[0])
+# print(f"\t\t\t--- {_calling_script} ---")
+_calling_script = Path.cwd() / "cli.py" if str(_calling_script) == "." else _calling_script  # vscode run in python shell
+# print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
+# print(f"\t\t\t--- {_calling_script} ---")
+log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
+
+config = Config(base_dir=_calling_script.resolve().parent)
+log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)

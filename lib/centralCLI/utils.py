@@ -182,10 +182,16 @@ class Utils:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         raw_data = outdata
         _lexer = table_data = None
+
         if tablefmt == "json":
             # from pygments import highlight, lexers, formatters
             raw_data = json.dumps(outdata, sort_keys=True, indent=2)
             _lexer = lexers.JsonLexer
+
+        elif tablefmt in ["yml", "yaml"]:
+            raw_data = yaml.dump(outdata, sort_keys=True, )
+            _lexer = lexers.YamlLexer
+
         elif tablefmt == "csv":
             raw_data = table_data = "\n".join(
                             [
@@ -197,21 +203,24 @@ class Utils:
                                     ])
                                 for d in outdata
                             ])
-        elif tablefmt in ["yml", "yaml"]:
-            raw_data = yaml.dump(outdata, sort_keys=True, )
-            _lexer = lexers.YamlLexer
+
         else:
             customer_id = customer_name = ""
             outdata = self.listify(outdata)
-            if outdata and all(isinstance(x, dict) for x in outdata):  # verify List[dict, ...]
+
+            # -- // List[dict, ...] \\ --
+            if outdata and all(isinstance(x, dict) for x in outdata):
                 customer_id = outdata[0].get("customer_id", "")
                 customer_name = outdata[0].get("customer_name", "")
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
-                raw_data = table_data = f"--\n{'Customer ID:':15}{customer_id}\n" \
-                                        f"{'Customer Name:':15} {customer_name}\n--\n" \
-                                        f"{table_data}"
-            elif outdata and (isinstance(x, str) for x in outdata):  # verify List[dict, ...]
+
+                data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
+                              f"{'Customer Name:':15} {customer_name}\n--\n"
+                raw_data = table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+
+            # -- // List[str, ...] \\ --
+            elif outdata and (isinstance(x, str) for x in outdata):
                 raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
 
         if _lexer and raw_data:

@@ -9,7 +9,7 @@
           "id": "cliArgs",
           "description": "Select Arguments",
           // The default is updated automatically by the script, could not get vscode debugger to do it.
-          "default": "show sites"  // VSC_PREV_ARGS
+          "default": "show groups"  // VSC_PREV_ARGS
         },
       ],
     "configurations": [
