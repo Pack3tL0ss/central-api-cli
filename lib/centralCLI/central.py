@@ -395,7 +395,6 @@ class CentralApi:
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
         return Response(self.post, url, payload=payload)
 
-
     def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
             key = "node_name"
