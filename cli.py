@@ -7,10 +7,10 @@ from typing import List
 import sys
 import typer
 
-from lib.centralCLI import config, log, utils
-from lib.centralCLI.central import BuildCLI, CentralApi
-from lib.centralCLI.constants import (ShowArgs, SortOptions, StatusOptions,
-                                      arg_to_what, devices)
+from centralCLI import config, log, utils
+from centralCLI.central import BuildCLI, CentralApi
+from centralCLI.constants import (ShowArgs, SortOptions, StatusOptions,
+                                  arg_to_what, devices)
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -201,7 +201,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
          do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
          do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client ..."),
          outfile: Path = typer.Option(None, writable=True),
-         sort_by: SortOptions = typer.Option(None, "--sort")):
+         sort_by: SortOptions = typer.Option(None, "--sort"),
+         no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+         ):
 
     what = arg_to_what.get(what)
 
@@ -212,24 +214,31 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
             resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
         else:
             # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+            # TODO this is a very different dataset... will determine most ideal to return
             resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, group=group)
 
-    elif what == "groups":
-        resp = session.get_all_groups()
+    elif what == "groups":  # VERIFIED
+        resp = session.get_all_groups()  # simple list of str
 
-    elif what == "sites":
+    elif what == "sites":  # VERIFIED
         if dev_id is None:
-            resp = session.get_all_sites()
+            resp = session.get_all_sites()  # VERIFIED
         else:
-            resp = session.get_site_details(id)
+            resp = session.get_site_details(dev_id)  # VERIFIED
 
     elif what == "template":
-        if group:
+        if not args:
+            typer.echo(
+                typer.style("template keyword requires additional argument: <template name | serial>", fg="red")
+            )
+            raise typer.Exit(1)
+        elif group:
             # args is template name in this case
             resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, args)
         else:
+            # TODO lookup by name, ip address, etc
             # args is device serial num in this case
-            resp = session.get_variablised_template(args)
+            resp = session.get_variablised_template(args)  # VERIFIED
 
     # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
@@ -244,15 +253,16 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
     data = None if not resp else eval_resp(resp)
 
     if data:
-        # Strip needless inconsistent json key from dict if present
+        # TODO enable cleaner in Response... will benefit all command paths
         if isinstance(data, dict):
             for wtf in STRIP_KEYS:
                 if wtf in data:
                     data = data[wtf]
                     break
 
-        if isinstance(data, str):
-            typer.echo_via_pager(data) if len(data) > tty.rows else typer.echo(data)
+        # if isinstance(data, str):
+        #     data = data.splitlines()
+            # typer.echo_via_pager(data) if len(data) > tty.rows else typer.echo(data)
 
         if do_json is True:
             tablefmt = "json"
@@ -265,7 +275,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
         else:
             tablefmt = "simple"
         outdata = utils.output(data, tablefmt)
-        typer.echo_via_pager(outdata) if len(outdata) > tty.rows else typer.echo(outdata)
+        typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --
         if outfile and outdata:
@@ -434,6 +444,9 @@ def _refresh_tokens(account_name: str) -> CentralApi:
 
 
 # ---- // RUN \\ ----
+
+# TODO We may be able to do this in @app.callback which is run before the command
+# https://typer.tiangolo.com/tutorial/commands/context/
 if environ.get("TERM_PROGRAM") == "vscode":
     vscode_arg_handler()
 
