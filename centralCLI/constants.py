@@ -1,29 +1,36 @@
 from enum import Enum
 from typing import Union
 
-dev_to_url = {"switch": "switches", "ap": "aps", "iap": "aps"}
+# TODO replace references -> use arg_to_what
+dev_to_url = {
+    "switch": "switches",
+    "ap": "aps",
+    "iap": "aps"
+              }
 
 
 class ShowArgs(str, Enum):
     all = "all"
     # device = "device"
     # devices = "devices"
-    switch = "switch"
-    switches = "switches"
-    group = "group"
-    groups = "groups"
-    sites = "sites"
-    clients = "clients"
     ap = "ap"
     aps = "aps"
+    switch = "switch"
+    switches = "switches"
     gateway = "gateway"
     gateways = "gateways"
-    templates = "templates"
+    group = "group"
+    groups = "groups"
+    site = "site"
+    sites = "sites"
+    clients = "clients"
     template = "template"
+    templates = "templates"
     variables = "variables"
     certs = "certs"
 
 
+# Used to determine if arg is for a device (vs group, templates, ...)
 devices = ["switch", "aps", "gateway", "mcd"]
 
 # wrapping keys from return for some calls that have no value
@@ -44,6 +51,7 @@ class ArgToWhat:
         self.switch = self.switches = "switch"
         self.groups = self.group = "groups"
         self.site = self.sites = "sites"
+        self.template = self.templates = "template"
 
     def get(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):

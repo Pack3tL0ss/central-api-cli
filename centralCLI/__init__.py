@@ -102,7 +102,8 @@ class Response:
     Otherwise resp.ok will always be assigned and will be True or False
     '''
     def __init__(self, function, *args: Any, **kwargs: Any) -> Any:
-        log.debug(f"request url: {'' if not args else args[0]}")
+        self.url = '' if not args else args[0]
+        log.debug(f"request url: {self.url}")
         try:
             resp = function(*args, **kwargs)
             self.ok = resp.ok
