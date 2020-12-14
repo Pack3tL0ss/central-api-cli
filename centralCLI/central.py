@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 from pycentral.base import ArubaCentralBase
-import requests
+# import requests
 import json
 from typing import List, Tuple, Union
 import csv
@@ -76,7 +76,7 @@ class CentralApi:
         tok_dict = cfg_dict["token"]
 
         # Temp Refactor to use ArubaBaseClass without changing all my methods
-        self.central.get = self.get
+        # self.central.get = self.get
 
         self.headers = {
             "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
@@ -90,35 +90,40 @@ class CentralApi:
 
     def get(self, url, params: dict = None, headers: dict = None):
         f_url = self.central.central_info["base_url"] + url
+        # TODO may not need headers, auth= is handled in requestUrl method, application/json is default for central
+        headers = self.headers if headers is None else {**self.headers, **headers}
         return Response(self.central.requestUrl, f_url, params=params, headers=headers)
 
     def post(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
-        return Response(self.central.requestUrl, f_url, data=payload, params=params, headers=headers, **kwargs)
+        headers = self.headers if headers is None else {**self.headers, **headers}
+        return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
+
+    def patch(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+        f_url = self.central.central_info["base_url"] + url
+        return Response(self.central.requestUrl, f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
+
+    def delete(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+        f_url = self.central.central_info["base_url"] + url
+        return Response(self.central.requestUrl, f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
 
     # doesn't appear to work. referenced in swagger to get listing of types (New Device Inventory: Get Devices...)
     def get_dev_types(self):
         url = "/platform/orders/v1/skus?sku_type=all"
-        return self.central.get(url)
+        return self.get(url)
 
-    def get_ap(self):
-        """GET call for AP data
-
-        :param access_token: Access token from tokens func
-        :type access_token: String
-        """
+    def get_ap(self) -> Response:  # VERIFIED
         url = "/monitoring/v1/aps"
-        # return self.central.get(url)
-        return self.central.get(url)
+        return self.get(url)
 
     def get_swarms_by_group(self, group: str):
         url = "/monitoring/v1/swarms"
         params = {"group": group}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def get_swarm_details(self, swarm_id: str):
         url = f"/monitoring/v1/swarms/{swarm_id}"
-        return self.central.get(url)
+        return self.get(url)
 
     def get_clients(self, *args: Tuple[str], group: str = None, swarm_id: str = None,
                     label: str = None, ssid: str = None,
@@ -167,7 +172,7 @@ class CentralApi:
                 params[k] = v
 
         url = "/monitoring/v1/clients/wireless"
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def _get_wired_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
                            serial: str = None, cluster_id: str = None, stack_id: str = None) -> Response:
@@ -179,50 +184,65 @@ class CentralApi:
                 params[k] = v
 
         url = "/monitoring/v1/clients/wired"
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def _get_client_details(self, mac: utils.Mac) -> Response:
+        # TODO THIS IS SPECIFIC TO WIRED AS IS
+        # need to check wireless if doesn't exist there check wired or see if there is generic wired/wlan method
         url = f"/monitoring/v1/clients/wired/{mac.url}"
-        resp = self.central.get(url)
+        resp = self.get(url)
         return resp
-        # TODO need to check wireless if doesn't exist there check wired or see if there is generic wired/wlan method
-        # if resp.ok
-        #     if not resp.output:
 
-    def get_certificates(self):
+    def get_certificates(self) -> Response:  # VERIFIED
         url = "/configuration/v1/certificates"
         params = {"limit": 20, "offset": 0}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
-    def get_template(self, group, template):
+    def post_certificates(self, name: str, cert_type: str, passphrase: str, cert_data: str, format: str = "PEM") -> Response:
+        """Upload a Certificate"""
+        url = "/configuration/v1/certificates"
+        payload = {
+            "cert_name": name,
+            "cert_type": cert_type,
+            "cert_format": format,
+            "passphrase": passphrase,
+            "cert_data": cert_data
+            }
+        return self.post(url, payload=payload)
+
+    def del_certificates(self, name: str) -> Response:  # VERIFIED
+        url = "/configuration/v1/certificates"
+        return self.delete(url, name)
+
+    def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
-        return self.central.get(url)
+        return self.get(url)
 
-    def get_all_groups(self):  # DONE
+    def get_all_groups(self) -> Response:  # VERIFIED
         url = "/configuration/v2/groups"
-        params = {"limit": 20, "offset": 0}  # 20 is the max
-        resp = self.central.get(url, params=params)
+        params = {"offset": 0, "limit": 20}  # 20 is the max
+        resp = self.get(url, params=params)
         if resp.ok and resp.get("data"):
             resp["data"] = [g for _ in resp["data"] for g in _ if g != "unprovisioned"]
         return resp
 
-    def get_sku_types(self):
+    def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
         url = "/platform/orders/v1/skus"
         params = {"sku_type": "all"}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
-    def get_dev_by_type(self, dev_type: str):
+    def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
         if dev_type.lower() in ["aps", "ap"]:
             dev_type = "iap"
         params = {"sku_type": dev_type}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
-    def get_variablised_template(self, serialnum: str) -> Response:
+    def get_variablised_template(self, serialnum: str) -> Response:  # VERIFIED
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
-        return self.central.get(url)
+        return self.get(url)
 
-    def get_variables(self, serialnum: str = None):
+    def get_variables(self, serialnum: str = None) -> Response:
         if serialnum:
             url = f"/configuration/v1/devices/{serialnum}/template_variables"
             params = {}
@@ -230,63 +250,62 @@ class CentralApi:
             url = "/configuration/v1/devices/template_variables"
             params = {"limit": 20, "offset": 0}
             # TODO generator for returns > 20 devices
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
-    # TODO self.patch
-    def update_variables(self, serialnum: str, var_dict: dict):
+    # TODO self.patch  --> Refactor to pycentral
+    def update_variables(self, serialnum: str, var_dict: dict) -> bool:
         url = f"/configuration/v1/devices/{serialnum}/template_variables"
-        header = {
-                    "authorization": f"Bearer {self.central.access_token}",
-                    "Content-type": "application/json"
-                 }
         var_dict = json.dumps(var_dict)
-        resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
-        return(resp.ok)
+        resp = self.patch(url, data=var_dict)
+        return resp.ok
+        # resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
+        # return(resp.ok)
 
     def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
                     status: str = None, fields: list = None, show_stats: bool = False, calc_clients: bool = False,
                     pub_ip: str = None, limit: int = None, offset: int = None, sort: str = None):
         _strip = ["self", "dev_type", "url", "_strip"]
         params = {k: v for k, v in locals().items() if k not in _strip and v}
-        url = f"/monitoring/v1/{dev_type}"
-        return self.central.get(url, params=params)
+        url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
+        return self.get(url, params=params)
 
     def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"
         params = {"group": group}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def get_gateways_by_group(self, group):
         url = "/monitoring/v1/mobility_controllers"
         params = {"group": group}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def get_group_for_dev_by_serial(self, serial_num):
-        return self.central.get(f"/configuration/v1/devices/{serial_num}/group")
+        return self.get(f"/configuration/v1/devices/{serial_num}/group")
 
     def get_dhcp_client_info_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
         params = {"reservation": False}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def get_vlan_info_by_gw(self, serial_num):
-        return self.central.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
+        return self.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
 
     def get_uplink_info_by_gw(self, serial_num, timerange: str = "3H"):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks"
         params = {"timerange": timerange}
-        return self.central.get(url, params)
+        return self.get(url, params)
 
     def get_uplink_tunnel_stats_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks/tunnel_stats"
-        return self.central.get(url)
+        return self.get(url)
 
-    def get_uplink_state_by_group(self, group):
-        url = f"/monitoring/v1/mobility_controllers/uplinks/distribution?group={group}"
-        return self.central.get(url)
+    def get_uplink_state_by_group(self, group: str) -> Response:
+        url = "/monitoring/v1/mobility_controllers/uplinks/distribution"
+        params = {"group": group}
+        return self.get(url, params)
 
-    def get_all_sites(self):
-        resp = self.central.get("/central/v2/sites")
+    def get_all_sites(self) -> Response:
+        resp = self.get("/central/v2/sites")
 
         # strip visualrrf_default site from response
         if resp.ok:
@@ -297,18 +316,18 @@ class CentralApi:
         return resp
 
     def get_site_details(self, site_id):
-        return self.central.get(f"/central/v2/sites/{site_id}")
+        return self.get(f"/central/v2/sites/{site_id}")
 
-    def get_events_by_group(self, group):
-        url = f"/monitoring/v1/events?group={group}"
+    def get_events_by_group(self, group: str) -> Response:  # VERIFIED
+        url = "/monitoring/v1/events"
         params = {"group": group}
-        return self.central.get(url, params=params)
+        return self.get(url, params=params)
 
     def bounce_poe(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
         # TODO allow bounce by name or ip
         url = f"/device_management/v1/device/{serial_num}/action/bounce_poe_port/port/{port}"
         print(url)
-        return self.post(url)
+        return Response(self.post, url)
 
     def kick_users(self, serial_num: str = None, name: str = None, kick_all: bool = False,
                    mac: str = None, ssid: str = None, hint: Union[List[str], str] = None) -> Union[Response, None]:
@@ -331,7 +350,7 @@ class CentralApi:
             log.error("Missing Required Parameters", show=True)
 
     def get_task_status(self, task_id):
-        return self.central.get(f"/device_management/v1/status/{task_id}")
+        return self.get(f"/device_management/v1/status/{task_id}")
 
     def add_dev(self, mac: str, serial_num: str):
         """
@@ -416,7 +435,6 @@ class CentralApi:
         return Response(self.post, url, params=params, payload=payload)
 
         # return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
-        # TODO use my resp generator
 
 
 # t = CentralApi()

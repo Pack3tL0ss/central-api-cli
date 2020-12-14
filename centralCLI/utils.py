@@ -178,6 +178,11 @@ class Utils:
         def __str__(self):
             return self.tty or self.file
 
+        def __iter__(self):
+            out = self.tty or self.file
+            for line in out.splitlines(keepends=True):
+                yield line
+
     def output(self, outdata, tablefmt):
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         raw_data = outdata
@@ -221,7 +226,11 @@ class Utils:
 
             # -- // List[str, ...] \\ --
             elif outdata and (isinstance(x, str) for x in outdata):
-                raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
+                if len(outdata) > 1:
+                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
+                else:
+                    # template / config file output
+                    raw_data = table_data = '\n'.join(outdata)
 
         if _lexer and raw_data:
             table_data = highlight(bytes(raw_data, 'UTF-8'),
