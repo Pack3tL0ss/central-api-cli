@@ -9,7 +9,7 @@
           "id": "cliArgs",
           "description": "Select Arguments",
           // The default is updated automatically by the script, could not get vscode debugger to do it.
-          "default": "method-test bounce_poe 2 CN71HKZ1CL"  // VSC_PREV_ARGS
+          "default": "do bounce-interface abc"  // VSC_PREV_ARGS
         },
       ],
     "configurations": [

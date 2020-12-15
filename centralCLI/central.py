@@ -387,11 +387,8 @@ class CentralApi:
         """Bounce interface, valid only for switches
         """
         # TODO allow bounce by name or ip
-        url = f"/device_management/v1/device/{serial_num}/action/bounce_interface"
-        payload = {
-            "port": port
-        }
-        return self.post(url, payload=payload)
+        url = f"/device_management/v1/device/{serial_num}/action/bounce_interface/port/{port}"
+        return self.post(url)
 
     def kick_users(self, serial_num: str = None, name: str = None, kick_all: bool = False,
                    mac: str = None, ssid: str = None, hint: Union[List[str], str] = None) -> Union[Response, None]:

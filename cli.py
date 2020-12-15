@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from enum import Enum
+
 from os import environ
 from pathlib import Path
 from typing import List
@@ -9,7 +9,7 @@ import typer
 
 from centralCLI import config, log, utils
 from centralCLI.central import BuildCLI, CentralApi
-from centralCLI.constants import (ShowArgs, SortOptions, StatusOptions,
+from centralCLI.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
                                   arg_to_what, devices)
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
@@ -104,12 +104,6 @@ def vscode_arg_handler():
     except Exception as e:
         log.exception(f"Exception in vscode arg handler (launch.json update) {e.__class__}.{e}", show=True)
         return
-
-
-class TemplateLevel1(str, Enum):
-    update = "update"
-    delete = "delete"
-    add = "add"
 
 
 def eval_resp(resp):
@@ -327,6 +321,45 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
                     typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
                 else:
                     typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)}")
+
+
+@app.command()
+def do(what: DoArgs = typer.Argument(...),
+       # args: str = typer.Argument(..., metavar="Identifying Attributes: [serial #|name|ip address|mac address]"),
+       args: str = typer.Argument(None, metavar="identifying attribute i.e. port #, required for some actions."),
+       serial: str = typer.Option(None),
+       name: str = typer.Option(None),
+       ip: str = typer.Option(None),
+       mac: str = typer.Option(None),
+       yes: bool = typer.Option(False, "-Y", metavar="Bypass confirmation prompts - Assume Yes"),
+       ) -> None:
+
+    # serial_num is currently only real option until cache/lookup is implemented
+    kwargs = {
+        "serial_num": serial,
+        "name": name,
+        "ip": ip,
+        "mac": None if not mac else utils.Mac(mac)
+    }
+    typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
+
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    if typer.confirm(typer.style(f"Please Confirm {what} {args}", fg="cyan")):
+        resp = getattr(session, what.replace("-", "_"))(args, **kwargs)
+        typer.echo(resp)
+        if resp.ok:
+            typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
+            resp = session.get_task_status(resp.task_id)
+            typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
+
+    else:
+        raise typer.Abort()
+    # if what == "bounce-poe":
+    #     resp = session.bounce_poe(args2, )
+    # elif what == "bounce-interface":
+    #     typer.echo(f"{what}, {args}, {yes}")
+    # elif what == "reboot":
+    #     pass
 
 
 @app.command()

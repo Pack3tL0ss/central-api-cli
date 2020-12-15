@@ -30,6 +30,23 @@ class ShowArgs(str, Enum):
     certs = "certs"
 
 
+class DoArgs(str, Enum):
+    bounce_poe = "bounce-poe"              # Switches Only
+    bounce_interface = "bounce-interface"  # Switches only
+    reboot = "reboot"                      # IAP/Controllers/Switches
+    sync = "sync"                          # Controllers
+    blink_led = "blink-led"                # IAP/Switches
+    factory_default = "factory-default"    # Switches only
+    write_mem = "write-mem"                # IAP & Switches
+    halt = "halt"                          # controllers only
+
+
+class TemplateLevel1(str, Enum):
+    update = "update"
+    delete = "delete"
+    add = "add"
+
+
 # Used to determine if arg is for a device (vs group, templates, ...)
 devices = ["switch", "aps", "gateway", "all"]
 

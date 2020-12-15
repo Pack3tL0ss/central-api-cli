@@ -160,8 +160,8 @@ class Response:
         for k, v in self.output.items():
             yield k, v
 
-    def get(self, key):
-        return self.output.get(key)
+    def get(self, key, default: Any = None):
+        return self.output.get(key, default)
 
     def keys(self):
         return self.output.keys()
