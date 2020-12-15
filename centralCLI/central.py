@@ -78,6 +78,7 @@ class CentralApi:
         # Temp Refactor to use ArubaBaseClass without changing all my methods
         # self.central.get = self.get
 
+        # No Longer used pycentral module handles auth headers content-type is always application/json
         self.headers = {
             "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
             "Content-type": "application/json"
@@ -91,12 +92,12 @@ class CentralApi:
     def get(self, url, params: dict = None, headers: dict = None):
         f_url = self.central.central_info["base_url"] + url
         # TODO may not need headers, auth= is handled in requestUrl method, application/json is default for central
-        headers = self.headers if headers is None else {**self.headers, **headers}
+        # headers = self.headers if headers is None else {**self.headers, **headers}
         return Response(self.central.requestUrl, f_url, params=params, headers=headers)
 
     def post(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
-        headers = self.headers if headers is None else {**self.headers, **headers}
+        # headers = self.headers if headers is None else {**self.headers, **headers}
         return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
 
     def patch(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
@@ -231,6 +232,43 @@ class CentralApi:
         params = {"sku_type": "all"}
         return self.get(url, params=params)
 
+    def get_all_devices(self) -> Response:  # VERIFIED
+        url = "/platform/device_inventory/v1/devices"
+        _output = []
+        resp = None
+        for dev_type in ["iap", "switch", "gateway"]:
+            params = {"sku_type": dev_type}
+            resp = self.get(url, params=params)
+            if not resp.ok:
+                break
+            _output = [*_output, *resp.output["devices"]]
+
+        if _output:
+            resp.output = _output
+
+        return resp
+
+    # TODO I don't like this, (running output through utils.output here) as it's not consistent with
+    # all the others, but for this API method (which shows a lot more data then the above), the keys
+    # for each dev_type vary
+    def get_all_devicesv2(self, **kwargs) -> Response:  # VERIFIED
+        _output = {}
+        resp = None
+
+        for dev_type in ["aps", "switches", "gateways"]:
+            resp = self.get_devices(dev_type, **kwargs)
+            if not resp.ok:
+                break
+            _output[dev_type] = resp.output[dev_type]  # [dict, ...]
+
+        if _output:
+            # return just the keys common across all device types
+            dicts = [{**{"type": k.rstrip("es")}, **{kk: vv for kk, vv in idx.items()}} for k, v in _output.items() for idx in v]
+            common_keys = set.intersection(*map(set, dicts))
+            resp.output = [{k: v for k, v in d.items() if k in common_keys} for d in dicts]
+
+        return resp
+
     def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
         if dev_type.lower() in ["aps", "ap"]:
@@ -261,11 +299,23 @@ class CentralApi:
         # resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
         # return(resp.ok)
 
+    # TODO ignore sort parameter and sort output from any field.  Central is inconsistent as to what they support via sort
     def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
-                    status: str = None, fields: list = None, show_stats: bool = False, calc_clients: bool = False,
-                    pub_ip: str = None, limit: int = None, offset: int = None, sort: str = None):
+                    status: str = None, fields: list = None, show_resource_details: bool = False,
+                    calculate_client_count: bool = False, calculate_ssid_count: bool = False,
+                    public_ip_address: str = None, limit: int = None, offset: int = None, sort: str = None):
+        # pagenation limit default 100, max 1000
+        # does not return _next... pager will need to page until count < limit
         _strip = ["self", "dev_type", "url", "_strip"]
+        # if fields is not None:
+        #     fields = json.dumps(fields)
         params = {k: v for k, v in locals().items() if k not in _strip and v}
+        if dev_type == "switch":
+            dev_type = "switches"
+        elif dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
+            if params.get("sort", "").endswith("name"):
+                del params["sort"]
+                log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort")
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
         return self.get(url, params=params)
 
@@ -324,10 +374,24 @@ class CentralApi:
         return self.get(url, params=params)
 
     def bounce_poe(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
+        """Bounce PoE on interface, valid only for switches
+        """
         # TODO allow bounce by name or ip
+        # v2 method returns 'CSRF token missing or incorrect.'
         url = f"/device_management/v1/device/{serial_num}/action/bounce_poe_port/port/{port}"
-        print(url)
-        return Response(self.post, url)
+        # need to check get_task_status with response.output["task_id"] from this request to get status
+        # During testing cetral always returned QUEUED
+        return self.post(url)
+
+    def bounce_interface(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
+        """Bounce interface, valid only for switches
+        """
+        # TODO allow bounce by name or ip
+        url = f"/device_management/v1/device/{serial_num}/action/bounce_interface"
+        payload = {
+            "port": port
+        }
+        return self.post(url, payload=payload)
 
     def kick_users(self, serial_num: str = None, name: str = None, kick_all: bool = False,
                    mac: str = None, ssid: str = None, hint: Union[List[str], str] = None) -> Union[Response, None]:
@@ -371,7 +435,7 @@ class CentralApi:
                 }
             ]
 
-        return Response(self.post, url, payload=payload)
+        return self.post(url, payload=payload)
         # resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         # pprint.pprint(resp.json())
 
@@ -397,7 +461,7 @@ class CentralApi:
                 }
             ]
 
-        return Response(self.post, url, payload=payload)
+        return self.post(url, payload=payload)
         # resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         # pprint.pprint(resp.json())
 
@@ -412,7 +476,7 @@ class CentralApi:
                   }
 
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
-        return Response(self.post, url, payload=payload)
+        return self.post(url, payload=payload)
 
     def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
@@ -432,7 +496,7 @@ class CentralApi:
 
         # f_url = self.central.central_info["base_url"] + url
         # return Response(requests.post, f_url, params=params, json=payload, headers=headers)
-        return Response(self.post, url, params=params, payload=payload)
+        return self.post(url, params=params, payload=payload)
 
         # return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
 
