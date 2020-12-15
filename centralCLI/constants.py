@@ -31,7 +31,7 @@ class ShowArgs(str, Enum):
 
 
 # Used to determine if arg is for a device (vs group, templates, ...)
-devices = ["switch", "aps", "gateway", "mcd"]
+devices = ["switch", "aps", "gateway", "all"]
 
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
@@ -94,3 +94,7 @@ class SortOptions(str, Enum):
 class StatusOptions(str, Enum):
     up = "up"
     down = "down"
+    Up = "Up"
+    Down = "Down"
+    UP = "UP"
+    DOWN = "DOWN"

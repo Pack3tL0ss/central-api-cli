@@ -183,23 +183,24 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 #          ):
 
 
-show_dev_opts = ["switch[es]", "ap[s]", "gateway[s]", "controller[s]"]
+show_help = ["all (devices)", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
+             "clients", "template[s]", "variables", "certs"]
 
 
 @app.command(short_help="Show Details about Aruba Central Objects")
-def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opts)}]"),
+def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]"),
          #  args: List[str] = typer.Argument(None, hidden=True),
          args: str = typer.Argument(None, hidden=True),
          group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
          label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
          dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
-         status: StatusOptions = typer.Option(None, help="Filter by device status"),
+         status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
          pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
          do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
          do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client ..."),
+         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
          outfile: Path = typer.Option(None, writable=True),
          sort_by: SortOptions = typer.Option(None, "--sort"),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -210,12 +211,27 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_dev_opt
     # -- // Peform GET Call \\ --
     resp = None
     if what in devices:
-        if not group:
-            resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
+        params = {
+            "group": group,
+            "status": None if not status else status.title(),
+            "label": label,
+            "public_ip_address": pub_ip,
+            "calculate_client_count": do_clients,
+            "show_resource_details": do_stats,
+            "sort": None if not sort_by else sort_by._value_
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if what == "all":
+            # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devicesv2, **params)
         else:
-            # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
-            # TODO this is a very different dataset... will determine most ideal to return
-            resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, group=group)
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, **params)
+        # elif not group:
+        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
+        # else:
+        #     # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+        #     # TODO this is a very different dataset... will determine most ideal to return
+        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_devices(), what, group=group, **params)
 
     elif what == "groups":  # VERIFIED
         resp = session.get_all_groups()  # simple list of str
