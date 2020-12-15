@@ -9,6 +9,7 @@ import sys
 import urllib.parse
 from pprint import pprint
 from typing import Union
+import typer
 
 import yaml
 from halo import Halo
@@ -176,14 +177,26 @@ class Utils:
             return len(str(self.file).splitlines())
 
         def __str__(self):
-            return self.tty or self.file
+            pretty_up = typer.style(" Up", fg="green")
+            pretty_down = typer.style(" Down", fg="red")
+            return self.tty.replace(" Up", pretty_up).replace(" Down", pretty_down) or self.file
 
         def __iter__(self):
             out = self.tty or self.file
             for line in out.splitlines(keepends=True):
                 yield line
 
-    def output(self, outdata, tablefmt):
+    # Not used moved to __str__ method of Output class
+    @staticmethod
+    def do_pretty(key: str, value: str) -> str:
+        """Pre Color Output
+
+        Applies color to certian columns/values prior to formatting
+        """
+        color = "green" if value.lower() == "up" else "red"
+        return value if key != "status" else typer.style(value, fg=color)
+
+    def output(self, outdata: Union[list, dict], tablefmt: str = None) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         raw_data = outdata
         _lexer = table_data = None
@@ -218,6 +231,11 @@ class Utils:
                 customer_id = outdata[0].get("customer_id", "")
                 customer_name = outdata[0].get("customer_name", "")
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
+                # moved to __str__ method of Output class
+                # pretty_outdata = [
+                #             {k: v if k != "status" else self.do_pretty(k, v) for k, v in d.items() if k not in CUST_KEYS}
+                #             for d in outdata
+                #                          ]
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
