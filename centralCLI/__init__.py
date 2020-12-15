@@ -25,6 +25,12 @@ class MyLogger:
         self.name = self._log.name
         self.show = show  # Sets default log behavior (other than debug)
 
+    def __getattr__(self, name):
+        if hasattr(self, "_log") and hasattr(self._log, name):
+            return getattr(self._log, name)
+        else:
+            raise AttributeError(f"'MyLogger' object has no attribute '{name}'")
+
     def get_logger(self):
         '''Return custom log object.'''
         fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
@@ -103,21 +109,23 @@ class Response:
     '''
     def __init__(self, function, *args: Any, **kwargs: Any) -> Any:
         self.url = '' if not args else args[0]
-        log.debug(f"request url: {self.url}")
+        log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
-            resp = function(*args, **kwargs)
-            self.ok = resp.ok
+            r = function(*args, **kwargs)
+            self.ok = r.ok
             try:
-                self.output = resp.json()
+                self.output = r.json()
             except Exception:
-                self.output = resp.text
-            self.error = resp.reason
-            self.status_code = resp.status_code
+                self.output = r.text
+            self.error = r.reason
+            self.status_code = r.status_code
         except Exception as e:
             self.output = {}
             self.ok = False
             self.error = f"Exception occurred {e.__class__}\n\t{e}"
             self.status_code = 418
+        if not self.ok:
+            log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
 
     def __bool__(self):
         return self.ok
@@ -136,7 +144,7 @@ class Response:
         return self.output[key]
 
     def __getattr__(self, name: str) -> Any:
-        print(f"hit {name}")
+        # print(f"hit {name}")
         if hasattr(self, "output") and self.output:
             if name in self.output:
                 return self.output[name]
@@ -145,6 +153,8 @@ class Response:
                 _keys = [k for k in constants.STRIP_KEYS if k in self.output]
                 if _keys and name in self.output[_keys[0]] and isinstance(self.output[_keys[0]], dict):
                     return self.output[_keys[0]]
+
+        raise AttributeError(f"'Response' object has no attribute '{name}'")
 
     def __iter__(self):
         for k, v in self.output.items():
