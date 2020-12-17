@@ -4,6 +4,14 @@
     // sed -i 's/"default": .*/"default": "show poop"/' .vscode/launch.json
     "tasks": [
       {
+        // pickString input allows you to select previous but not to provide a new option.  promptString allows you to input, but doesn't show history
+        // This is a compromise... using promptString and will echo the previous to the terminal... can copy/paste into window from history
+        // disregard... This didn't work, the promptString executes prior to the task
+        "label": "show-prev-args",
+        "type": "shell",
+        "command": "[[ -f ${workspaceFolder}/.vscode/prev_args ]] && cat ${workspaceFolder}/.vscode/prev_args"
+      },
+      {
         "label": "pre-get-args",
         "type": "shell",
         "command": "[[ -f ${workspaceFolder}/.vscode/vscargs.sh ]] && echo found vscargs && . ${workspaceFolder}/.vscode/vscargs.sh && echo Source Success && export VSC_PREV_ARGS=${env:VSC_PREV_ARGS} || echo Something went wrong"
@@ -17,6 +25,11 @@
         "label": "central cli arguments",
         "type": "shell",
         "command": "[ -f ${workspaceFolder}/.vscode/envvars ] && . ${workspaceFolder}/.vscode/envvars; echo export PREV_ARGS=\\'${input:command}\\' > ${workspaceFolder}/.vscode/envvars"
+      },
+      {
+        "label": "printenv",
+        "type": "shell",
+        "command": "printenv",
       },
       {
         "label": "ECHO",

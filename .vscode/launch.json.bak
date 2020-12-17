@@ -9,19 +9,39 @@
           "id": "cliArgs",
           "description": "Select Arguments",
           // The default is updated automatically by the script, could not get vscode debugger to do it.
-          "default": "show groups"  // VSC_PREV_ARGS
+          "default": "show clients"  // VSC_PREV_ARGS
         },
+        {
+            "type": "pickString",
+            "id": "cliArgsHistory",
+            "description": "Select Arguments",
+            // The default is updated automatically by the script, could not get vscode debugger to do it.
+            "options": ["show clients"],  // VSC_ARG_HISTORY
+            "default": "show clients"  // VSC_PREV_ARGS
+          },
       ],
     "configurations": [
         {
-            "name": "cli interactive arg selection",
+            "name": "cli arg INPUT",
             "type": "python",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {"BETTER_EXCEPTIONS": "1"},
+            // "preLaunchTask": "show-prev-args",  // didn't work prompt occurs before preLaunchTask
+            "preLaunchTask": "printenv",
             "args": ["${input:cliArgs}"]
+        },
+        {
+            "name": "cli arg SELECT",
+            "type": "python",
+            "request": "launch",
+            "program": "cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},
+            "args": ["${input:cliArgsHistory}"]
         },
         {
             "name": "DEVCLI interactive arg selection",
