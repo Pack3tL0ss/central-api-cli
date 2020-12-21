@@ -2,10 +2,12 @@
 
 from os import environ
 from pathlib import Path
-from typing import List
-
+from typing import List, Union
+from tinydb import TinyDB, Query
+import time
 import sys
 import typer
+import asyncio
 
 from centralCLI import config, log, utils
 from centralCLI.central import BuildCLI, CentralApi
@@ -69,6 +71,70 @@ def caas_response(resp):
         print()
 
 
+class Identifiers:
+    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None):
+        self.session = session
+        self.DevDB = TinyDB(config.cache_file)
+        self.SiteDB = self.DevDB.table("sites")
+        self.GroupDB = self.DevDB.table("groups")
+        self.Q = Query()
+        if data:
+            self.insert(data)
+        self.check_fresh()
+
+    def insert(self, data: Union[List[dict, ], dict]) -> bool:
+        _data = data
+        if isinstance(data, list) and data:
+            _data = data[1]
+
+        table = self.DevDB
+        if "zipcode" in _data.keys():
+            table = self.SiteDB
+
+        data = data if isinstance(data, list) else [data]
+        ret = table.insert_multiple(data)
+
+        return len(ret) == len(data)
+
+    async def update_site_db(self):
+        site_resp = self.session.get_all_sites()
+        if site_resp.ok:
+            return self.insert(site_resp.output)
+
+    async def update_dev_db(self):
+        dev_resp = self.session.get_all_devicesv2()
+        if dev_resp.ok:
+            return self.insert(dev_resp.output)
+
+    async def _check_fresh(self):
+        await asyncio.gather(self.update_dev_db(), self.update_site_db())
+
+    def check_fresh(self):
+        if not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
+           or config.cache_file.stat().st_mtime - time.time() > 7200:
+            asyncio.run(self._check_fresh())
+
+    def get_dev_identifier(self, query_str: str, ret_field: str = "serial") -> str:
+        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
+                                  | (self.Q.macaddr == query_str) | (self.Q.serial == query_str))
+        if match:
+            return match[0].get(ret_field)
+
+    def get_site_identifier(self, query_str: str, ret_field: str = "id") -> str:
+        match = self.SiteDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
+                                  | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                  | (self.Q.city == query_str))
+        if match:
+            return match[0].get(ret_field)
+
+    def get_group_identifier(self, query_str: str, ret_field: str = "id") -> str:
+        match = self.GroupDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
+                                  | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                  | (self.Q.city == query_str))
+        if match:
+            return match[0].get(ret_field)
+
+
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
     # session = _refresh_tokens(account)
@@ -117,6 +183,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     what = arg_to_what.get(what)
 
+    # load cache to support friendly identifiers
+    cache = Identifiers(session)
+
     # -- // Peform GET Call \\ --
     resp = None
     if what in devices:
@@ -163,7 +232,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         else:
             # TODO lookup by name, ip address, etc
             # args is device serial num in this case
-            resp = session.get_variablised_template(args)  # VERIFIED
+            _args = cache.get_dev_identifier(args)
+            resp = session.get_variablised_template(_args)  # VERIFIED
 
     # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
@@ -409,28 +479,29 @@ def _refresh_tokens(account_name: str) -> CentralApi:
 
 # ---- // RUN \\ ----
 
-# extract account from arguments or environment variables
-account = environ.get('ARUBACLI_ACCOUNT', "central_info")
+if __name__ == "__main__":
+    # extract account from arguments or environment variables
+    account = environ.get('ARUBACLI_ACCOUNT', "central_info")
 
-if "--account" in sys.argv:
-    idx = sys.argv.index("--account")
-    for i in range(idx, idx + 2):
-        account = sys.argv.pop(idx)
+    if "--account" in sys.argv:
+        idx = sys.argv.index("--account")
+        for i in range(idx, idx + 2):
+            account = sys.argv.pop(idx)
 
-# Abort if account
-if account not in config.data:
-    typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-               f"The specified account: '{account}' not defined in config.")
-    raise typer.Exit(1)
+    # Abort if account
+    if account not in config.data:
+        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+                f"The specified account: '{account}' not defined in config.")
+        raise typer.Exit(1)
 
-# debug flag ~ additional logging, and all logs are echoed to tty
-if ("--debug" in sys.argv) or (environ.get('ARUBACLI_DEBUG') == "1"):
-    config.DEBUG = log.DEBUG = log.show = True
-    log.setLevel("DEBUG")
-    if "--debug" in sys.argv:
-        _ = sys.argv.pop(sys.argv.index("--debug"))
+    # debug flag ~ additional logging, and all logs are echoed to tty
+    if ("--debug" in sys.argv) or (environ.get('ARUBACLI_DEBUG') == "1"):
+        config.DEBUG = log.DEBUG = log.show = True
+        log.setLevel("DEBUG")
+        if "--debug" in sys.argv:
+            _ = sys.argv.pop(sys.argv.index("--debug"))
 
-log.debug(" ".join(sys.argv))
-session = _refresh_tokens(account)
+    log.debug(" ".join(sys.argv))
+    session = _refresh_tokens(account)
 
-app()
+    app()
