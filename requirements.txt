@@ -1,3 +1,5 @@
+pygments
+tabulate
 pycentral
 halo
 typer
@@ -9,3 +11,5 @@ requests
 urllib3
 colorlog
 click_spinner
+colorama
+tinydb

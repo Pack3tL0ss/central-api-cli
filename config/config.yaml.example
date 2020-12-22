@@ -1,3 +1,8 @@
+#token_store:
+#  type: "local"
+#  path: "config"
+
+
 central_info:
     client_id: "<Your Aruba Central API Client ID>"
     client_secret: "<Client Secret for the specified Client ID>"
@@ -5,3 +10,32 @@ central_info:
     username: "<Aruba Central Username>"
     password: "<aruba-central-account-password>"
     base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
+
+
+#
+# You can pass the --acount <customer_name> option to use different Aruba Central profiles.
+#
+#customer_one:
+#    client_id: "<Your Aruba Central API Client ID>"
+#    client_secret: "<Client Secret for the specified Client ID>"
+#    customer_id: "<Aruba Central Customer ID>"
+#    username: "<Aruba Central Username>"
+#    password: "<aruba-central-account-password>"
+#    base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
+#
+#customer_two:
+#    client_id: "<Your Aruba Central API Client ID>"
+#    client_secret: "<Client Secret for the specified Client ID>"
+#    customer_id: "<Aruba Central Customer ID>"
+#    username: "<Aruba Central Username>"
+#    password: "<aruba-central-account-password>"
+#    base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
+#
+#
+#internal:
+#    client_id: "<Your Aruba Central API Client ID>"
+#    client_secret: "<Client Secret for the specified Client ID>"
+#    customer_id: "<Aruba Central Customer ID>"
+#    username: "<Aruba Central Username>"
+#    password: "<aruba-central-account-password>"
+#    base_url: "https://internal-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com

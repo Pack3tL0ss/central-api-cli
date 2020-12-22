@@ -1,99 +1,26 @@
-#!/usr/bin/env python3
+#!\usr\bin\env python3
 
-from enum import Enum
-# from sys import argv
-# from pprint import pprint
-# from typing import Union
-# from pathlib import Path
-# from requests.sessions import session
-
-import typer
-# from typer.params import Argument
-# from lib.centralCLI.central import CentralApi, BuildCLI, utils
-# from lib.centralCLI import utils
-from lib.centralCLI.central import CentralApi, BuildCLI, utils
-
-# from pycentral.workflows.workflows_utils import get_conn_from_file
+from os import environ
 from pathlib import Path
-import os
+from typing import List, Tuple, Union
+from tinydb import TinyDB, Query
+import time
+import sys
+import typer
+import asyncio
 
-_config_dir = Path.joinpath(Path(__file__).parent, "config")
-# _config_file = _config_dir.joinpath("config.yaml")
-_def_import_file = _config_dir.joinpath("stored-tasks.yaml")
+from centralCLI import config, log, utils
+from centralCLI.central import BuildCLI, CentralApi
+from centralCLI.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
+                                  arg_to_what, devices)
+
+STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-# import click_spinner  # NoQA
-
-# central = get_conn_from_file(filename=_config_file)
-
-
-# -- break up arguments passed as single string from vscode promptString --
-def get_arguments_from_import(import_file: str, key: str = None):
-    args = utils.read_yaml(_import_file)
-    if key and key in args:
-        args = args[key]
-
-    sys.argv += args
-
-    return sys.argv
-
-
-import sys  # NoQA
-sys.argv[0] = 'cencli'
-try:
-    if len(sys.argv) > 1:
-        if " " in sys.argv[1] or not sys.argv[1]:
-            vsc_args = sys.argv.pop(1)
-            if vsc_args:
-                if "\\'" in vsc_args:
-                    _loc = vsc_args.find("\\'")
-                    _before = vsc_args[:_loc - 1]
-                    _str_end = vsc_args.find("\\'", _loc + 1)
-                    sys.argv += _before.split()
-                    sys.argv += [f"{vsc_args[_loc + 2:_str_end]}"]
-                    sys.argv += vsc_args[_str_end + 2:].split()
-                else:
-                    sys.argv += vsc_args.split()
-
-    if len(sys.argv) > 2:
-        _import_file, _import_key = None, None
-        if sys.argv[2].endswith((".yaml", ".yml")):
-            _import_file = sys.argv.pop(2)
-            if not utils.valid_file(_import_file):
-                if utils.valid_file(os.path.join(_config_dir, _import_file)):
-                    _import_file = os.path.join(_config_dir, _import_file)
-
-            if len(sys.argv) > 2:
-                _import_key = sys.argv.pop(2)
-
-        sys.argv = get_arguments_from_import(_import_file, key=_import_key)
-except Exception:
-    pass
-
+tty = utils.tty
 
 app = typer.Typer()
-
-
-class ShowLevel1(str, Enum):
-    devices = "devices"
-    # devices = "dev"
-    switch = "switch"
-    groups = "groups"
-    sites = "sites"
-    clients = "clients"
-    aps = "ap"
-    gateway = "gateway"
-    # gateways = "gateways"
-    template = "template"
-    variables = "variables"
-    certs = "certs"
-
-
-class TemplateLevel1(str, Enum):
-    update = "update"
-    delete = "delete"
-    add = "add"
 
 
 def eval_resp(resp):
@@ -107,10 +34,10 @@ def eval_resp(resp):
 
 def caas_response(resp):
     if not resp.ok:
-        typer.echo(f"[{resp.status_code}] {resp.text} {resp.reason}")
+        typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
         return
     else:
-        resp = resp.json()
+        resp = resp.output
 
     print()
     lines = "-" * 22
@@ -144,9 +71,101 @@ def caas_response(resp):
         print()
 
 
+class Identifiers:
+    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None):
+        self.session = session
+        self.DevDB = TinyDB(config.cache_file)
+        self.SiteDB = self.DevDB.table("sites")
+        self.GroupDB = self.DevDB.table("groups")
+        self.Q = Query()
+        if data:
+            self.insert(data)
+        self.check_fresh()
+
+    def insert(self, data: Union[List[dict, ], dict]) -> bool:
+        _data = data
+        if isinstance(data, list) and data:
+            _data = data[1]
+
+        table = self.DevDB
+        if "zipcode" in _data.keys():
+            table = self.SiteDB
+
+        data = data if isinstance(data, list) else [data]
+        ret = table.insert_multiple(data)
+
+        return len(ret) == len(data)
+
+    async def update_site_db(self):
+        site_resp = self.session.get_all_sites()
+        if site_resp.ok:  # TODO may need to verify site list has items # and site_resp.sites:
+            return self.SiteDB.insert_multiple(site_resp.sites)
+
+    async def update_dev_db(self):
+        dev_resp = self.session.get_all_devicesv2()
+        if dev_resp.ok:
+            return self.insert(dev_resp.output)
+
+    async def _check_fresh(self):
+        await asyncio.gather(self.update_dev_db(), self.update_site_db())
+
+    def check_fresh(self):
+        if not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
+           or config.cache_file.stat().st_mtime - time.time() > 7200:
+            utils.spinner("Refreshing Identifier mapping Cache", asyncio.run, self._check_fresh())
+
+    def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip_address == query_str)
+                                  | (self.Q.macaddr == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
+
+        # retry with case insensitive name match if no match with original query
+        if not match:
+            match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                                      | self.Q.macaddr.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                                      | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
+
+        if match:
+            return match[0].get(ret_field)
+        else:
+            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
+            raise typer.Exit(1)  # TODO maybe scenario where we wouldn't want to exit?
+
+    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "site_id") -> str:
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        match = self.SiteDB.search((self.Q.site_name == query_str) | (self.Q.site_id.test(lambda v: str(v) == query_str))
+                                   | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                   | (self.Q.city == query_str) | (self.Q.state == query_str))
+
+        # retry with case insensitive name & address match if no match with original query
+        if not match:
+            match = self.SiteDB.search((self.Q.site_name.test(lambda v: v.lower() == query_str.lower()))
+                                       | self.Q.address.test(
+                                           lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
+                                           )
+                                       )
+
+        if match:
+            return match[0].get(ret_field)
+        else:
+            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
+
+    # TODO Not used likely not needed (group output is list of strings / group names)
+    def get_group_identifier(self, query_str: str, ret_field: str = "id") -> str:
+        match = self.GroupDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
+                                    | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                    | (self.Q.city == query_str))
+        if match:
+            return match[0].get(ret_field)
+
+
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    # session = CentralApi()
+    # session = _refresh_tokens(account)
     cli = BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
@@ -156,114 +175,301 @@ def bulk_edit(input_file: str = typer.Argument(None)):
             caas_response(resp)
 
 
-@app.command()
-def show(what: ShowLevel1 = typer.Argument(...), dev_type: str = typer.Argument(None), group: str = None):
-    # session = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+# @app.command()
+# def show(what: ShowLevel1 = typer.Argument(...),
+#          dev_type: str = typer.Argument(None),
+#          group: str = typer.Option(None, help="Filter Output by group"),
+#          json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
+#          output: str = typer.Option("simple", help="Output to table format"),
+#          # account: str = typer.Option(None, "account", help="Pass the account name from the config file"),
+#          id: int = typer.Option(None, help="ID field used for certain commands")
+#          ):
 
-    if not dev_type:
-        if what.startswith("gateway"):
-            what, dev_type = "devices", "gateway"
 
-        elif what.lower() in ["iap", "ap", "aps"]:
-            what, dev_type = "devices", "iap"
+show_help = ["all (devices)", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
+             "clients", "template[s]", "variables", "certs"]
+args_metavar_dev = "[name|ip|mac-address|serial]"
+args_metavar_site = "[name|site_id|address|city|state|zip]"
+args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
 
-        elif what.lower() == "switch":
-            what, dev_type = "devices", "switch"
+
+@app.command(short_help="Show Details about Aruba Central Objects")
+def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]"),
+         args: List[str] = typer.Argument(None, metavar=args_metavar, hidden=False),
+         #  args: str = typer.Argument(None, hidden=True),
+         group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+         label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+         dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
+         status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
+         state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
+         pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
+         name: str = typer.Option(None, metavar="<Template Name>", help="[Templates] Filter by Template Name"),
+         device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
+                                         help="[Templates] Filter by Device Type"),
+         version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by dev version Template is assigned to"),
+         model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
+         #  variablised: str = typer.Option(False, "--with-vars",
+         #                                  help="[Templates] Show Template with variable place-holders and vars."),
+         do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+         sort_by: SortOptions = typer.Option(None, "--sort"),
+         do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+         do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+         do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+         outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+         no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+         ):
+
+    what = arg_to_what.get(what)
+
+    # load cache to support friendly identifiers
+    cache = Identifiers(session)
 
     # -- // Peform GET Call \\ --
     resp = None
-    if what == "devices":
-        if dev_type:
-            dev_type = "gateway" if dev_type == "gateways" else dev_type
-            if not group:
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, dev_type)
-            else:
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+    if what in devices:
+        params = {
+            "group": group,
+            "status": None if not status else status.title(),
+            "label": label,
+            "public_ip_address": pub_ip,
+            "calculate_client_count": do_clients,
+            "show_resource_details": do_stats,
+            "sort": None if not sort_by else sort_by._value_
+        }
+        if params["status"] is None and state is not None:
+            params["status"] = state.title()
 
-    elif what == "groups":
-        resp = session.get_all_groups()
+        params = {k: v for k, v in params.items() if v is not None}
+        if what == "all":
+            # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devicesv2, **params)
+        else:
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, **params)
+        # elif not group:
+        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
+        # else:
+        #     # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
+        #     # TODO this is a very different dataset... will determine most ideal to return
+        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_devices(), what, group=group, **params)
+
+    elif what == "groups":  # VERIFIED
+        resp = session.get_all_groups()  # simple list of str
+
+    elif what == "sites":  # VERIFIED
+        if args:
+            dev_id = cache.get_site_identifier(args)
+
+        if dev_id is None:
+            resp = session.get_all_sites()  # VERIFIED
+        else:
+            resp = session.get_site_details(dev_id)  # VERIFIED
 
     elif what == "template":
-        if dev_type:
-            if group:
-                # dev_type is template name in this case
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, dev_type)
-            else:
-                # dev_type is device serial num in this case
-                resp = session.get_variablised_template(dev_type)
+        if not args:
+            if not group:
+                typer.echo(
+                    typer.style("template keyword requires additional argument: <template name | serial>", fg="red")
+                )
+                raise typer.Exit(1)
+            else:  # show templates --group <group name>
+                params = {
+                    "name": name,  # name becomes `template` in get_all_templates_in_group()
+                    "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+                    "version": version,
+                    "model": model
+                }
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_all_templates_in_group, group, **params)
+        elif group:
+            # args is template name in this case
+            resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, args)
+        else:
+            # TODO add support for all (get_all_templates_in_group for each group)
+            _args = cache.get_dev_identifier(args)
+            resp = session.get_variablised_template(_args)  # VERIFIED
 
-    # if dev_type provided (serial_num) gets vars for that dev otherwise gets vars for all devs
+    # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
-        resp = session.get_variables(dev_type)
+        if args and args != "all":
+            dev_id = cache.get_dev_identifier(args)
+        else:  # switch default output to json for show variables
+            if True not in [do_csv, do_yaml]:
+                do_json = True
+
+        resp = session.get_variables(args)
 
     elif what == "certs":
         resp = session.get_certificates()
 
+    elif what == "clients":
+        resp = session.get_clients(args)
+
     data = None if not resp else eval_resp(resp)
 
     if data:
-        typer.echo("\n--")
-        # Strip needless inconsistent json key from dict if present
-        if isinstance(data, dict):
-            data = data.get("data", data)
+        # TODO enable cleaner in Response... will benefit all command paths
+        # if isinstance(data, dict):
+        #     for wtf in STRIP_KEYS:
+        #         if wtf in data:
+        #             data = data[wtf]
+        #             break
 
-        if isinstance(data, dict):
-            data = data.get("devices", data)
-
-        if isinstance(data, dict):
-            data = data.get("mcs", data)
-
-        if isinstance(data, dict):
-            data = data.get("group", data)
-
-        if isinstance(data, str):
-            typer.echo_via_pager(data)
+        if do_json is True:
+            tablefmt = "json"
+        elif do_yaml is True:
+            tablefmt = "yaml"
+        elif do_csv is True:
+            tablefmt = "csv"
+        # elif output:
+        #     tablefmt = output
         else:
-            _global_displayed = False
-            for _ in data:
-                if isinstance(_, list) and len(_) == 1:
-                    typer.echo(_[0])
+            tablefmt = "simple"
+        outdata = utils.output(data, tablefmt)
+        typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
-                elif isinstance(_, dict):
-                    if not _global_displayed and _.get("customer_id"):
-                        typer.echo(f"customer_id: {_['customer_id']}")
-                        typer.echo(f"customer_name: {_['customer_name']}")
-                        _global_displayed = True
-                    typer.echo("--")
-                    for k, v in _.items():
-                        # strip needless return keys from displayed output
-                        if k not in ["customer_id", "customer_name"]:
-                            typer.echo(f"{k}: {v}")
-                elif isinstance(_, str):
-                    if isinstance(data, dict) and data.get(_):
-                        _key = typer.style(_, fg=typer.colors.CYAN)
-                        typer.echo(f"{_key}:")
-                        for k, v in sorted(data[_].items()):
-                            typer.echo(f"    {k}: {v}")
-                    else:
-                        typer.echo(_)
+        # -- // Output to file \\ --
+        if outfile and outdata:
+            if outfile.parent.resolve() == config.base_dir.resolve():
+                outfile = config.outdir / outfile
 
-        typer.echo("--\n")
+            print(
+                typer.style(f"\nWriting output to {outfile.resolve().relative_to(Path.cwd())}... ", fg="cyan"),
+                end=""
+            )
+            outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
+            typer.secho("Done", fg="green")
+
+    else:
+        typer.echo("No Data Returned")
 
 
 @app.command()
 def template(operation: TemplateLevel1 = typer.Argument(...),
-             what: str = typer.Argument(...),
-             device: str = typer.Argument(None),
-             variable: str = typer.Argument(None),
-             value: str = typer.Argument(None)
+             what: str = typer.Argument(None, hidden=False, metavar="['variable']",
+                                        help="Optional variable keyword to indicate variable update"),
+             device: str = typer.Argument(None, metavar=args_metavar_dev),
+             variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
+             value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
+             template: Path = typer.Option(None, help="Path to file containing new template"),
+             group: str = typer.Option(None, metavar="<Device Group>", help="Required for Update Template"),
+             device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
+                                             help="[Templates] Filter by Device Type"),
+             version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
+             model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
              ):
 
+    # TODO cache group names to allow case-insensitive group match
+    # TODO cache template names
     if operation == "update":
         if what == "variable":
             if variable and value and device:
-                ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+                # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+                cache = Identifiers(session)
+                device = cache.get_dev_identifier(device)
                 payload = {"variables": {variable: value}}
-                _resp = ses.update_variables(device, payload)
+                _resp = session.update_variables(device, payload)
                 if _resp:
+                    log.info(f"Template Variable Updated {variable} -> {value}", show=False)
                     typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
                 else:
-                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)}")
+                    log.error(f"Template Update Variables {variable} -> {value} retuned error\n{_resp.output}", show=False)
+                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)} {_resp.error}")
+        else:  # update template (what becomes device/template identifier)
+            kwargs = {
+                "group": group,
+                "name": what,
+                "device_type": device_type,
+                "version": version,
+                "model": model
+            }
+            payload = None
+            do_prompt = False
+            if template:
+                if not template.is_file() or template.stat().st_size > 0:
+                    typer.secho(f"{template} not found or invalid.", fg="red")
+                    do_prompt = True
+            else:
+                typer.secho("template file not provided (--template <path/to/file>)", fg="cyan")
+                do_prompt = True
+
+            if do_prompt:
+                payload = utils.get_multiline_input("Paste in new template contents then press CTRL-D", typer.secho, fg="cyan")
+                payload = "\n".join(payload).encode()
+
+            _resp = session.update_existing_template(**kwargs, template=template, payload=payload)
+            if _resp:
+                log.info(f"Template {what} Updated {_resp.output}", show=False)
+                typer.secho(_resp.output, fg="green")
+            else:
+                log.error(f"Template {what} Update from {template} Failed. {_resp.error}", show=False)
+                typer.secho(_resp.output, fg="red")
+
+
+@app.command()
+def do(what: DoArgs = typer.Argument(...),
+       args1: str = typer.Argument(..., metavar="Identifying Attributes: [serial #|name|ip address|mac address]"),
+       args2: str = typer.Argument(None, metavar="identifying attribute i.e. port #, required for some actions."),
+       #    serial: str = typer.Option(None),
+       #    name: str = typer.Option(None),
+       #    ip: str = typer.Option(None),
+       #    mac: str = typer.Option(None),
+       yes: bool = typer.Option(False, "-Y", metavar="Bypass confirmation prompts - Assume Yes"),
+       ) -> None:
+
+    # serial_num is currently only real option until cache/lookup is implemented
+    if not args1:
+        typer.secho("Operation Requires additional Argument: [serial #|name|ip address|mac address]", fg="red")
+        typer.echo("Examples:")
+        typer.echo(f"> do {what} nash-idf21-sw1 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} 10.0.30.5 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} f40343-a0b1c2 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} f4:03:43:a0:b1:c2 {'2' if what.startswith('bounce') else ''}")
+        typer.echo("\nWhen Identifying device by Mac Address most commmon MAC formats are accepted.\n")
+        raise typer.Exit(1)
+    else:
+        if what.startswith("bounce") and not args2:
+            typer.secho("Operation Requires additional Argument: <port #>", fg="red")
+            typer.echo("Example:")
+            typer.echo(f"> do {what} {args1} 2")
+            raise typer.Exit(1)
+
+        cache = Identifiers(session)
+        serial = cache.get_dev_identifier(args1)
+        # _mac = utils.Mac(args1)
+        # if _mac.ok:
+        #     serial = cache.get_dev_identifier(_mac.cols)
+        # else:
+
+    # kwargs = {
+    #     "serial_num": serial,
+    #     "name": name,
+    #     "ip": ip,
+    #     "mac": None if not mac else utils.Mac(mac)
+    # }
+        kwargs = {
+            "serial_num": serial,
+        }
+    if config.DEBUG:
+        typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
+
+    # kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    # -- // do the Command \\ --
+    if yes or typer.confirm(typer.style(f"Please Confirm {what} {args1} {args2}", fg="cyan")):
+        resp = getattr(session, what.replace("-", "_"))(args2, **kwargs)
+        typer.echo(resp)
+        if resp.ok:
+            typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
+            resp = session.get_task_status(resp.task_id)
+            typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
+
+    else:
+        raise typer.Abort()
+    # if what == "bounce-poe":
+    #     resp = session.bounce_poe(args2, )
+    # elif what == "bounce-interface":
+    #     typer.echo(f"{what}, {args}, {yes}")
+    # elif what == "reboot":
+    #     pass
 
 
 @app.command()
@@ -283,17 +489,14 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
             cmds += [f"priority {vrrp_pri}"]
         cmds += ["no shutdown", "!"]
 
-    # session = CentralApi()
     # TODO move command gen to BuildCLI
     caas_response(session.caasapi(group_dev, cmds))
-    # for c in cmds:
-    #     typer.echo(c)
 
 
 @app.command()
-def import_vlan(import_file: str = typer.Argument(_def_import_file),
+def import_vlan(import_file: str = typer.Argument(config.stored_tasks_file),
                 key: str = None):
-    if import_file == _def_import_file and not key:
+    if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
 
     data = utils.read_yaml(import_file)
@@ -307,12 +510,12 @@ def import_vlan(import_file: str = typer.Argument(_def_import_file),
 
 
 @app.command()
-def batch(import_file: str = typer.Argument(_def_import_file),
+def batch(import_file: str = typer.Argument(config.stored_tasks_file),
           command: str = None, key: str = None):
 
-    if import_file == _def_import_file and not key:
+    if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
-        # typer.Exit()
+        raise typer.Exit()
 
     data = utils.read_yaml(import_file)
     if key:
@@ -339,9 +542,9 @@ def batch(import_file: str = typer.Argument(_def_import_file),
             # if "!" not in cmds:
             #     cmds = '^!^'.join(cmds).split("^")
             # with click_spinner.spinner():
-            ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+            # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
-            resp = utils.spinner(SPIN_TXT_CMDS, ses.caasapi, *args, **kwargs)
+            resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
             caas_response(resp)
 
 
@@ -350,25 +553,83 @@ def refresh_tokens():
     pass
 
 
-def _refresh_tokens():
+@app.command()
+def method_test(method: str = typer.Argument(...),
+                kwargs: List[str] = typer.Argument(None)
+                ):
+    """dev testing commands to run CentralApi methods from command line
+
+    Args:
+        method (str, optional): CentralAPI method to test.
+        kwargs (List[str], optional): list of args kwargs to pass to function.
+
+    format: arg1 arg2 keyword=value keyword2=value
+        or  arg1, arg2, keyword = value, keyword2=value
+
+    Displays all attributes of Response object
+   """
+    if not hasattr(session, method):
+        typer.secho(f"{method} does not exist", fg="red")
+        raise typer.Exit(1)
+    args = [k for k in kwargs if "=" not in k]
+    kwargs = [k.replace(" =", "=").replace("= ", "=").replace(",", " ").replace("  ", " ") for k in kwargs]
+    kwargs = [k.split("=") for k in kwargs if "=" in k]
+    kwargs = {k[0]: k[1] for k in kwargs}
+
+    typer.secho(f"session.{method}({(args)}, {kwargs})", fg="green")
+    resp = getattr(session, method)(*args, **kwargs)
+    for k, v in resp.__dict__.items():
+        typer.echo(f"{k}: {v}")
+
+
+# Testing does not refresh here, refresh in Response if token_expired returned
+# TODO acccept user input with --access-token --refresh-token or token key
+#      to update borked (cached) token.  internal can't reauth via OAUTH due to SSO
+def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
-    session = CentralApi()
-    central = session.central
-    central.token_store["path"] = _config_dir
-    token = central.loadToken()
-    if token:
-        # refresh token on every launch
-        token = central.refreshToken(token)
-        if token:
-            central.storeToken(token)
-            central.central_info["token"] = token
+    if not config.DEBUG:
+        session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name)
+    else:
+        session = CentralApi(account_name)
+
+    # central = session.central
+
+    # token = central.loadToken()
+    # if token:  # Verifying we don't need to refresh at every launch
+    #     # refresh token on every launch
+    #     token = central.refreshToken(token)
+    #     if token:
+    #         central.storeToken(token)
+    #         central.central_info["token"] = token
 
     return session
 
 
+# ---- // RUN \\ ----
+
 if __name__ == "__main__":
-    session = _refresh_tokens()
-    app()
-else:
-    session = _refresh_tokens()
+    # extract account from arguments or environment variables
+    account = environ.get('ARUBACLI_ACCOUNT', "central_info")
+
+    if "--account" in sys.argv:
+        idx = sys.argv.index("--account")
+        for i in range(idx, idx + 2):
+            account = sys.argv.pop(idx)
+
+    # Abort if account
+    if account not in config.data:
+        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+                   f"The specified account: '{account}' not defined in config.")
+        raise typer.Exit(1)
+
+    # debug flag ~ additional logging, and all logs are echoed to tty
+    if ("--debug" in sys.argv) or (environ.get('ARUBACLI_DEBUG') == "1"):
+        config.DEBUG = log.DEBUG = log.show = True
+        log.setLevel("DEBUG")
+        if "--debug" in sys.argv:
+            _ = sys.argv.pop(sys.argv.index("--debug"))
+
+    log.debug(" ".join(sys.argv))
+    session = _refresh_tokens(account)
+
     app()

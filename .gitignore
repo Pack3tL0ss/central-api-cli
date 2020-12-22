@@ -157,7 +157,7 @@ dmypy.json
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
-!.vscode/launch.json
+# !.vscode/launch.json  # I change this all the time
 !.vscode/extensions.json
 *.code-workspace
 
@@ -168,5 +168,9 @@ dmypy.json
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,linux,python
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
-.vscode/
+# .vscode/
 scratch.py
+
+# App ignores
+# ignoring directory where tokens are stored.
+temp/
