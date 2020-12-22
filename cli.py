@@ -114,14 +114,18 @@ class Identifiers:
            or config.cache_file.stat().st_mtime - time.time() > 7200:
             utils.spinner("Refreshing Identifier mapping Cache", asyncio.run, self._check_fresh())
 
-    def get_dev_identifier(self, query_str: str, ret_field: str = "serial") -> str:
+    def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
         match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip_address == query_str)
                                   | (self.Q.macaddr == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
 
         # retry with case insensitive name match if no match with original query
         if not match:
             match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                                      | self.Q.macaddr.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower()))
+                                      | self.Q.macaddr.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                                      | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
 
         if match:
             return match[0].get(ret_field)
