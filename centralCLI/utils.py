@@ -30,9 +30,10 @@ class Convert:
         cols = ':'.join(self.clean[i:i+2] for i in range(0, 12, 2))
         if cols.strip().endswith(':'):  # handle macs starting with 00 for oobm
             cols = f"00:{cols.strip().rstrip(':')}"
+        self.cols = cols
         self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, 12, 2))
         self.dots = '.'.join(self.clean[i:i+4] for i in range(0, 12, 4))
-        self.tag = f"ztp-{self.clean[-4:]}"
+        # self.tag = f"ztp-{self.clean[-4:]}"
         self.dec = int(self.clean, 16) if self.ok else 0
         self.url = urllib.parse.quote(mac)
 
