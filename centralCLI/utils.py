@@ -8,7 +8,7 @@ import string
 import sys
 import urllib.parse
 from pprint import pprint
-from typing import Union
+from typing import List, Union
 import typer
 
 import yaml
@@ -168,6 +168,38 @@ class Utils:
         if sys.stdin.isatty():
             with Halo(text=spin_txt, spinner=spinner):
                 return function(*args, **kwargs)
+
+    @staticmethod
+    def get_multiline_input(prompt: str = None, print_func: callable = print,
+                            return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
+        prompt = prompt or "Enter/Paste your content. Then Ctrl-D or Ctrl-Z ( windows ) to submit."
+        print_func(prompt, **kwargs)
+        contents = []
+        while True:
+            try:
+                try:
+                    line = input()
+                except EOFError:
+                    break
+                contents.append(line)
+            except KeyboardInterrupt:
+                print_func(f"""
+                    *retry* {prompt}
+                    or Enter `exit` to exit
+                    """)
+                line = input()
+                if line == 'exit':
+                    sys.exit()
+                else:
+                    contents = [line]
+
+        if return_type:
+            if return_type == "dict":
+                contents = json.loads("\n".join(contents))
+            elif return_type == "str":
+                contents = "\n".join(contents)
+
+        return contents
 
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = ""):
