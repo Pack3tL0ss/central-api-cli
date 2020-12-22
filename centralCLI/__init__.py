@@ -3,6 +3,8 @@
 
 import os
 from typing import Any
+from pycentral.base import ArubaCentralBase
+
 from .utils import Utils
 from .config import Config
 from pathlib import Path
@@ -103,31 +105,86 @@ class MyLogger:
         pass
 
 
+SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
+
+
 class Response:
     '''wrapper for requests.response object
 
     Assigns commonly evaluated attributes regardless of success
     Otherwise resp.ok will always be assigned and will be True or False
     '''
-    def __init__(self, function, *args: Any, **kwargs: Any) -> Any:
+    def __init__(self, function, *args: Any, central: ArubaCentralBase = None, **kwargs: Any) -> Any:
         self.url = '' if not args else args[0]
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
-            r = function(*args, **kwargs)
+            if central:
+                r = self.api_call(central, function, *args, **kwargs)
+            else:
+                r = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
             self.ok = r.ok
             try:
                 self.output = r.json()
             except Exception:
                 self.output = r.text
+            self.output = self.clean_response()
             self.error = r.reason
             self.status_code = r.status_code
         except Exception as e:
-            self.output = {}
             self.ok = False
-            self.error = f"Exception occurred {e.__class__}\n\t{e}"
+            self.error = f"Exception occurred: {e.__class__}\n\t{e}"
+            self.output = e
             self.status_code = 418
         if not self.ok:
             log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
+
+    def api_call(self, central: ArubaCentralBase, function: callable, *args, **kwargs):
+        if "internal" in central.central_info["base_url"]:
+            internal = True
+        else:
+            internal = False
+
+        resp, token = None, None
+        for _ in range(0, 2):
+            try:
+                resp = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
+                if resp.status_code == 401 and "invalid_token" in resp.text:
+                    log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+                    token = central.refreshToken(central.central_info["token"])
+                    if token:
+                        central.storeToken(token)
+                        central.central_info["token"] = token
+                else:
+                    token = True
+            except Exception as e:
+                log.error(f"Attempt to refresh returned {e.__class__} {e}")
+
+            if not token:
+                if internal:
+                    prompt = f"\nRefresh Failed Please Generate a new Token for:" \
+                             f"\n    customer_id: {central.central_info['customer_id']}" \
+                             f"\n    client_id: {central.central_info['client_id']}" \
+                             "\nand paste result of `Download Tokens` Use CTRL-D to submit." \
+                             "\n > "
+
+                    token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
+                    central.central_info["token"]["access_token"] = token_data.get("access_token")
+                    central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
+
+                    try:
+                        token = central.refreshToken(central.central_info["token"])
+                        if token:
+                            central.storeToken(token)
+                            central.central_info["token"] = token
+                        _ += 1
+                    except Exception as e:
+                        log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+                else:
+                    central.handleTokenExpiry()
+
+            log.debug(f"api_call pass {_}")
+
+        return resp
 
     def __bool__(self):
         return self.ok
@@ -173,8 +230,10 @@ class Response:
         _keys = [k for k in constants.STRIP_KEYS if k in self.output]
         if len(_keys) == 1:
             return self.output[_keys[0]]
-        else:
+        elif _keys:
             print(f"More wrapping keys than expected from return {_keys}")
+
+        return self.output
 
 
 _calling_script = Path(sys.argv[0])

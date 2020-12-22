@@ -21,10 +21,11 @@
 # SOFTWARE.
 
 from pycentral.base import ArubaCentralBase
-# import requests
 import json
 from typing import List, Tuple, Union
+from pathlib import Path
 import csv
+
 from . import MyLogger, Response, config, log
 
 try:
@@ -79,34 +80,88 @@ class CentralApi:
         # self.central.get = self.get
 
         # No Longer used pycentral module handles auth headers content-type is always application/json
+        # self.headers = {
+        #     "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
+        #     "Content-type": "application/json"
+        # }
+
         self.headers = {
-            "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
-            "Content-type": "application/json"
-        }
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                    }
 
         # def get(self, url: str, params: dict = {}, data: dict = {},
         #         headers: dict = {}, files: dict = {}, retry_api_call: bool = True) -> dict:
         #     return self.central.command("GET", apiPath=url, apiData=data, apiParams=params,
         #                                 headers=headers, files=files, retry_api_call=retry_api_call)
 
-    def get(self, url, params: dict = None, headers: dict = None):
-        f_url = self.central.central_info["base_url"] + url
-        # TODO may not need headers, auth= is handled in requestUrl method, application/json is default for central
-        # headers = self.headers if headers is None else {**self.headers, **headers}
-        return Response(self.central.requestUrl, f_url, params=params, headers=headers)
+    # @classmethod
+    # def handle_expired_token(self, resp: requests.Response, func: callable, *args, **kwargs):
+    #     if "internal" in self.central.central_info["base_url"]:
+    #         internal = True
+    #     else:
+    #         internal = False
 
-    def post(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    #     token = None
+    #     try:
+    #         if resp.status_code == 401 and "invalid_token" in resp.text:
+    #             log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+    #             token = self.central.refresh_token(self.central.central_info["token"])
+    #     except Exception as e:
+    #         log.error(f"Attempt to refresh returned {e.__class__} {e}")
+    #         if internal:
+    #             # self.central.central_info["token"]["access_token"] = input("provide Updated access token > ")
+    #             # self.central.central_info["refresh_token"] = input("provide Updated refresh token > ")
+    #             prompt = f"""
+    #                     Refresh Failed Please Generate a new Token for:
+    #                     customer_id: {self.central.central_info['customer_id']}
+    #                     client_id: {self.central.central_info['client_id']}
+    #                     and paste result of `Download Tokens` Use CTRL-D to submit.
+    #                     """
+    #             token_data = utils.get_multiline_input(prompt)
+    #             token_data = json.loads("\n".join(token_data))
+    #             self.central.central_info["token"]["access_token"] = token_data.get("access_token")
+    #             self.central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
+    #             try:
+    #                 token = self.central.refreshToken(self.central.central_info["token"])
+    #             except Exception as e:
+    #                 log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+
+    #     if token:
+    #         self.central.storeToken(token)
+    #         self.central.central_info["token"] = token
+
+    #     return resp
+
+    def get(self, url, params: dict = {}, headers: dict = None):
         f_url = self.central.central_info["base_url"] + url
-        # headers = self.headers if headers is None else {**self.headers, **headers}
+        headers = self.headers if headers is None else {**self.headers, **headers}
+        params = {k: v for k, v in params.items() if v is not None}
+        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central)
+
+    def post(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+        f_url = self.central.central_info["base_url"] + url
+        params = {k: v for k, v in params.items() if v is not None}
+        headers = self.headers if headers is None else {**self.headers, **headers}
         return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
 
-    def patch(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
+        params = {k: v for k, v in params.items() if v is not None}
+        headers = self.headers if headers is None else {**self.headers, **headers}
         return Response(self.central.requestUrl, f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
 
-    def delete(self, url, params: dict = None, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
+        headers = self.headers if headers is None else {**self.headers, **headers}
+        params = {k: v for k, v in params.items() if v is not None}
         return Response(self.central.requestUrl, f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
+
+    # Not used changed default kwarg for params to {} vs None not sure which is more "Pythonic"
+    def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
+        """strip all keys from a dict where value is NoneType"""
+
+        return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
 
     # doesn't appear to work. referenced in swagger to get listing of types (New Device Inventory: Get Devices...)
     def get_dev_types(self):
@@ -219,6 +274,57 @@ class CentralApi:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
         return self.get(url)
 
+    # Query can be filtered by name, device_type, version, model or J number (for ArubaSwitch).
+    def get_all_templates_in_group(self, group: str, name: str = None,
+                                   device_type: str = None, version: str = None, model: str = None) -> Response:
+        params = {"offset": 0, "limit": 20}  # 20 is the max
+        url = f"/configuration/v1/groups/{group}/templates"
+        params = {
+            "offset": 0,
+            "limit": 20,
+            "template": name,
+            "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+            "version": version,
+            "model": model
+        }
+        return self.get(url, params=params)
+
+    def update_existing_template(self, group: str, name: str, template: Path = None, payload: str = None,
+                                 device_type: str = None, version: str = None, model: str = None) -> Response:
+        url = f"/configuration/v1/groups/{group}/templates"
+        params = {
+            "name": name,
+            "device_type": device_type,
+            "version": version,
+            "model": model
+        }
+
+        if template and template.is_file() and template.stat().st_size > 0:
+            template_data: bytes = template.read_bytes()
+        elif payload:
+            template_data: bytes = payload
+        else:
+            template_data = None
+
+        return self.patch(url, params=params, files={"template": template_data})
+
+    # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
+    # and it doesn't catch all exceptions so possible to get exception when eval resp... our Response object is better IMHO
+    def _update_existing_template(self, group: str, name: str, template: Path = None, payload: str = None,
+                                  device_type: str = None, version: str = None, model: str = None) -> Response:
+        from pycentral.configuration import Templates
+        templates = Templates()
+        kwargs = {
+            "group_name": group,
+            "template_name": name,
+            "device_type": device_type,
+            "version": version,
+            "model": model,
+            "template_filename": str(template)
+        }
+
+        return templates.update_template(self.central, **kwargs)
+
     def get_all_groups(self) -> Response:  # VERIFIED
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 20}  # 20 is the max
@@ -281,7 +387,7 @@ class CentralApi:
         return self.get(url)
 
     def get_variables(self, serialnum: str = None) -> Response:
-        if serialnum:
+        if serialnum and serialnum != "all":
             url = f"/configuration/v1/devices/{serialnum}/template_variables"
             params = {}
         else:
@@ -294,8 +400,7 @@ class CentralApi:
     def update_variables(self, serialnum: str, var_dict: dict) -> bool:
         url = f"/configuration/v1/devices/{serialnum}/template_variables"
         var_dict = json.dumps(var_dict)
-        resp = self.patch(url, data=var_dict)
-        return resp.ok
+        return self.patch(url, payload=var_dict)
         # resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
         # return(resp.ok)
 
