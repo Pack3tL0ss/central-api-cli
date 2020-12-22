@@ -197,12 +197,19 @@ args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} si
 def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]"),
          args: List[str] = typer.Argument(None, metavar=args_metavar, hidden=False),
          #  args: str = typer.Argument(None, hidden=True),
-         group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
+         group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
          label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
          dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
          status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
          state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
          pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
+         name: str = typer.Option(None, metavar="<Template Name>", help="[Templates] Filter by Template Name"),
+         device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
+                                         help="[Templates] Filter by Device Type"),
+         version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by dev version Template is assigned to"),
+         model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
+         #  variablised: str = typer.Option(False, "--with-vars",
+         #                                  help="[Templates] Show Template with variable place-holders and vars."),
          do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
          do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
          sort_by: SortOptions = typer.Option(None, "--sort"),
@@ -260,21 +267,35 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     elif what == "template":
         if not args:
-            typer.echo(
-                typer.style("template keyword requires additional argument: <template name | serial>", fg="red")
-            )
-            raise typer.Exit(1)
+            if not group:
+                typer.echo(
+                    typer.style("template keyword requires additional argument: <template name | serial>", fg="red")
+                )
+                raise typer.Exit(1)
+            else:  # show templates --group <group name>
+                params = {
+                    "name": name,  # name becomes `template` in get_all_templates_in_group()
+                    "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+                    "version": version,
+                    "model": model
+                }
+                resp = utils.spinner(SPIN_TXT_DATA, session.get_all_templates_in_group, group, **params)
         elif group:
             # args is template name in this case
             resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, args)
         else:
-            # TODO lookup by name, ip address, etc
-            # args is device serial num in this case
+            # TODO add support for all (get_all_templates_in_group for each group)
             _args = cache.get_dev_identifier(args)
             resp = session.get_variablised_template(_args)  # VERIFIED
 
     # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
+        if args and args != "all":
+            dev_id = cache.get_dev_identifier(args)
+        else:  # switch default output to json for show variables
+            if True not in [do_csv, do_yaml]:
+                do_json = True
+
         resp = session.get_variables(args)
 
     elif what == "certs":
@@ -287,15 +308,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     if data:
         # TODO enable cleaner in Response... will benefit all command paths
-        if isinstance(data, dict):
-            for wtf in STRIP_KEYS:
-                if wtf in data:
-                    data = data[wtf]
-                    break
-
-        # if isinstance(data, str):
-        #     data = data.splitlines()
-            # typer.echo_via_pager(data) if len(data) > tty.rows else typer.echo(data)
+        # if isinstance(data, dict):
+        #     for wtf in STRIP_KEYS:
+        #         if wtf in data:
+        #             data = data[wtf]
+        #             break
 
         if do_json is True:
             tablefmt = "json"
@@ -316,7 +333,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                 outfile = config.outdir / outfile
 
             print(
-                typer.style(f"\nWriting output to {outfile.relative_to(Path.cwd())}... ", fg="cyan"),
+                typer.style(f"\nWriting output to {outfile.resolve().relative_to(Path.cwd())}... ", fg="cyan"),
                 end=""
             )
             outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
@@ -328,22 +345,64 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
 @app.command()
 def template(operation: TemplateLevel1 = typer.Argument(...),
-             what: str = typer.Argument(...),
-             device: str = typer.Argument(None),
-             variable: str = typer.Argument(None),
-             value: str = typer.Argument(None)
+             what: str = typer.Argument(None, hidden=False, metavar="['variable']",
+                                        help="Optional variable keyword to indicate variable update"),
+             device: str = typer.Argument(None, metavar=args_metavar_dev),
+             variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
+             value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
+             template: Path = typer.Option(None, help="Path to file containing new template"),
+             group: str = typer.Option(None, metavar="<Device Group>", help="Required for Update Template"),
+             device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
+                                             help="[Templates] Filter by Device Type"),
+             version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
+             model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
              ):
 
+    # TODO cache group names to allow case-insensitive group match
+    # TODO cache template names
     if operation == "update":
         if what == "variable":
             if variable and value and device:
-                ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+                # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
+                cache = Identifiers(session)
+                device = cache.get_dev_identifier(device)
                 payload = {"variables": {variable: value}}
-                _resp = ses.update_variables(device, payload)
+                _resp = session.update_variables(device, payload)
                 if _resp:
+                    log.info(f"Template Variable Updated {variable} -> {value}", show=False)
                     typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
                 else:
-                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)}")
+                    log.error(f"Template Update Variables {variable} -> {value} retuned error\n{_resp.output}", show=False)
+                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)} {_resp.error}")
+        else:  # update template (what becomes device/template identifier)
+            kwargs = {
+                "group": group,
+                "name": what,
+                "device_type": device_type,
+                "version": version,
+                "model": model
+            }
+            payload = None
+            do_prompt = False
+            if template:
+                if not template.is_file() or template.stat().st_size > 0:
+                    typer.secho(f"{template} not found or invalid.", fg="red")
+                    do_prompt = True
+            else:
+                typer.secho("template file not provided (--template <path/to/file>)", fg="cyan")
+                do_prompt = True
+
+            if do_prompt:
+                payload = utils.get_multiline_input("Paste in new template contents then press CTRL-D", typer.secho, fg="cyan")
+                payload = "\n".join(payload).encode()
+
+            _resp = session.update_existing_template(**kwargs, template=template, payload=payload)
+            if _resp:
+                log.info(f"Template {what} Updated {_resp.output}", show=False)
+                typer.secho(_resp.output, fg="green")
+            else:
+                log.error(f"Template {what} Update from {template} Failed. {_resp.error}", show=False)
+                typer.secho(_resp.output, fg="red")
 
 
 @app.command()
@@ -523,6 +582,9 @@ def method_test(method: str = typer.Argument(...),
         typer.echo(f"{k}: {v}")
 
 
+# Testing does not refresh here, refresh in Response if token_expired returned
+# TODO acccept user input with --access-token --refresh-token or token key
+#      to update borked (cached) token.  internal can't reauth via OAUTH due to SSO
 def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
     if not config.DEBUG:
@@ -530,15 +592,15 @@ def _refresh_tokens(account_name: str) -> CentralApi:
     else:
         session = CentralApi(account_name)
 
-    central = session.central
+    # central = session.central
 
-    token = central.loadToken()
-    if token:  # Verifying we don't need to refresh at every launch
-        # refresh token on every launch
-        token = central.refreshToken(token)
-        if token:
-            central.storeToken(token)
-            central.central_info["token"] = token
+    # token = central.loadToken()
+    # if token:  # Verifying we don't need to refresh at every launch
+    #     # refresh token on every launch
+    #     token = central.refreshToken(token)
+    #     if token:
+    #         central.storeToken(token)
+    #         central.central_info["token"] = token
 
     return session
 
