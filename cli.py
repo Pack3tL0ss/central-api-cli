@@ -188,11 +188,9 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 show_help = ["all (devices)", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
              "clients", "template[s]", "variables", "certs"]
-args_metavar_site = "[name|ip|mac-address|serial]"
-args_metavar_dev = "[name|side_id|address|city|state|zip]"
-args_metavar = f"""Optional Identifying Attribute:
-    device: {args_metavar_dev}
-    site: {args_metavar_site}"""
+args_metavar_dev = "[name|ip|mac-address|serial]"
+args_metavar_site = "[name|site_id|address|city|state|zip]"
+args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
 
 
 @app.command(short_help="Show Details about Aruba Central Objects")
@@ -203,6 +201,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
          dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
          status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
+         state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
          pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
          do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
          do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
@@ -231,6 +230,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             "show_resource_details": do_stats,
             "sort": None if not sort_by else sort_by._value_
         }
+        if params["status"] is None and state is not None:
+            params["status"] = state.title()
+
         params = {k: v for k, v in params.items() if v is not None}
         if what == "all":
             # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
