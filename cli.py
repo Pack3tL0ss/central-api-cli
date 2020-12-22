@@ -2,7 +2,7 @@
 
 from os import environ
 from pathlib import Path
-from typing import List, Union
+from typing import List, Tuple, Union
 from tinydb import TinyDB, Query
 import time
 import sys
@@ -98,8 +98,8 @@ class Identifiers:
 
     async def update_site_db(self):
         site_resp = self.session.get_all_sites()
-        if site_resp.ok:
-            return self.insert(site_resp.output)
+        if site_resp.ok:  # TODO may need to verify site list has items # and site_resp.sites:
+            return self.SiteDB.insert_multiple(site_resp.sites)
 
     async def update_dev_db(self):
         dev_resp = self.session.get_all_devicesv2()
@@ -112,25 +112,53 @@ class Identifiers:
     def check_fresh(self):
         if not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
            or config.cache_file.stat().st_mtime - time.time() > 7200:
-            asyncio.run(self._check_fresh())
+            utils.spinner("Refreshing Identifier mapping Cache", asyncio.run, self._check_fresh())
 
-    def get_dev_identifier(self, query_str: str, ret_field: str = "serial") -> str:
-        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
-                                  | (self.Q.macaddr == query_str) | (self.Q.serial == query_str))
+    def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip_address == query_str)
+                                  | (self.Q.macaddr == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
+
+        # retry with case insensitive name match if no match with original query
+        if not match:
+            match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                                      | self.Q.macaddr.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                                      | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
+
         if match:
             return match[0].get(ret_field)
+        else:
+            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
+            raise typer.Exit(1)  # TODO maybe scenario where we wouldn't want to exit?
 
-    def get_site_identifier(self, query_str: str, ret_field: str = "id") -> str:
-        match = self.SiteDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
-                                  | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                                  | (self.Q.city == query_str))
+    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "site_id") -> str:
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        match = self.SiteDB.search((self.Q.site_name == query_str) | (self.Q.site_id.test(lambda v: str(v) == query_str))
+                                   | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                   | (self.Q.city == query_str) | (self.Q.state == query_str))
+
+        # retry with case insensitive name & address match if no match with original query
+        if not match:
+            match = self.SiteDB.search((self.Q.site_name.test(lambda v: v.lower() == query_str.lower()))
+                                       | self.Q.address.test(
+                                           lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
+                                           )
+                                       )
+
         if match:
             return match[0].get(ret_field)
+        else:
+            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
 
+    # TODO Not used likely not needed (group output is list of strings / group names)
     def get_group_identifier(self, query_str: str, ret_field: str = "id") -> str:
         match = self.GroupDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
-                                  | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                                  | (self.Q.city == query_str))
+                                    | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                                    | (self.Q.city == query_str))
         if match:
             return match[0].get(ret_field)
 
@@ -160,24 +188,28 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 show_help = ["all (devices)", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
              "clients", "template[s]", "variables", "certs"]
+args_metavar_dev = "[name|ip|mac-address|serial]"
+args_metavar_site = "[name|site_id|address|city|state|zip]"
+args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
 
 
 @app.command(short_help="Show Details about Aruba Central Objects")
 def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]"),
-         #  args: List[str] = typer.Argument(None, hidden=True),
-         args: str = typer.Argument(None, hidden=True),
+         args: List[str] = typer.Argument(None, metavar=args_metavar, hidden=False),
+         #  args: str = typer.Argument(None, hidden=True),
          group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
          label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
          dev_id: int = typer.Option(None, "--id", metavar="<id>", help="Filter by id"),
          status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
+         state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
          pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
+         do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+         sort_by: SortOptions = typer.Option(None, "--sort"),
          do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
          do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-         do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-         do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
-         outfile: Path = typer.Option(None, writable=True),
-         sort_by: SortOptions = typer.Option(None, "--sort"),
+         outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
          ):
 
@@ -198,6 +230,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             "show_resource_details": do_stats,
             "sort": None if not sort_by else sort_by._value_
         }
+        if params["status"] is None and state is not None:
+            params["status"] = state.title()
+
         params = {k: v for k, v in params.items() if v is not None}
         if what == "all":
             # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
@@ -215,6 +250,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         resp = session.get_all_groups()  # simple list of str
 
     elif what == "sites":  # VERIFIED
+        if args:
+            dev_id = cache.get_site_identifier(args)
+
         if dev_id is None:
             resp = session.get_all_sites()  # VERIFIED
         else:
@@ -310,27 +348,55 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
 
 @app.command()
 def do(what: DoArgs = typer.Argument(...),
-       # args: str = typer.Argument(..., metavar="Identifying Attributes: [serial #|name|ip address|mac address]"),
-       args: str = typer.Argument(None, metavar="identifying attribute i.e. port #, required for some actions."),
-       serial: str = typer.Option(None),
-       name: str = typer.Option(None),
-       ip: str = typer.Option(None),
-       mac: str = typer.Option(None),
+       args1: str = typer.Argument(..., metavar="Identifying Attributes: [serial #|name|ip address|mac address]"),
+       args2: str = typer.Argument(None, metavar="identifying attribute i.e. port #, required for some actions."),
+       #    serial: str = typer.Option(None),
+       #    name: str = typer.Option(None),
+       #    ip: str = typer.Option(None),
+       #    mac: str = typer.Option(None),
        yes: bool = typer.Option(False, "-Y", metavar="Bypass confirmation prompts - Assume Yes"),
        ) -> None:
 
     # serial_num is currently only real option until cache/lookup is implemented
-    kwargs = {
-        "serial_num": serial,
-        "name": name,
-        "ip": ip,
-        "mac": None if not mac else utils.Mac(mac)
-    }
-    typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
+    if not args1:
+        typer.secho("Operation Requires additional Argument: [serial #|name|ip address|mac address]", fg="red")
+        typer.echo("Examples:")
+        typer.echo(f"> do {what} nash-idf21-sw1 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} 10.0.30.5 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} f40343-a0b1c2 {'2' if what.startswith('bounce') else ''}")
+        typer.echo(f"> do {what} f4:03:43:a0:b1:c2 {'2' if what.startswith('bounce') else ''}")
+        typer.echo("\nWhen Identifying device by Mac Address most commmon MAC formats are accepted.\n")
+        raise typer.Exit(1)
+    else:
+        if what.startswith("bounce") and not args2:
+            typer.secho("Operation Requires additional Argument: <port #>", fg="red")
+            typer.echo("Example:")
+            typer.echo(f"> do {what} {args1} 2")
+            raise typer.Exit(1)
 
-    kwargs = {k: v for k, v in kwargs.items() if v is not None}
-    if typer.confirm(typer.style(f"Please Confirm {what} {args}", fg="cyan")):
-        resp = getattr(session, what.replace("-", "_"))(args, **kwargs)
+        cache = Identifiers(session)
+        serial = cache.get_dev_identifier(args1)
+        # _mac = utils.Mac(args1)
+        # if _mac.ok:
+        #     serial = cache.get_dev_identifier(_mac.cols)
+        # else:
+
+    # kwargs = {
+    #     "serial_num": serial,
+    #     "name": name,
+    #     "ip": ip,
+    #     "mac": None if not mac else utils.Mac(mac)
+    # }
+        kwargs = {
+            "serial_num": serial,
+        }
+    if config.DEBUG:
+        typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
+
+    # kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    # -- // do the Command \\ --
+    if yes or typer.confirm(typer.style(f"Please Confirm {what} {args1} {args2}", fg="cyan")):
+        resp = getattr(session, what.replace("-", "_"))(args2, **kwargs)
         typer.echo(resp)
         if resp.ok:
             typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
@@ -491,7 +557,7 @@ if __name__ == "__main__":
     # Abort if account
     if account not in config.data:
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                f"The specified account: '{account}' not defined in config.")
+                   f"The specified account: '{account}' not defined in config.")
         raise typer.Exit(1)
 
     # debug flag ~ additional logging, and all logs are echoed to tty
