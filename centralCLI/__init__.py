@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# from centralCLI.central import ArubaCentralBase
 import os
 from typing import Any
-from pycentral.base import ArubaCentralBase
+# from pycentral.base import ArubaCentralBase
+import pycentral.base
+import typer
 
 from .utils import Utils
 from .config import Config
 from pathlib import Path
 from typing import Union
-# from sys import argv
 import sys
 import logging
-from . import constants  # NoQA
+from . import constants
 utils = Utils()
+
+
+ArubaCentralBase = pycentral.base.ArubaCentralBase
+
+
+# Not Used
+class ArubaCentralException(Exception):
+    pass
 
 
 class MyLogger:
@@ -28,6 +38,8 @@ class MyLogger:
         self._log = self.get_logger()
         self.name = self._log.name
         self.show = show  # Sets default log behavior (other than debug)
+        self._exit_caught = False
+        self._exit = None
 
     def __getattr__(self, name):
         if hasattr(self, "_log") and hasattr(self._log, name):
@@ -104,6 +116,54 @@ class MyLogger:
         getattr(self._log, 'setLevel')(level)
         pass
 
+    def no_exit(self, exit_msg_code: Union[str, int] = None, *args, **kwargs) -> None:
+        # try:
+        #     msg = ', '.join(*args)
+        # except TypeError:
+        #     msg = str(*args)
+        if self._exit_caught and self._exit is not None:
+            self._exit()
+        else:
+            self._log.warning(f"ArubaCentralBase Tried to exit. ({exit_msg_code}) Exit Overriden")
+            self._exit_caught = True
+
+
+def handle_invalid_token(central: ArubaCentralBase) -> None:
+    """Handle invalid or expired tokens
+
+    For prod cluster it leverages ArubaCentralBase.handleTokenExpiry()
+    For internal cluster it extends functionality to support user input
+    copy paste of Download Token dict from Aruba Central GUI.
+
+    Args:
+        central (ArubaCentralBase): ArubaCentralBase class
+    """
+    internal = "internal" in central.central_info["base_url"]
+    if internal:
+        prompt = f"\nRefresh Failed Please Generate a new Token for:" \
+                 f"\n    customer_id: {central.central_info['customer_id']}" \
+                 f"\n    client_id: {central.central_info['client_id']}" \
+                 "\nand paste result of `Download Tokens` Use CTRL-D on empty line to submit." \
+                 "\n > "
+
+        token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
+        typer.clear()
+        # central.central_info["token"]["access_token"] = token_data.get("access_token")
+        # central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
+
+        try:
+            # token = central.refreshToken(central.central_info["token"])
+            token = central.refreshToken(token_data)
+            if token:
+                central.storeToken(token)
+                central.central_info["token"] = token
+        except Exception as e:
+            log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+    else:
+        central.handleTokenExpiry()
+
+    return central
+
 
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 
@@ -114,7 +174,8 @@ class Response:
     Assigns commonly evaluated attributes regardless of success
     Otherwise resp.ok will always be assigned and will be True or False
     '''
-    def __init__(self, function, *args: Any, central: ArubaCentralBase = None, **kwargs: Any) -> Any:
+    def __init__(self, function, *args: Any, central: ArubaCentralBase = None, callback: callable = None,
+                 callback_args: Any = None, callback_kwargs: Any = None, **kwargs: Any):
         self.url = '' if not args else args[0]
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
@@ -137,15 +198,14 @@ class Response:
             self.status_code = 418
         if not self.ok:
             log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
+        # data cleaner methods to strip any useless columns, change key names, etc.
+        elif callback is not None:
+            self.output = callback(*callback_args, **callback_kwargs)
 
-    def api_call(self, central: ArubaCentralBase, function: callable, *args, **kwargs):
-        if "internal" in central.central_info["base_url"]:
-            internal = True
-        else:
-            internal = False
-
+    @staticmethod
+    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
         resp, token = None, None
-        for _ in range(0, 2):
+        for _ in range(1, 3):
             try:
                 resp = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
                 if resp.status_code == 401 and "invalid_token" in resp.text:
@@ -156,31 +216,14 @@ class Response:
                         central.central_info["token"] = token
                 else:
                     token = True
+                    break
             except Exception as e:
                 log.error(f"Attempt to refresh returned {e.__class__} {e}")
 
             if not token:
-                if internal:
-                    prompt = f"\nRefresh Failed Please Generate a new Token for:" \
-                             f"\n    customer_id: {central.central_info['customer_id']}" \
-                             f"\n    client_id: {central.central_info['client_id']}" \
-                             "\nand paste result of `Download Tokens` Use CTRL-D to submit." \
-                             "\n > "
+                if handle_invalid_token(central):
+                    _ += 1
 
-                    token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
-                    central.central_info["token"]["access_token"] = token_data.get("access_token")
-                    central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
-
-                    try:
-                        token = central.refreshToken(central.central_info["token"])
-                        if token:
-                            central.storeToken(token)
-                            central.central_info["token"] = token
-                        _ += 1
-                    except Exception as e:
-                        log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
-                else:
-                    central.handleTokenExpiry()
 
             log.debug(f"api_call pass {_}")
 
@@ -226,7 +269,6 @@ class Response:
     def keys(self):
         return self.output.keys()
 
-    # not implemented yet
     def clean_response(self):
         _keys = [k for k in constants.STRIP_KEYS if k in self.output]
         if len(_keys) == 1:
@@ -246,6 +288,8 @@ log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"
 
 config = Config(base_dir=_calling_script.resolve().parent)
 log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)
+log._exit = pycentral.base.sys.exit
+pycentral.base.sys.exit = log.no_exit
 
 
 # -- break up arguments passed as single string from vscode promptString --

@@ -20,13 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from pycentral.base import ArubaCentralBase
+# from pycentral.base import ArubaCentralBase
+import sys
+from centralCLI import constants
+# import pycentral.base
 import json
 from typing import List, Tuple, Union
 from pathlib import Path
 import csv
 
-from . import MyLogger, Response, config, log
+from . import MyLogger, Response, config, handle_invalid_token, log, ArubaCentralBase
 
 try:
     from . import utils
@@ -54,6 +57,18 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     :return: An instance of class:`pycentral.ArubaCentralBase` to make API calls and manage access tokens.
     :rtype: class:`pycentral.ArubaCentralBase`
     """
+    '''
+    if "token" in self.central_info and self.central_info["token"]:
+        if "access_token" not in self.central_info["token"]:
+            self.central_info["token"] = self.getToken()
+    else:
+        self.central_info["token"] = self.getToken()
+
+    if not self.central_info["token"]:
+    '''
+    # class TokenCheck:
+    #     def __init__(cen: ArubaCentralBase):
+    #         self.status_code = 200 if cen.central_info["token"] else 418
     conn = None
     if account_name not in config.data:
         exit(f"exiting... {account_name} missing from {config.file}")
@@ -61,11 +76,18 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
     ssl_verify = config.get("ssl_verify", True)
 
-    conn = ArubaCentralBase(central_info=central_info,
-                            token_store=token_store,
-                            ssl_verify=ssl_verify,
-                            logger=logger
-                            )
+    kwargs = {
+        "central_info": central_info,
+        "token_store": token_store,
+        "ssl_verify": ssl_verify,
+        "logger": logger
+    }
+    # conn = ArubaCentralBase(**kwargs)
+    log._exit_caught = False
+    conn = utils.spinner(constants.MESSAGES["SPIN_TXT_AUTH"], ArubaCentralBase, name="init_ArubaCentralBase", **kwargs)
+    if conn and log._exit_caught:
+        conn = handle_invalid_token(conn)
+
     return conn
 
 
@@ -370,6 +392,14 @@ class CentralApi:
                 log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort")
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
         return self.get(url, params=params)
+
+    def get_dev_details(self, dev_type: str, serial: str) -> Response:
+        # https://internal-apigw.central.arubanetworks.com/monitoring/v1/switches/CN71HKZ1CL
+        if dev_type == "switch":
+            dev_type = "switches"
+        url = f"/monitoring/v1/{dev_type}/{serial}"
+        return self.get(url)
+
 
     def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"

@@ -172,15 +172,21 @@ class Utils:
             # with Halo(text=spin_txt, spinner=spinner):
             spin = None
             active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
-            if not active_spinners:
+            if active_spinners:
+                spin = active_spinners[0]._target.__self__
+                spin.text == spin_txt
+                spin.spinner == spinner
+            else:
                 spin = Halo(text=spin_txt, spinner=spinner)
                 spin.start()
                 threading.enumerate()[-1].name = spin._spinner_id = name
+
             r = function(*args, **kwargs)
+
             if spin:
                 spin.stop()
-            elif active_spinners:
-                _ = [t._target.__self__.stop() for t in active_spinners]
+            # elif active_spinners:
+            #     _ = [t._target.__self__.stop() for t in active_spinners]
                 # _ = [t._stop_spinner.set() for t in active_spinners]
                 # _ = [t._target.__self__._stop_spinner.set() for t in active_spinners]
                 # active_spinners[0]._target.__self__._stop_spinner.set()
