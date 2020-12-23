@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 # from pycentral.base import ArubaCentralBase
-import sys
+# import sys
 from centralCLI import constants
 # import pycentral.base
 import json
