@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "aruba-central-api-cli"
+version = "0.1.0"
+description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
+authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
+readme = "README.md"
+license = "MIT"
+
+[tool.poetry.scripts]
+cencli = "centralCLI.main:app"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+Pygments = "^2.7.3"
+tabulate = "^0.8.7"
+pycentral = "^0.0.1"
+halo = "^0.0.31"
+typer = "^0.3.2"
+certifi = "^2020.12.5"
+chardet = "^4.0.0"
+idna = "^2.10"
+pylibyaml = "^0.1.0"
+PyYAML = "^5.3.1"
+requests = "^2.25.1"
+urllib3 = "^1.26.2"
+colorama = "^0.4.4"
+tinydb = "^4.3.0"
+
+[tool.poetry.dev-dependencies]
+pyflakes = "^2.2.0"
+pycodestyle = "^2.6.0"
+mccabe = "^0.6.1"
+flake8 = "^3.8.4"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
