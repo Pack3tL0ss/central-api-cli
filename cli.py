@@ -244,6 +244,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         if what == "all":
             # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
             resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devicesv2, **params)
+        elif args:
+            serial = cache.get_dev_identifier(args)
+            resp = session.get_dev_details(what, serial)
+            if True not in [do_csv, do_json]:
+                do_yaml = True
         else:
             resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, **params)
         # elif not group:
@@ -587,10 +592,10 @@ def method_test(method: str = typer.Argument(...),
 #      to update borked (cached) token.  internal can't reauth via OAUTH due to SSO
 def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
-    if not config.DEBUG:
-        session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name, name="init_CentralApi")
-    else:
-        session = CentralApi(account_name)
+    # if not config.DEBUG:
+    #     session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name, name="init_CentralApi")
+    # else:
+    session = CentralApi(account_name)
 
     # central = session.central
 
