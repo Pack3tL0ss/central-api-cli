@@ -73,65 +73,10 @@ class CentralApi:
     def __init__(self, account_name):
         self.central = get_conn_from_file(account_name)
 
-        cfg_dict = self.central.central_info
-        tok_dict = cfg_dict["token"]
-
-        # Temp Refactor to use ArubaBaseClass without changing all my methods
-        # self.central.get = self.get
-
-        # No Longer used pycentral module handles auth headers content-type is always application/json
-        # self.headers = {
-        #     "authorization": f"{tok_dict.get('token_type', 'Bearer')} {tok_dict['access_token']}",
-        #     "Content-type": "application/json"
-        # }
-
         self.headers = {
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                     }
-
-        # def get(self, url: str, params: dict = {}, data: dict = {},
-        #         headers: dict = {}, files: dict = {}, retry_api_call: bool = True) -> dict:
-        #     return self.central.command("GET", apiPath=url, apiData=data, apiParams=params,
-        #                                 headers=headers, files=files, retry_api_call=retry_api_call)
-
-    # @classmethod
-    # def handle_expired_token(self, resp: requests.Response, func: callable, *args, **kwargs):
-    #     if "internal" in self.central.central_info["base_url"]:
-    #         internal = True
-    #     else:
-    #         internal = False
-
-    #     token = None
-    #     try:
-    #         if resp.status_code == 401 and "invalid_token" in resp.text:
-    #             log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
-    #             token = self.central.refresh_token(self.central.central_info["token"])
-    #     except Exception as e:
-    #         log.error(f"Attempt to refresh returned {e.__class__} {e}")
-    #         if internal:
-    #             # self.central.central_info["token"]["access_token"] = input("provide Updated access token > ")
-    #             # self.central.central_info["refresh_token"] = input("provide Updated refresh token > ")
-    #             prompt = f"""
-    #                     Refresh Failed Please Generate a new Token for:
-    #                     customer_id: {self.central.central_info['customer_id']}
-    #                     client_id: {self.central.central_info['client_id']}
-    #                     and paste result of `Download Tokens` Use CTRL-D to submit.
-    #                     """
-    #             token_data = utils.get_multiline_input(prompt)
-    #             token_data = json.loads("\n".join(token_data))
-    #             self.central.central_info["token"]["access_token"] = token_data.get("access_token")
-    #             self.central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
-    #             try:
-    #                 token = self.central.refreshToken(self.central.central_info["token"])
-    #             except Exception as e:
-    #                 log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
-
-    #     if token:
-    #         self.central.storeToken(token)
-    #         self.central.central_info["token"] = token
-
-    #     return resp
 
     def get(self, url, params: dict = {}, headers: dict = None):
         f_url = self.central.central_info["base_url"] + url
@@ -365,8 +310,9 @@ class CentralApi:
             resp = self.get_devices(dev_type, **kwargs)
             if not resp.ok:
                 break
-            else:
-                _output[dev_type] = resp.output[dev_type]  # [dict, ...]
+            _output[dev_type] = resp.output  # [dict, ...]
+            # TODO remove once verified no longer needed.  useless outer dict is now stripe in Response
+            # _output[dev_type] = resp.output[dev_type]  # [dict, ...]
 
         if _output:
             # return just the keys common across all device types
@@ -464,10 +410,17 @@ class CentralApi:
         resp = self.get("/central/v2/sites")
 
         # strip visualrrf_default site from response
-        if resp.ok:
-            _ = resp.output.get("sites", "")
-            resp["sites"] = [s for s in _ if s.get("site_name", "") != "visualrf_default"]
-            # TODO move site_name to front of dict
+        if resp.ok:  # resp.output = List[dict, ...]
+
+            # sorting logically and stripping tag column for now
+            _sorted = ["site_name", "site_id", "address", "city", "state", "zipcode", "country", "longitude",
+                       "latitude", "associated_device_count"]  # , "tags"]
+            key_map = {
+                "associated_device_count": "associated_devices",
+                "site_id": "id"
+            }
+            resp.output = [{key_map.get(k, k): s[k] for k in _sorted} for s in resp.output
+                           if s.get("site_name", "") != "visualrf_default"]
 
         return resp
 
