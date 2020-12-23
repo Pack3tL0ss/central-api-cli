@@ -216,8 +216,9 @@ class Response:
         raise AttributeError(f"'Response' object has no attribute '{name}'")
 
     def __iter__(self):
-        for k, v in self.output.items():
-            yield k, v
+        for _dict in self.output:
+            for k, v in _dict.items():
+                yield k, v
 
     def get(self, key, default: Any = None):
         return self.output.get(key, default)

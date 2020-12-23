@@ -8,11 +8,12 @@ import string
 import sys
 import urllib.parse
 from pprint import pprint
-from typing import List, Union
+from typing import Any, List, Union
 import typer
 
 import yaml
 from halo import Halo
+import threading
 from pygments import formatters, highlight, lexers
 from tabulate import tabulate
 
@@ -163,11 +164,27 @@ class Utils:
         )
 
     @staticmethod
-    def spinner(spin_txt, function, *args, **kwargs):
-        spinner = kwargs.get("spinner", "dots")
+    def spinner(spin_txt: str, function: callable, *args, name: str = None, spinner: str = "dots", **kwargs) -> Any:
+        name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
+        if not name.startswith("spinner_"):
+            name = f"spinner_{name}"
         if sys.stdin.isatty():
-            with Halo(text=spin_txt, spinner=spinner):
-                return function(*args, **kwargs)
+            # with Halo(text=spin_txt, spinner=spinner):
+            spin = None
+            active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
+            if not active_spinners:
+                spin = Halo(text=spin_txt, spinner=spinner)
+                spin.start()
+                threading.enumerate()[-1].name = spin._spinner_id = name
+            r = function(*args, **kwargs)
+            if spin:
+                spin.stop()
+            elif active_spinners:
+                _ = [t._target.__self__.stop() for t in active_spinners]
+                # _ = [t._stop_spinner.set() for t in active_spinners]
+                # _ = [t._target.__self__._stop_spinner.set() for t in active_spinners]
+                # active_spinners[0]._target.__self__._stop_spinner.set()
+            return r
 
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
