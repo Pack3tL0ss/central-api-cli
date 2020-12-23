@@ -365,7 +365,8 @@ class CentralApi:
             resp = self.get_devices(dev_type, **kwargs)
             if not resp.ok:
                 break
-            _output[dev_type] = resp.output[dev_type]  # [dict, ...]
+            else:
+                _output[dev_type] = resp.output[dev_type]  # [dict, ...]
 
         if _output:
             # return just the keys common across all device types
