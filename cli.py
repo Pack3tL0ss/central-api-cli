@@ -98,8 +98,8 @@ class Identifiers:
 
     async def update_site_db(self):
         site_resp = self.session.get_all_sites()
-        if site_resp.ok:  # TODO may need to verify site list has items # and site_resp.sites:
-            return self.SiteDB.insert_multiple(site_resp.sites)
+        if site_resp.ok:
+            return self.SiteDB.insert_multiple(site_resp.output)
 
     async def update_dev_db(self):
         dev_resp = self.session.get_all_devicesv2()
@@ -588,7 +588,7 @@ def method_test(method: str = typer.Argument(...),
 def _refresh_tokens(account_name: str) -> CentralApi:
     # access token in config is overriden stored in tok file in config dir
     if not config.DEBUG:
-        session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name)
+        session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name, name="init_CentralApi")
     else:
         session = CentralApi(account_name)
 
