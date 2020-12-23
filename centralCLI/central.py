@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 # from pycentral.base import ArubaCentralBase
-import sys
+# import sys
 from centralCLI import constants
 # import pycentral.base
 import json
@@ -397,9 +397,10 @@ class CentralApi:
         # https://internal-apigw.central.arubanetworks.com/monitoring/v1/switches/CN71HKZ1CL
         if dev_type == "switch":
             dev_type = "switches"
+        elif dev_type == "gateway":
+            dev_type = "gateways"
         url = f"/monitoring/v1/{dev_type}/{serial}"
         return self.get(url)
-
 
     def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"

@@ -146,6 +146,7 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
                  "\nand paste result of `Download Tokens` Use CTRL-D on empty line to submit." \
                  "\n > "
 
+        # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
         token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
         typer.clear()
         # central.central_info["token"]["access_token"] = token_data.get("access_token")

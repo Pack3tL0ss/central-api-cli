@@ -343,6 +343,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             )
             outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
             typer.secho("Done", fg="green")
+            # doesn't appear to work on wsl tries to use ps to launch
+            # typer.echo("Opening config directory")
+            # typer.launch(str(outfile), locate=True)
 
     else:
         typer.echo("No Data Returned")
@@ -587,27 +590,11 @@ def method_test(method: str = typer.Argument(...),
         typer.echo(f"{k}: {v}")
 
 
-# Testing does not refresh here, refresh in Response if token_expired returned
-# TODO acccept user input with --access-token --refresh-token or token key
-#      to update borked (cached) token.  internal can't reauth via OAUTH due to SSO
-def _refresh_tokens(account_name: str) -> CentralApi:
-    # access token in config is overriden stored in tok file in config dir
-    # if not config.DEBUG:
-    #     session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account_name, name="init_CentralApi")
-    # else:
-    session = CentralApi(account_name)
-
-    # central = session.central
-
-    # token = central.loadToken()
-    # if token:  # Verifying we don't need to refresh at every launch
-    #     # refresh token on every launch
-    #     token = central.refreshToken(token)
-    #     if token:
-    #         central.storeToken(token)
-    #         central.central_info["token"] = token
-
-    return session
+@app.callback()
+def callback():
+    """
+    Aruba Central API CLI
+    """
 
 
 # ---- // RUN \\ ----
@@ -635,6 +622,7 @@ if __name__ == "__main__":
             _ = sys.argv.pop(sys.argv.index("--debug"))
 
     log.debug(" ".join(sys.argv))
-    session = _refresh_tokens(account)
+    session = CentralApi(account)
+    # session = _refresh_tokens(account)
 
     app()
