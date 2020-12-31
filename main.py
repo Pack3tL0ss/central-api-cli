@@ -5,7 +5,7 @@ import sys
 import cli
 from pathlib import Path
 
-from lib.centralCLI.central import utils
+from centralcli.central import utils
 
 # _config_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config")
 _config_dir = Path.joinpath(Path(__file__).parent, "config")
