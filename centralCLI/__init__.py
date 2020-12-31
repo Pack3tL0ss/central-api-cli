@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# from centralCLI.central import ArubaCentralBase
+import json
 import os
 from typing import Any
-# from pycentral.base import ArubaCentralBase
 import pycentral.base
 import typer
 
@@ -147,6 +146,7 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
                  "\n > "
 
         # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
+        # TODO exception handling graceful exit for invalid json pasted
         token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
         typer.clear()
         # central.central_info["token"]["access_token"] = token_data.get("access_token")
@@ -166,6 +166,33 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
     return central
 
 
+def createToken(central: ArubaCentralBase) -> str:
+    """This method overrides the method by the same name in ArubaCentralBase Package.
+
+    Generates a new access token for Aruba Central via OAUTH2.0 APIs.
+    Override extends functionality to support user input
+    copy paste of Download Token dict from Aruba Central GUI.
+
+    :return: The token dict conisting of access_token and refresh_token.
+    :rtype: dict
+    """
+    csrf_token = None
+    session_token = None
+    auth_code = None
+    access_token = None
+    if central.validateOauthParams():
+        # Step 1: Login and obtain csrf token and session key
+        csrf_token, session_token = central.oauthLogin()
+        # Step 2: Obtain Auth Code
+        auth_code = central.oauthCode(csrf_token, session_token)
+        # Step 3: Swap the auth_code for access token
+        access_token = central.oauthAccessToken(auth_code)
+        central.logger.info("Central Login Successfull.. Obtained Access Token!")
+        return access_token
+    else:
+        handle_invalid_token(central)
+
+
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 
 
@@ -176,7 +203,7 @@ class Response:
     Otherwise resp.ok will always be assigned and will be True or False
     '''
     def __init__(self, function, *args: Any, central: ArubaCentralBase = None, callback: callable = None,
-                 callback_args: Any = None, callback_kwargs: Any = None, **kwargs: Any):
+                 callback_kwargs: Any = {}, **kwargs: Any):
         self.url = '' if not args else args[0]
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
@@ -201,7 +228,7 @@ class Response:
             log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
         # data cleaner methods to strip any useless columns, change key names, etc.
         elif callback is not None:
-            self.output = callback(*callback_args, **callback_kwargs)
+            self.output = callback(self.output, **callback_kwargs)
 
     @staticmethod
     def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
@@ -224,7 +251,6 @@ class Response:
             if not token:
                 if handle_invalid_token(central):
                     _ += 1
-
 
             log.debug(f"api_call pass {_}")
 
@@ -265,7 +291,8 @@ class Response:
                 yield k, v
 
     def get(self, key, default: Any = None):
-        return self.output.get(key, default)
+        if isinstance(self.output, dict):
+            return self.output.get(key, default)
 
     def keys(self):
         return self.output.keys()
@@ -282,15 +309,31 @@ class Response:
 
 _calling_script = Path(sys.argv[0])
 # print(f"\t\t\t--- {_calling_script} ---")
-_calling_script = Path.cwd() / "cli.py" if str(_calling_script) == "." else _calling_script  # vscode run in python shell
+_calling_script = Path.cwd() / "cli.py" if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode" \
+    else _calling_script  # vscode run in python shell
+if _calling_script.name == "cencli":
+    base_dir = Path(typer.get_app_dir(__name__))
+else:
+    base_dir = _calling_script.resolve().parent  # .joinpath("config")
+
 # print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
 # print(f"\t\t\t--- {_calling_script} ---")
-log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
+# log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
+log_dir = base_dir / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+# log_file = log_dir / f"{_calling_script.stem}.log"
+log_file = log_dir / f"{__name__}.log"
 
-config = Config(base_dir=_calling_script.resolve().parent)
-log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)
-log._exit = pycentral.base.sys.exit
-pycentral.base.sys.exit = log.no_exit
+config = Config(base_dir=base_dir)
+log = MyLogger(log_file, debug=config.debug, show=config.debug)
+
+log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {base_dir}")
+log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()})}")
+
+# override sys.exit prevent ArubaCentralBase from exiting when unable to refresh internal
+# log._exit = pycentral.base.sys.exit
+# pycentral.base.sys.exit = log.no_exit
+# pycentral.base.createToken = createToken
 
 
 # -- break up arguments passed as single string from vscode promptString --
@@ -411,3 +454,7 @@ def vscode_arg_handler():
 
 if os.environ.get("TERM_PROGRAM") == "vscode":
     vscode_arg_handler()
+
+# # TODO TEMP DEBUG REMOVE ------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# print(json.dumps({k: str(v) for k, v in locals().items() if k != "__builtins__"}, indent=4, sort_keys=True))
+# print(json.dumps({k: str(v) for k, v in globals().items() if k != "__builtins__"},  indent=4, sort_keys=True))
