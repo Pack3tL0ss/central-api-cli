@@ -22,14 +22,14 @@
 
 # from pycentral.base import ArubaCentralBase
 # import sys
-from centralCLI import constants
+from centralcli import constants
 # import pycentral.base
 import json
 from typing import List, Tuple, Union
 from pathlib import Path
 import csv
 
-from . import MyLogger, Response, config, handle_invalid_token, log, ArubaCentralBase
+from . import MyLogger, Response, config, cleaner, handle_invalid_token, log, ArubaCentralBase
 
 try:
     from . import utils
@@ -85,6 +85,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     # conn = ArubaCentralBase(**kwargs)
     log._exit_caught = False
     conn = utils.spinner(constants.MESSAGES["SPIN_TXT_AUTH"], ArubaCentralBase, name="init_ArubaCentralBase", **kwargs)
+
     if conn and log._exit_caught:
         conn = handle_invalid_token(conn)
 
@@ -100,11 +101,11 @@ class CentralApi:
                     "Accept": "application/json"
                     }
 
-    def get(self, url, params: dict = {}, headers: dict = None):
+    def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         headers = self.headers if headers is None else {**self.headers, **headers}
         params = {k: v for k, v in params.items() if v is not None}
-        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central)
+        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central, **kwargs)
 
     def post(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
@@ -292,12 +293,10 @@ class CentralApi:
 
         return templates.update_template(self.central, **kwargs)
 
-    def get_all_groups(self) -> Response:  # VERIFIED
+    def get_all_groups(self) -> Response:  # REVERIFIED
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 20}  # 20 is the max
-        resp = self.get(url, params=params)
-        if resp.ok and resp.get("data"):
-            resp["data"] = [g for _ in resp["data"] for g in _ if g != "unprovisioned"]
+        resp = self.get(url, params=params, callback=cleaner.get_all_groups)
         return resp
 
     def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
@@ -321,10 +320,7 @@ class CentralApi:
 
         return resp
 
-    # TODO I don't like this, (running output through utils.output here) as it's not consistent with
-    # all the others, but for this API method (which shows a lot more data then the above), the keys
-    # for each dev_type vary
-    def get_all_devicesv2(self, **kwargs) -> Response:  # VERIFIED
+    def get_all_devicesv2(self, **kwargs) -> Response:  # REVERIFIED
         _output = {}
         resp = None
 
@@ -333,8 +329,6 @@ class CentralApi:
             if not resp.ok:
                 break
             _output[dev_type] = resp.output  # [dict, ...]
-            # TODO remove once verified no longer needed.  useless outer dict is now stripe in Response
-            # _output[dev_type] = resp.output[dev_type]  # [dict, ...]
 
         if _output:
             # return just the keys common across all device types
