@@ -119,7 +119,7 @@ class StatusOptions(str, Enum):
 
 
 MESSAGES = {
-    "SPIN_TXT_AUTH": "Establishing Session with Aruba Central API Gateway...",
+    "SPIN_TXT_AUTH": "Initializing Arunba Central Base...",
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
     "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway..."
 }
