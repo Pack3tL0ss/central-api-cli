@@ -10,6 +10,7 @@ import urllib.parse
 from pprint import pprint
 from typing import Any, List, Union
 import typer
+import logging
 
 import yaml
 from halo import Halo
@@ -19,6 +20,7 @@ from tabulate import tabulate
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
+log = logging.getLogger()
 
 
 class Convert:
@@ -189,7 +191,15 @@ class Utils:
             r = function(*args, **kwargs)
 
             if spin:
-                spin.stop()
+                try:
+                    if r.ok:
+                        spin.succeed()
+                    else:
+                        _spin_fail_msg = r.json().get("error_description", spin.text)
+                        spin.fail(_spin_fail_msg)
+                except Exception as e:
+                    log.debug(f"spinner exception evaluating r.ok (expected in some cases)\n{e}")
+                    spin.stop_and_persist()
 
             return r
 
