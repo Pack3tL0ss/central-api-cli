@@ -218,7 +218,8 @@ class Response:
             self.output = e
             self.status_code = 418
         if not self.ok:
-            log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
+            log.error(f"API Call ({self.url}) Returned Failure ({self.status_code})\n\t"
+                      f"output: {self.output}\n\terror: {self.error}")
         # data cleaner methods to strip any useless columns, change key names, etc.
         elif callback is not None:
             self.output = callback(self.output, **callback_kwargs)
