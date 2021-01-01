@@ -387,8 +387,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             # typer.echo("Opening config directory")
             # typer.launch(str(outfile), locate=True)
 
-    else:
-        typer.echo("No Data Returned")
+    # else:
+    #     typer.echo("No Data Returned")
 
 
 @app.command()
