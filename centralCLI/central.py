@@ -84,7 +84,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
                                            central_info["client_id"]))
 
     # always create token cache if it doesn't exist and always use it first
-    # however if token in config has been modified more recently the tokens in the config will be tried first
+    # however if config has been modified more recently the tokens in the config will be tried first
     # if both fail user will be prompted for token (assuming no password in file)
     if token_cache.is_file():
         cache_token = conn.loadToken()

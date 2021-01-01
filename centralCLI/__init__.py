@@ -137,7 +137,7 @@ def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> bool:
     token = None
     try:
         # token = central.refreshToken(central.central_info["token"])
-        token = central.refreshToken(token_data)
+        token = utils.spinner("Attempting to Refresh Token", central.refreshToken, token_data)
         if token:
             central.storeToken(token)
             central.central_info["token"] = token
@@ -186,9 +186,6 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
     return central
 
 
-SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-
-
 class Response:
     '''wrapper for requests.response object
 
@@ -203,7 +200,10 @@ class Response:
             if central:
                 r = self.api_call(central, function, *args, **kwargs)
             else:
-                r = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
+                _data_msg = '' if not args or " arubanetworks.com" not in args[0] \
+                    else (f'({args[0].split("arubanetworks.com/")[-1]})')
+                spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+                r = utils.spinner(spin_txt_data, function, *args, **kwargs)
             self.ok = r.ok
             try:
                 self.output = r.json()
@@ -275,12 +275,14 @@ class Response:
     @staticmethod
     def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
         central_info = central.central_info
-        resp, token, retry_msg = None, None, ''
+        resp, token = None, None
+        _data_msg = '' if not args or "arubanetworks.com" not in args[0] else (f' ({args[0].split("arubanetworks.com/")[-1]})')
+        spin_txt_data = f"Collecting Data{_data_msg} from Aruba Central API Gateway..."
         for _ in range(1, 3):
+            if _ > 1:
+                spin_txt_data = spin_txt_data + " retry"
             try:
-                if _ > 1:
-                    retry_msg = " retry"
-                resp = utils.spinner(f"{SPIN_TXT_DATA}{retry_msg}", function, *args, **kwargs)
+                resp = utils.spinner(f"{spin_txt_data}", function, *args, **kwargs)
                 if resp.status_code == 401 and "invalid_token" in resp.text:
                     # log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
 

@@ -190,14 +190,26 @@ class Utils:
 
             r = function(*args, **kwargs)
 
+            _spin_fail_msg = spin_txt
+            ok = None
+            if "refreshToken" in str(function):
+                ok = r is not None
+            elif "ArubaCentralBase" in str(r):
+                ok = True
+            elif hasattr(r, "ok"):
+                ok = r.ok
+                _spin_fail_msg = r.json().get("error_description", spin.text)
+
             if spin:
                 try:
-                    if r.ok:
+                    if ok is True:
                         spin.succeed()
-                    else:
-                        _spin_fail_msg = r.json().get("error_description", spin.text)
+                    elif ok is False:
                         spin.fail(_spin_fail_msg)
+                    else:
+                        spin.stop_and_persist()
                 except Exception as e:
+                    # TODO remove once verified ... should no longer hit with ok logic above
                     log.debug(f"spinner exception evaluating r.ok (expected in some cases)\n{e}")
                     spin.stop_and_persist()
 
