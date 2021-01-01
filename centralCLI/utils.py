@@ -198,7 +198,11 @@ class Utils:
                 ok = True
             elif hasattr(r, "ok"):
                 ok = r.ok
-                _spin_fail_msg = r.json().get("error_description", spin.text)
+                if hasattr(r, "__class__") and "centralcli.Response" in str(r.__class__):
+                    if not r.ok:
+                        _spin_fail_msg = r.output.get("error", spin_txt)
+                elif hasattr(r, "json"):
+                    _spin_fail_msg = r.json().get("error_description", spin.text)
 
             if spin:
                 try:
