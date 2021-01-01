@@ -389,7 +389,10 @@ class CentralApi:
         params = {k: v for k, v in locals().items() if k not in _strip and v}
         if dev_type == "switch":
             dev_type = "switches"
-        elif dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
+        elif dev_type == "gateway":
+            dev_type = "gateways"
+
+        if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
             if params.get("sort", "").endswith("name"):
                 del params["sort"]
                 log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort")
