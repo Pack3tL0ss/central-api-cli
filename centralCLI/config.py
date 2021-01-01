@@ -29,11 +29,6 @@ class Config:
         self.cache_dir = self.cache_file.parent
         self.data = self.get_config_data(self.file) or {}
         self.debug = self.data.get("debug", False)
-        # if "--debug" in sys.argv:
-        #     self.debug = True
-        #     _ = sys.argv.pop(sys.argv.index("--debug"))
-        # else:
-        #     self.debug = self.data.get("debug", os.getenv("ARUBACLI_DEBUG", "0") == "1")
 
     def __bool__(self):
         return len(self.data) > 0
@@ -42,7 +37,12 @@ class Config:
         return len(self.data)
 
     def __getattr__(self, item: str, default: Any = None) -> Any:
-        return self.data.get(item, default=default)
+        return self.data.get(item, default)
+
+    # not used but may be handy
+    @property
+    def tokens(self, account: str = "central_info"):
+        return self.data.get(account, {}).get("token", {})
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)
