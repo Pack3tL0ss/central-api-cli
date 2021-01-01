@@ -127,6 +127,26 @@ class MyLogger:
             self._exit_caught = True
 
 
+def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> bool:
+    if not token_data:
+        token_data = central.central_info.get("token")
+
+    if not token_data:
+        return False
+
+    token = None
+    try:
+        # token = central.refreshToken(central.central_info["token"])
+        token = central.refreshToken(token_data)
+        if token:
+            central.storeToken(token)
+            central.central_info["token"] = token
+    except Exception as e:
+        log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+
+    return token is not None
+
+
 def handle_invalid_token(central: ArubaCentralBase) -> None:
     """Handle invalid or expired tokens
 
@@ -151,46 +171,19 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
         typer.clear()
         # central.central_info["token"]["access_token"] = token_data.get("access_token")
         # central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
-
-        try:
-            # token = central.refreshToken(central.central_info["token"])
-            token = central.refreshToken(token_data)
-            if token:
-                central.storeToken(token)
-                central.central_info["token"] = token
-        except Exception as e:
-            log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+        _refresh_token(central, token_data)
+        # try:
+        #     # token = central.refreshToken(central.central_info["token"])
+        #     token = central.refreshToken(token_data)
+        #     if token:
+        #         central.storeToken(token)
+        #         central.central_info["token"] = token
+        # except Exception as e:
+        #     log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
     else:
         central.handleTokenExpiry()
 
     return central
-
-
-def createToken(central: ArubaCentralBase) -> str:
-    """This method overrides the method by the same name in ArubaCentralBase Package.
-
-    Generates a new access token for Aruba Central via OAUTH2.0 APIs.
-    Override extends functionality to support user input
-    copy paste of Download Token dict from Aruba Central GUI.
-
-    :return: The token dict conisting of access_token and refresh_token.
-    :rtype: dict
-    """
-    csrf_token = None
-    session_token = None
-    auth_code = None
-    access_token = None
-    if central.validateOauthParams():
-        # Step 1: Login and obtain csrf token and session key
-        csrf_token, session_token = central.oauthLogin()
-        # Step 2: Obtain Auth Code
-        auth_code = central.oauthCode(csrf_token, session_token)
-        # Step 3: Swap the auth_code for access token
-        access_token = central.oauthAccessToken(auth_code)
-        central.logger.info("Central Login Successfull.. Obtained Access Token!")
-        return access_token
-    else:
-        handle_invalid_token(central)
 
 
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
@@ -229,32 +222,6 @@ class Response:
         # data cleaner methods to strip any useless columns, change key names, etc.
         elif callback is not None:
             self.output = callback(self.output, **callback_kwargs)
-
-    @staticmethod
-    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
-        resp, token = None, None
-        for _ in range(1, 3):
-            try:
-                resp = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
-                if resp.status_code == 401 and "invalid_token" in resp.text:
-                    log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
-                    token = central.refreshToken(central.central_info["token"])
-                    if token:
-                        central.storeToken(token)
-                        central.central_info["token"] = token
-                else:
-                    token = True
-                    break
-            except Exception as e:
-                log.error(f"Attempt to refresh returned {e.__class__} {e}")
-
-            if not token:
-                if handle_invalid_token(central):
-                    _ += 1
-
-            log.debug(f"api_call pass {_}")
-
-        return resp
 
     def __bool__(self):
         return self.ok
@@ -303,18 +270,54 @@ class Response:
             return self.output[_keys[0]]
         elif _keys:
             print(f"More wrapping keys than expected from return {_keys}")
-
         return self.output
+
+    @staticmethod
+    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
+        central_info = central.central_info
+        resp, token, retry_msg = None, None, ''
+        for _ in range(1, 3):
+            try:
+                if _ > 1:
+                    retry_msg = " retry"
+                resp = utils.spinner(f"{SPIN_TXT_DATA}{retry_msg}", function, *args, **kwargs)
+                if resp.status_code == 401 and "invalid_token" in resp.text:
+                    # log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+
+                    if central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
+                        token = _refresh_token(central, central.central_info["retry_token"])
+                    else:
+                        token = _refresh_token(central)
+                    # token = central.refreshToken(central.central_info["token"])
+                    # if token:
+                    #     central.storeToken(token)
+                    #     central.central_info["token"] = token
+                else:
+                    token = True
+                    break
+            except Exception as e:
+                log.error(f"Attempt to refresh returned {e.__class__} {e}")
+
+            if not token:
+                handle_invalid_token(central)
+                _ += 1
+
+            log.debug(f"api_call pass {_}")
+
+        return resp
 
 
 _calling_script = Path(sys.argv[0])
 # print(f"\t\t\t--- {_calling_script} ---")
-_calling_script = Path.cwd() / "cli.py" if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode" \
-    else _calling_script  # vscode run in python shell
+if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
+    _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
+
 if _calling_script.name == "cencli":
     base_dir = Path(typer.get_app_dir(__name__))
 else:
     base_dir = _calling_script.resolve().parent  # .joinpath("config")
+    if base_dir.parts.count("centralcli") > 1:
+        base_dir = base_dir.parent
 
 # print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
 # print(f"\t\t\t--- {_calling_script} ---")
