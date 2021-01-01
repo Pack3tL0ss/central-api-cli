@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Any, List, Tuple, Union
 from tinydb import TinyDB, Query
 import time
 import sys
 import typer
 import asyncio
 
-from centralcli import config, handle_invalid_token, log, utils
+try:
+    from centralcli import config, handle_invalid_token, log, utils
+except ImportError as e:
+    pkg_dir = Path(__file__).parent.parent
+    if pkg_dir.name == "centralcli":
+        sys.path.insert(0, str(pkg_dir))
+        from centralcli import config, handle_invalid_token, log, utils
+    else:
+        raise e
+
 from centralcli.central import BuildCLI, CentralApi
 from centralcli.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
                                   arg_to_what, devices)
@@ -22,7 +31,7 @@ tty = utils.tty
 app = typer.Typer()
 
 
-def eval_resp(resp):
+def eval_resp(resp) -> Any:
     if not resp.ok:
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                    f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
@@ -31,7 +40,7 @@ def eval_resp(resp):
         return resp.output
 
 
-def caas_response(resp):
+def caas_response(resp) -> None:
     if not resp.ok:
         typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
         return
@@ -169,13 +178,17 @@ def account_name_callback(ctx: typer.Context, account: str):
     if account not in config.data:
         strip_keys = ['central_info', 'ssl_verify', 'token_store']
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"The specified account: '{account}' is not defined in the config.\n\n"
+                   f"The specified account: '{account}' is not defined in the config @\n"
+                   f"{config.file}\n\n"
                    f"The following accounts are defined {[k for k in config.data.keys() if k not in strip_keys]}\n"
-                   f"The default account 'central_info' is used if no account is specified via --account parameter.\n")
-        if "central_info" not in config.data:
+                   f"The default account 'central_info' is used if no account is specified via --account flag.\n"
+                   f"or the ARUBACLI_ACCOUNT environment variable.\n")
+
+        if account != "central_info" and "central_info" not in config.data:
             typer.echo(f"{typer.style('WARNING:', fg='yellow')} "
                        f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
                        f"--account parameter or ARUBACLI_ACCOUNT environment variable.")
+
         raise typer.Exit(code=1)
 
     global session
@@ -339,32 +352,29 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     elif what == "clients":
         resp = session.get_clients(args)
 
-    data = None if not resp else eval_resp(resp)
+    # TODO remove after verifying we never return a NoneType
+    if resp is None:
+        print("Developer Message: resp returned NoneType")
+
+    data = eval_resp(resp)
 
     if data:
-        # TODO enable cleaner in Response... will benefit all command paths
-        # if isinstance(data, dict):
-        #     for wtf in STRIP_KEYS:
-        #         if wtf in data:
-        #             data = data[wtf]
-        #             break
-
         if do_json is True:
             tablefmt = "json"
         elif do_yaml is True:
             tablefmt = "yaml"
         elif do_csv is True:
             tablefmt = "csv"
-        # elif output:
-        #     tablefmt = output
         else:
             tablefmt = "simple"
+
         outdata = utils.output(data, tablefmt)
         typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --
         if outfile and outdata:
             if outfile.parent.resolve() == config.base_dir.resolve():
+                config.outdir.mkdir(exist_ok=True)
                 outfile = config.outdir / outfile
 
             print(
