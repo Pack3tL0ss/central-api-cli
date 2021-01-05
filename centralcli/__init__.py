@@ -319,8 +319,11 @@ if _calling_script.name == "cencli":
     base_dir = Path(typer.get_app_dir(__name__))
 else:
     base_dir = _calling_script.resolve().parent  # .joinpath("config")
-    if base_dir.parts.count("centralcli") > 1:
+    if base_dir.name == "centralcli":
         base_dir = base_dir.parent
+    else:
+        print("Warning Logic Error in git/pypi detection")
+        print(f"base_dir Parts: {base_dir.parts}")
 
 # print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
 # print(f"\t\t\t--- {_calling_script} ---")
