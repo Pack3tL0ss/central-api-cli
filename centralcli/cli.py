@@ -179,10 +179,19 @@ def account_name_callback(ctx: typer.Context, account: str):
         strip_keys = ['central_info', 'ssl_verify', 'token_store']
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                    f"The specified account: '{account}' is not defined in the config @\n"
-                   f"{config.file}\n\n"
-                   f"The following accounts are defined {[k for k in config.data.keys() if k not in strip_keys]}\n"
-                   f"The default account 'central_info' is used if no account is specified via --account flag.\n"
-                   f"or the ARUBACLI_ACCOUNT environment variable.\n")
+                   f"{config.file}\n\n")
+
+        _accounts = [k for k in config.data.keys() if k not in strip_keys]
+        if _accounts:
+            typer.echo(f"The following accounts are defined {_accounts}\n"
+                       f"The default account 'central_info' is used if no account is specified via --account flag.\n"
+                       f"or the ARUBACLI_ACCOUNT environment variable.\n")
+        else:
+            if not config.data:
+                # TODO prompt user for details
+                typer.secho("Configuration doesn't exist", fg="red")
+            else:
+                typer.secho("No accounts defined in config", fg="red")
 
         if account != "central_info" and "central_info" not in config.data:
             typer.echo(f"{typer.style('WARNING:', fg='yellow')} "
