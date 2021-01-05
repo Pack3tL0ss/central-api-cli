@@ -13,3 +13,4 @@ colorlog
 click_spinner
 colorama
 tinydb
+shellingham
