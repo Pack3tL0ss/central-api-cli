@@ -10,7 +10,7 @@ import asyncio
 
 try:
     from centralcli import config, handle_invalid_token, log, utils
-except ImportError as e:
+except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).parent.parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir))
