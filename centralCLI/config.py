@@ -6,31 +6,43 @@ from pathlib import Path
 from typing import Any
 import yaml
 import json
-import os
+# import os
+# import sys
 
 
 class Config:
     def __init__(self, base_dir: Path = None):
-        self.base_dir = base_dir or Path(__file__).parent.parent.parent
-        self.dir = self.base_dir.joinpath("config")
+        # self.base_dir = Path(__file__).parent.parent if config_dir is None else config_dir.parent
+        if base_dir and isinstance(base_dir, str):
+            base_dir = Path(base_dir)
+        self.base_dir = base_dir or Path(__file__).parent.parent
+        self.dir = self.base_dir / "config"
         self.outdir = self.base_dir / "out"
-        self.file = self.dir.joinpath("config.yaml")
+        self.file = self.dir / "config.yaml"
         for ext in ["yml", "json"]:
             if self.dir.joinpath(f"config.{ext}").exists():
-                self.file = self.dir.joinpath(f"config.{ext}")
+                self.file = self.dir / f"config.{ext}"
                 break
-        self.bulk_edit_file = self.dir.joinpath("bulkedit.csv")
-        self.stored_tasks_file = self.dir.joinpath("stored-tasks.yaml")
-        self.cache_file = self.dir.joinpath(".cache", "db.json")
+        self.bulk_edit_file = self.dir / "bulkedit.csv"
+        self.stored_tasks_file = self.dir / "stored-tasks.yaml"
+        self.cache_file = self.dir / ".cache" / "db.json"
         self.cache_dir = self.cache_file.parent
         self.data = self.get_config_data(self.file) or {}
-        self.DEBUG = self.data.get("debug", os.getenv("DEBUG", False))
+        self.debug = self.data.get("debug", False)
 
     def __bool__(self):
         return len(self.data) > 0
 
     def __len__(self):
         return len(self.data)
+
+    def __getattr__(self, item: str, default: Any = None) -> Any:
+        return self.data.get(item, default)
+
+    # not used but may be handy
+    @property
+    def tokens(self, account: str = "central_info"):
+        return self.data.get(account, {}).get("token", {})
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)

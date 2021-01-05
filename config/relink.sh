@@ -10,8 +10,3 @@ if [ ! -z "$1" ]; then
 else
     echo "Argument is required"
 fi
-
-# if [ ! -L "../venv/lib/python3*/site-packages/centralCLI" ]; then
-#     ln -s ../venv/lib/python3*/site-packages/centralCLI ../lib/centralCLI
-# fi
-

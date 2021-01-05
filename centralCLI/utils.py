@@ -10,6 +10,7 @@ import urllib.parse
 from pprint import pprint
 from typing import Any, List, Union
 import typer
+import logging
 
 import yaml
 from halo import Halo
@@ -19,6 +20,7 @@ from tabulate import tabulate
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
+log = logging.getLogger()
 
 
 class Convert:
@@ -164,32 +166,57 @@ class Utils:
         )
 
     @staticmethod
-    def spinner(spin_txt: str, function: callable, *args, name: str = None, spinner: str = "dots", **kwargs) -> Any:
+    def spinner(spin_txt: str, function: callable, *args, name: str = None,
+                spinner: str = "dots", debug: bool = False, **kwargs) -> Any:
         name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
         if not name.startswith("spinner_"):
             name = f"spinner_{name}"
-        if sys.stdin.isatty():
-            # with Halo(text=spin_txt, spinner=spinner):
+
+        if sys.stdin.isatty():  # TODO probably not needed, relic of re-used code from ConsolePi
+            # If a spinner is already running, update that spinner vs creating new
             spin = None
             active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
             if active_spinners:
                 spin = active_spinners[0]._target.__self__
-                spin.text == spin_txt
-                spin.spinner == spinner
-            else:
+                if debug:
+                    spin.stop()
+                else:
+                    spin.text == spin_txt
+                    spin.spinner == "dots12" if spin.spinner == spinner else spinner
+            elif not debug:
                 spin = Halo(text=spin_txt, spinner=spinner)
                 spin.start()
                 threading.enumerate()[-1].name = spin._spinner_id = name
 
             r = function(*args, **kwargs)
 
+            _spin_fail_msg = spin_txt
+            ok = None
+            if "refreshToken" in str(function):
+                ok = r is not None
+            elif "ArubaCentralBase" in str(r):
+                ok = True
+            elif hasattr(r, "ok"):
+                ok = r.ok
+                if hasattr(r, "__class__") and "centralcli.Response" in str(r.__class__):
+                    if not r.ok:
+                        _spin_fail_msg = r.output.get("error", spin_txt)
+                elif hasattr(r, "json"):
+                    _spin_fail_msg = r.json().get("error_description", spin.text)
+
             if spin:
-                spin.stop()
-            # elif active_spinners:
-            #     _ = [t._target.__self__.stop() for t in active_spinners]
-                # _ = [t._stop_spinner.set() for t in active_spinners]
-                # _ = [t._target.__self__._stop_spinner.set() for t in active_spinners]
-                # active_spinners[0]._target.__self__._stop_spinner.set()
+                try:
+                    if ok is True:
+                        spin.succeed()
+                    elif ok is False:
+                        spin.fail(_spin_fail_msg)
+                    else:
+                        spin.stop_and_persist()
+                except Exception as e:
+                    # TODO remove once verified ... should no longer hit with ok logic above
+                    log.debug(f"spinner exception evaluating r.ok (expected in some cases)\n{e}")
+                    spin.stop_and_persist()
+
             return r
 
     @staticmethod
@@ -235,7 +262,10 @@ class Utils:
         def __str__(self):
             pretty_up = typer.style(" Up", fg="green")
             pretty_down = typer.style(" Down", fg="red")
-            return self.tty.replace(" Up", pretty_up).replace(" Down", pretty_down) or self.file
+            if self.tty:
+                return self.tty.replace(" Up", pretty_up).replace(" Down", pretty_down)
+            else:
+                return self.file
 
         def __iter__(self):
             out = self.tty or self.file
@@ -299,7 +329,7 @@ class Utils:
                 raw_data = table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
 
             # -- // List[str, ...] \\ --
-            elif outdata and (isinstance(x, str) for x in outdata):
+            elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:
                 if len(outdata) > 1:
                     raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
                 else:

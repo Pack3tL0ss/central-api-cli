@@ -12,7 +12,7 @@ dev_to_url = {
 class ShowArgs(str, Enum):
     all = "all"
     # device = "device"
-    # devices = "devices"
+    devices = "devices"
     ap = "ap"
     aps = "aps"
     switch = "switch"
@@ -69,6 +69,7 @@ class ArgToWhat:
         self.groups = self.group = "groups"
         self.site = self.sites = "sites"
         self.template = self.templates = "template"
+        self.all = self.devices = "all"
 
     def get(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
@@ -118,7 +119,7 @@ class StatusOptions(str, Enum):
 
 
 MESSAGES = {
-    "SPIN_TXT_AUTH": "Establishing Session with Aruba Central API Gateway...",
+    "SPIN_TXT_AUTH": "Initializing Arunba Central Base...",
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
     "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway..."
 }

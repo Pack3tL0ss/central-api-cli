@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# from centralCLI.central import ArubaCentralBase
+import json
 import os
 from typing import Any
-# from pycentral.base import ArubaCentralBase
 import pycentral.base
 import typer
 
@@ -128,6 +127,26 @@ class MyLogger:
             self._exit_caught = True
 
 
+def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> bool:
+    if not token_data:
+        token_data = central.central_info.get("token")
+
+    if not token_data:
+        return False
+
+    token = None
+    try:
+        # token = central.refreshToken(central.central_info["token"])
+        token = utils.spinner("Attempting to Refresh Token", central.refreshToken, token_data)
+        if token:
+            central.storeToken(token)
+            central.central_info["token"] = token
+    except Exception as e:
+        log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+
+    return token is not None
+
+
 def handle_invalid_token(central: ArubaCentralBase) -> None:
     """Handle invalid or expired tokens
 
@@ -147,26 +166,24 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
                  "\n > "
 
         # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
+        # TODO exception handling graceful exit for invalid json pasted
         token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
         typer.clear()
         # central.central_info["token"]["access_token"] = token_data.get("access_token")
         # central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
-
-        try:
-            # token = central.refreshToken(central.central_info["token"])
-            token = central.refreshToken(token_data)
-            if token:
-                central.storeToken(token)
-                central.central_info["token"] = token
-        except Exception as e:
-            log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+        _refresh_token(central, token_data)
+        # try:
+        #     # token = central.refreshToken(central.central_info["token"])
+        #     token = central.refreshToken(token_data)
+        #     if token:
+        #         central.storeToken(token)
+        #         central.central_info["token"] = token
+        # except Exception as e:
+        #     log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
     else:
         central.handleTokenExpiry()
 
     return central
-
-
-SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 
 
 class Response:
@@ -176,14 +193,17 @@ class Response:
     Otherwise resp.ok will always be assigned and will be True or False
     '''
     def __init__(self, function, *args: Any, central: ArubaCentralBase = None, callback: callable = None,
-                 callback_args: Any = None, callback_kwargs: Any = None, **kwargs: Any):
+                 callback_kwargs: Any = {}, **kwargs: Any):
         self.url = '' if not args else args[0]
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
             if central:
                 r = self.api_call(central, function, *args, **kwargs)
             else:
-                r = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
+                _data_msg = '' if not args or " arubanetworks.com" not in args[0] \
+                    else (f'({args[0].split("arubanetworks.com/")[-1]})')
+                spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+                r = utils.spinner(spin_txt_data, function, *args, **kwargs)
             self.ok = r.ok
             try:
                 self.output = r.json()
@@ -198,37 +218,11 @@ class Response:
             self.output = e
             self.status_code = 418
         if not self.ok:
-            log.error(f"API Call Returned Failure ({self.status_code})\n\toutput: {self.output}\n\terror: {self.error}")
+            log.error(f"API Call ({self.url}) Returned Failure ({self.status_code})\n\t"
+                      f"output: {self.output}\n\terror: {self.error}")
         # data cleaner methods to strip any useless columns, change key names, etc.
         elif callback is not None:
-            self.output = callback(*callback_args, **callback_kwargs)
-
-    @staticmethod
-    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
-        resp, token = None, None
-        for _ in range(1, 3):
-            try:
-                resp = utils.spinner(SPIN_TXT_DATA, function, *args, **kwargs)
-                if resp.status_code == 401 and "invalid_token" in resp.text:
-                    log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
-                    token = central.refreshToken(central.central_info["token"])
-                    if token:
-                        central.storeToken(token)
-                        central.central_info["token"] = token
-                else:
-                    token = True
-                    break
-            except Exception as e:
-                log.error(f"Attempt to refresh returned {e.__class__} {e}")
-
-            if not token:
-                if handle_invalid_token(central):
-                    _ += 1
-
-
-            log.debug(f"api_call pass {_}")
-
-        return resp
+            self.output = callback(self.output, **callback_kwargs)
 
     def __bool__(self):
         return self.ok
@@ -265,7 +259,8 @@ class Response:
                 yield k, v
 
     def get(self, key, default: Any = None):
-        return self.output.get(key, default)
+        if isinstance(self.output, dict):
+            return self.output.get(key, default)
 
     def keys(self):
         return self.output.keys()
@@ -276,21 +271,75 @@ class Response:
             return self.output[_keys[0]]
         elif _keys:
             print(f"More wrapping keys than expected from return {_keys}")
-
         return self.output
+
+    @staticmethod
+    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
+        central_info = central.central_info
+        resp, token = None, None
+        _data_msg = '' if not args or "arubanetworks.com" not in args[0] else (f' ({args[0].split("arubanetworks.com/")[-1]})')
+        spin_txt_data = f"Collecting Data{_data_msg} from Aruba Central API Gateway..."
+        for _ in range(1, 3):
+            if _ > 1:
+                spin_txt_data = spin_txt_data + " retry"
+            try:
+                resp = utils.spinner(f"{spin_txt_data}", function, *args, **kwargs)
+                if resp.status_code == 401 and "invalid_token" in resp.text:
+                    # log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+
+                    if central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
+                        token = _refresh_token(central, central.central_info["retry_token"])
+                    else:
+                        token = _refresh_token(central)
+                    # token = central.refreshToken(central.central_info["token"])
+                    # if token:
+                    #     central.storeToken(token)
+                    #     central.central_info["token"] = token
+                else:
+                    token = True
+                    break
+            except Exception as e:
+                log.error(f"Attempt to refresh returned {e.__class__} {e}")
+
+            if not token:
+                handle_invalid_token(central)
+                _ += 1
+
+            log.debug(f"api_call pass {_}")
+
+        return resp
 
 
 _calling_script = Path(sys.argv[0])
 # print(f"\t\t\t--- {_calling_script} ---")
-_calling_script = Path.cwd() / "cli.py" if str(_calling_script) == "." else _calling_script  # vscode run in python shell
+if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
+    _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
+
+if _calling_script.name == "cencli":
+    base_dir = Path(typer.get_app_dir(__name__))
+else:
+    base_dir = _calling_script.resolve().parent  # .joinpath("config")
+    if base_dir.parts.count("centralcli") > 1:
+        base_dir = base_dir.parent
+
 # print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
 # print(f"\t\t\t--- {_calling_script} ---")
-log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
+# log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
+log_dir = base_dir / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+# log_file = log_dir / f"{_calling_script.stem}.log"
+log_file = log_dir / f"{__name__}.log"
 
-config = Config(base_dir=_calling_script.resolve().parent)
-log = MyLogger(log_file, debug=config.DEBUG, show=config.DEBUG)
-log._exit = pycentral.base.sys.exit
-pycentral.base.sys.exit = log.no_exit
+config = Config(base_dir=base_dir)
+log = MyLogger(log_file, debug=config.debug, show=config.debug)
+
+log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {base_dir}")
+log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()})}")
+
+# override sys.exit prevent ArubaCentralBase from exiting when unable to refresh internal
+# log._exit = pycentral.base.sys.exit
+# pycentral.base.sys.exit = log.no_exit
+# pycentral.base.createToken = createToken
 
 
 # -- break up arguments passed as single string from vscode promptString --
@@ -411,3 +460,7 @@ def vscode_arg_handler():
 
 if os.environ.get("TERM_PROGRAM") == "vscode":
     vscode_arg_handler()
+
+# # TODO TEMP DEBUG REMOVE ------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# print(json.dumps({k: str(v) for k, v in locals().items() if k != "__builtins__"}, indent=4, sort_keys=True))
+# print(json.dumps({k: str(v) for k, v in globals().items() if k != "__builtins__"},  indent=4, sort_keys=True))

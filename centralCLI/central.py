@@ -22,14 +22,15 @@
 
 # from pycentral.base import ArubaCentralBase
 # import sys
-from centralCLI import constants
+from centralcli import constants
 # import pycentral.base
 import json
 from typing import List, Tuple, Union
 from pathlib import Path
+from pycentral.base_utils import tokenLocalStoreUtil
 import csv
 
-from . import MyLogger, Response, config, handle_invalid_token, log, ArubaCentralBase
+from . import MyLogger, Response, config, cleaner, log, ArubaCentralBase
 
 try:
     from . import utils
@@ -66,12 +67,6 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
     if not self.central_info["token"]:
     '''
-    # class TokenCheck:
-    #     def __init__(cen: ArubaCentralBase):
-    #         self.status_code = 200 if cen.central_info["token"] else 418
-    conn = None
-    if account_name not in config.data:
-        exit(f"exiting... {account_name} missing from {config.file}")
     central_info = config.data[account_name]
     token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
     ssl_verify = config.get("ssl_verify", True)
@@ -82,17 +77,32 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
         "ssl_verify": ssl_verify,
         "logger": logger
     }
-    # conn = ArubaCentralBase(**kwargs)
-    log._exit_caught = False
+
     conn = utils.spinner(constants.MESSAGES["SPIN_TXT_AUTH"], ArubaCentralBase, name="init_ArubaCentralBase", **kwargs)
-    if conn and log._exit_caught:
-        conn = handle_invalid_token(conn)
+    token_cache = Path(tokenLocalStoreUtil(token_store,
+                                           central_info["customer_id"],
+                                           central_info["client_id"]))
+
+    # always create token cache if it doesn't exist and always use it first
+    # however if config has been modified more recently the tokens in the config will be tried first
+    # if both fail user will be prompted for token (assuming no password in file)
+    if token_cache.is_file():
+        cache_token = conn.loadToken()
+        if cache_token:
+            if token_cache.stat().st_mtime > config.file.stat().st_mtime:
+                conn.central_info["retry_token"] = conn.central_info["token"]
+                conn.central_info["token"] = cache_token
+            else:
+                conn.central_info["retry_token"] = cache_token
+    else:
+        if not conn.storeToken(conn.central_info.get("token")):
+            log.warning("Failed to Store Token and token cache doesn't exist yet.", show=True)
 
     return conn
 
 
 class CentralApi:
-    def __init__(self, account_name):
+    def __init__(self, account_name: str):
         self.central = get_conn_from_file(account_name)
 
         self.headers = {
@@ -100,11 +110,11 @@ class CentralApi:
                     "Accept": "application/json"
                     }
 
-    def get(self, url, params: dict = {}, headers: dict = None):
+    def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         headers = self.headers if headers is None else {**self.headers, **headers}
         params = {k: v for k, v in params.items() if v is not None}
-        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central)
+        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central, **kwargs)
 
     def post(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
@@ -182,7 +192,7 @@ class CentralApi:
             wlan_resp = resp
             resp = self._get_wired_clients(**params)
             if resp.ok:
-                resp.output = wlan_resp.output.get("clients") + resp.output.get("clients")
+                resp.output = wlan_resp.output + resp.output
         return resp
 
     def _get_wireless_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
@@ -292,12 +302,10 @@ class CentralApi:
 
         return templates.update_template(self.central, **kwargs)
 
-    def get_all_groups(self) -> Response:  # VERIFIED
+    def get_all_groups(self) -> Response:  # REVERIFIED
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 20}  # 20 is the max
-        resp = self.get(url, params=params)
-        if resp.ok and resp.get("data"):
-            resp["data"] = [g for _ in resp["data"] for g in _ if g != "unprovisioned"]
+        resp = self.get(url, params=params, callback=cleaner.get_all_groups)
         return resp
 
     def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
@@ -321,10 +329,7 @@ class CentralApi:
 
         return resp
 
-    # TODO I don't like this, (running output through utils.output here) as it's not consistent with
-    # all the others, but for this API method (which shows a lot more data then the above), the keys
-    # for each dev_type vary
-    def get_all_devicesv2(self, **kwargs) -> Response:  # VERIFIED
+    def get_all_devicesv2(self, **kwargs) -> Response:  # REVERIFIED
         _output = {}
         resp = None
 
@@ -333,8 +338,6 @@ class CentralApi:
             if not resp.ok:
                 break
             _output[dev_type] = resp.output  # [dict, ...]
-            # TODO remove once verified no longer needed.  useless outer dict is now stripe in Response
-            # _output[dev_type] = resp.output[dev_type]  # [dict, ...]
 
         if _output:
             # return just the keys common across all device types
@@ -386,7 +389,10 @@ class CentralApi:
         params = {k: v for k, v in locals().items() if k not in _strip and v}
         if dev_type == "switch":
             dev_type = "switches"
-        elif dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
+        elif dev_type == "gateway":
+            dev_type = "gateways"
+
+        if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
             if params.get("sort", "").endswith("name"):
                 del params["sort"]
                 log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort")

@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 
-from os import environ
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Any, List, Tuple, Union
 from tinydb import TinyDB, Query
 import time
 import sys
 import typer
 import asyncio
 
-from centralCLI import config, log, utils
-from centralCLI.central import BuildCLI, CentralApi
-from centralCLI.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
+try:
+    from centralcli import config, handle_invalid_token, log, utils
+except ImportError as e:
+    pkg_dir = Path(__file__).parent.parent
+    if pkg_dir.name == "centralcli":
+        sys.path.insert(0, str(pkg_dir))
+        from centralcli import config, handle_invalid_token, log, utils
+    else:
+        raise e
+
+from centralcli.central import BuildCLI, CentralApi
+from centralcli.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
                                   arg_to_what, devices)
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
@@ -23,7 +31,7 @@ tty = utils.tty
 app = typer.Typer()
 
 
-def eval_resp(resp):
+def eval_resp(resp) -> Any:
     if not resp.ok:
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                    f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
@@ -32,7 +40,7 @@ def eval_resp(resp):
         return resp.output
 
 
-def caas_response(resp):
+def caas_response(resp) -> None:
     if not resp.ok:
         typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
         return
@@ -163,6 +171,36 @@ class Identifiers:
             return match[0].get(ret_field)
 
 
+def account_name_callback(ctx: typer.Context, account: str):
+    if ctx.resilient_parsing:  # tab completion, return without validating
+        return account
+
+    if account not in config.data:
+        strip_keys = ['central_info', 'ssl_verify', 'token_store']
+        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+                   f"The specified account: '{account}' is not defined in the config @\n"
+                   f"{config.file}\n\n"
+                   f"The following accounts are defined {[k for k in config.data.keys() if k not in strip_keys]}\n"
+                   f"The default account 'central_info' is used if no account is specified via --account flag.\n"
+                   f"or the ARUBACLI_ACCOUNT environment variable.\n")
+
+        if account != "central_info" and "central_info" not in config.data:
+            typer.echo(f"{typer.style('WARNING:', fg='yellow')} "
+                       f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
+                       f"--account parameter or ARUBACLI_ACCOUNT environment variable.")
+
+        raise typer.Exit(code=1)
+
+    global session
+    session = CentralApi(account)
+    return account
+
+
+def debug_callback(debug: bool):
+    if debug:
+        log.debug = config.debug = log.show = debug
+
+
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
     # session = _refresh_tokens(account)
@@ -186,7 +224,7 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 #          ):
 
 
-show_help = ["all (devices)", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
+show_help = ["all (devices)", "devices (same as 'all')", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
              "clients", "template[s]", "variables", "certs"]
 args_metavar_dev = "[name|ip|mac-address|serial]"
 args_metavar_site = "[name|site_id|address|city|state|zip]"
@@ -218,6 +256,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+         debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
+         account: str = typer.Option("central_info",
+                                     envvar="ARUBACLI_ACCOUNT",
+                                     help="The Aruba Central Account to use (must be defined in the config)",
+                                     callback=account_name_callback),
          ):
 
     what = arg_to_what.get(what)
@@ -309,32 +352,29 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     elif what == "clients":
         resp = session.get_clients(args)
 
-    data = None if not resp else eval_resp(resp)
+    # TODO remove after verifying we never return a NoneType
+    if resp is None:
+        print("Developer Message: resp returned NoneType")
+
+    data = eval_resp(resp)
 
     if data:
-        # TODO enable cleaner in Response... will benefit all command paths
-        # if isinstance(data, dict):
-        #     for wtf in STRIP_KEYS:
-        #         if wtf in data:
-        #             data = data[wtf]
-        #             break
-
         if do_json is True:
             tablefmt = "json"
         elif do_yaml is True:
             tablefmt = "yaml"
         elif do_csv is True:
             tablefmt = "csv"
-        # elif output:
-        #     tablefmt = output
         else:
             tablefmt = "simple"
+
         outdata = utils.output(data, tablefmt)
         typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --
         if outfile and outdata:
             if outfile.parent.resolve() == config.base_dir.resolve():
+                config.outdir.mkdir(exist_ok=True)
                 outfile = config.outdir / outfile
 
             print(
@@ -343,12 +383,12 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             )
             outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
             typer.secho("Done", fg="green")
-            # doesn't appear to work on wsl tries to use ps to launch
+            # typer.launch doesn't appear to work on wsl tries to use ps to launch
             # typer.echo("Opening config directory")
             # typer.launch(str(outfile), locate=True)
 
-    else:
-        typer.echo("No Data Returned")
+    # else:
+    #     typer.echo("No Data Returned")
 
 
 @app.command()
@@ -457,7 +497,7 @@ def do(what: DoArgs = typer.Argument(...),
         kwargs = {
             "serial_num": serial,
         }
-    if config.DEBUG:
+    if config.debug:
         typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
 
     # kwargs = {k: v for k, v in kwargs.items() if v is not None}
@@ -557,8 +597,28 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
 
 
 @app.command()
-def refresh_tokens():
-    pass
+def refresh_tokens(debug: bool = typer.Option(True, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                   callback=debug_callback),
+                   account: str = typer.Option("central_info",
+                                               envvar="ARUBACLI_ACCOUNT",
+                                               help="The Aruba Central Account to use (must be defined in the config)",
+                                               callback=account_name_callback),):
+
+    session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account)
+    central = session.central
+
+    token = central.loadToken()
+    if token:
+        token = central.refreshToken(token)
+        if token:
+            typer.secho("Refresh Token Success", fg="green")
+            central.storeToken(token)
+            # central.central_info["token"] = token
+    else:
+        handle_invalid_token(central)
+
+    # sys.exit = log._exit
+    return session
 
 
 @app.command()
@@ -597,32 +657,7 @@ def callback():
     """
 
 
-# ---- // RUN \\ ----
+log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 
 if __name__ == "__main__":
-    # extract account from arguments or environment variables
-    account = environ.get('ARUBACLI_ACCOUNT', "central_info")
-
-    if "--account" in sys.argv:
-        idx = sys.argv.index("--account")
-        for i in range(idx, idx + 2):
-            account = sys.argv.pop(idx)
-
-    # Abort if account
-    if account not in config.data:
-        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"The specified account: '{account}' not defined in config.")
-        raise typer.Exit(1)
-
-    # debug flag ~ additional logging, and all logs are echoed to tty
-    if ("--debug" in sys.argv) or (environ.get('ARUBACLI_DEBUG') == "1"):
-        config.DEBUG = log.DEBUG = log.show = True
-        log.setLevel("DEBUG")
-        if "--debug" in sys.argv:
-            _ = sys.argv.pop(sys.argv.index("--debug"))
-
-    log.debug(" ".join(sys.argv))
-    session = CentralApi(account)
-    # session = _refresh_tokens(account)
-
     app()
