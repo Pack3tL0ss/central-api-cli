@@ -174,3 +174,5 @@ scratch.py
 # App ignores
 # ignoring directory where tokens are stored.
 temp/
+
+poetry.lock
