@@ -207,12 +207,11 @@ def account_name_callback(ctx: typer.Context, account: str):
 
 def debug_callback(debug: bool):
     if debug:
-        log.DEBUG = config.debug = log.show = debug
+        log.DEBUG = config.debug = debug
 
 
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    # session = _refresh_tokens(account)
     cli = BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
@@ -220,17 +219,6 @@ def bulk_edit(input_file: str = typer.Argument(None)):
             group_dev = f"{cli.data[dev]['_common'].get('group')}/{dev}"
             resp = session.caasapi(group_dev, cli.cmds)
             caas_response(resp)
-
-
-# @app.command()
-# def show(what: ShowLevel1 = typer.Argument(...),
-#          dev_type: str = typer.Argument(None),
-#          group: str = typer.Option(None, help="Filter Output by group"),
-#          json: bool = typer.Option(False, "-j", is_flag=True, help="Output in JSON"),
-#          output: str = typer.Option("simple", help="Output to table format"),
-#          # account: str = typer.Option(None, "account", help="Pass the account name from the config file"),
-#          id: int = typer.Option(None, help="ID field used for certain commands")
-#          ):
 
 
 show_help = ["all (devices)", "devices (same as 'all')", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
@@ -295,33 +283,26 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
         params = {k: v for k, v in params.items() if v is not None}
         if what == "all":
-            # resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devices)
-            resp = utils.spinner(SPIN_TXT_DATA, session.get_all_devicesv2, **params)
+            resp = session.get_all_devicesv2(**params)
         elif args:
             serial = cache.get_dev_identifier(args)
             resp = session.get_dev_details(what, serial)
             if True not in [do_csv, do_json]:
                 do_yaml = True
         else:
-            resp = utils.spinner(SPIN_TXT_DATA, session.get_devices, what, **params)
-        # elif not group:
-        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_dev_by_type, what)
-        # else:
-        #     # resp = utils.spinner(SPIN_TXT_DATA, session.get_gateways_by_group, group)
-        #     # TODO this is a very different dataset... will determine most ideal to return
-        #     resp = utils.spinner(SPIN_TXT_DATA, session.get_devices(), what, group=group, **params)
+            resp = session.get_devices(what, **params)
 
-    elif what == "groups":  # VERIFIED
+    elif what == "groups":
         resp = session.get_all_groups()  # simple list of str
 
-    elif what == "sites":  # VERIFIED
+    elif what == "sites":
         if args:
             dev_id = cache.get_site_identifier(args)
 
         if dev_id is None:
-            resp = session.get_all_sites()  # VERIFIED
+            resp = session.get_all_sites()
         else:
-            resp = session.get_site_details(dev_id)  # VERIFIED
+            resp = session.get_site_details(dev_id)
 
     elif what == "template":
         if not args:
@@ -340,11 +321,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                 resp = utils.spinner(SPIN_TXT_DATA, session.get_all_templates_in_group, group, **params)
         elif group:
             # args is template name in this case
-            resp = utils.spinner(SPIN_TXT_DATA, session.get_template, group, args)
+            resp = session.get_template(group, args)
         else:
             # TODO add support for all (get_all_templates_in_group for each group)
             _args = cache.get_dev_identifier(args)
-            resp = session.get_variablised_template(_args)  # VERIFIED
+            resp = session.get_variablised_template(_args)
 
     # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":

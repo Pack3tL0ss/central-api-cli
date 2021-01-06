@@ -29,6 +29,7 @@ class Config:
         self.cache_dir = self.cache_file.parent
         self.data = self.get_config_data(self.file) or {}
         self.debug = self.data.get("debug", False)
+        self.debugv = self.data.get("debugv", False)
 
     def __bool__(self):
         return len(self.data) > 0
