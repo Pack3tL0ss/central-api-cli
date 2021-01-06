@@ -78,7 +78,8 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
         "logger": logger
     }
 
-    conn = utils.spinner(constants.MESSAGES["SPIN_TXT_AUTH"], ArubaCentralBase, name="init_ArubaCentralBase", **kwargs)
+    # conn = utils.spinner(constants.MESSAGES["SPIN_TXT_AUTH"], ArubaCentralBase, name="init_ArubaCentralBase", **kwargs)
+    conn = ArubaCentralBase(**kwargs)
     token_cache = Path(tokenLocalStoreUtil(token_store,
                                            central_info["customer_id"],
                                            central_info["client_id"]))
@@ -120,19 +121,22 @@ class CentralApi:
         f_url = self.central.central_info["base_url"] + url
         params = {k: v for k, v in params.items() if v is not None}
         headers = self.headers if headers is None else {**self.headers, **headers}
-        return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
+        return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params,
+                        headers=headers, central=self.central, **kwargs)
 
     def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         params = {k: v for k, v in params.items() if v is not None}
         headers = self.headers if headers is None else {**self.headers, **headers}
-        return Response(self.central.requestUrl, f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
+        return Response(self.central.requestUrl, f_url, method="PATCH", data=payload, params=params, headers=headers,
+                        central=self.central, **kwargs)
 
     def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         headers = self.headers if headers is None else {**self.headers, **headers}
         params = {k: v for k, v in params.items() if v is not None}
-        return Response(self.central.requestUrl, f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
+        return Response(self.central.requestUrl, f_url, method="DELETE", data=payload, params=params, headers=headers,
+                        central=self.central, **kwargs)
 
     # Not used changed default kwarg for params to {} vs None not sure which is more "Pythonic"
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
