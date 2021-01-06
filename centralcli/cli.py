@@ -207,7 +207,7 @@ def account_name_callback(ctx: typer.Context, account: str):
 
 def debug_callback(debug: bool):
     if debug:
-        log.debug = config.debug = log.show = debug
+        log.DEBUG = config.debug = log.show = debug
 
 
 @app.command()
@@ -265,7 +265,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-         debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
+         debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                                    callback=debug_callback),
          account: str = typer.Option("central_info",
                                      envvar="ARUBACLI_ACCOUNT",
                                      help="The Aruba Central Account to use (must be defined in the config)",
@@ -471,6 +472,12 @@ def do(what: DoArgs = typer.Argument(...),
        #    ip: str = typer.Option(None),
        #    mac: str = typer.Option(None),
        yes: bool = typer.Option(False, "-Y", metavar="Bypass confirmation prompts - Assume Yes"),
+       debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                                  callback=debug_callback),
+       account: str = typer.Option("central_info",
+                                   envvar="ARUBACLI_ACCOUNT",
+                                   help="The Aruba Central Account to use (must be defined in the config)",
+                                   callback=account_name_callback),
        ) -> None:
 
     # serial_num is currently only real option until cache/lookup is implemented
@@ -492,20 +499,10 @@ def do(what: DoArgs = typer.Argument(...),
 
         cache = Identifiers(session)
         serial = cache.get_dev_identifier(args1)
-        # _mac = utils.Mac(args1)
-        # if _mac.ok:
-        #     serial = cache.get_dev_identifier(_mac.cols)
-        # else:
-
-    # kwargs = {
-    #     "serial_num": serial,
-    #     "name": name,
-    #     "ip": ip,
-    #     "mac": None if not mac else utils.Mac(mac)
-    # }
         kwargs = {
             "serial_num": serial,
         }
+
     if config.debug:
         typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
 
