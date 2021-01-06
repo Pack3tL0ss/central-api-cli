@@ -114,31 +114,28 @@ class CentralApi:
     def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         headers = self.headers if headers is None else {**self.headers, **headers}
-        params = {k: v for k, v in params.items() if v is not None}
-        return Response(self.central.requestUrl, f_url, params=params, headers=headers, central=self.central, **kwargs)
+        params = self.strip_none(params)
+        return Response(self.central, f_url, params=params, headers=headers, **kwargs)
 
     def post(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
-        params = {k: v for k, v in params.items() if v is not None}
+        params = self.strip_none(params)
         headers = self.headers if headers is None else {**self.headers, **headers}
-        return Response(self.central.requestUrl, f_url, method="POST", data=payload, params=params,
-                        headers=headers, central=self.central, **kwargs)
+        return Response(self.central, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
 
     def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
-        params = {k: v for k, v in params.items() if v is not None}
+        params = self.strip_none(params)
         headers = self.headers if headers is None else {**self.headers, **headers}
-        return Response(self.central.requestUrl, f_url, method="PATCH", data=payload, params=params, headers=headers,
-                        central=self.central, **kwargs)
+        return Response(self.central, f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
 
     def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         headers = self.headers if headers is None else {**self.headers, **headers}
-        params = {k: v for k, v in params.items() if v is not None}
-        return Response(self.central.requestUrl, f_url, method="DELETE", data=payload, params=params, headers=headers,
-                        central=self.central, **kwargs)
+        params = self.strip_none(params)
+        return Response(self.central, f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
 
-    # Not used changed default kwarg for params to {} vs None not sure which is more "Pythonic"
+    @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
         """strip all keys from a dict where value is NoneType"""
 
@@ -190,13 +187,13 @@ class CentralApi:
             if v:
                 params[k] = v
 
-        # return structure:  {'clients': [], 'count': 0}
         resp = self._get_wireless_clients(**params)
         if resp.ok:
             wlan_resp = resp
             resp = self._get_wired_clients(**params)
             if resp.ok:
                 resp.output = wlan_resp.output + resp.output
+                resp.output = cleaner.get_all_clients(resp.output)
         return resp
 
     def _get_wireless_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
@@ -384,7 +381,7 @@ class CentralApi:
     def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
                     status: str = None, fields: list = None, show_resource_details: bool = False,
                     calculate_client_count: bool = False, calculate_ssid_count: bool = False,
-                    public_ip_address: str = None, limit: int = None, offset: int = None, sort: str = None):
+                    public_ip_address: str = None, limit: int = 100, offset: int = 0, sort: str = None):
         # pagenation limit default 100, max 1000
         # does not return _next... pager will need to page until count < limit
         _strip = ["self", "dev_type", "url", "_strip"]
