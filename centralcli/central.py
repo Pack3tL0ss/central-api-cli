@@ -22,7 +22,7 @@
 
 # from pycentral.base import ArubaCentralBase
 # import sys
-from centralcli import constants
+# from centralcli import constants
 # import pycentral.base
 import json
 from typing import List, Tuple, Union
