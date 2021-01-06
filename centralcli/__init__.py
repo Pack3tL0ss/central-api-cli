@@ -26,10 +26,10 @@ class ArubaCentralException(Exception):
 
 
 class MyLogger:
-    def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False):
+    def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False):
+        self._DEBUG = debug
         self.log_msgs = []
-        self.DEBUG = debug
-        self.verbose = False
+        self.verbose = verbose
         if isinstance(log_file, Path):
             self.log_file = log_file
         else:
@@ -40,7 +40,7 @@ class MyLogger:
         self._exit_caught = False
         self._exit = None
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         if hasattr(self, "_log") and hasattr(self._log, name):
             return getattr(self._log, name)
         else:
@@ -74,6 +74,16 @@ class MyLogger:
                 print(m)
             self.log_msgs = []
 
+    @property
+    def DEBUG(self):
+        return self._DEBUG
+
+    @DEBUG.setter
+    def DEBUG(self, value: bool = False):
+        self._DEBUG = value
+        self.show = value
+        self.setLevel(logging.DEBUG if value else logging.INFO)
+
     def show(self, msgs: Union[list, str], log: bool = False, show: bool = True, *args, **kwargs) -> None:
         self.log_print(msgs, show=show, log=log, *args, **kwargs)
 
@@ -81,8 +91,9 @@ class MyLogger:
         show = show or self.show
         self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
-    # -- more verbose debugging - primarily to get json dumps
     def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        """more verbose debugging - primarily to get json dumps, set via debugv: True in config
+        """
         show = show or self.show
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
@@ -113,18 +124,6 @@ class MyLogger:
 
     def setLevel(self, level):
         getattr(self._log, 'setLevel')(level)
-        pass
-
-    def no_exit(self, exit_msg_code: Union[str, int] = None, *args, **kwargs) -> None:
-        # try:
-        #     msg = ', '.join(*args)
-        # except TypeError:
-        #     msg = str(*args)
-        if self._exit_caught and self._exit is not None:
-            self._exit()
-        else:
-            self._log.warning(f"ArubaCentralBase Tried to exit. ({exit_msg_code}) Exit Overriden")
-            self._exit_caught = True
 
 
 def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> bool:
@@ -165,22 +164,12 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
                  "\nand paste result of `Download Tokens` Use CTRL-D on empty line to submit." \
                  "\n > "
 
+        # typer.launch doesn't work on wsl attempts powershell
         # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
-        # TODO exception handling graceful exit for invalid json pasted
         token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
 
         typer.clear()
-        # central.central_info["token"]["access_token"] = token_data.get("access_token")
-        # central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
         _refresh_token(central, token_data)
-        # try:
-        #     # token = central.refreshToken(central.central_info["token"])
-        #     token = central.refreshToken(token_data)
-        #     if token:
-        #         central.storeToken(token)
-        #         central.central_info["token"] = token
-        # except Exception as e:
-        #     log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
     else:
         central.handleTokenExpiry()
 
@@ -191,41 +180,22 @@ class Response:
     '''wrapper for requests.response object
 
     Assigns commonly evaluated attributes regardless of success
-    Otherwise resp.ok will always be assigned and will be True or False
+    Otherwise resp.ok  and bool(resp) will always be assigned and will be True or False
     '''
-    def __init__(self, function, *args: Any, central: ArubaCentralBase = None, callback: callable = None,
-                 callback_kwargs: Any = {}, **kwargs: Any):
+    def __init__(self, central: ArubaCentralBase, *args: Any, callback: callable = None,
+                 callback_kwargs: Any = {}, ok: bool = False, error: str = '', output: Any = None,
+                 status_code: int = 418, **kwargs: Any):
         self.url = '' if not args else args[0]
         self._response = None
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
-        try:
-            if central:
-                r = self.api_call(central, function, *args, **kwargs)
-            else:
-                _data_msg = '' if not args or " arubanetworks.com" not in args[0] \
-                    else (f'({args[0].split("arubanetworks.com/")[-1]})')
-                spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
-                r = utils.spinner(spin_txt_data, function, *args, **kwargs)
-            self.ok = r.ok
-            try:
-                self.output = r.json()
-            except Exception:
-                self.output = r.text
-            self._response = r
-            self.output = self.clean_response()
-            self.error = r.reason
-            self.status_code = r.status_code
-        except Exception as e:
-            self.ok = False
-            self.error = f"Exception occurred: {e.__class__}\n\t{e}"
-            self.output = e
-            self.status_code = 418
-        if not self.ok:
-            log.error(f"API Call ({self.url}) Returned Failure ({self.status_code})\n\t"
-                      f"output: {self.output}\n\terror: {self.error}")
-        # data cleaner methods to strip any useless columns, change key names, etc.
-        elif callback is not None:
-            self.output = callback(self.output, **callback_kwargs)
+        self.ok = ok
+        self.error = error
+        self.output = output
+        self.status_code = status_code
+        if kwargs.get("params", {}).get("limit") and config.limit:
+            kwargs["params"]["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+        if central is not None:
+            self.api_call(central, *args, callback=callback, callback_kwargs=callback_kwargs, **kwargs)
 
     def __bool__(self):
         return self.ok
@@ -278,8 +248,64 @@ class Response:
             print(f"More wrapping keys than expected from return {_keys}")
         return self.output
 
+    def api_call(self, central: ArubaCentralBase, *args: Any, callback: callable = None,
+                 callback_kwargs: Any = {}, **kwargs: Any) -> bool:
+        output = None
+        while True:
+            try:
+                r = self._api_call(central, *args, **kwargs)
+
+                self._response = r
+                self.ok = r.ok
+
+                if "requests.models.Response" in str(r.__class__):
+                    log.info(f"[{r.reason}] {r.url} Elapsed: {r.elapsed}")
+                else:
+                    log.warning("DEV Note: Response wrapper being used for something other than request")
+
+                try:
+                    self.output = r.json()
+                except Exception:
+                    self.output = r.text
+
+                self.output = self.clean_response()
+                self.error = r.reason
+                self.status_code = r.status_code
+            except Exception as e:
+                self.ok = False
+                self.error = f"Resonse.api_call() Exception occurred: {e.__class__}\n\t{e}"
+                self.output = e
+                self.status_code = 418
+
+            if not self.ok:
+                log.error(f"API Call ({self.url}) Returned Failure ({self.status_code})\n\t"
+                          f"output: {self.output}\n\terror: {self.error}")
+                break
+
+            # data cleaner methods to strip any useless columns, change key names, etc.
+            elif callback is not None:
+                self.output = callback(self.output, **callback_kwargs)
+
+            if not output:
+                output = self.output
+            else:
+                if isinstance(self.output, dict):
+                    output = {**output, **self.output}
+                else:
+                    output += self.output
+
+            _limit = kwargs.get("params", {}).get("limit", 0)
+            _offset = kwargs.get("params", {}).get("offset", 0)
+            if kwargs.get("params", {}).get("limit") and len(self.output) == _limit:
+                kwargs["params"]["offset"] = _offset + _limit
+            else:
+                self.output = output
+                break
+
+        return self.ok
+
     @staticmethod
-    def api_call(central: ArubaCentralBase, function: callable, *args, **kwargs):
+    def _api_call(central: ArubaCentralBase, *args, **kwargs):
         central_info = central.central_info
         resp, token = None, None
         _data_msg = '' if not args or "arubanetworks.com" not in args[0] else (f' ({args[0].split("arubanetworks.com/")[-1]})')
@@ -288,19 +314,15 @@ class Response:
             if _ > 1:
                 spin_txt_data = spin_txt_data + " retry"
             try:
-                resp = utils.spinner(f"{spin_txt_data}", function, *args, **kwargs)
+                resp = utils.spinner(f"{spin_txt_data}", central.requestUrl, *args, **kwargs)
                 if resp.status_code == 401 and "invalid_token" in resp.text:
-                    # log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+                    # attempt to refresh with primary token (from cache if it exists)
                     token = _refresh_token(central)
 
+                    # retry_token is typically token data in config, user can update config if token becomes invalid
                     if not token and central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
                         token = _refresh_token(central, central.central_info["retry_token"])
-                    # else:
-                    #     token = _refresh_token(central)
-                    # token = central.refreshToken(central.central_info["token"])
-                    # if token:
-                    #     central.storeToken(token)
-                    #     central.central_info["token"] = token
+
                 else:
                     token = True
                     break
@@ -308,6 +330,7 @@ class Response:
                 log.error(f"Attempt to refresh returned {e.__class__} {e}")
 
             if not token:
+                # Allow user to paste token data from Central UI
                 handle_invalid_token(central)
                 _ += 1
 
@@ -316,39 +339,34 @@ class Response:
         return resp
 
 
+# -- // MAIN \\ --
 _calling_script = Path(sys.argv[0])
-# print(f"\t\t\t--- {_calling_script} ---")
 if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
     _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
 
 if _calling_script.name == "cencli":
     base_dir = Path(typer.get_app_dir(__name__))
 else:
-    base_dir = _calling_script.resolve().parent  # .joinpath("config")
+    base_dir = _calling_script.resolve().parent
     if base_dir.name == "centralcli":
         base_dir = base_dir.parent
     else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
-# print(f"\t\t\t--- {str(_calling_script) == '.'} ---")
-# print(f"\t\t\t--- {_calling_script} ---")
-# log_file = _calling_script.joinpath(_calling_script.resolve().parent, "logs", f"{_calling_script.stem}.log")
 log_dir = base_dir / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
-# log_file = log_dir / f"{_calling_script.stem}.log"
 log_file = log_dir / f"{__name__}.log"
 
 config = Config(base_dir=base_dir)
-log = MyLogger(log_file, debug=config.debug, show=config.debug)
+
+if '--debug' in str(sys.argv):
+    config.debug = True  # for the benefit of the 2 log messages below
+
+log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {base_dir}")
-log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()})}")
-
-# override sys.exit prevent ArubaCentralBase from exiting when unable to refresh internal
-# log._exit = pycentral.base.sys.exit
-# pycentral.base.sys.exit = log.no_exit
-# pycentral.base.createToken = createToken
+log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()}, indent=4)}")
 
 
 # -- break up arguments passed as single string from vscode promptString --
@@ -469,7 +487,3 @@ def vscode_arg_handler():
 
 if os.environ.get("TERM_PROGRAM") == "vscode":
     vscode_arg_handler()
-
-# # TODO TEMP DEBUG REMOVE ------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# print(json.dumps({k: str(v) for k, v in locals().items() if k != "__builtins__"}, indent=4, sort_keys=True))
-# print(json.dumps({k: str(v) for k, v in globals().items() if k != "__builtins__"},  indent=4, sort_keys=True))
