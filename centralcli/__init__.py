@@ -168,6 +168,7 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
         # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
         # TODO exception handling graceful exit for invalid json pasted
         token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
+
         typer.clear()
         # central.central_info["token"]["access_token"] = token_data.get("access_token")
         # central.central_info["token"]["refresh_token"] = token_data.get("refresh_token")
@@ -195,6 +196,7 @@ class Response:
     def __init__(self, function, *args: Any, central: ArubaCentralBase = None, callback: callable = None,
                  callback_kwargs: Any = {}, **kwargs: Any):
         self.url = '' if not args else args[0]
+        self._response = None
         log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         try:
             if central:
@@ -209,6 +211,7 @@ class Response:
                 self.output = r.json()
             except Exception:
                 self.output = r.text
+            self._response = r
             self.output = self.clean_response()
             self.error = r.reason
             self.status_code = r.status_code
@@ -250,6 +253,8 @@ class Response:
                 _keys = [k for k in constants.STRIP_KEYS if k in self.output]
                 if _keys and name in self.output[_keys[0]] and isinstance(self.output[_keys[0]], dict):
                     return self.output[_keys[0]]
+        elif hasattr(self._response, name):
+            return getattr(self._response, name)
 
         raise AttributeError(f"'Response' object has no attribute '{name}'")
 
@@ -286,11 +291,12 @@ class Response:
                 resp = utils.spinner(f"{spin_txt_data}", function, *args, **kwargs)
                 if resp.status_code == 401 and "invalid_token" in resp.text:
                     # log.error(f"Received error 401 on requesting url {resp.url}: {resp.reason}")
+                    token = _refresh_token(central)
 
-                    if central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
+                    if not token and central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
                         token = _refresh_token(central, central.central_info["retry_token"])
-                    else:
-                        token = _refresh_token(central)
+                    # else:
+                    #     token = _refresh_token(central)
                     # token = central.refreshToken(central.central_info["token"])
                     # if token:
                     #     central.storeToken(token)
