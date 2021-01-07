@@ -2,33 +2,82 @@
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 '''
 
-from typing import List, Any
-import time
+from centralcli import utils
+from typing import List, Any, Union
+import pendulum
 
 
-def _convert_epoch(epoch: float) -> time.strftime:
-    return time.strftime('%x %X',  time.localtime(epoch/1000))
+def _convert_epoch(epoch: float) -> str:
+    # return time.strftime('%x %X',  time.localtime(epoch/1000))
+    return pendulum.from_timestamp(epoch, tz="local").to_day_datetime_string()
+
+
+def _duration_words(secs: int) -> str:
+    return pendulum.duration(seconds=secs).in_words()
+
+
+def _time_diff_words(epoch: float) -> str:
+    return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
+
+
+_NO_FAN = [
+    "Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"
+]
 
 
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
-    "last_connection_time": _convert_epoch
+    "last_connection_time": _time_diff_words,
+    "uptime": _duration_words,
+    "updated_at": _time_diff_words,
+    "last_modified": _convert_epoch
 }
 
 _short_key = {
-    "interface_port": "interface"
+    "interface_port": "interface",
+    "firmware_version": "version",
+    "firmware_backup_version": "backup version",
+    "group_name": "group",
+    "public_ip_address": "public ip",
+    "ip_address": "ip",
+    "macaddr": "mac",
+    "uplink_ports": "uplinks",
+    "total_clients": "clients",
+    "updated_at": "updated",
+    "cpu_utilization": "cpu %"
 }
 
 
+def pre_clean(data: dict) -> dict:
+    if isinstance(data, dict):
+        if data.get("fan_speed", "") == "Fail":
+            if data.get("model", "") in _NO_FAN:
+                data["fan_speed"] = "N/A"
+    return data
+
+
+def _unlist(data: Any):
+    if isinstance(data, list):
+        if len(data) == 1:
+            data = data[0]
+        elif not data:
+            data = ''
+
+    return data
+
+
+def short_key(key: str) -> str:
+    return _short_key.get(key, key)
+
+
 def short_value(key: str, value: Any):
-    if isinstance(value, list) and len(value) == 1:
-        value = value[0]
+    # _unlist(value)
 
     if isinstance(value, (str, int, float)):
-        return _short_key.get(key, key), _short_value.get(value, value) if key not in _short_value else _short_value[key](value)
+        return short_key(key), _short_value.get(value, value) if key not in _short_value else _short_value[key](value)
     else:
-        return _short_key.get(key, key), value
+        return short_key(key), _unlist(value)
 
 
 def get_all_groups(data: List[str, ]) -> list:
@@ -42,3 +91,25 @@ def get_all_clients(data: List[dict]) -> list:
     strip_na = set([i for o in strip_na for i in o])
     data = [dict(short_value(k, v) for k, v in d.items() if k not in strip_na) for d in data]
     return data
+
+
+def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+    return _unlist(
+        [dict(short_value(k, v) for k, v in pre_clean(inner).items() if "id" not in k[-3:]) for inner in data]
+        )
+
+
+def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+
+    _sorted = ["site_name", "site_id", "address", "city", "state", "zipcode", "country", "longitude",
+               "latitude", "associated_device_count"]  # , "tags"]
+    key_map = {
+        "associated_device_count": "associated devices",
+        "site_id": "id"
+    }
+
+    return _unlist(
+        [{key_map.get(k, k): s[k] for k in _sorted} for s in data if s.get("site_name", "") != "visualrf_default"]
+    )
