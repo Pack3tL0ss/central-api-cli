@@ -28,6 +28,13 @@ class ShowArgs(str, Enum):
     templates = "templates"
     variables = "variables"
     certs = "certs"
+    cache = "cache"
+
+
+class RefreshWhat(str, Enum):
+    cache = "cache"
+    token = "token"
+    tokens = "tokens"
 
 
 class DoArgs(str, Enum):

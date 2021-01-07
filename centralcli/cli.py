@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from collections import namedtuple as nt
 from pathlib import Path
 from typing import Any, List, Tuple, Union
 from tinydb import TinyDB, Query
@@ -20,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.central import BuildCLI, CentralApi
 from centralcli.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
-                                  arg_to_what, devices)
+                                  RefreshWhat, arg_to_what, devices)
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -80,7 +81,7 @@ def caas_response(resp) -> None:
 
 
 class Identifiers:
-    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None):
+    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False):
         self.session = session
         self.DevDB = TinyDB(config.cache_file)
         self.SiteDB = self.DevDB.table("sites")
@@ -88,7 +89,11 @@ class Identifiers:
         self.Q = Query()
         if data:
             self.insert(data)
-        self.check_fresh()
+        self.check_fresh(refresh)
+
+    def __iter__(self) -> list:
+        for db in [self.DevDB, self.SiteDB]:
+            yield db.name(), db.all()
 
     def insert(self, data: Union[List[dict, ], dict]) -> bool:
         _data = data
@@ -107,32 +112,37 @@ class Identifiers:
     async def update_site_db(self):
         site_resp = self.session.get_all_sites()
         if site_resp.ok:
+            # TODO time this to see which is more efficient
+            # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
+            # upd = [item for in_list in upd for item in in_list]
+            self.SiteDB.truncate()
             return self.SiteDB.insert_multiple(site_resp.output)
 
     async def update_dev_db(self):
         dev_resp = self.session.get_all_devicesv2()
         if dev_resp.ok:
+            self.DevDB.truncate()
             return self.insert(dev_resp.output)
 
     async def _check_fresh(self):
         await asyncio.gather(self.update_dev_db(), self.update_site_db())
 
-    def check_fresh(self):
-        if not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
-           or config.cache_file.stat().st_mtime - time.time() > 7200:
+    def check_fresh(self, refresh: bool = False):
+        if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
+           or time.time() - config.cache_file.stat().st_mtime > 7200:
             utils.spinner("Refreshing Identifier mapping Cache", asyncio.run, self._check_fresh())
 
     def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
-        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip_address == query_str)
-                                  | (self.Q.macaddr == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
+        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
+                                  | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
 
         # retry with case insensitive name match if no match with original query
         if not match:
             match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                                      | self.Q.macaddr.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                                      | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
                                       | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
 
         if match:
@@ -141,7 +151,7 @@ class Identifiers:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
             raise typer.Exit(1)  # TODO maybe scenario where we wouldn't want to exit?
 
-    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "site_id") -> str:
+    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "id") -> str:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
@@ -171,6 +181,7 @@ class Identifiers:
             return match[0].get(ret_field)
 
 
+# TODO ?? make more sense to have this return the ArubaCentralBase object ??
 def account_name_callback(ctx: typer.Context, account: str):
     if ctx.resilient_parsing:  # tab completion, return without validating
         return account
@@ -278,15 +289,19 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             "show_resource_details": do_stats,
             "sort": None if not sort_by else sort_by._value_
         }
+
+        # status and state keywords both allowed
         if params["status"] is None and state is not None:
             params["status"] = state.title()
 
         params = {k: v for k, v in params.items() if v is not None}
+
         if what == "all":
             resp = session.get_all_devicesv2(**params)
         elif args:
             serial = cache.get_dev_identifier(args)
             resp = session.get_dev_details(what, serial)
+            # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
             if True not in [do_csv, do_json]:
                 do_yaml = True
         else:
@@ -342,6 +357,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     elif what == "clients":
         resp = session.get_clients(args)
+    elif what == "cache":
+        do_json = True
+        data = {"devices": cache.DevDB.all(), "sites": cache.SiteDB.all()}
+        resp = nt("Response", ["ok", "output"])
+        resp = resp(True, data)
 
     # TODO remove after verifying we never return a NoneType
     if resp is None:
@@ -448,10 +468,6 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
 def do(what: DoArgs = typer.Argument(...),
        args1: str = typer.Argument(..., metavar="Identifying Attributes: [serial #|name|ip address|mac address]"),
        args2: str = typer.Argument(None, metavar="identifying attribute i.e. port #, required for some actions."),
-       #    serial: str = typer.Option(None),
-       #    name: str = typer.Option(None),
-       #    ip: str = typer.Option(None),
-       #    mac: str = typer.Option(None),
        yes: bool = typer.Option(False, "-Y", metavar="Bypass confirmation prompts - Assume Yes"),
        debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                   callback=debug_callback),
@@ -461,7 +477,6 @@ def do(what: DoArgs = typer.Argument(...),
                                    callback=account_name_callback),
        ) -> None:
 
-    # serial_num is currently only real option until cache/lookup is implemented
     if not args1:
         typer.secho("Operation Requires additional Argument: [serial #|name|ip address|mac address]", fg="red")
         typer.echo("Examples:")
@@ -484,27 +499,18 @@ def do(what: DoArgs = typer.Argument(...),
             "serial_num": serial,
         }
 
-    if config.debug:
-        typer.echo("\n".join([f"{k}: {v}" for k, v in locals().items()]))
-
-    # kwargs = {k: v for k, v in kwargs.items() if v is not None}
     # -- // do the Command \\ --
     if yes or typer.confirm(typer.style(f"Please Confirm {what} {args1} {args2}", fg="cyan")):
         resp = getattr(session, what.replace("-", "_"))(args2, **kwargs)
         typer.echo(resp)
         if resp.ok:
             typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
+            # always returns queued on success even if the task is done
             resp = session.get_task_status(resp.task_id)
             typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
 
     else:
         raise typer.Abort()
-    # if what == "bounce-poe":
-    #     resp = session.bounce_poe(args2, )
-    # elif what == "bounce-interface":
-    #     typer.echo(f"{what}, {args}, {yes}")
-    # elif what == "reboot":
-    #     pass
 
 
 @app.command()
@@ -584,28 +590,32 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
 
 
 @app.command()
-def refresh_tokens(debug: bool = typer.Option(True, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                   callback=debug_callback),
-                   account: str = typer.Option("central_info",
-                                               envvar="ARUBACLI_ACCOUNT",
-                                               help="The Aruba Central Account to use (must be defined in the config)",
-                                               callback=account_name_callback),):
+def refresh(what: RefreshWhat = typer.Argument(...),
+            debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                                       callback=debug_callback),
+            account: str = typer.Option("central_info",
+                                        envvar="ARUBACLI_ACCOUNT",
+                                        help="The Aruba Central Account to use (must be defined in the config)",
+                                        callback=account_name_callback),):
 
-    session = utils.spinner(SPIN_TXT_AUTH, CentralApi, account)
+    session = CentralApi(account)
     central = session.central
 
-    token = central.loadToken()
-    if token:
-        token = central.refreshToken(token)
+    if what.startswith("token"):
+        # enable debug so token refresh msgs from ArubaCentralBase are displayed
+        debug_callback(True)
+        token = central.loadToken()
         if token:
-            typer.secho("Refresh Token Success", fg="green")
-            central.storeToken(token)
-            # central.central_info["token"] = token
-    else:
-        handle_invalid_token(central)
+            token = central.refreshToken(token)
+            if token:
+                typer.secho("Refresh Token Success", fg="green")
+                central.storeToken(token)
+        else:
+            handle_invalid_token(central)
 
-    # sys.exit = log._exit
-    return session
+        return session
+    else:
+        Identifiers(session=session, refresh=True)
 
 
 @app.command()
