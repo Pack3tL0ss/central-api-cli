@@ -396,9 +396,9 @@ class CentralApi:
         if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
             if params.get("sort", "").endswith("name"):
                 del params["sort"]
-                log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort")
+                log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort", show=True)
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
-        return self.get(url, params=params)
+        return self.get(url, params=params, callback=cleaner.get_devices)
 
     def get_dev_details(self, dev_type: str, serial: str) -> Response:
         # https://internal-apigw.central.arubanetworks.com/monitoring/v1/switches/CN71HKZ1CL
@@ -407,7 +407,7 @@ class CentralApi:
         elif dev_type == "gateway":
             dev_type = "gateways"
         url = f"/monitoring/v1/{dev_type}/{serial}"
-        return self.get(url)
+        return self.get(url, callback=cleaner.get_devices)
 
     def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"
@@ -445,25 +445,25 @@ class CentralApi:
         return self.get(url, params)
 
     def get_all_sites(self) -> Response:
-        resp = self.get("/central/v2/sites")
+        return self.get("/central/v2/sites", callback=cleaner.sites)
 
         # strip visualrrf_default site from response
-        if resp.ok:  # resp.output = List[dict, ...]
+        # if resp.ok:  # resp.output = List[dict, ...]
 
-            # sorting logically and stripping tag column for now
-            _sorted = ["site_name", "site_id", "address", "city", "state", "zipcode", "country", "longitude",
-                       "latitude", "associated_device_count"]  # , "tags"]
-            key_map = {
-                "associated_device_count": "associated_devices",
-                "site_id": "id"
-            }
-            resp.output = [{key_map.get(k, k): s[k] for k in _sorted} for s in resp.output
-                           if s.get("site_name", "") != "visualrf_default"]
+        #     # sorting logically and stripping tag column for now
+        #     _sorted = ["site_name", "site_id", "address", "city", "state", "zipcode", "country", "longitude",
+        #                "latitude", "associated_device_count"]  # , "tags"]
+        #     key_map = {
+        #         "associated_device_count": "associated_devices",
+        #         "site_id": "id"
+        #     }
+        #     resp.output = [{key_map.get(k, k): s[k] for k in _sorted} for s in resp.output
+        #                    if s.get("site_name", "") != "visualrf_default"]
 
-        return resp
+        # return resp
 
     def get_site_details(self, site_id):
-        return self.get(f"/central/v2/sites/{site_id}")
+        return self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
 
     def get_events_by_group(self, group: str) -> Response:  # VERIFIED
         url = "/monitoring/v1/events"
