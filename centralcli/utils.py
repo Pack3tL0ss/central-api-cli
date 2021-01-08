@@ -166,21 +166,22 @@ class Utils:
         )
 
     @staticmethod
-    def spinner(spin_txt: str, function: callable, *args, name: str = None,
+    def spinner(spin_txt: str, function: callable, url: str = None, *args, name: str = None,
                 spinner: str = "dots", debug: bool = False, **kwargs) -> Any:
         name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
         if not name.startswith("spinner_"):
             name = f"spinner_{name}"
 
-        if sys.stdin.isatty():  # TODO probably not needed, relic of re-used code from ConsolePi
+        spin = None
+        if sys.stdin.isatty():
             # If a spinner is already running, update that spinner vs creating new
-            spin = None
             active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
             if active_spinners:
                 spin = active_spinners[0]._target.__self__
                 if debug:
                     spin.stop()
                 else:
+                    log.warning(f"A Spinner was already running '{spin.text}' updating to '{spin_txt}'")
                     spin.text == spin_txt
                     spin.spinner == "dots12" if spin.spinner == spinner else spinner
             elif not debug:
@@ -188,59 +189,50 @@ class Utils:
                 spin.start()
                 threading.enumerate()[-1].name = spin._spinner_id = name
 
-            r = function(*args, **kwargs)
+        if url:
+            args = (url, *args)
 
+        r = function(*args, **kwargs)
+
+        if spin:
+            # determine pass if request successful
             _spin_fail_msg = spin_txt
             ok = None
+            if hasattr(r, "ok"):
+                ok = r.ok
             if "refreshToken" in str(function):
                 ok = r is not None
-            elif "ArubaCentralBase" in str(r):
-                ok = True
-            elif hasattr(r, "ok"):
-                ok = r.ok
-                if hasattr(r, "__class__") and "centralcli.Response" in str(r.__class__):
-                    if not r.ok:
-                        _spin_fail_msg = r.output.get("error", spin_txt)
-                elif hasattr(r, "json"):
-                    _spin_fail_msg = r.json().get("error_description", spin.text)
+                if hasattr(r, "json"):
+                    _spin_fail_msg = f"spin_text\n   {r.json().get('error_description', spin_txt)}"
 
-            if spin:
-                try:
-                    if ok is True:
-                        spin.succeed()
-                    elif ok is False:
-                        spin.fail(_spin_fail_msg)
-                    else:
-                        spin.stop_and_persist()
-                except Exception as e:
-                    # TODO remove once verified ... should no longer hit with ok logic above
-                    log.debug(f"spinner exception evaluating r.ok (expected in some cases)\n{e}")
-                    spin.stop_and_persist()
+            if ok is True:
+                spin.succeed()
+            elif ok is False:
+                spin.fail(_spin_fail_msg)
+            else:
+                spin.stop_and_persist()
 
-            return r
+        return r
 
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
                             return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
         def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
-            prompt = prompt or "Enter/Paste your content. Then Ctrl-D or Ctrl-Z ( windows ) to submit."
+            prompt = prompt or \
+                "Enter/Paste your content. Then Ctrl-D or Ctrl-Z ( windows ) to submit.\n Enter 'exit' to abort"
             print_func(prompt, **kwargs)
-            contents = []
-            while True:
+            contents, line = [], ''
+            while line.strip().lower() != "exit":
                 try:
-                    try:
-                        line = input()
-                    except EOFError:
-                        break
-                    contents.append(line)
-                except KeyboardInterrupt:
-                    print_func(f"*retry* {prompt} or Enter `exit` to exit")
                     line = input()
-                    if line == 'exit':
-                        # sys.exit()
-                        raise typer.Abort()
-                    else:
-                        contents = [line]
+                    contents.append(line)
+                except EOFError:
+                    break
+
+            if line.strip().lower() == "exit":
+                print("Aborted")
+                exit()
+
             return contents
 
         contents = _get_multiline_sub(**kwargs)
