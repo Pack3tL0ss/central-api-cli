@@ -1,0 +1,5 @@
+pyflakes
+pycodestyle
+mccabe
+flake8
+pytest
