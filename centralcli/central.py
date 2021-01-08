@@ -103,7 +103,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
 
 class CentralApi:
-    def __init__(self, account_name: str):
+    def __init__(self, account_name: str = "central_info"):
         self.central = get_conn_from_file(account_name)
 
         self.headers = {
@@ -366,7 +366,6 @@ class CentralApi:
         else:
             url = "/configuration/v1/devices/template_variables"
             params = {"limit": 20, "offset": 0}
-            # TODO generator for returns > 20 devices
         return self.get(url, params=params)
 
     # TODO self.patch  --> Refactor to pycentral
@@ -383,10 +382,9 @@ class CentralApi:
                     calculate_client_count: bool = False, calculate_ssid_count: bool = False,
                     public_ip_address: str = None, limit: int = 100, offset: int = 0, sort: str = None):
         # pagenation limit default 100, max 1000
-        # does not return _next... pager will need to page until count < limit
+
         _strip = ["self", "dev_type", "url", "_strip"]
-        # if fields is not None:
-        #     fields = json.dumps(fields)
+
         params = {k: v for k, v in locals().items() if k not in _strip and v}
         if dev_type == "switch":
             dev_type = "switches"
@@ -401,11 +399,9 @@ class CentralApi:
         return self.get(url, params=params, callback=cleaner.get_devices)
 
     def get_dev_details(self, dev_type: str, serial: str) -> Response:
-        # https://internal-apigw.central.arubanetworks.com/monitoring/v1/switches/CN71HKZ1CL
-        if dev_type == "switch":
-            dev_type = "switches"
-        elif dev_type == "gateway":
-            dev_type = "gateways"
+        dev_type = "switches" if dev_type == "switch" else dev_type
+        dev_type = "gateways" if dev_type == "gateway" else dev_type
+        dev_type = "aps" if dev_type == "ap" else dev_type
         url = f"/monitoring/v1/{dev_type}/{serial}"
         return self.get(url, callback=cleaner.get_devices)
 
@@ -446,21 +442,6 @@ class CentralApi:
 
     def get_all_sites(self) -> Response:
         return self.get("/central/v2/sites", callback=cleaner.sites)
-
-        # strip visualrrf_default site from response
-        # if resp.ok:  # resp.output = List[dict, ...]
-
-        #     # sorting logically and stripping tag column for now
-        #     _sorted = ["site_name", "site_id", "address", "city", "state", "zipcode", "country", "longitude",
-        #                "latitude", "associated_device_count"]  # , "tags"]
-        #     key_map = {
-        #         "associated_device_count": "associated_devices",
-        #         "site_id": "id"
-        #     }
-        #     resp.output = [{key_map.get(k, k): s[k] for k in _sorted} for s in resp.output
-        #                    if s.get("site_name", "") != "visualrf_default"]
-
-        # return resp
 
     def get_site_details(self, site_id):
         return self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
@@ -503,9 +484,8 @@ class CentralApi:
             return Response(self.post, url, payload=payload)
             # pprint.pprint(resp.json())
         else:
-            # TODO adapt Response object so we can send error through it
-            # without a function... resp.ok = False, resp.error = The Error
-            log.error("Missing Required Parameters", show=True)
+            # TODO move this validation to the cli command
+            return Response(ok=False, error="Missing Required Parameters")
 
     def get_task_status(self, task_id):
         return self.get(f"/device_management/v1/status/{task_id}")
