@@ -3,7 +3,7 @@
 
 import json
 import os
-from typing import Any
+from typing import Any, List
 import pycentral.base
 import typer
 
@@ -126,27 +126,47 @@ class MyLogger:
         getattr(self._log, 'setLevel')(level)
 
 
-def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> bool:
-    if not token_data:
-        token_data = central.central_info.get("token")
+def _refresh_token(central: ArubaCentralBase, token_data: dict = None) -> None:
+    # # attempt to refresh with primary token (from cache if it exists)
+    # token = _refresh_token(central)
+
+    # # retry_token is typically token data in config, user can update config if token becomes invalid
+    # if not token and central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
+    #     token = _refresh_token(central, central.central_info["retry_token"])
+
+    # # Allow user to paste token data from Central UI
+    # if not token:
+    #     handle_invalid_token(central)
+    def _refresh_token_sub(token_data: Union[dict, List[dict]] = []) -> bool:
+        token_data = utils.listify(token_data)
+        token = None
+        for t in token_data:
+            try:
+                # token = central.refreshToken(central.central_info["token"])
+                token = utils.spinner("Attempting to Refresh Token", central.refreshToken, t)
+                if token:
+                    central.storeToken(token)
+                    central.central_info["token"] = token
+                    break
+            except Exception as e:
+                log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
+
+        return token is not None
 
     if not token_data:
-        return False
+        token: Union[dict, None] = central.central_info.get("token")
+        retry_token: Union[dict, None] = central.central_info.get("retry_token")
+        token_data = [t for t in [token, retry_token] if t is not None]
+    else:
+        token_data: List[dict] = [token_data]
 
-    token = None
-    try:
-        # token = central.refreshToken(central.central_info["token"])
-        token = utils.spinner("Attempting to Refresh Token", central.refreshToken, token_data)
-        if token:
-            central.storeToken(token)
-            central.central_info["token"] = token
-    except Exception as e:
-        log.error(f"Attempt to refresh internal returned {e.__class__} {e}")
-
-    return token is not None
+    if _refresh_token_sub(token_data):
+        return
+    else:
+        _refresh_token_sub(get_token_from_user(central))
 
 
-def handle_invalid_token(central: ArubaCentralBase) -> None:
+def get_token_from_user(central: ArubaCentralBase) -> None:
     """Handle invalid or expired tokens
 
     For prod cluster it leverages ArubaCentralBase.handleTokenExpiry()
@@ -156,24 +176,28 @@ def handle_invalid_token(central: ArubaCentralBase) -> None:
     Args:
         central (ArubaCentralBase): ArubaCentralBase class
     """
-    internal = "internal" in central.central_info["base_url"]
-    if internal:
-        prompt = f"\nRefresh Failed Please Generate a new Token for:" \
-                 f"\n    customer_id: {central.central_info['customer_id']}" \
-                 f"\n    client_id: {central.central_info['client_id']}" \
-                 "\nand paste result of `Download Tokens` Use CTRL-D on empty line to submit." \
-                 "\n > "
+    token_data = None
+    if sys.stdin.isatty():
+        internal = "internal" in central.central_info["base_url"]
+        if internal:
+            prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
+                     f"\n    customer_id: {central.central_info['customer_id']}" \
+                     f"\n    client_id: {central.central_info['client_id']}" \
+                     "\n\nPaste result of `Download Tokens` from Central UI."\
+                     f"\nUse {typer.style('CTRL-D', fg='magenta')} on empty line after contents to submit" \
+                     f"\nEnter {typer.style('exit', fg='magenta')} --> {typer.style('Enter', fg='magenta')} " \
+                     f"--> {typer.style('CTRL-D', fg='magenta')} to abort." \
+                     f"\n{typer.style('Waiting for Input...', fg='cyan', blink=True)}\n"
 
-        # typer.launch doesn't work on wsl attempts powershell
-        # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
-        token_data = utils.get_multiline_input(prompt, end="", return_type="dict")
-
-        typer.clear()
-        _refresh_token(central, token_data)
+            # typer.launch doesn't work on wsl attempts powershell
+            # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
+            token_data = utils.get_multiline_input(prompt, return_type="dict")
+        else:
+            central.handleTokenExpiry()
     else:
         central.handleTokenExpiry()
 
-    return central
+    return token_data
 
 
 class Response:
@@ -182,20 +206,23 @@ class Response:
     Assigns commonly evaluated attributes regardless of success
     Otherwise resp.ok  and bool(resp) will always be assigned and will be True or False
     '''
-    def __init__(self, central: ArubaCentralBase, *args: Any, callback: callable = None,
+    def __init__(self, central: ArubaCentralBase = None, url: str = '', *args: Any, callback: callable = None,
                  callback_kwargs: Any = {}, ok: bool = False, error: str = '', output: Any = None,
                  status_code: int = 418, **kwargs: Any):
-        self.url = '' if not args else args[0]
+        self.url = url
         self._response = None
-        log.debug(f"request url: {self.url}\nkwargs: {kwargs}")
         self.ok = ok
         self.error = error
         self.output = output
         self.status_code = status_code
         if kwargs.get("params", {}).get("limit") and config.limit:
+            log.info(f'paging limit being overriden by config: {kwargs.get("params", {}).get("limit")} --> {config.limit}')
             kwargs["params"]["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+
         if central is not None:
-            self.api_call(central, *args, callback=callback, callback_kwargs=callback_kwargs, **kwargs)
+            if args:  # determining if I've passed any additional args now that url was specified
+                log.warning(f"Developer Note args exist {args}")
+            self.api_call(central, url, *args, callback=callback, callback_kwargs=callback_kwargs, **kwargs)
 
     def __bool__(self):
         return self.ok
@@ -248,12 +275,12 @@ class Response:
             print(f"More wrapping keys than expected from return {_keys}")
         return self.output
 
-    def api_call(self, central: ArubaCentralBase, *args: Any, callback: callable = None,
+    def api_call(self, central: ArubaCentralBase, url: str = '', *args: Any, callback: callable = None,
                  callback_kwargs: Any = {}, **kwargs: Any) -> bool:
         output = None
         while True:
             try:
-                r = self._api_call(central, *args, **kwargs)
+                r = self._api_call(central, url, *args, **kwargs)
 
                 self._response = r
                 self.ok = r.ok
@@ -263,17 +290,13 @@ class Response:
                 else:
                     log.warning("DEV Note: Response wrapper being used for something other than request")
 
-                try:
-                    self.output = r.json()
-                except Exception:
-                    self.output = r.text
-
+                self.output = r.json()
                 self.output = self.clean_response()
                 self.error = r.reason
                 self.status_code = r.status_code
             except Exception as e:
                 self.ok = False
-                self.error = f"Resonse.api_call() Exception occurred: {e.__class__}\n\t{e}"
+                self.error = f"Resonse.api_call() Exception occurred: {type(e)}\n\t{e}"
                 self.output = e
                 self.status_code = 418
 
@@ -286,6 +309,7 @@ class Response:
             elif callback is not None:
                 self.output = callback(self.output, **callback_kwargs)
 
+            # -- // paging \\ --
             if not output:
                 output = self.output
             else:
@@ -305,36 +329,32 @@ class Response:
         return self.ok
 
     @staticmethod
-    def _api_call(central: ArubaCentralBase, *args, **kwargs):
-        central_info = central.central_info
-        resp, token = None, None
-        _data_msg = '' if not args or "arubanetworks.com" not in args[0] else (f' ({args[0].split("arubanetworks.com/")[-1]})')
-        spin_txt_data = f"Collecting Data{_data_msg} from Aruba Central API Gateway..."
-        for _ in range(1, 3):
-            if _ > 1:
-                spin_txt_data = spin_txt_data + " retry"
+    def _api_call(central: ArubaCentralBase, url: str, *args, **kwargs):
+        resp = None
+        _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
+        spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+        for _ in range(0, 2):
+            if _ > 0:
+                spin_txt_data += f" retry {_}"
             try:
-                resp = utils.spinner(f"{spin_txt_data}", central.requestUrl, *args, **kwargs)
+                log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
+                          f"\taccess token: {central.central_info.get('token', {}).get('access_token', {})}\n"
+                          f"\trefresh token: {central.central_info.get('token', {}).get('refresh_token', {})}"
+                          )
+
+                resp = utils.spinner(f"{spin_txt_data}", central.requestUrl, url, *args, **kwargs)
+
                 if resp.status_code == 401 and "invalid_token" in resp.text:
-                    # attempt to refresh with primary token (from cache if it exists)
-                    token = _refresh_token(central)
-
-                    # retry_token is typically token data in config, user can update config if token becomes invalid
-                    if not token and central_info.get("retry_token") and not central_info["token"] == central_info["retry_token"]:
-                        token = _refresh_token(central, central.central_info["retry_token"])
-
+                    _refresh_token(central)
                 else:
-                    token = True
                     break
             except Exception as e:
-                log.error(f"Attempt to refresh returned {e.__class__} {e}")
-
-            if not token:
-                # Allow user to paste token data from Central UI
-                handle_invalid_token(central)
+                log.error(f"_API Call{_data_msg}{e.__class__} {e}")
                 _ += 1
 
-            log.debug(f"api_call pass {_}")
+            # if not token:
+            #     # Allow user to paste token data from Central UI
+            #     handle_invalid_token(central)
 
         return resp
 
@@ -346,6 +366,13 @@ if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
 
 if _calling_script.name == "cencli":
     base_dir = Path(typer.get_app_dir(__name__))
+elif _calling_script.name.startswith("test_"):
+    base_dir = _calling_script.parent.parent
+elif "centralcli" in Path(__file__).parts:
+    base_dir = Path(__file__).parent
+    while base_dir.name != "centralcli":
+        base_dir = base_dir.parent
+    base_dir = base_dir.parent
 else:
     base_dir = _calling_script.resolve().parent
     if base_dir.name == "centralcli":
@@ -425,10 +452,12 @@ def vscode_arg_handler():
 
     # update launch.json default if launched by vscode debugger
     try:
+        # Update prev_args history file
         history_lines = None
         history_file = config.base_dir / ".vscode" / "prev_args"
         this_args = " ".join(sys.argv[1:])
-        if history_file.is_file():
+
+        if history_file.is_file() and this_args.strip():
             history_lines = history_file.read_text().splitlines()
 
             if this_args in history_lines:
@@ -440,6 +469,7 @@ def vscode_arg_handler():
                     _ = history_lines.pop(10)
             history_file.write_text("\n".join(history_lines) + "\n")
 
+        # update launch.json default arg
         do_update = False
         launch_data = None
         launch_file = config.base_dir / ".vscode" / "launch.json"
