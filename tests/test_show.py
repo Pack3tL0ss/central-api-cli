@@ -178,3 +178,17 @@ def test_show_cache():
     assert result.exit_code == 0
     assert "devices" in result.stdout
     assert "sites" in result.stdout
+
+
+def test_show_variables():
+    result = runner.invoke(app, ["show", "variables"])
+    assert result.exit_code == 0
+    assert "_sys_serial" in result.stdout
+    assert "_sys_lan_mac" in result.stdout
+
+
+def test_show_variables_by_name():
+    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["serial"]])
+    assert result.exit_code == 0
+    assert "_sys_serial" in result.stdout
+    assert "_sys_lan_mac" in result.stdout
