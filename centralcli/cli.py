@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from collections import namedtuple as nt
 from pathlib import Path
 from typing import Any, List, Tuple, Union
 from tinydb import TinyDB, Query
@@ -9,13 +8,14 @@ import sys
 import typer
 import asyncio
 
+# Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, handle_invalid_token, log, utils
+    from centralcli import config, log, utils, _refresh_token, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, handle_invalid_token, log, utils
+        from centralcli import config, log, utils, _refresh_token, Response
     else:
         raise e
 
@@ -48,8 +48,8 @@ def caas_response(resp) -> None:
     else:
         resp = resp.output
 
-    print()
     lines = "-" * 22
+    typer.echo("")
     typer.echo(lines)
     if resp.get("_global_result", {}).get("status", '') == 0:
         typer.echo("Global Result: Success")
@@ -77,11 +77,12 @@ def caas_response(resp) -> None:
                     typer.echo("-" * 65)
                 elif _r_txt and not _bypass:
                     typer.echo(f"\t{_r_txt}")
-        print()
+        typer.echo("")
 
 
 class Identifiers:
     def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False):
+        self.updated: list = []
         self.session = session
         self.DevDB = TinyDB(config.cache_file)
         self.SiteDB = self.DevDB.table("sites")
@@ -89,7 +90,8 @@ class Identifiers:
         self.Q = Query()
         if data:
             self.insert(data)
-        self.check_fresh(refresh)
+        if session:
+            self.check_fresh(refresh)
 
     def __iter__(self) -> list:
         for db in [self.DevDB, self.SiteDB]:
@@ -115,12 +117,14 @@ class Identifiers:
             # TODO time this to see which is more efficient
             # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
             # upd = [item for in_list in upd for item in in_list]
+            self.updated.append(self.session.get_all_sites)
             self.SiteDB.truncate()
             return self.SiteDB.insert_multiple(site_resp.output)
 
     async def update_dev_db(self):
         dev_resp = self.session.get_all_devicesv2()
         if dev_resp.ok:
+            self.updated.append(self.session.get_all_devicesv2)
             self.DevDB.truncate()
             return self.insert(dev_resp.output)
 
@@ -130,8 +134,10 @@ class Identifiers:
     def check_fresh(self, refresh: bool = False):
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
            or time.time() - config.cache_file.stat().st_mtime > 7200:
-            utils.spinner("Refreshing Identifier mapping Cache", asyncio.run, self._check_fresh())
+            typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
+            asyncio.run(self._check_fresh())
 
+    # TODO trigger update if no match is found and db wasn't updated recently
     def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -145,8 +151,12 @@ class Identifiers:
                                       | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
                                       | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
 
+        # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
         if match:
-            return match[0].get(ret_field)
+            if ret_field == "type-serial":
+                return match[0].get("type"), match[0].get("serial")
+            else:
+                return match[0].get(ret_field)
         else:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
             raise typer.Exit(1)  # TODO maybe scenario where we wouldn't want to exit?
@@ -232,8 +242,8 @@ def bulk_edit(input_file: str = typer.Argument(None)):
             caas_response(resp)
 
 
-show_help = ["all (devices)", "devices (same as 'all')", "switch[es]", "ap[s]", "gateway[s]", "group[s]", "site[s]",
-             "clients", "template[s]", "variables", "certs"]
+show_help = ["all (devices)", "device[s] (same as 'all' unless followed by device identifier)", "switch[es]", "ap[s]",
+             "gateway[s]", "group[s]", "site[s]", "clients", "template[s]", "variables", "certs"]
 args_metavar_dev = "[name|ip|mac-address|serial]"
 args_metavar_site = "[name|site_id|address|city|state|zip]"
 args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
@@ -264,6 +274,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+         update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
          debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                     callback=debug_callback),
          account: str = typer.Option("central_info",
@@ -275,7 +286,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     what = arg_to_what.get(what)
 
     # load cache to support friendly identifiers
-    cache = Identifiers(session)
+    cache = Identifiers(session, refresh=False if not update_cache else True)
 
     # -- // Peform GET Call \\ --
     resp = None
@@ -296,8 +307,19 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
         params = {k: v for k, v in params.items() if v is not None}
 
-        if what == "all":
-            resp = session.get_all_devicesv2(**params)
+        if what == "device":
+            if args:
+                what, serial = cache.get_dev_identifier(args, ret_field="type-serial")
+
+                if what and serial:
+                    resp = session.get_dev_details(what, serial)
+
+        elif what == "all":
+            # if cache was updated this session get the data from there given no params (expected result may differ)
+            if session.get_all_devicesv2 in cache.updated and len(params) == 2 and list(params.values()).count(False) == 2:
+                resp = Response(ok=True, output=cache.DevDB.all())
+            else:
+                resp = session.get_all_devicesv2(**params)
         elif args:
             serial = cache.get_dev_identifier(args)
             resp = session.get_dev_details(what, serial)
@@ -315,7 +337,10 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             dev_id = cache.get_site_identifier(args)
 
         if dev_id is None:
-            resp = session.get_all_sites()
+            if session.get_all_sites in cache.updated:
+                resp = Response(ok=True, output=cache.SiteDB.all())
+            else:
+                resp = session.get_all_sites()
         else:
             resp = session.get_site_details(dev_id)
 
@@ -342,13 +367,13 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             _args = cache.get_dev_identifier(args)
             resp = session.get_variablised_template(_args)
 
-    # if what provided (serial_num) gets vars for that dev otherwise gets vars for all devs
     elif what == "variables":
+        # switch default output to json for show variables
+        if True not in [do_csv, do_yaml]:
+            do_json = True
+
         if args and args != "all":
-            dev_id = cache.get_dev_identifier(args)
-        else:  # switch default output to json for show variables
-            if True not in [do_csv, do_yaml]:
-                do_json = True
+            args = cache.get_dev_identifier(args)
 
         resp = session.get_variables(args)
 
@@ -357,11 +382,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     elif what == "clients":
         resp = session.get_clients(args)
+
     elif what == "cache":
         do_json = True
         data = {"devices": cache.DevDB.all(), "sites": cache.SiteDB.all()}
-        resp = nt("Response", ["ok", "output"])
-        resp = resp(True, data)
+        resp = Response(ok=True, output=data)
 
     # TODO remove after verifying we never return a NoneType
     if resp is None:
@@ -571,7 +596,8 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
         cmds = data.get("cmds", [])
 
         if not args:
-            pass  # TODO error msg import data requires an argument specifying the group / device
+            typer.secho("import data requires an argument specifying the group / device")
+            raise typer.Exit(1)
 
         if command:
             try:
@@ -580,10 +606,6 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
             except AttributeError:
                 typer.echo(f"{command} doesn't appear to be valid")
         elif cmds:
-            # if "!" not in cmds:
-            #     cmds = '^!^'.join(cmds).split("^")
-            # with click_spinner.spinner():
-            # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
             resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
             caas_response(resp)
@@ -602,19 +624,8 @@ def refresh(what: RefreshWhat = typer.Argument(...),
     central = session.central
 
     if what.startswith("token"):
-        # enable debug so token refresh msgs from ArubaCentralBase are displayed
-        debug_callback(True)
-        token = central.loadToken()
-        if token:
-            token = central.refreshToken(token)
-            if token:
-                typer.secho("Refresh Token Success", fg="green")
-                central.storeToken(token)
-        else:
-            handle_invalid_token(central)
-
-        return session
-    else:
+        _refresh_token(central)
+    else:  # cache is only other option
         Identifiers(session=session, refresh=True)
 
 
