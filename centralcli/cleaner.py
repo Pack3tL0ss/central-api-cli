@@ -41,6 +41,7 @@ _short_key = {
     "group_name": "group",
     "public_ip_address": "public ip",
     "ip_address": "ip",
+    "ip_address_v6": "ip (v6)",
     "macaddr": "mac",
     "uplink_ports": "uplinks",
     "total_clients": "clients",
