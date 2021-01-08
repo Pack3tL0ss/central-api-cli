@@ -157,6 +157,7 @@ dmypy.json
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
+!.vscode/requirements-dev.txt
 # !.vscode/launch.json  # I change this all the time
 !.vscode/extensions.json
 *.code-workspace
@@ -174,5 +175,3 @@ scratch.py
 # App ignores
 # ignoring directory where tokens are stored.
 temp/
-
-poetry.lock
