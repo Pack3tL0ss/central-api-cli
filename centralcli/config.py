@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Any
 import yaml
 import json
-# import os
-# import sys
 
 
 class Config:
