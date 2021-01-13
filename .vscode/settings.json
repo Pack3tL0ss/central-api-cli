@@ -14,4 +14,8 @@
     "python.testing.unittestEnabled": false,
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestEnabled": true,
+    "pytest.command": "pytest",
+    "cSpell.ignoreWords": [
+        "secho"
+    ],
 }
