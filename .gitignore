@@ -175,3 +175,5 @@ scratch.py
 # App ignores
 # ignoring directory where tokens are stored.
 temp/
+# ignore for now, until dynamic
+tests/__init__.py

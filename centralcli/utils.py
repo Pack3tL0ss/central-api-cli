@@ -276,7 +276,7 @@ class Utils:
     # Not used moved to __str__ method of Output class
     @staticmethod
     def do_pretty(key: str, value: str) -> str:
-        """Pre Color Output
+        """Apply coloring to tty output
 
         Applies color to certian columns/values prior to formatting
         """
@@ -289,7 +289,6 @@ class Utils:
         _lexer = table_data = None
 
         if tablefmt == "json":
-            # from pygments import highlight, lexers, formatters
             raw_data = json.dumps(outdata, sort_keys=True, indent=2)
             _lexer = lexers.JsonLexer
 
@@ -309,6 +308,52 @@ class Utils:
                                 for d in outdata
                             ])
 
+        elif tablefmt == "rich":  # TODO Temporary Testing ***
+            from rich.console import Console
+            from rich.table import Table
+            console = Console()
+            table = Table(show_header=True, header_style="bold magenta")
+
+            customer_id, customer_name = "", ""
+            outdata = self.listify(outdata)
+
+            # -- // List[dict, ...] \\ --
+            if outdata and all(isinstance(x, dict) for x in outdata):
+                customer_id = outdata[0].get("customer_id", "")
+                customer_name = outdata[0].get("customer_name", "")
+                outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
+
+                def do_subtables(data):
+                    out = []
+                    for val in data:
+                        if not isinstance(val, (list, dict, tuple)):
+                            out.append(str(val))
+                        else:
+                            val = self.listify(val)
+                            subtable = Table(show_header=True, header_style="bold cyan")
+                            _ = [subtable.add_column(k) for k in val[0].keys()]
+                            _ = [subtable.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
+                            out.append(subtable)
+                    return out
+
+                _ = [table.add_column(k) for k in outdata[0].keys()]
+                values = [do_subtables(list(d.values())) for d in outdata]
+                _ = [table.add_row(*v) for v in values]
+                console.print(table)
+
+                table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
+
+                data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
+                              f"{'Customer Name:':15} {customer_name}\n--\n"
+                raw_data = table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+
+            # -- // List[str, ...] \\ --
+            elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:
+                if len(outdata) > 1:
+                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
+                else:
+                    raw_data = table_data = '\n'.join(outdata)
+
         else:
             customer_id = customer_name = ""
             outdata = self.listify(outdata)
@@ -318,11 +363,7 @@ class Utils:
                 customer_id = outdata[0].get("customer_id", "")
                 customer_name = outdata[0].get("customer_name", "")
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
-                # moved to __str__ method of Output class
-                # pretty_outdata = [
-                #             {k: v if k != "status" else self.do_pretty(k, v) for k, v in d.items() if k not in CUST_KEYS}
-                #             for d in outdata
-                #                          ]
+
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \

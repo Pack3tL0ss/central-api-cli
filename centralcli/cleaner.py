@@ -81,8 +81,18 @@ def short_value(key: str, value: Any):
         return short_key(key), _unlist(value)
 
 
-def get_all_groups(data: List[str, ]) -> list:
-    return [g for _ in data for g in _ if g != "unprovisioned"]
+def _get_group_names(data: List[str, ]) -> list:
+    groups = [g for _ in data for g in _ if g != "unprovisioned"]
+    groups.insert(0, groups.pop(groups.index("default")))
+    return groups
+
+
+def get_all_groups(data: List[dict, ]) -> list:
+    _keys = {
+        "group": "name",
+        "template_details": "template group"
+    }
+    return [{_keys[k]: v for k, v in g.items()} for g in data]
 
 
 def get_all_clients(data: List[dict]) -> list:
@@ -97,7 +107,10 @@ def get_all_clients(data: List[dict]) -> list:
 def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
     return _unlist(
-        [dict(short_value(k, v) for k, v in pre_clean(inner).items() if "id" not in k[-3:]) for inner in data]
+        [dict(short_value(k, v) for k, v in pre_clean(inner).items()
+              if "id" not in k[-3:] and k != "mac_range")
+         for inner in data
+         ]
         )
 
 

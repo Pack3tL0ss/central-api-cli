@@ -28,9 +28,9 @@ import json
 from typing import List, Tuple, Union
 from pathlib import Path
 from pycentral.base_utils import tokenLocalStoreUtil
-import csv
 
-from . import MyLogger, Response, config, cleaner, log, ArubaCentralBase
+from . import MyLogger, config, cleaner, log, ArubaCentralBase
+from response import Response
 
 try:
     from . import utils
@@ -255,16 +255,15 @@ class CentralApi:
     # Query can be filtered by name, device_type, version, model or J number (for ArubaSwitch).
     def get_all_templates_in_group(self, group: str, name: str = None,
                                    device_type: str = None, version: str = None, model: str = None) -> Response:
-        params = {"offset": 0, "limit": 20}  # 20 is the max
-        url = f"/configuration/v1/groups/{group}/templates"
         params = {
             "offset": 0,
-            "limit": 20,
+            "limit": 20,  # 20 is the max
             "template": name,
             "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
             "version": version,
             "model": model
         }
+        url = f"/configuration/v1/groups/{group}/templates"
         return self.get(url, params=params)
 
     def update_existing_template(self, group: str, name: str, template: Path = None, payload: str = None,
@@ -303,11 +302,48 @@ class CentralApi:
 
         return templates.update_template(self.central, **kwargs)
 
-    def get_all_groups(self) -> Response:  # REVERIFIED
+    def _get_group_names(self) -> Response:  # REVERIFIED
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 20}  # 20 is the max
-        resp = self.get(url, params=params, callback=cleaner.get_all_groups)
+        resp = self.get(url, params=params, callback=cleaner._get_group_names)
         return resp
+
+    def get_all_groups(self) -> Response:
+        url = "/configuration/v2/groups/template_info"
+        resp = self._get_group_names()
+        if not resp.ok:
+            return resp
+        else:
+            all_groups = ",".join(resp.output)
+            params = {"groups": all_groups}
+        return self.get(url, params=params, callback=cleaner.get_all_groups)
+
+    def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
+        """Get data for all defined templates from Aruba Central
+
+        Args:
+            groups (List[dict], optional): List of group dictionaries (Used to send cache vs trigerring a fresh API call).
+                                           Defaults to None (Central will first be queried for all groups)
+
+        Returns:
+            Response: centralcli Response Object
+        """
+        if not groups:
+            resp = self.get_all_groups()
+            if resp:
+                groups = resp.output
+            else:
+                return resp
+
+        template_groups = groups = [g["name"] for g in groups if True in g.get("template group", {}).values()]
+        all_templates = []
+        for group in template_groups:
+            resp = self.get_all_templates_in_group(group, **params)
+            if not resp.ok:
+                return resp
+            else:
+                all_templates += resp.output
+        return Response(ok=True, output=all_templates, error="OK")
 
     def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
         url = "/platform/orders/v1/skus"
@@ -350,6 +386,7 @@ class CentralApi:
 
     def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
+        # iap, switch, gateway|boc
         if dev_type.lower() in ["aps", "ap"]:
             dev_type = "iap"
         params = {"sku_type": dev_type}
@@ -368,13 +405,10 @@ class CentralApi:
             params = {"limit": 20, "offset": 0}
         return self.get(url, params=params)
 
-    # TODO self.patch  --> Refactor to pycentral
     def update_variables(self, serialnum: str, var_dict: dict) -> bool:
         url = f"/configuration/v1/devices/{serialnum}/template_variables"
         var_dict = json.dumps(var_dict)
         return self.patch(url, payload=var_dict)
-        # resp = requests.patch(self.central.vars["base_url"] + url, data=var_dict, headers=header)
-        # return(resp.ok)
 
     # TODO ignore sort parameter and sort output from any field.  Central is inconsistent as to what they support via sort
     def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
@@ -552,6 +586,7 @@ class CentralApi:
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
         return self.post(url, payload=payload)
 
+    # TODO move to caas.py
     def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
             key = "node_name"
@@ -568,207 +603,8 @@ class CentralApi:
 
         payload = {"cli_cmds": cli_cmds or []}
 
-        # f_url = self.central.central_info["base_url"] + url
-        # return Response(requests.post, f_url, params=params, json=payload, headers=headers)
         return self.post(url, params=params, payload=payload)
-
-        # return requests.post(self.central.vars["base_url"] + url, params=params, headers=header, json=payload)
-
-
-# t = CentralApi()
-# t.get_ap()
-# t.get_swarms_by_group("Branch1")
-# t.get_swarm_details("fbe90101014332bf0dabfa5d2cf4ae7a0917a04127f864e047")
-# t.get_wlan_clients(group="Branch1")
-# t.get_wired_clients()
-# t.get_wired_clients(group="Branch1")
-# t.get_client_details("20:4c:03:30:4c:4c")
-# t.get_certificates()
-# t.get_template("WadeLab", "2930F-8")
-# t.get_all_groups()
-# t.get_dev_by_type("iap")
-# t.get_dev_by_type("switch")
-# t.get_dev_by_type("gateway")
-# t.get_variablised_template("CN71HKZ1CL")
-# t.get_ssids_by_group("Branch1")
-# t.get_gateways_by_group("Branch1")
-# t.get_group_for_dev_by_serial("CNHPKLB030")
-# t.get_dhcp_client_info_by_gw("CNF7JSP0N0")
-# t.get_vlan_info_by_gw("CNHPKLB030")
-# t.get_uplink_info_by_gw("CNF7JSP0N0")
-# t.get_uplink_tunnel_stats_by_gw("CNF7JSP0N0")
-# t.get_uplink_state_by_group("Branch1")
-# t.get_all_sites()
-# t.get_site_details(10)
-# t.get_events_by_group("Branch1")
-# t.bounce_poe("CN71HKZ1CL", 2)
-# t.kick_users("CNC7J0T0GK", kick_all=True)
-# t.get_task_status(15983230525575)
-# group_dev = "Branch1/20:4C:03:26:28:4C"
-# cli_cmds = ["netdestination delme", "host 1.2.3.4", "!"]
-# t.caasapi(group_dev, cli_cmds)
-# mac = "20:4C:03:81:E8:FA"
-# serial_num = "CNHPKLB030"
-# t.add_dev(mac, serial_num)
-# t.verify_add_dev(mac, serial_num)
-# t.move_dev_to_group("Branch1", serial_num)
-
-
-class BuildCLI:
-    def __init__(self, data: dict = None, session=None, filename: str = None):
-        filename = filename or config.bulk_edit_file
-
-        self.session = session
-        self.dev_info = None
-        if data:
-            self.data = data
-        else:
-            self.data = self.get_bulkedit_data(filename)
-        self.cmds = []
-        self.build_cmds()
-
-    @staticmethod
-    def get_bulkedit_data(filename: str):
-        cli_data = {}
-        _common = {}
-        _vlans = []
-        _mac = "error"
-        _exclude_start = ''
-        with open(filename) as csv_file:
-            csv_reader = csv.reader([line for line in csv_file.readlines() if not line.startswith('#')])
-
-            csv_rows = [r for r in csv_reader]
-
-            for data_row in csv_rows[1:]:
-                vlan_data = {}
-                for k, v in zip(csv_rows[0], data_row):
-                    k = k.strip().lower().replace(' ', '_')
-                    # print(f"{k}: {v}")
-                    if k == "mac_address":
-                        _mac = v
-                        cli_data[v] = {}
-                    elif k in ["group", "model", "hostname", "bg_peer_ip", "controller_vlan",
-                               "zs_site_to_site_map_name", "source_fqdn"]:
-                        _common[k] = v
-                    elif k.startswith(("vlan", "dhcp", "domain", "dns", "vrrp", "access_port", "ppoe")):
-                        if k == "vlan_id":
-                            if vlan_data:
-                                _vlans.append(vlan_data)
-                            vlan_data = {k: v}
-                        elif k.startswith("dns_server_"):
-                            vlan_data["dns_servers"] = [v] if "dns_servers" not in vlan_data else \
-                                                              [*vlan_data["dns_servers"], *[v]]
-                        elif k.startswith("dhcp_default_router"):
-                            vlan_data["dhcp_def_gws"] = [v] if "dhcp_def_gws" not in vlan_data else \
-                                                               [*vlan_data["dhcp_def_gws"], *[v]]
-                        elif k.startswith("dhcp_exclude_start"):
-                            _exclude_start = v
-                        elif k.startswith("dhcp_exclude_end"):
-                            if _exclude_start:
-                                _line = f"ip dhcp exclude-address {_exclude_start} {v}"
-                                vlan_data["dhcp_excludes"] = [_line] if "dhcp_excludes" not in vlan_data else \
-                                                                        [*vlan_data["dhcp_excludes"], *[_line]]
-                                _exclude_start, _line = '', ''
-                            else:
-                                print(f"Validation Error DHCP Exclude End with no preceding start ({v})... Ignoring")
-                        else:
-                            vlan_data[k] = v
-
-                _vlans.append(vlan_data)
-                cli_data[_mac] = {"_common": _common, "vlans": _vlans}
-
-        return cli_data
-
-    def build_cmds(self):
-        for dev in self.data:
-            common = self.data[dev]["_common"]
-            vlans = self.data[dev]["vlans"]
-            _pretty_name = common.get('hostname', dev)
-            print(f"Verifying {_pretty_name} is in Group {common['group']}...", end='')
-            # group_devs = self.session.get_gateways_by_group(self.data[dev]["_common"]["group"])
-            gateways = self.session.get_dev_by_type("gateway")
-            self.dev_info = [_dev for _dev in gateways if _dev.get('macaddr', '').lower() == dev.lower()]
-            if self.dev_info:
-                self.dev_info = self.dev_info[0]
-                if common["group"] == self.session.get_group_for_dev_by_serial(self.dev_info["serial"]):
-                    print(' Confirmed', end='\n')
-                else:
-                    print(" it is *Not*", end="\n")
-                    print(f"Moving {_pretty_name} to Group {common['group']}")
-                    res = self.session.move_dev_to_group(common["group"], self.dev_info["serial"])
-                    if not res:
-                        print(f"Error Returned Moving {common['hostname']} to Group {common['group']}")
-
-            print(f"Building cmds for {_pretty_name}")
-            if common.get("hostname"):
-                self.cmds += [f"hostname {common['hostname']}", "!"]
-
-            for v in vlans:
-                self.cmds += [f"vlan {v['vlan_id']}", "!"]
-                if v.get("vlan_ip"):
-                    if not v.get("vlan_subnet"):
-                        print(f"Validation Error No subnet mask for VLAN {v['vlan_id']} ")
-                        # TODO handle the error
-                    self.cmds += [f"interface vlan {v['vlan_id']}", f"ip address {v['vlan_ip']} {v['vlan_subnet']}"]
-                    # TODO should VLAN description also be vlan name - check what bulk edit does
-                    if v.get("vlan_interface_description"):
-                        self.cmds.append(f"description {v['vlan_interface_description']}")
-                    if v.get("vlan_helper_addr"):
-                        self.cmds.append(f"ip helper-address {v['vlan_helper_addr']}")
-                    if v.get("vlan_interface_operstate"):
-                        self.cmds.append(f"operstate {v['vlan_interface_operstate']}")
-                    self.cmds.append("!")
-
-                if v.get("pppoe_username"):
-                    print("Warning PPPoE not supported by this tool yet")
-
-                if v.get("access_port"):
-                    if "thernet" not in v["access_port"] and not v["access_port"].startswith("g"):
-                        _line = f"interface gigabitethernet {v['access_port']}"
-                    else:
-                        _line = f"interface {v['access_port']}"
-                    self.cmds += [_line, f"switchport access vlan {v['vlan_id']}", "!"]
-
-                if v.get("dhcp_pool_name"):
-                    self.cmds.append(f"ip dhcp pool {v['dhcp_pool_name']}")
-                    if v.get("dhcp_def_gws"):
-                        for gw in v["dhcp_def_gws"]:
-                            self.cmds.append(f"default-router {gw}")
-                    if v.get("dns_servers"):
-                        self.cmds.append(f"dns-server {' '.join(v['dns_servers'])}")
-                    if v.get("domain_name"):
-                        self.cmds.append(f"domain-name {v['domain_name']}")
-                    if v.get("dhcp_network"):
-                        if v.get("dhcp_mask"):
-                            self.cmds.append(f"network {v['dhcp_network']} {v['dhcp_mask']}")
-                        elif v.get("dhcp_network_prefix"):
-                            self.cmds.append(f"network {v['dhcp_network']} /{v['dhcp_network_prefix']}")
-                    self.cmds.append("!")
-
-                if v.get("dhcp_excludes"):
-                    # dhcp exclude lines are fully formatted as data is collected
-                    for _line in v["dhcp_excludes"]:
-                        self.cmds.append(_line)
-
-                if v.get("vrrp_id"):
-                    if v.get("vrrp_ip"):
-                        self.cmds += [f"vrrp {v['vrrp_id']}", f"ip address {v['vrrp_ip']}", f"vlan {v['vlan_id']}"]
-                        if v.get("vrrp_priority"):
-                            self.cmds.append(f"priority {v['vrrp_priority']}")
-                        self.cmds += ["no shutdown", "!"]
-                    else:
-                        print(f"Validation Error VRRP ID {v['vrrp_id']} VLAN {v['vlan_id']} No VRRP IP provided... Skipped")
-
-                if v.get("bg_peer_ip"):
-                    # _as = self.session.get_bgp_as()
-                    # self.cmds.append(f"router bgp neighbor {v['bg_peer_ip']} as {_as}")
-                    print("bgp peer ip Not Supported by Script yet")
-
-                if v.get("zs_site_to_site_map_name") or v.get("source_fqdn"):
-                    print("Zscaler Configuration Not Supported by Script Yet")
 
 
 if __name__ == "__main__":
-    cli = BuildCLI(session=CentralApi())
-    for c in cli.cmds:
-        print(c)
+    pass

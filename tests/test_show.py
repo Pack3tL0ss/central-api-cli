@@ -192,3 +192,24 @@ def test_show_variables_by_name():
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
+
+
+def test_show_templates_by_group():
+    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["switch"]["group"]])
+    assert result.exit_code == 0
+    assert "group" in result.stdout
+    assert "version" in result.stdout
+
+
+def test_show_template_by_dev_name():
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["serial"].lower()])
+    assert result.exit_code == 0
+    assert "BEGIN TEMPLATE" in result.stdout
+    assert "%_sys_hostname%" in result.stdout
+
+
+def test_show_template_by_name():
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower()])
+    assert result.exit_code == 0
+    assert "_sys_hostname%" in result.stdout
+    assert "_sys_ip_address%" in result.stdout
