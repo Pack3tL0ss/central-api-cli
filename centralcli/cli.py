@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from typing import Any, List, Tuple, Union
-from tinydb import TinyDB, Query
-import time
+from typing import Any, List
+from tinydb import TinyDB
 import sys
 import typer
-import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, _refresh_token, Response
+    from centralcli import config, log, utils, Cache, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, _refresh_token, Response
+        from centralcli import config, log, utils, Cache, Response
     else:
+        print(pkg_dir.parts)
         raise e
 
-from centralcli.central import BuildCLI, CentralApi
+from centralcli.central import CentralApi
+import caas
 from centralcli.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
                                   RefreshWhat, arg_to_what, devices)
+
+
+TinyDB.default_table_name = "devices"
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -30,165 +33,6 @@ SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 tty = utils.tty
 
 app = typer.Typer()
-
-
-def eval_resp(resp) -> Any:
-    if not resp.ok:
-        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
-                   )
-    else:
-        return resp.output
-
-
-def caas_response(resp) -> None:
-    if not resp.ok:
-        typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
-        return
-    else:
-        resp = resp.output
-
-    lines = "-" * 22
-    typer.echo("")
-    typer.echo(lines)
-    if resp.get("_global_result", {}).get("status", '') == 0:
-        typer.echo("Global Result: Success")
-    else:
-        typer.echo("Global Result: Failure")
-    typer.echo(lines)
-    _bypass = None
-    if resp.get("cli_cmds_result"):
-        typer.echo("\n -- Command Results --")
-        for cmd_resp in resp["cli_cmds_result"]:
-            for _c, _r in cmd_resp.items():
-                _r_code = _r.get("status")
-                if _r_code == 0:
-                    _r_pretty = "OK"
-                else:
-                    _r_pretty = f"ERROR {_r_code}"
-                _r_txt = _r.get("status_str")
-                typer.echo(f" [{_bypass or _r_pretty}] {_c}")
-                if not _r_code == 0:
-                    _bypass = "bypassed"
-                    if _r_txt:
-                        typer.echo(f"\t{_r_txt}\n")
-                    typer.echo("-" * 65)
-                    typer.echo("!! Remaining Commands bypassed due to Error in previous object !!")
-                    typer.echo("-" * 65)
-                elif _r_txt and not _bypass:
-                    typer.echo(f"\t{_r_txt}")
-        typer.echo("")
-
-
-class Identifiers:
-    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False):
-        self.updated: list = []
-        self.session = session
-        self.DevDB = TinyDB(config.cache_file)
-        self.SiteDB = self.DevDB.table("sites")
-        self.GroupDB = self.DevDB.table("groups")
-        self.Q = Query()
-        if data:
-            self.insert(data)
-        if session:
-            self.check_fresh(refresh)
-
-    def __iter__(self) -> list:
-        for db in [self.DevDB, self.SiteDB]:
-            yield db.name(), db.all()
-
-    def insert(self, data: Union[List[dict, ], dict]) -> bool:
-        _data = data
-        if isinstance(data, list) and data:
-            _data = data[1]
-
-        table = self.DevDB
-        if "zipcode" in _data.keys():
-            table = self.SiteDB
-
-        data = data if isinstance(data, list) else [data]
-        ret = table.insert_multiple(data)
-
-        return len(ret) == len(data)
-
-    async def update_site_db(self):
-        site_resp = self.session.get_all_sites()
-        if site_resp.ok:
-            # TODO time this to see which is more efficient
-            # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
-            # upd = [item for in_list in upd for item in in_list]
-            self.updated.append(self.session.get_all_sites)
-            self.SiteDB.truncate()
-            return self.SiteDB.insert_multiple(site_resp.output)
-
-    async def update_dev_db(self):
-        dev_resp = self.session.get_all_devicesv2()
-        if dev_resp.ok:
-            self.updated.append(self.session.get_all_devicesv2)
-            self.DevDB.truncate()
-            return self.insert(dev_resp.output)
-
-    async def _check_fresh(self):
-        await asyncio.gather(self.update_dev_db(), self.update_site_db())
-
-    def check_fresh(self, refresh: bool = False):
-        if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
-           or time.time() - config.cache_file.stat().st_mtime > 7200:
-            typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
-            asyncio.run(self._check_fresh())
-
-    # TODO trigger update if no match is found and db wasn't updated recently
-    def get_dev_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "serial") -> str:
-        if isinstance(query_str, (list, tuple)):
-            query_str = " ".join(query_str)
-
-        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
-                                  | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
-
-        # retry with case insensitive name match if no match with original query
-        if not match:
-            match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                                      | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
-                                      | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
-
-        # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
-        if match:
-            if ret_field == "type-serial":
-                return match[0].get("type"), match[0].get("serial")
-            else:
-                return match[0].get(ret_field)
-        else:
-            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
-            raise typer.Exit(1)  # TODO maybe scenario where we wouldn't want to exit?
-
-    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "id") -> str:
-        if isinstance(query_str, (list, tuple)):
-            query_str = " ".join(query_str)
-
-        match = self.SiteDB.search((self.Q.site_name == query_str) | (self.Q.site_id.test(lambda v: str(v) == query_str))
-                                   | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                                   | (self.Q.city == query_str) | (self.Q.state == query_str))
-
-        # retry with case insensitive name & address match if no match with original query
-        if not match:
-            match = self.SiteDB.search((self.Q.site_name.test(lambda v: v.lower() == query_str.lower()))
-                                       | self.Q.address.test(
-                                           lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
-                                           )
-                                       )
-
-        if match:
-            return match[0].get(ret_field)
-        else:
-            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}")
-
-    # TODO Not used likely not needed (group output is list of strings / group names)
-    def get_group_identifier(self, query_str: str, ret_field: str = "id") -> str:
-        match = self.GroupDB.search((self.Q.name == query_str) | (self.Q.id == query_str)
-                                    | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                                    | (self.Q.city == query_str))
-        if match:
-            return match[0].get(ret_field)
 
 
 # TODO ?? make more sense to have this return the ArubaCentralBase object ??
@@ -233,13 +77,22 @@ def debug_callback(debug: bool):
 
 @app.command()
 def bulk_edit(input_file: str = typer.Argument(None)):
-    cli = BuildCLI(session=session)
+    cli = caas.BuildCLI(session=session)
     # TODO log cli
     if cli.cmds:
         for dev in cli.data:
             group_dev = f"{cli.data[dev]['_common'].get('group')}/{dev}"
             resp = session.caasapi(group_dev, cli.cmds)
-            caas_response(resp)
+            caas.eval_caas_response(resp)
+
+
+def eval_resp(resp) -> Any:
+    if not resp.ok:
+        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
+                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
+                   )
+    else:
+        return resp.output
 
 
 show_help = ["all (devices)", "device[s] (same as 'all' unless followed by device identifier)", "switch[es]", "ap[s]",
@@ -272,6 +125,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
          do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+         do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
          update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -286,7 +140,12 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     what = arg_to_what.get(what)
 
     # load cache to support friendly identifiers
-    cache = Identifiers(session, refresh=False if not update_cache else True)
+    cache = Cache(session, refresh=update_cache)
+
+    if group:
+        group = cache.get_group_identifier(group)
+        if not group:
+            raise typer.Exit(1)
 
     # -- // Peform GET Call \\ --
     resp = None
@@ -313,11 +172,13 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
                 if what and serial:
                     resp = session.get_dev_details(what, serial)
+            else:  # show devices ... equiv to show all
+                resp = session.get_all_devicesv2()
 
         elif what == "all":
             # if cache was updated this session get the data from there given no params (expected result may differ)
             if session.get_all_devicesv2 in cache.updated and len(params) == 2 and list(params.values()).count(False) == 2:
-                resp = Response(ok=True, output=cache.DevDB.all())
+                resp = Response(ok=True, output=cache.devices)
             else:
                 resp = session.get_all_devicesv2(**params)
         elif args:
@@ -330,7 +191,10 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             resp = session.get_devices(what, **params)
 
     elif what == "groups":
-        resp = session.get_all_groups()  # simple list of str
+        if session.get_all_groups in cache.updated:
+            resp = Response(output=cache.groups)
+        else:
+            resp = session.get_all_groups()  # List[str]
 
     elif what == "sites":
         if args:
@@ -338,34 +202,62 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
         if dev_id is None:
             if session.get_all_sites in cache.updated:
-                resp = Response(ok=True, output=cache.SiteDB.all())
+                resp = Response(output=cache.sites)
             else:
                 resp = session.get_all_sites()
         else:
             resp = session.get_site_details(dev_id)
 
+    # -- // SHOW TEMPLATE \\ --
     elif what == "template":
+        params = {
+            "name": name,
+            "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+            "version": version,
+            "model": model
+        }
+
+        params = {k: v for k, v in params.items() if v is not None}
+
+        if args:
+            if len(args) > 1:
+                log.error(f"Only expecting 1 argument for show template, ignoring {args[1:]}", show=True)
+            args = args[0]
+
         if not args:
-            if not group:
-                typer.echo(
-                    typer.style("template keyword requires additional argument: <template name | serial>", fg="red")
-                )
-                raise typer.Exit(1)
+            if not group:  # show templates
+                if session.get_all_templates in cache.updated:
+                    resp = Response(output=cache.templates)
+                else:
+                    resp = session.get_all_templates(**params)
             else:  # show templates --group <group name>
-                params = {
-                    "name": name,  # name becomes `template` in get_all_templates_in_group()
-                    "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
-                    "version": version,
-                    "model": model
-                }
-                resp = utils.spinner(SPIN_TXT_DATA, session.get_all_templates_in_group, group, **params)
-        elif group:
-            # args is template name in this case
-            resp = session.get_template(group, args)
-        else:
-            # TODO add support for all (get_all_templates_in_group for each group)
+                resp = session.get_all_templates_in_group(group, **params)
+        elif group:  # show template <arg> --group <group_name>
+            _args = cache.get_template_identifier(args)
+            if _args:  # name of template
+                resp = session.get_template(group, args)
+            else:
+                _args = cache.get_dev_identifier(args)
+                if _args:
+                    typer.secho(f"{args} Does not match a Template name, but does match device with serial {_args}", fg="cyan")
+                    typer.secho(f"Fetching Variablised Template for {args}", fg="cyan")
+                    msg = (
+                        f"{typer.style(f'--group {group} is not required for device specific template output.  ', fg='cyan')}"
+                        f"{typer.style(f'ignoring --group {group}', fg='red')}"
+                        )
+                    typer.echo(msg)
+                    resp = session.get_variablised_template(_args)
+        else:  # provided args but no group
             _args = cache.get_dev_identifier(args)
-            resp = session.get_variablised_template(_args)
+            if _args:  # assume arg is device identifier 1st
+                resp = session.get_variablised_template(_args)
+            else:  # next try template names
+                _args = cache.get_template_identifier(args, ret_field="group-name")
+                if _args:
+                    group, tmplt_name = _args[0], _args[1]
+                    resp = session.get_template(group, tmplt_name)
+                else:
+                    raise typer.Exit(1)
 
     elif what == "variables":
         # switch default output to json for show variables
@@ -385,8 +277,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
     elif what == "cache":
         do_json = True
-        data = {"devices": cache.DevDB.all(), "sites": cache.SiteDB.all()}
-        resp = Response(ok=True, output=data)
+        resp = Response(ok=True, output=cache.all)
 
     # TODO remove after verifying we never return a NoneType
     if resp is None:
@@ -401,6 +292,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
             tablefmt = "yaml"
         elif do_csv is True:
             tablefmt = "csv"
+        elif do_rich is True:
+            tablefmt = "rich"
         else:
             tablefmt = "simple"
 
@@ -440,15 +333,19 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
                                              help="[Templates] Filter by Device Type"),
              version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
              model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
+             debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                                        callback=debug_callback),
+             account: str = typer.Option("central_info",
+                                         envvar="ARUBACLI_ACCOUNT",
+                                         help="The Aruba Central Account to use (must be defined in the config)",
+                                         callback=account_name_callback),
              ):
-
-    # TODO cache group names to allow case-insensitive group match
     # TODO cache template names
     if operation == "update":
         if what == "variable":
             if variable and value and device:
                 # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
-                cache = Identifiers(session)
+                cache = Cache(session)
                 device = cache.get_dev_identifier(device)
                 payload = {"variables": {variable: value}}
                 _resp = session.update_variables(device, payload)
@@ -458,7 +355,7 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
                 else:
                     log.error(f"Template Update Variables {variable} -> {value} retuned error\n{_resp.output}", show=False)
                     typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)} {_resp.error}")
-        else:  # update template (what becomes device/template identifier)
+        else:  # delete or add template, what becomes device/template identifier
             kwargs = {
                 "group": group,
                 "name": what,
@@ -518,7 +415,7 @@ def do(what: DoArgs = typer.Argument(...),
             typer.echo(f"> do {what} {args1} 2")
             raise typer.Exit(1)
 
-        cache = Identifiers(session)
+        cache = Cache(session)
         serial = cache.get_dev_identifier(args1)
         kwargs = {
             "serial_num": serial,
@@ -556,7 +453,7 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
         cmds += ["no shutdown", "!"]
 
     # TODO move command gen to BuildCLI
-    caas_response(session.caasapi(group_dev, cmds))
+    caas.eval_caas_response(session.caasapi(group_dev, cmds))
 
 
 @app.command()
@@ -608,7 +505,7 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
         elif cmds:
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
             resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
-            caas_response(resp)
+            caas.eval_caas_response(resp)
 
 
 @app.command()
@@ -619,20 +516,27 @@ def refresh(what: RefreshWhat = typer.Argument(...),
                                         envvar="ARUBACLI_ACCOUNT",
                                         help="The Aruba Central Account to use (must be defined in the config)",
                                         callback=account_name_callback),):
+    """refresh <'token'|'cache'>"""
 
     session = CentralApi(account)
     central = session.central
 
     if what.startswith("token"):
-        _refresh_token(central)
+        Response(central).refresh_token()
     else:  # cache is only other option
-        Identifiers(session=session, refresh=True)
+        Cache(session=session, refresh=True)
 
 
 @app.command()
 def method_test(method: str = typer.Argument(...),
-                kwargs: List[str] = typer.Argument(None)
-                ):
+                kwargs: List[str] = typer.Argument(None),
+                debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                                           callback=debug_callback),
+                account: str = typer.Option("central_info",
+                                            envvar="ARUBACLI_ACCOUNT",
+                                            help="The Aruba Central Account to use (must be defined in the config)",
+                                            callback=account_name_callback),
+                ) -> None:
     """dev testing commands to run CentralApi methods from command line
 
     Args:
@@ -644,6 +548,7 @@ def method_test(method: str = typer.Argument(...),
 
     Displays all attributes of Response object
    """
+    session = CentralApi(account)
     if not hasattr(session, method):
         typer.secho(f"{method} does not exist", fg="red")
         raise typer.Exit(1)
