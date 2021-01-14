@@ -14,3 +14,4 @@ click_spinner
 colorama
 tinydb
 shellingham
+pendulum
