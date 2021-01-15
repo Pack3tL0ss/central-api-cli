@@ -118,7 +118,14 @@ class CentralApi:
         params = self.strip_none(params)
         return Response(self.central, f_url, params=params, headers=headers, **kwargs)
 
-    def post(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    def post(self, url, params: dict = {}, payload: dict = None,
+             _json: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
+        if _json and payload:
+            raise UserWarning("post method expects 1 of the 2 keys payload, json.  Providing Both is invalid\n"
+                              f"post was provided:\n    payload: {payload}\n    _json: {_json}")
+        elif _json:
+            payload = json.dumps(_json)
+
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
         headers = self.headers if headers is None else {**self.headers, **headers}
@@ -252,6 +259,12 @@ class CentralApi:
     def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
         return self.get(url)
+
+    def get_template_details_for_device(self, device_serial: str, details: bool = False) -> Response:
+        url = f"/configuration/v1/devices/{device_serial}/config_details"
+        headers = {"Accept": "multipart/form-data"}
+        params = {"details": details}
+        return self.get(url, params=params, headers=headers)
 
     # Query can be filtered by name, device_type, version, model or J number (for ArubaSwitch).
     def get_all_templates_in_group(self, group: str, name: str = None,
@@ -411,6 +424,11 @@ class CentralApi:
         var_dict = json.dumps(var_dict)
         return self.patch(url, payload=var_dict)
 
+    def get_last_known_running_config(self, serialnum: str) -> Response:
+        url = f"/configuration/v1/devices/{serialnum}/configuration"
+        headers = {"Accept": "multipart/form-data"}
+        return self.get(url, headers=headers)
+
     # TODO ignore sort parameter and sort output from any field.  Central is inconsistent as to what they support via sort
     def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
                     status: str = None, fields: list = None, show_resource_details: bool = False,
@@ -486,6 +504,18 @@ class CentralApi:
         params = {"group": group}
         return self.get(url, params=params)
 
+    def get_all_webhooks(self) -> Response:
+        url = "/central/v1/webhooks"
+        return self.get(url)
+
+    def post_add_webhook(self, name: str, *urls: Union[str, List[str]]) -> Response:
+        url = "/central/v1/webhooks"
+        payload = {
+                "name": name,
+                "urls": utils.listify(urls)
+                }
+        return self.post(url, _json=payload)
+
     def bounce_poe(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
         """Bounce PoE on interface, valid only for switches
         """
@@ -521,6 +551,15 @@ class CentralApi:
         else:
             # TODO move this validation to the cli command
             return Response(ok=False, error="Missing Required Parameters")
+
+    def post_switch_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
+        url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
+        payload = {
+            "username": username,
+            "password": password
+        }
+        # returns "Success"
+        return self.post(url, _json=payload)
 
     def get_task_status(self, task_id):
         return self.get(f"/device_management/v1/status/{task_id}")
@@ -586,6 +625,61 @@ class CentralApi:
 
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
         return self.post(url, payload=payload)
+
+    def get_audit_logs(self, log_id: str = None) -> Response:
+        """Get all audit logs or details about a specifc log from Aruba Central
+
+        Args:
+            log_id (str, optional): The id of the log to return details for. Defaults to None.
+
+        Returns:
+            Response: Response object
+        """
+        # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
+        url = "/platform/auditlogs/v1/logs"
+        params = {"offset": 0, "limit": 100}
+        if log_id:
+            url = f"{url}/{log_id}"
+            params = None
+        return self.get(url, params=params)
+
+    def get_ts_commands(self, dev_type: str) -> Response:
+        # iap, mas, switch, controller
+        url = "/troubleshooting/v1/commands"
+        params = {"device_type": dev_type}
+        return self.get(url, params=params)
+
+    def start_ts_session(self, device_serial: str, dev_type: str, commands: Union[dict, List[dict]]) -> Response:
+        url = f"/troubleshooting/v1/devices/{device_serial}"
+        payload = {
+            "device_type": dev_type,
+            "commands": commands
+        }
+        return self.post(url, _json=payload)
+
+    def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
+        url = f"/troubleshooting/v1/devices/{device_serial}"
+        params = {"session_id": ts_id}
+        return self.get(url, params=params)
+
+    def clear_ts_session(self, device_serial: str, ts_id: int) -> Response:
+        # returns a str
+        url = f"/troubleshooting/v1/devices/{device_serial}"
+        params = {"session_id": ts_id}
+        return self.get(url, params=params)
+
+    def get_ts_id_by_serial(self, device_serial: str) -> Response:
+        url = f"/troubleshooting/v1/devices/{device_serial}/session"
+        return self.get(url)
+
+    def get_sdwan_dps_policy_compliance(self, time_frame: str = "last_week", order: str = "best") -> Response:
+        url = "/sdwan-mon-api/external/noc/reports/wan/policy-compliance"
+        params = {
+            "period": time_frame,
+            "result_order": order,
+            "count": 250
+        }
+        return self.get(url, params=params)
 
     # TODO move to caas.py
     def caasapi(self, group_dev: str, cli_cmds: list = None):
