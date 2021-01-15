@@ -133,6 +133,8 @@ class Utils:
         return os.path.isfile(filepath) and os.stat(filepath).st_size > 0
 
     def listify(self, var):
+        if isinstance(var, tuple):
+            return list(var)
         return var if isinstance(var, list) or var is None else [var]
 
     @staticmethod

@@ -8,18 +8,18 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response
+    from centralcli import config, log, utils, Cache, Response, caas
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response
+        from centralcli import config, log, utils, Cache, Response, caas
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi
-import caas
+# import caas
 from centralcli.constants import (DoArgs, ShowArgs, SortOptions, StatusOptions, TemplateLevel1,
                                   RefreshWhat, arg_to_what, devices)
 
