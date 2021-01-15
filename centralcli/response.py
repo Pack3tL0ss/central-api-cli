@@ -47,49 +47,6 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
     return contents
 
 
-class Spinner:
-    def __init__(self):
-        self.spinner = None
-
-    def __bool__(self):
-        return bool(self.spinner)
-
-    def __call__(self, spin_txt: str, function: callable, url: str = None, *args, name: str = None,
-                 spinner: str = "dots", **kwargs) -> Any:
-
-        name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
-        if not name.startswith("spinner_"):
-            name = f"spinner_{name}"
-
-        spin = None
-        if sys.stdin.isatty():
-            if log.DEBUG:
-                log.info(spin_txt)
-            else:
-                # This is just a catch to ensure we don't start multiple spinners
-                if self.spinner:  # stop a spinner if one was already running
-                    spin = self.spinner
-                    log.warning(f"A Spinner was already running '{spin.text}' updating to '{spin_txt}'")
-                    spin.text == spin_txt
-                    spin.spinner == "dots12" if spin.spinner == spinner else spinner
-                else:  # start a new spinner
-                    spin = Halo(text=spin_txt, spinner=spinner)
-                    spin._spinner_id = name
-                    self.spinner = spin.start()
-
-        if url:
-            args = (url, *args)
-
-        # -- // API CALL \\ --
-        r = function(*args, **kwargs)
-
-        if spin:
-            spin.succeed() if r.ok else spin.fail(f"{spin.text}\n  {r.json().get('error_description', r.text)}")
-            self.spinner = None
-
-        return r
-
-
 class Session:
     def __init__(self, central: ArubaCentralBase = None) -> None:
         self.central = central
@@ -166,11 +123,12 @@ class Session:
         return self.ok
 
     def _api_call(self, url: str, *args, **kwargs):
-        spinner = Spinner()
+        # spinner = Spinner()
         central = self.central
-        resp = None
+        resp, spin = None, None
         _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
         spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+
         for _ in range(0, 2):
             if _ > 0:
                 spin_txt_data += f" retry {_}"
@@ -180,44 +138,50 @@ class Session:
                           f"\trefresh token: {central.central_info.get('token', {}).get('refresh_token', {})}"
                           )
 
-                resp = spinner(f"{spin_txt_data}", central.requestUrl, url, *args, **kwargs)
+                with Halo(spin_txt_data) as spin:
+                    resp = central.requestUrl(url, *args, **kwargs)
+
+                # resp = spinner(f"{spin_txt_data}", central.requestUrl, url, *args, **kwargs)
+                fail_msg = f"{spin.text}\n  {resp.json().get('error_description', resp.text)}"
 
                 if resp.status_code == 401 and "invalid_token" in resp.text:
+                    spin.fail(fail_msg)
                     self.refresh_token()
                 else:
+                    spin.succeed() if resp.ok else spin.fail(fail_msg)
                     break
             except Exception as e:
                 log.error(f"_API Call{_data_msg}{e.__class__.__name__} {e}")
+                spin.fail(f"{spin_txt_data}\n  {e}")
                 _ += 1
 
         return resp
 
+    def _refresh_token(self, token_data: Union[dict, List[dict]] = []) -> bool:
+        central = self.central
+        token_data = utils.listify(token_data)
+        token = None
+        spin = Halo("Attempting to Refresh Token")
+        spin.start()
+        for idx, t in enumerate(token_data):
+            try:
+                if idx == 1:
+                    spin.fail()
+                    spin.text = spin.text + " retry"
+                    spin.start()
+                token = central.refreshToken(t)
+                if token:
+                    central.storeToken(token)
+                    central.central_info["token"] = token
+                    break
+            except Exception as e:
+                log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
+        spin.succeed() if token else spin.fail()
+
+        return token is not None
+
     def refresh_token(self, token_data: dict = None) -> None:
         central = self.central
-
-        def _refresh_token(token_data: Union[dict, List[dict]] = []) -> bool:
-            # spinner = Spinner()
-            token_data = utils.listify(token_data)
-            token = None
-            spin = Halo("Attempting to Refresh Token")
-            spin.start()
-            for idx, t in enumerate(token_data):
-                try:
-                    if idx == 1:
-                        spin.fail()
-                        spin.text = spin.text + " retry"
-                        spin.start()
-                    token = central.refreshToken(t)
-                    if token:
-                        central.storeToken(token)
-                        central.central_info["token"] = token
-                        break
-                except Exception as e:
-                    log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
-            spin.succeed() if token else spin.fail()
-
-            return token is not None
-
         if not token_data:
             token: Union[dict, None] = central.central_info.get("token")
             retry_token: Union[dict, None] = central.central_info.get("retry_token")
@@ -225,10 +189,10 @@ class Session:
         else:
             token_data: List[dict] = [token_data]
 
-        if _refresh_token(token_data):
+        if self._refresh_token(token_data):
             return
         else:
-            _refresh_token(self.get_token_from_user())
+            self._refresh_token(self.get_token_from_user())
 
     def get_token_from_user(self) -> None:
         """Handle invalid or expired tokens
@@ -244,7 +208,14 @@ class Session:
         token_data: dict = None
         if sys.stdin.isatty():
             internal = "internal" in central.central_info["base_url"]
-            if internal:
+            # if internal:
+            token_only = [
+                central.central_info.get("username") is None,
+                central.central_info.get("username", "").endswith("@hpe.com") and internal,
+                central.central_info.get("password") is None
+            ]
+            # if not central.central_info["username"] or not central.central_info["password"]:
+            if True in token_only:
                 prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
                         f"\n    customer_id: {central.central_info['customer_id']}" \
                         f"\n    client_id: {central.central_info['client_id']}" \
