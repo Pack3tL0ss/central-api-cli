@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 from pathlib import Path
 from typing import Any, List
 from tinydb import TinyDB
@@ -89,7 +90,7 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 def eval_resp(resp) -> Any:
     if not resp.ok:
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
+                   f"{resp.output.get('error_description', resp.error).replace('Error: ', '')}"
                    )
     else:
         return resp.output
@@ -171,42 +172,51 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                 what, serial = cache.get_dev_identifier(args, ret_field="type-serial")
 
                 if what and serial:
-                    resp = session.get_dev_details(what, serial)
+                    resp = session.request(session.get_dev_details, what, serial)
             else:  # show devices ... equiv to show all
-                resp = session.get_all_devicesv2()
+                resp = session.request(session.get_all_devicesv2)
 
         elif what == "all":
-            # if cache was updated this session get the data from there given no params (expected result may differ)
-            if session.get_all_devicesv2 in cache.updated and len(params) == 2 and list(params.values()).count(False) == 2:
-                resp = Response(ok=True, output=cache.devices)
-            else:
-                resp = session.get_all_devicesv2(**params)
+            # if no params (expected result may differ) update cache if not updated this session and return results from there
+            if len(params) == 2 and list(params.values()).count(False) == 2:
+                if session.get_all_devicesv2 not in cache.updated:
+                    asyncio.run(cache.update_dev_db())
+                    # cache = Cache(session, refresh=True)
+
+                resp = Response(output=cache.devices)
+            else:  # will only run if user specifies params (filters)
+                resp = session.request(session.get_all_devicesv2, **params)
         elif args:
             serial = cache.get_dev_identifier(args)
-            resp = session.get_dev_details(what, serial)
+            resp = session.request(session.get_dev_details, what, serial)
             # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
             if True not in [do_csv, do_json]:
                 do_yaml = True
         else:
-            resp = session.get_devices(what, **params)
+            # resp = session.get_devices(what, **params)
+            # resp = asyncio.run(session.get_devices(what, **params))
+            resp = session.request(session.get_devices, what, **params)
 
     elif what == "groups":
-        if session.get_all_groups in cache.updated:
-            resp = Response(output=cache.groups)
-        else:
-            resp = session.get_all_groups()  # List[str]
+        if session.get_all_groups not in cache.updated:
+            asyncio.run(cache.update_group_db())
+
+        resp = Response(output=cache.groups)
+        # resp = asyncio.run(session.get_all_groups())  # List[str]
 
     elif what == "sites":
         if args:
             dev_id = cache.get_site_identifier(args)
 
         if dev_id is None:
-            if session.get_all_sites in cache.updated:
-                resp = Response(output=cache.sites)
-            else:
-                resp = session.get_all_sites()
+            if session.get_all_sites not in cache.updated:
+                asyncio.run(cache.update_site_db())
+            # else:
+                # resp = asyncio.run(session.get_all_sites())
+
+            resp = Response(output=cache.sites)
         else:
-            resp = session.get_site_details(dev_id)
+            resp = session.request(session.get_site_details, dev_id)
 
     # -- // SHOW TEMPLATE \\ --
     elif what == "template":
@@ -226,16 +236,18 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
 
         if not args:
             if not group:  # show templates
-                if session.get_all_templates in cache.updated:
-                    resp = Response(output=cache.templates)
-                else:
-                    resp = session.get_all_templates(**params)
+                if session.get_all_templates not in cache.updated:
+                    asyncio.run(cache.update_template_db())
+
+                resp = Response(output=cache.templates)
+                # else:
+                #     resp = session.get_all_templates(**params)
             else:  # show templates --group <group name>
-                resp = session.get_all_templates_in_group(group, **params)
+                resp = session.request(session.get_all_templates_in_group, group, **params)
         elif group:  # show template <arg> --group <group_name>
             _args = cache.get_template_identifier(args)
             if _args:  # name of template
-                resp = session.get_template(group, args)
+                resp = session.request(session.get_template, group, args)
             else:
                 _args = cache.get_dev_identifier(args)
                 if _args:
@@ -246,16 +258,16 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                         f"{typer.style(f'ignoring --group {group}', fg='red')}"
                         )
                     typer.echo(msg)
-                    resp = session.get_variablised_template(_args)
+                    resp = session.request(session.get_variablised_template, _args)
         else:  # provided args but no group
             _args = cache.get_dev_identifier(args)
             if _args:  # assume arg is device identifier 1st
-                resp = session.get_variablised_template(_args)
+                resp = session.request(session.get_variablised_template, _args)
             else:  # next try template names
                 _args = cache.get_template_identifier(args, ret_field="group-name")
                 if _args:
                     group, tmplt_name = _args[0], _args[1]
-                    resp = session.get_template(group, tmplt_name)
+                    resp = session.request(session.get_template, group, tmplt_name)
                 else:
                     raise typer.Exit(1)
 
@@ -267,17 +279,17 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         if args and args != "all":
             args = cache.get_dev_identifier(args)
 
-        resp = session.get_variables(args)
+        resp = session.request(session.get_variables, args)
 
     elif what == "certs":
-        resp = session.get_certificates()
+        resp = session.request(session.get_certificates)
 
     elif what == "clients":
-        resp = session.get_clients(args)
+        resp = session.request(session.get_clients, args)
 
     elif what == "cache":
         do_json = True
-        resp = Response(ok=True, output=cache.all)
+        resp = Response(output=cache.all)
 
     # TODO remove after verifying we never return a NoneType
     if resp is None:
@@ -423,12 +435,12 @@ def do(what: DoArgs = typer.Argument(...),
 
     # -- // do the Command \\ --
     if yes or typer.confirm(typer.style(f"Please Confirm {what} {args1} {args2}", fg="cyan")):
-        resp = getattr(session, what.replace("-", "_"))(args2, **kwargs)
+        resp = session.request(getattr(session, what.replace("-", "_")), args2, **kwargs)
         typer.echo(resp)
         if resp.ok:
             typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
             # always returns queued on success even if the task is done
-            resp = session.get_task_status(resp.task_id)
+            resp = session.request(session.get_task_status, resp.task_id)
             typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
 
     else:
@@ -558,7 +570,8 @@ def method_test(method: str = typer.Argument(...),
     kwargs = {k[0]: k[1] for k in kwargs}
 
     typer.secho(f"session.{method}({(args)}, {kwargs})", fg="green")
-    resp = getattr(session, method)(*args, **kwargs)
+    resp = asyncio.run(getattr(session, method)(*args, **kwargs))
+
     for k, v in resp.__dict__.items():
         typer.echo(f"{k}: {v}")
 
@@ -568,6 +581,7 @@ def callback():
     """
     Aruba Central API CLI
     """
+    pass
 
 
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
