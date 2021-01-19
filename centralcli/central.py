@@ -33,7 +33,7 @@ from pycentral.base_utils import tokenLocalStoreUtil
 from aiohttp import ClientSession
 
 from . import MyLogger, config, cleaner, utils, log, ArubaCentralBase
-from .response2 import Session, Response
+from .response import Session, Response
 
 
 DEFAULT_TOKEN_STORE = {
