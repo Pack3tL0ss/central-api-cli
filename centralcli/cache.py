@@ -1,4 +1,5 @@
 from typing import Union, List, Tuple
+from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from centralcli.central import CentralApi
 from centralcli import config, log, utils
@@ -67,21 +68,21 @@ class Cache:
         return len(ret) == len(data)
 
     async def update_dev_db(self):
-        start = time.time()
-        print(f" dev db start: {start}")
-        resp = self.session.get_all_devicesv2()
+        # start = time.time()
+        # print(f" dev db start: {start}")
+        resp = await self.session.get_all_devicesv2()
         # async with self.session.get_all_devicesv2() as resp:
         # resp = await self.session.get_all_devicesv2()
         if resp.ok:
             self.updated.append(self.session.get_all_devicesv2)
             self.DevDB.truncate()
-            print(f" dev db Done: {time.time() - start}")
+            # print(f" dev db Done: {time.time() - start}")
             return self.DevDB.insert_multiple(resp.output)
 
     async def update_site_db(self):
-        start = time.time()
-        print(f" site db start: {start}")
-        resp = self.session.get_all_sites()
+        # start = time.time()
+        # print(f" site db start: {start}")
+        resp = await self.session.get_all_sites()
         # async with self.session.get_all_sites() as resp:
         # resp = await self.session.get_all_sites()
         if resp.ok:
@@ -90,48 +91,50 @@ class Cache:
             # upd = [item for in_list in upd for item in in_list]
             self.updated.append(self.session.get_all_sites)
             self.SiteDB.truncate()
-            print(f" site db Done: {time.time() - start}")
+            # print(f" site db Done: {time.time() - start}")
             return self.SiteDB.insert_multiple(resp.output)
 
     async def update_group_db(self):
-        start = time.time()
-        print(f" group db start: {start}")
+        # start = time.time()
+        # print(f" group db start: {start}")
         # async with self.session.get_all_groups() as resp:
         # resp = await self.session.get_all_groups()
-        resp = self.session.get_all_groups()
+        resp = await self.session.get_all_groups()
         if resp.ok:
             self.updated.append(self.session.get_all_groups)
             self.GroupDB.truncate()
-            print(f" group db Done: {time.time() - start}")
+            # print(f" group db Done: {time.time() - start}")
             return self.GroupDB.insert_multiple(resp.output)
 
     async def update_template_db(self):
-        start = time.time()
-        print(f" template db start: {start}")
+        # start = time.time()
+        # print(f" template db start: {start}")
         # async with self.session.get_all_groups() as resp:
         # resp = await self.session.get_all_groups()
         groups = self.groups if self.session.get_all_groups in self.updated else None
-        resp = self.session.get_all_templates(groups=groups)
+        resp = await self.session.get_all_templates(groups=groups)
         if resp.ok:
             self.updated.append(self.session.get_all_templates)
             self.TemplateDB.truncate()
-            print(f" template db Done: {time.time() - start}")
+            # print(f" template db Done: {time.time() - start}")
             return self.TemplateDB.insert_multiple(resp.output)
 
     async def _check_fresh(self):
-        await asyncio.gather(self.update_dev_db(), self.update_site_db(), self.update_group_db(), self.update_template_db())
+        async with ClientSession() as self.session.aio_session:
+            if await self.update_dev_db():  # run first call by itself in case token needs to be refreshed
+                await asyncio.gather(self.update_site_db(), self.update_group_db(), self.update_template_db())
 
     def check_fresh(self, refresh: bool = False):
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
            or time.time() - config.cache_file.stat().st_mtime > 7200:
             typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
-            # asyncio.run(self._check_fresh())
-            loop = asyncio.get_event_loop()
-            try:
-                loop.run_until_complete(self._check_fresh())
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                loop.close()
+            asyncio.run(self._check_fresh())
+            # loop = asyncio.get_event_loop()
+            # try:
+            #     loop.run_until_complete(self._check_fresh())
+            #     loop.run_until_complete(loop.shutdown_asyncgens())
+            # finally:
+            #     loop.close()
 
     # TODO trigger update if no match is found and db wasn't updated recently
     def get_dev_identifier(self,

@@ -2,7 +2,7 @@
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 '''
 
-from centralcli import utils
+from centralcli import utils, constants
 from typing import List, Any, Union
 import pendulum
 
@@ -48,6 +48,15 @@ _short_key = {
     "updated_at": "updated",
     "cpu_utilization": "cpu %"
 }
+
+
+def strip_outer_keys(data: dict) -> dict:
+    _keys = [k for k in constants.STRIP_KEYS if k in data]
+    if len(_keys) == 1:
+        return data[_keys[0]]
+    elif _keys:
+        print(f"More wrapping keys than expected from return {_keys}")
+    return data
 
 
 def pre_clean(data: dict) -> dict:
