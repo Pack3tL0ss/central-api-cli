@@ -1,6 +1,6 @@
 from aiohttp.client_exceptions import ContentTypeError
-import cleaner
 from pycentral.base import ArubaCentralBase
+from . import cleaner
 from typing import Union, List, Any
 
 from centralcli import config, utils, log
