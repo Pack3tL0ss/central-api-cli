@@ -1,12 +1,108 @@
+from aiohttp.client_exceptions import ContentTypeError
+import cleaner
 from pycentral.base import ArubaCentralBase
 from typing import Union, List, Any
 
-from centralcli import config, utils, log, constants
+from centralcli import config, utils, log
 from halo import Halo
 
 import sys
 import typer
 import json
+import aiohttp
+import time
+# import asyncio
+
+
+DEFAULT_HEADERS = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+}
+
+
+class Response:
+    '''wrapper aiohttp.ClientResponse object
+
+    Assigns commonly evaluated attributes regardless of API execution result
+
+    The following attributes will always be available:
+        ok: (bool) indicates success/failure of aiohttp.ClientSession.request()
+        output: (Any) The content returned from the response
+        error: (str) Error message indicating the nature of a failed response
+        status: (int) http status code returned from response
+
+    Create instance by providing at minimum one of the following parameters:
+        response: (aiohttp.ClientResponse) all other paramaters ignored if providing response
+        error: (str) ok, output, status set to logical default if not provided
+        output: (Any) ok, error, status set to logical default if not provided
+        ** Only provide output orr
+    '''
+    def __init__(self, response: aiohttp.ClientResponse = None, url: str = None, ok: bool = None,
+                 error: str = None, output: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
+        self._response = response
+        self.output = output
+        if response:
+            self.ok = response.ok
+            self.url = response.url
+            self.error = response.reason
+            self.status = response.status
+            log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
+        else:
+            if output:
+                self.ok = ok or True
+                self.error = error or "OK"
+            elif error:
+                self.ok = ok or False
+                self.error = self.output = error
+
+            self.url = str(url)
+            self.status = status_code or 299 if self.ok else 418
+
+        if self.output and "error" in self.output and "error_description" in self.output and isinstance(self.output, dict):
+            self.output = f"{self.output['error']}: {self.output['error_description']}"
+
+    def __bool__(self):
+        return self.ok
+
+    def __repr__(self):
+        f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
+
+    def __str__(self):
+        return str(self.output) if self.output else self.error
+
+    def __setitem__(self, name: str, value: Any) -> None:
+        if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
+            self.output[name] = value
+
+    def __getitem__(self, key):
+        return self.output[key]
+
+    def __getattr__(self, name: str) -> Any:
+        if hasattr(self, "output") and self.output:
+            if name in self.output:
+                return self.output[name]
+
+        if hasattr(self._response, name):
+            return getattr(self._response, name)
+
+        raise AttributeError(f"'Response' object has no attribute '{name}'")
+
+    def __iter__(self):
+        for _dict in self.output:
+            for k, v in _dict.items():
+                yield k, v
+
+    def get(self, key: Any, default: Any = None):
+        if isinstance(self.output, dict):
+            return self.output.get(key, default)
+
+    def keys(self) -> list:
+        if isinstance(self.output, dict):
+            return self.output.keys()
+        elif self.output and isinstance(self.output, (list, tuple)):
+            return self.output[0].keys()
+        else:
+            raise TypeError("output attribute is not a valid type for keys method.")
 
 
 def get_multiline_input(prompt: str = None, print_func: callable = print,
@@ -48,114 +144,109 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
 
 
 class Session:
-    def __init__(self, central: ArubaCentralBase = None) -> None:
+    def __init__(self, central: ArubaCentralBase = None, aio_session: aiohttp.ClientSession = None) -> None:
         self.central = central
+        self._aio_session = aio_session
+        self.headers = DEFAULT_HEADERS
+        self.headers["authorization"] = f"Bearer {central.central_info['token']['access_token']}"
+        self.ssl = central.ssl_verify
 
-    def clean_response(self):
-        _keys = [k for k in constants.STRIP_KEYS if k in self.output]
-        if len(_keys) == 1:
-            return self.output[_keys[0]]
-        elif _keys:
-            print(f"More wrapping keys than expected from return {_keys}")
-        return self.output
+    @property
+    def aio_session(self):
+        return self._aio_session if self._aio_session and not self._aio_session.closed else aiohttp.ClientSession()
 
-    def api_call(self, url: str = '', *args: Any, callback: callable = None,
-                 callback_kwargs: Any = {}, **kwargs: Any) -> bool:
+    @aio_session.setter
+    def aio_session(self, session: aiohttp.ClientSession):
+        self._aio_session = session
+
+    async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
+                            method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
+        central = self.central
+        resp, spin = None, None
+        _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
+        spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+        for _ in range(0, 2):
+            if _ > 0:
+                spin_txt_data += f" retry {_}"
+
+            log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
+                      f"\taccess token: {central.central_info.get('token', {}).get('access_token', {})}\n"
+                      f"\trefresh token: {central.central_info.get('token', {}).get('refresh_token', {})}"
+                      )
+
+            try:
+                with Halo(spin_txt_data) as spin:
+                    _start = time.time()
+                    headers = self.headers if not headers else {**self.headers, **headers}
+                    resp = await self.aio_session.request(method=method, url=url, params=params, data=data, json=json_data,
+                                                          headers=headers, ssl=self.ssl, **kwargs)
+
+                    elapsed = time.time() - _start
+
+                    try:
+                        output = await resp.json()
+                        output = cleaner.strip_outer_keys(output)
+                    except (json.decoder.JSONDecodeError, ContentTypeError):
+                        output = await resp.text()
+
+                resp = Response(resp, output=output, elapsed=elapsed)
+            except Exception as e:
+                resp = Response(error=str(e), url=url)
+                _ += 1
+
+            fail_msg = f"{spin.text}\n  {resp.output}"
+            if not resp:
+                spin.fail(fail_msg)
+                if "invalid_token" in resp.output:
+                    self.refresh_token()
+                else:
+                    log.error(f"API [{method}] {url} Error Returned: {resp.error}")
+            else:
+                spin.succeed()
+                break
+
+        return resp
+
+    async def api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
+                       method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
+                       callback_kwargs: Any = {}, **kwargs: Any) -> Response:
 
         if kwargs.get("params", {}).get("limit") and config.limit:
             log.info(f'paging limit being overriden by config: {kwargs.get("params", {}).get("limit")} --> {config.limit}')
             kwargs["params"]["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
 
-        output = None
+        # Output pagination loop
+        paged_output = None
         while True:
-            try:
-                # -- // Attempt API Call \\ --
-                r = self._api_call(url, *args, **kwargs)
+            # -- // Attempt API Call \\ --
+            r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
+                                         params=params, **kwargs)
 
-                self._response = r
-                self.ok = r.ok
-                self.status_code = r.status_code
-
-                if "requests.models.Response" in str(r.__class__):
-                    log.info(f"[{r.reason}] {r.url} Elapsed: {r.elapsed}")
-                else:
-                    log.warning("DEV Note: Response wrapper being used for something other than request")
-
-                try:
-                    self.output = r.json()
-                    self.output = self.clean_response()
-                except json.decoder.JSONDecodeError:
-                    self.output = r.text
-
-                self.error = r.reason
-            except Exception as e:
-                self.ok = False
-                self.error = f"Session.api_call() Exception occurred: {e.__class__.__name__}\n\t{e}"
-                self.output = e
-                self.status_code = 418
-
-            if not self.ok:
-                log.error(f"API Call ({self.url}) Returned Failure ({self.status_code})\n\t"
-                          f"output: {self.output}\n\terror: {self.error}")
+            if not r.ok:
                 break
 
             # data cleaner methods to strip any useless columns, change key names, etc.
             elif callback is not None:
-                self.output = callback(self.output, **callback_kwargs)
+                r.output = callback(r.output, **callback_kwargs)
 
             # -- // paging \\ --
-            if not output:
-                output = self.output
+            if not paged_output:
+                paged_output = r.output
             else:
-                if isinstance(self.output, dict):
-                    output = {**output, **self.output}
+                if isinstance(r.output, dict):
+                    paged_output = {**paged_output, **r.output}
                 else:
-                    output += self.output
+                    paged_output += r.output
 
             _limit = kwargs.get("params", {}).get("limit", 0)
             _offset = kwargs.get("params", {}).get("offset", 0)
-            if kwargs.get("params", {}).get("limit") and len(self.output) == _limit:
+            if kwargs.get("params", {}).get("limit") and len(r.output) == _limit:
                 kwargs["params"]["offset"] = _offset + _limit
             else:
-                self.output = output
+                r.output = paged_output
                 break
 
-        return self.ok
-
-    def _api_call(self, url: str, *args, **kwargs):
-        # spinner = Spinner()
-        central = self.central
-        resp, spin = None, None
-        _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
-        spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
-
-        for _ in range(0, 2):
-            if _ > 0:
-                spin_txt_data += f" retry {_}"
-            try:
-                log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
-                          f"\taccess token: {central.central_info.get('token', {}).get('access_token', {})}\n"
-                          f"\trefresh token: {central.central_info.get('token', {}).get('refresh_token', {})}"
-                          )
-
-                with Halo(spin_txt_data) as spin:
-                    resp = central.requestUrl(url, *args, **kwargs)
-
-                # resp = spinner(f"{spin_txt_data}", central.requestUrl, url, *args, **kwargs)
-                fail_msg = f"{spin.text}\n  {resp.json().get('error_description', resp.text)}"
-
-                if resp.status_code == 401 and "invalid_token" in resp.text:
-                    spin.fail(fail_msg)
-                    self.refresh_token()
-                else:
-                    spin.succeed() if resp.ok else spin.fail(fail_msg)
-                    break
-            except Exception as e:
-                log.error(f"_API Call{_data_msg}{e.__class__.__name__} {e}")
-                spin.fail(f"{spin_txt_data}\n  {e}")
-                _ += 1
-
-        return resp
+        return r
 
     def _refresh_token(self, token_data: Union[dict, List[dict]] = []) -> bool:
         central = self.central
@@ -176,7 +267,12 @@ class Session:
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
-        spin.succeed() if token else spin.fail()
+
+        if token:
+            self.headers["authorization"] = f"Bearer {self.central.central_info['token']['access_token']}"
+            spin.succeed()
+        else:
+            spin.fail()
 
         return token is not None
 
@@ -234,77 +330,3 @@ class Session:
             central.handleTokenExpiry()
 
         return token_data
-
-
-class Response(Session):
-    '''wrapper for requests.response object
-
-    Assigns commonly evaluated attributes regardless of success
-    Otherwise resp.ok  and bool(resp) will always be assigned and will be True or False
-    '''
-    def __init__(self, central: ArubaCentralBase = None, url: str = '', *args: Any, callback: callable = None,
-                 callback_kwargs: Any = {}, ok: bool = False, error: str = '', output: Any = {},
-                 status_code: int = 418, **kwargs: Any):
-        self.url = url
-        self._response = None
-        self.ok = ok
-        self.error = error
-        self.status_code = status_code
-        self.output = output
-        if output:  # used to create consistent Response object without API call (data already collected from cache)
-            self.output = output
-            self.ok = True
-            self.error = "OK"
-            self.status_code = 299
-        else:
-            super().__init__(central)
-
-            if central is not None:
-                if args:  # TODO determining if I've passed any additional args now that url was specified
-                    log.warning(f"Developer Note args exist {args}")
-                self.api_call(url, *args, callback=callback, callback_kwargs=callback_kwargs, **kwargs)
-
-    def __bool__(self):
-        return self.ok
-
-    def __repr__(self):
-        f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
-
-    def __str__(self):
-        return str(self.output) if self.output else self.error
-
-    def __setitem__(self, name: str, value: Any) -> None:
-        if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
-            self.output[name] = value
-
-    def __getitem__(self, key):
-        return self.output[key]
-
-    def __getattr__(self, name: str) -> Any:
-        # print(f"hit {name}")
-        if hasattr(self, "output") and self.output:
-            if name in self.output:
-                return self.output[name]
-            else:
-                # TODO can likely remove now that all responses go through cleaner to strip these keys
-                # return from 2nd level of dict if 2nd level value is a dict
-                _keys = [k for k in constants.STRIP_KEYS if k in self.output]
-                if _keys and name in self.output[_keys[0]] and isinstance(self.output[_keys[0]], dict):
-                    return self.output[_keys[0]]
-
-        if hasattr(self._response, name):
-            return getattr(self._response, name)
-
-        raise AttributeError(f"'Response' object has no attribute '{name}'")
-
-    def __iter__(self):
-        for _dict in self.output:
-            for k, v in _dict.items():
-                yield k, v
-
-    def get(self, key, default: Any = None):
-        if isinstance(self.output, dict):
-            return self.output.get(key, default)
-
-    def keys(self):
-        return self.output.keys()
