@@ -121,8 +121,9 @@ class Cache:
 
     async def _check_fresh(self):
         async with ClientSession() as self.session.aio_session:
-            if await self.update_dev_db():  # run first call by itself in case token needs to be refreshed
-                await asyncio.gather(self.update_site_db(), self.update_group_db(), self.update_template_db())
+            # update groups first so template update can use the result, and to trigger token_refresh if necessary
+            if await self.update_group_db():
+                await asyncio.gather(self.update_dev_db(), self.update_site_db(), self.update_template_db())
 
     def check_fresh(self, refresh: bool = False):
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
