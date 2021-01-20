@@ -414,20 +414,29 @@ def do(what: DoArgs = typer.Argument(...),
     if not args1:
         typer.secho("Operation Requires additional Argument: [serial #|name|ip address|mac address]", fg="red")
         typer.echo("Examples:")
-        typer.echo(f"> do {what} nash-idf21-sw1 {'2' if what.startswith('bounce') else ''}")
-        typer.echo(f"> do {what} 10.0.30.5 {'2' if what.startswith('bounce') else ''}")
-        typer.echo(f"> do {what} f40343-a0b1c2 {'2' if what.startswith('bounce') else ''}")
-        typer.echo(f"> do {what} f4:03:43:a0:b1:c2 {'2' if what.startswith('bounce') else ''}")
+        if what.startswith('bounce'):
+            typer.echo(f"> do {what} nash-idf21-sw1 2")
+            typer.echo(f"> do {what} 10.0.30.5 2")
+            typer.echo(f"> do {what} f40343-a0b1c2 2")
+            typer.echo(f"> do {what} f4:03:43:a0:b1:c2 2")
+        elif what.startswith('move'):
+            typer.echo(f"> do {what} nash-idf21-sw1 <Group to Move device to>")
         typer.echo("\nWhen Identifying device by Mac Address most commmon MAC formats are accepted.\n")
         raise typer.Exit(1)
     else:
-        if what.startswith("bounce") and not args2:
-            typer.secho("Operation Requires additional Argument: <port #>", fg="red")
+        if (what.startswith("bounce") or what == "move") and not args2:
+            # TODO need more help for newer options
+            typer.secho("Operation Requires additional Argument: <port #> or <group>", fg="red")
             typer.echo("Example:")
             typer.echo(f"> do {what} {args1} 2")
             raise typer.Exit(1)
 
         cache = Cache(session)
+
+        if what == "move":
+            what = "move_dev_to_group"
+            args2 = cache.get_group_identifier(args2)  # group name
+
         serial = cache.get_dev_identifier(args1)
         kwargs = {
             "serial_num": serial,
@@ -436,12 +445,21 @@ def do(what: DoArgs = typer.Argument(...),
     # -- // do the Command \\ --
     if yes or typer.confirm(typer.style(f"Please Confirm {what} {args1} {args2}", fg="cyan")):
         resp = session.request(getattr(session, what.replace("-", "_")), args2, **kwargs)
-        typer.echo(resp)
+        typer.secho(str(resp), fg="green" if resp else "red")
         if resp.ok:
-            typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
-            # always returns queued on success even if the task is done
-            resp = session.request(session.get_task_status, resp.task_id)
-            typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
+            # typer.echo(f"{typer.style('Success', fg='green')} command Queued.")
+            if resp.get("task_id"):
+                # TODO always returns queued on success even if the task is done. wtf?
+                resp = session.request(session.get_task_status, resp.task_id)
+                typer.secho(str(resp), fg="green" if resp else "red")
+                # typer.secho(f"Task Status: {resp.get('reason', '')}, State: {resp.state}", fg="green" if resp.ok else "red")
+            # -- Don't think this is necessary cache is only used for identifier lookup group being inaccurate ... no impact
+            # -- if it becomes necessary old_group needs to be retrieved prior to initiating move...
+            # elif what.startswith("move"):  # After device moved to new group, update cache for that device
+            #     old_group = cache.DevDB.search(cache.Q.serial == 'CN29FP403H')[-1].get("group")
+            #     typer.secho(f" -- Updating cache for {serial} Group: {old_group} --> {args2} -- ")
+            #     r = cache.DevDB.update({'group': args2}, cache.Q.serial == serial)
+            #     typer.secho("Done", fg="green") if r else typer.secho("Error", fg="red")
 
     else:
         raise typer.Abort()
@@ -570,7 +588,7 @@ def method_test(method: str = typer.Argument(...),
     kwargs = {k[0]: k[1] for k in kwargs}
 
     typer.secho(f"session.{method}({(args)}, {kwargs})", fg="green")
-    resp = asyncio.run(getattr(session, method)(*args, **kwargs))
+    resp = session.request(getattr(session, method), *args, **kwargs)
 
     for k, v in resp.__dict__.items():
         typer.echo(f"{k}: {v}")

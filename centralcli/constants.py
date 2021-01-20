@@ -46,6 +46,10 @@ class DoArgs(str, Enum):
     factory_default = "factory-default"    # Switches only
     write_mem = "write-mem"                # IAP & Switches
     halt = "halt"                          # controllers only
+    move = "move"                          # move device to diff group
+    clone = "clone"                        # clone-add group
+    add = "add"                            # add group
+    delete = "delete"                      # delete a group
 
 
 class TemplateLevel1(str, Enum):
