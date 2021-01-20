@@ -65,9 +65,13 @@ class Response:
         return self.ok
 
     def __repr__(self):
-        f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
+        # f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
+        f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
 
     def __str__(self):
+        if isinstance(self.output, dict):
+            return "\n".join([f"  {k}: {v}" for k, v in self.output.items()])
+
         return str(self.output) if self.output else self.error
 
     def __setitem__(self, name: str, value: Any) -> None:
