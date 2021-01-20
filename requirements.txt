@@ -4,6 +4,7 @@ pycentral
 halo
 typer
 certifi
+cchardet
 chardet
 idna
 PyYAML
