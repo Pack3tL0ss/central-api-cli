@@ -638,7 +638,7 @@ class CentralApi(Session):
                   }
 
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
-        return await self.post(url, payload=payload)
+        return await self.post(url, json_data=payload)
 
     async def get_audit_logs(self, log_id: str = None) -> Response:
         """Get all audit logs or details about a specifc log from Aruba Central
