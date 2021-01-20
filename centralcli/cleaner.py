@@ -85,7 +85,8 @@ def short_value(key: str, value: Any):
     # _unlist(value)
 
     if isinstance(value, (str, int, float)):
-        return short_key(key), _short_value.get(value, value) if key not in _short_value else _short_value[key](value)
+        return short_key(key), _short_value.get(value, value) \
+               if key not in _short_value or not value else _short_value[key](value)
     else:
         return short_key(key), _unlist(value)
 
