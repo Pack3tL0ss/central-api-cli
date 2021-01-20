@@ -32,11 +32,20 @@ def test_do_bounce_interface():
     result = runner.invoke(app, ["do", "bounce-interface", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
-    assert "Success command Queued." in result.stdout
+    assert "state:" in result.stdout
+    assert "task_id:" in result.stdout
 
 
 def test_do_bounce_poe():
     result = runner.invoke(app, ["do", "bounce-poe", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
-    assert "Success command Queued." in result.stdout
+    assert "state:" in result.stdout
+    assert "task_id:" in result.stdout
+
+
+def test_do_move_dev_to_group():
+    result = runner.invoke(app, ["do", "move", "J9773A-80:C1:6E:CD:32:40",
+                           "WadeLab", "-Y", "--debug"])
+    assert result.exit_code == 0
+    assert "Success" in result.stdout
