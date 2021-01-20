@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Union
 from tinydb import TinyDB
 import sys
 import typer
@@ -94,6 +94,26 @@ def eval_resp(resp) -> Any:
                    )
     else:
         return resp.output
+
+
+# TODO combine eval_resp and display_results
+def display_results(data: Union[List[dict], List[str]], tablefmt: str = "simple",
+                    pager=True, outfile: Path = None) -> Union[list, dict]:
+    outdata = utils.output(data, tablefmt)
+    typer.echo_via_pager(outdata) if pager and len(outdata) > tty.rows else typer.echo(outdata)
+
+    # -- // Output to file \\ --
+    if outfile and outdata:
+        if outfile.parent.resolve() == config.base_dir.resolve():
+            config.outdir.mkdir(exist_ok=True)
+            outfile = config.outdir / outfile
+
+        print(
+            typer.style(f"\nWriting output to {outfile.resolve().relative_to(Path.cwd())}... ", fg="cyan"),
+            end=""
+        )
+        outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
+        typer.secho("Done", fg="green")
 
 
 show_help = ["all (devices)", "device[s] (same as 'all' unless followed by device identifier)", "switch[es]", "ap[s]",
@@ -295,6 +315,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     if resp is None:
         print("Developer Message: resp returned NoneType")
 
+    # TODO make this it's own function
     data = eval_resp(resp)
 
     if data:
@@ -560,6 +581,14 @@ def refresh(what: RefreshWhat = typer.Argument(...),
 @app.command()
 def method_test(method: str = typer.Argument(...),
                 kwargs: List[str] = typer.Argument(None),
+                do_json: bool = typer.Option(True, "--json", is_flag=True, help="Output in JSON"),
+                do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+                do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+                do_table: bool = typer.Option(False, "--simple", is_flag=True, help="Output in Table"),
+                do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+                outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+                no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+                update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
                 debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                            callback=debug_callback),
                 account: str = typer.Option("central_info",
@@ -587,11 +616,30 @@ def method_test(method: str = typer.Argument(...),
     kwargs = [k.split("=") for k in kwargs if "=" in k]
     kwargs = {k[0]: k[1] for k in kwargs}
 
-    typer.secho(f"session.{method}({(args)}, {kwargs})", fg="green")
+    typer.secho(f"session.{method}({', '.join(a for a in args)}, "
+                f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})", fg="cyan")
     resp = session.request(getattr(session, method), *args, **kwargs)
 
     for k, v in resp.__dict__.items():
-        typer.echo(f"{k}: {v}")
+        if k != "output":
+            if debug or not k.startswith("_"):
+                typer.echo(f"  {typer.style(k, fg='cyan')}: {v}")
+
+    data = eval_resp(resp)
+
+    if data:
+        if do_yaml is True:
+            tablefmt = "yaml"
+        elif do_csv is True:
+            tablefmt = "csv"
+        elif do_rich is True:
+            tablefmt = "rich"
+        elif do_table is True:
+            tablefmt = "simple"
+        else:
+            tablefmt = "json"
+
+        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.callback()
