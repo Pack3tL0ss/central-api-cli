@@ -1,6 +1,9 @@
 cchardet
+pylibyaml
+pyYAML
 click-spinner
 colorlog
+colorama
 halo
 pendulum
 pycentral
@@ -10,3 +13,4 @@ tabulate
 tinydb
 typer
 aiohttp
+asyncio
