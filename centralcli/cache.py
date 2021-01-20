@@ -128,8 +128,11 @@ class Cache:
     def check_fresh(self, refresh: bool = False):
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
            or time.time() - config.cache_file.stat().st_mtime > 7200:
+            start = time.time()
             typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
             asyncio.run(self._check_fresh())
+            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
+            typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
             # loop = asyncio.get_event_loop()
             # try:
             #     loop.run_until_complete(self._check_fresh())
@@ -137,31 +140,84 @@ class Cache:
             # finally:
             #     loop.close()
 
+    def handle_multi_match(self, match: list, query_str: str = None) -> list:
+        typer.secho(" -- Ambiguos identifier provided.  Please select desired device. --\n", color="cyan")
+        menu = f"{' ':{len(str(len(match)))}}  {'name':29} {'serial':12} {'mac':12} type"
+        menu += f"\n{' ':{len(str(len(match)))}}  {'-' * 29} {'-' * 12} {'-' * 18} -------\n"
+        menu += "\n".join(list(f'{idx + 1}. {m.get("name", "error"):29} {m.get("serial", "error"):12} '
+                               f'{m.get("mac", "error"):18} {m.get("type", "error")}' for idx, m in enumerate(match)))
+        if query_str:
+            menu = menu.replace(query_str, typer.style(query_str, fg='green'))
+            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg='green'))
+        typer.echo(menu)
+        selection = ''
+        valid = [str(idx + 1) for idx, _ in enumerate(match)]
+        try:
+            while selection not in valid:
+                selection = typer.prompt('Select Device')
+                if selection not in valid:
+                    typer.secho(f"Invalid selection {selection}, try again.")
+        except KeyboardInterrupt:
+            raise typer.Abort()
+        finally:
+            return [match.pop(int(selection) - 1)]
+
     # TODO trigger update if no match is found and db wasn't updated recently
     def get_dev_identifier(self,
                            query_str: Union[str, List[str], Tuple[str, ...]],
-                           ret_field: str = "serial") -> Union[str, Tuple]:
+                           dev_type: str = None,
+                           ret_field: str = "serial"
+                           ) -> Union[str, Tuple]:
 
+        # TODO dev_type currently not passed in or handled identifier for show switches would also
+        # try to match APs ...  & (self.Q.type == dev_type)
+        # TODO refactor to single test function usable by all identifier methods 1 search with a more involved test
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
-        match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
-                                  | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
+        match = None
+        for i in range(0, 3):
+            # Try exact match
+            match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
+                                      | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
 
-        # retry with case insensitive name match if no match with original query
-        if not match:
-            match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                                      | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
-                                      | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
+            # retry with case insensitive name match if no match with original query
+            if not match:
+                match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                                          | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                                          | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
+
+            # retry name match swapping - for _ and _ for -
+            if not match:
+                if '-' in query_str:
+                    match = self.DevDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+                elif '_' in query_str:
+                    match = self.DevDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+
+            # Last Chance try to match name if it startswith provided value
+            if not match:
+                match = self.DevDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                                          | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
+                                          | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower())))
+
+            if not match and self.session.get_all_devicesv2 not in self.updated:
+                typer.secho(f"No Match Found for {query_str}, Updating Device Cachce")
+                self.update_dev_db
+            else:
+                break
 
         # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
         if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str)
+
             if ret_field == "type-serial":
                 return match[0].get("type"), match[0].get("serial")
             else:
                 return match[0].get(ret_field)
         else:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
+            raise typer.Abort()
 
     def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "id") -> str:
         if isinstance(query_str, (list, tuple)):
