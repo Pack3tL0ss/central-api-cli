@@ -87,10 +87,10 @@ def bulk_edit(input_file: str = typer.Argument(None)):
             caas.eval_caas_response(resp)
 
 
-def eval_resp(resp) -> Any:
+def eval_resp(resp: Response, pad: int = 0) -> Any:
     if not resp.ok:
-        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"{resp.output.get('error_description', resp.error).replace('Error: ', '')}"
+        typer.echo(f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
+                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
                    )
     else:
         return resp.output
@@ -625,7 +625,7 @@ def method_test(method: str = typer.Argument(...),
             if debug or not k.startswith("_"):
                 typer.echo(f"  {typer.style(k, fg='cyan')}: {v}")
 
-    data = eval_resp(resp)
+    data = eval_resp(resp, pad=2)
 
     if data:
         if do_yaml is True:
@@ -639,6 +639,7 @@ def method_test(method: str = typer.Argument(...),
         else:
             tablefmt = "json"
 
+        typer.echo(f"\n{typer.style('output', fg='cyan')}:")
         display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
