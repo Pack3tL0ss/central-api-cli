@@ -695,6 +695,10 @@ class CentralApi(Session):
         }
         return await self.get(url, params=params)
 
+    async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
+        url = f"/topology_external_api/apNeighbors/{device_serial}"
+        return await self.get(url)
+
     # TODO move to caas.py
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
