@@ -62,7 +62,7 @@ class TemplateLevel1(str, Enum):
 devices = ["switch", "aps", "gateway", "all", "device"]
 
 # wrapping keys from return for some calls that have no value
-STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites"]
+STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites", "neighbors"]
 
 
 class ArgToWhat:
