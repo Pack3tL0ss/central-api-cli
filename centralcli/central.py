@@ -699,6 +699,38 @@ class CentralApi(Session):
         url = f"/topology_external_api/apNeighbors/{device_serial}"
         return await self.get(url)
 
+    async def do_multi_group_snapshot(self, backup_name: str, include_groups: Union[list, List[str]] = None,
+                                      exclude_groups: Union[list, List[str]] = None, do_not_delete: bool = False) -> Response:
+        """"Create new configuration backup for multiple groups."
+
+        Args:
+            backup_name (str): Name of Backup
+            include_groups (Union[list, List[str]], optional): Groups to include in Backup. Defaults to None.
+            exclude_groups (Union[list, List[str]], optional): Groups to Exclude in Backup. Defaults to None.
+            do_not_delete (bool, optional): Flag to represent if the snapshot can be deleted automatically
+                by system when creating new snapshot or not. Defaults to False.
+
+        *Either include_groups or exclude_groups should be provided, but not both.
+
+        Returns:
+            Response: Response Object
+        """
+        url = "/configuration/v1/groups/snapshot/backups"
+        include_groups = utils.listify(include_groups)
+        exclude_groups = utils.listify(exclude_groups)
+        payload = {
+            "backup_name": backup_name,
+            "do_not_delete": do_not_delete,
+            "include_groups": include_groups,
+            "exclude_groups": exclude_groups
+        }
+        payload = self.strip_none(payload)
+        return await self.post(url, json_data=payload)
+
+    async def get_snapshots_by_group(self, group: str):
+        url = f"/configuration/v1/groups/{group}/snapshots"
+        return await self.get(url)
+
     # TODO move to caas.py
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
