@@ -66,7 +66,7 @@ class Response:
 
     def __repr__(self):
         # f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
-        f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
+        return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
 
     def __str__(self):
         if isinstance(self.output, dict):
