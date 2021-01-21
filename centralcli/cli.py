@@ -284,7 +284,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                     typer.echo(msg)
                     resp = session.request(session.get_variablised_template, _args)
         else:  # provided args but no group
-            _args = cache.get_dev_identifier(args)
+            _args = cache.get_dev_identifier(args, retry=False)
             if _args:  # assume arg is device identifier 1st
                 resp = session.request(session.get_variablised_template, _args)
             else:  # next try template names
@@ -293,6 +293,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                     group, tmplt_name = _args[0], _args[1]
                     resp = session.request(session.get_template, group, tmplt_name)
                 else:
+                    # typer.secho(f"No Match Found for {args} in Cachce")
                     raise typer.Exit(1)
 
     elif what == "variables":

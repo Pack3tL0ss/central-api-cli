@@ -166,7 +166,8 @@ class Cache:
     def get_dev_identifier(self,
                            query_str: Union[str, List[str], Tuple[str, ...]],
                            dev_type: str = None,
-                           ret_field: str = "serial"
+                           ret_field: str = "serial",
+                           retry: bool = True
                            ) -> Union[str, Tuple]:
 
         # TODO dev_type currently not passed in or handled identifier for show switches would also
@@ -176,7 +177,7 @@ class Cache:
             query_str = " ".join(query_str)
 
         match = None
-        for i in range(0, 3):
+        for i in range(0, 2 if retry else 1):
             # Try exact match
             match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
                                       | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
@@ -200,10 +201,10 @@ class Cache:
                                           | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
                                           | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower())))
 
-            if not match and self.session.get_all_devicesv2 not in self.updated:
+            if retry and not match and self.session.get_all_devicesv2 not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Device Cachce")
                 self.update_dev_db
-            else:
+            if match:
                 break
 
         # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
@@ -215,7 +216,7 @@ class Cache:
                 return match[0].get("type"), match[0].get("serial")
             else:
                 return match[0].get(ret_field)
-        else:
+        elif retry:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
             raise typer.Abort()
 
