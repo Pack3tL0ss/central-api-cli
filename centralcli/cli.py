@@ -89,9 +89,13 @@ def bulk_edit(input_file: str = typer.Argument(None)):
 
 def eval_resp(resp: Response, pad: int = 0) -> Any:
     if not resp.ok:
-        typer.echo(f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
-                   )
+        msg = f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
+        if isinstance(resp.output, dict):
+            msg += f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
+        else:
+            msg += str(resp.output)
+
+        typer.echo(msg)
     else:
         return resp.output
 
