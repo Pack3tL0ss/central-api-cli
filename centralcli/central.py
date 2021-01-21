@@ -380,29 +380,28 @@ class CentralApi(Session):
 
     async def get_all_devices(self) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
-        _output = []
-        resp = None
-        for dev_type in ["iap", "switch", "gateway"]:
-            params = {"sku_type": dev_type}
-            resp = await self.get(url, params=params)
-            if not resp.ok:
-                break
-            _output = [*_output, *resp.output["devices"]]
+        dev_types = ["iap", "switch", "gateway"]
 
-        if _output:
-            resp.output = _output
+        # loop = asyncio.get_event_loop()
+        tasks = [self.get(url, params={"sku_type": dev_type})
+                 for dev_type in dev_types]
+        _ap, _switch, _gateway = await asyncio.gather(*tasks)
+        # loop.close()
 
-        return resp
+        _ap.output = [*_ap.output, *_switch.output, *_gateway.output]
+        _ap.url = str(_ap.url).replace("sku_type=iap", "sku_type=<3 calls: ap, switch, gw>")
+        return _ap
 
     async def get_all_devicesv2(self, **kwargs) -> Response:  # REVERIFIED
+        dev_types = ["aps", "switches", "gateways"]
         _output = {}
-        resp = None
 
-        for dev_type in ["aps", "switches", "gateways"]:
-            resp = await self.get_devices(dev_type, **kwargs)
-            if not resp.ok:
-                break
-            _output[dev_type] = resp.output  # [dict, ...]
+        tasks = [self.get_devices(dev_type, **kwargs)
+                 for dev_type in dev_types]
+        ap, sw, gw = await asyncio.gather(*tasks)
+        resp = ap
+        vals = [ap.output, sw.output, gw.output]
+        _output = {k: v for k, v in zip(dev_types, vals)}
 
         if _output:
             # return just the keys common across all device types
