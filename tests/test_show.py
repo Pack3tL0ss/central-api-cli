@@ -213,3 +213,10 @@ def test_show_template_by_name():
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
+
+
+# def test_show_snapshots_by_group():
+#     result = runner.invoke(app, ["show", "snapshots", TEST_DEVICES["switch"]["group"]])
+#     assert result.exit_code == 0
+#     assert "name" in result.stdout
+#     assert "created" in result.stdout
