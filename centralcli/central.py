@@ -68,14 +68,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
     ssl_verify = config.get("ssl_verify", True)
 
-    kwargs = {
-        "central_info": central_info,
-        "token_store": token_store,
-        "ssl_verify": ssl_verify,
-        "logger": logger
-    }
-
-    conn = ArubaCentralBase(**kwargs)
+    conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=ssl_verify)
     token_cache = Path(tokenLocalStoreUtil(token_store,
                                            central_info["customer_id"],
                                            central_info["client_id"]))
@@ -91,6 +84,10 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
                 conn.central_info["token"] = cache_token
             else:
                 conn.central_info["retry_token"] = cache_token
+
+            # Compare tokens and remove retry token if they are the same.  Rare scenario
+            if conn.central_info["retry_token"]["refresh_token"] == conn.central_info["token"]["refresh_token"]:
+                del conn.central_info["retry_token"]
     else:
         if not conn.storeToken(conn.central_info.get("token")):
             log.warning("Failed to Store Token and token cache doesn't exist yet.", show=True)
@@ -401,7 +398,7 @@ class CentralApi(Session):
         ap, sw, gw = await asyncio.gather(*tasks)
         resp = ap
         vals = [ap.output, sw.output, gw.output]
-        _output = {k: v for k, v in zip(dev_types, vals)}
+        _output = {k: utils.listify(v) for k, v in zip(dev_types, vals) if v}
 
         if _output:
             # return just the keys common across all device types

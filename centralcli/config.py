@@ -23,11 +23,12 @@ class Config:
                 break
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
-        self.cache_file = self.dir / ".cache" / "db.json"
-        self.cache_dir = self.cache_file.parent
+        self.cache_dir = self.dir / ".cache"
+        self.default_cache_file = self.cache_dir / "db.json"
         self.data = self.get_config_data(self.file) or {}
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
+        self.account = None  # Updated by cli account callback
 
     def __bool__(self):
         return len(self.data) > 0
@@ -40,8 +41,12 @@ class Config:
 
     # not used but may be handy
     @property
-    def tokens(self, account: str = "central_info"):
-        return self.data.get(account, {}).get("token", {})
+    def tokens(self):
+        return self.data.get(self.account, {}).get("token", {})
+
+    @property
+    def cache_file(self):
+        return self.default_cache_file if self.account == "central_info" else self.dir / ".cache" / f"{self.account}.json"
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)

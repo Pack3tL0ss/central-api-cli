@@ -10,18 +10,25 @@ import typer
 
 
 class Cache:
-    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False):
+    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
         self.updated: list = []
         self.session = session
         self.DevDB = TinyDB(config.cache_file)
         self.SiteDB = self.DevDB.table("sites")
         self.GroupDB = self.DevDB.table("groups")
         self.TemplateDB = self.DevDB.table("templates")
+        self.MetaDB = self.DevDB.table("_metadata")
         self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
         self.Q = Query()
         if data:
             self.insert(data)
         if session:
+            self.check_fresh(refresh)
+        print("cache __init__")
+
+    def __call__(self, refresh=False) -> None:
+        print("cache __call__")
+        if refresh:
             self.check_fresh(refresh)
 
     def __iter__(self) -> list:
@@ -118,6 +125,10 @@ class Cache:
             self.TemplateDB.truncate()
             # print(f" template db Done: {time.time() - start}")
             return self.TemplateDB.insert_multiple(resp.output)
+
+    def update_meta_db(self):
+        self.MetaDB.truncate()
+        return self.MetaDB.insert({"prev_account": config.account, "forget": time.time() + 7200})
 
     async def _check_fresh(self):
         async with ClientSession() as self.session.aio_session:
