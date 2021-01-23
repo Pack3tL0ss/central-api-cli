@@ -41,7 +41,15 @@ def account_name_callback(ctx: typer.Context, account: str):
     if ctx.resilient_parsing:  # tab completion, return without validating
         return account
 
-    if account not in config.data:
+    if account in config.data:
+        config.account = account
+        global session
+        session = CentralApi(account)
+        global cache
+        cache = Cache(session)
+        cache.update_meta_db()
+        return account
+    else:
         strip_keys = ['central_info', 'ssl_verify', 'token_store']
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                    f"The specified account: '{account}' is not defined in the config @\n"
@@ -65,10 +73,6 @@ def account_name_callback(ctx: typer.Context, account: str):
                        f"--account parameter or ARUBACLI_ACCOUNT environment variable.")
 
         raise typer.Exit(code=1)
-
-    global session
-    session = CentralApi(account)
-    return account
 
 
 def debug_callback(debug: bool):
@@ -113,7 +117,7 @@ def display_results(data: Union[List[dict], List[str]], tablefmt: str = "simple"
             outfile = config.outdir / outfile
 
         print(
-            typer.style(f"\nWriting output to {outfile.resolve().relative_to(Path.cwd())}... ", fg="cyan"),
+            typer.style(f"\nWriting output to {outfile}... ", fg="cyan"),
             end=""
         )
         outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
@@ -165,7 +169,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     what = arg_to_what.get(what)
 
     # load cache to support friendly identifiers
-    cache = Cache(session, refresh=update_cache)
+    # cache = Cache(session, refresh=update_cache)
+    cache(refresh=update_cache)
 
     if group:
         group = cache.get_group_identifier(group)
@@ -345,14 +350,14 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                 outfile = config.outdir / outfile
 
             print(
-                typer.style(f"\nWriting output to {outfile.resolve().relative_to(Path.cwd())}... ", fg="cyan"),
+                typer.style(f"\nWriting output to {outfile}... ", fg="cyan"),
                 end=""
             )
             outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
             typer.secho("Done", fg="green")
-            # typer.launch doesn't appear to work on wsl tries to use ps to launch
+            # typer.launch doesn't appear to work on wsl tries to use ps to launch using linux dir delim
             # typer.echo("Opening config directory")
-            # typer.launch(str(outfile), locate=True)
+            # typer.launch(str(outfile.parent), locate=True)
 
     # else:
     #     typer.echo("No Data Returned")
@@ -383,7 +388,7 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
         if what == "variable":
             if variable and value and device:
                 # ses = utils.spinner(SPIN_TXT_AUTH, CentralApi)
-                cache = Cache(session)
+                # cache = Cache(session)
                 device = cache.get_dev_identifier(device)
                 payload = {"variables": {variable: value}}
                 _resp = session.update_variables(device, payload)
@@ -457,7 +462,7 @@ def do(what: DoArgs = typer.Argument(...),
             typer.echo(f"> do {what} {args1} 2")
             raise typer.Exit(1)
 
-        cache = Cache(session)
+        # cache = Cache(session)
 
         if what == "move":
             what = "move_dev_to_group"
