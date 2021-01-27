@@ -368,7 +368,7 @@ class CentralApi(Session):
                 return resp
             else:
                 all_templates += resp.output
-        return Response(ok=True, output=all_templates, error="OK")
+        return Response(ok=True, output=all_templates)
 
     async def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
         url = "/platform/orders/v1/skus"

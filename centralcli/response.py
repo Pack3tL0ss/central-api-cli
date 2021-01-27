@@ -41,6 +41,7 @@ class Response:
                  error: str = None, output: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
         self._response = response
         self.output = output
+        self.ok = ok
         if response:
             self.ok = response.ok
             self.url = response.url
@@ -48,7 +49,7 @@ class Response:
             self.status = response.status
             log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
         else:
-            if output:
+            if output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
                 self.ok = ok or True
                 self.error = error or "OK"
             elif error:
