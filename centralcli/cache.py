@@ -24,10 +24,8 @@ class Cache:
             self.insert(data)
         if session:
             self.check_fresh(refresh)
-        print("cache __init__")
 
     def __call__(self, refresh=False) -> None:
-        print("cache __call__")
         if refresh:
             self.check_fresh(refresh)
 
