@@ -138,6 +138,14 @@ class CentralApi(Session):
                                    json_data=json_data, params=params, headers=headers, **kwargs)
         # return Response(self.central, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
 
+    async def put(self, url, params: dict = {}, payload: dict = None,
+                  json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
+
+        f_url = self.central.central_info["base_url"] + url
+        params = self.strip_none(params)
+        return await self.api_call(f_url, method="PUT", data=payload,
+                                   json_data=json_data, params=params, headers=headers, **kwargs)
+
     async def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
@@ -636,22 +644,22 @@ class CentralApi(Session):
         # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
         return await self.post(url, json_data=payload)
 
-    async def get_audit_logs(self, log_id: str = None) -> Response:
-        """Get all audit logs or details about a specifc log from Aruba Central
+    # async def get_audit_logs(self, log_id: str = None) -> Response:
+    #     """Get all audit logs or details about a specifc log from Aruba Central
 
-        Args:
-            log_id (str, optional): The id of the log to return details for. Defaults to None.
+    #     Args:
+    #         log_id (str, optional): The id of the log to return details for. Defaults to None.
 
-        Returns:
-            Response: Response object
-        """
-        # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
-        url = "/platform/auditlogs/v1/logs"
-        params = {"offset": 0, "limit": 100}
-        if log_id:
-            url = f"{url}/{log_id}"
-            params = None
-        return await self.get(url, params=params)
+    #     Returns:
+    #         Response: Response object
+    #     """
+    #     # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
+    #     url = "/platform/auditlogs/v1/logs"
+    #     params = {"offset": 0, "limit": 100}
+    #     if log_id:
+    #         url = f"{url}/{log_id}"
+    #         params = None
+    #     return await self.get(url, params=params)
 
     async def get_ts_commands(self, dev_type: str) -> Response:
         # iap, mas, switch, controller
@@ -726,6 +734,78 @@ class CentralApi(Session):
     async def get_snapshots_by_group(self, group: str):
         url = f"/configuration/v1/groups/{group}/snapshots"
         return await self.get(url)
+
+    async def get_mc_tunnels(self, serial: str, timerange: str, limit: int = 100, offset: int = 0) -> Response:
+        """Mobility Controllers Uplink Tunnel Details.
+
+        Args:
+            serial (str): Serial number of mobility controller to be queried
+            timerange (str): Time range for tunnel stats information.
+                             3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            offset (int, optional): Pagination offset Defaults to 0.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/mobility_controllers/{serial}/tunnels"
+
+        params = {
+            'timerange': timerange
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_audit_logs(self, username: str = None, start_time: int = None,
+                             end_time: int = None, description: str = None,
+                             target: str = None, classification: str = None,
+                             customer_name: str = None, ip_address: str = None,
+                             app_id: str = None, log_id: str = None,
+                             offset: int = 0, limit: int = 100) -> Response:
+        """Get all audit logs.
+
+        Args:
+            username (str, optional): Filter audit logs by User Name
+            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
+                logs should be provided in epoch seconds
+            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
+                should be provided in epoch seconds
+            description (str, optional): Filter audit logs by Description
+            target (str, optional): Filter audit logs by target (serial number).
+            classification (str, optional): Filter audit logs by Classification
+            customer_name (str, optional): Filter audit logs by Customer Name
+            ip_address (str, optional): Filter audit logs by IP Address
+            app_id (str, optional): Filter audit logs by app_id
+            log_id (str, optional): The id of the log to return details for. Defaults to None.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination Defaults to 0.
+            limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
+        url = "/platform/auditlogs/v1/logs"
+
+        params = {
+            'username': username,
+            'start_time': start_time,
+            'end_time': end_time,
+            'description': description,
+            'target': target,
+            'classification': classification,
+            'customer_name': customer_name,
+            'ip_address': ip_address,
+            'app_id': app_id,
+            'offset': offset,
+            'limit': limit
+        }
+
+        if log_id:
+            url = f"{url}/{log_id}"
+            params = None
+
+        return await self.get(url, params=params, callback=cleaner.get_audit_logs)
 
     # TODO move to caas.py
     async def caasapi(self, group_dev: str, cli_cmds: list = None):

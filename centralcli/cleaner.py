@@ -20,6 +20,10 @@ def _time_diff_words(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
+def _log_timestamp(epoch: float) -> str:
+    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
+
+
 _NO_FAN = [
     "Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"
 ]
@@ -31,7 +35,8 @@ _short_value = {
     "last_connection_time": _time_diff_words,
     "uptime": _duration_words,
     "updated_at": _time_diff_words,
-    "last_modified": _convert_epoch
+    "last_modified": _convert_epoch,
+    "ts": _log_timestamp
 }
 
 _short_key = {
@@ -41,12 +46,17 @@ _short_key = {
     "group_name": "group",
     "public_ip_address": "public ip",
     "ip_address": "ip",
+    "ip_addr": "ip",
     "ip_address_v6": "ip (v6)",
     "macaddr": "mac",
     "uplink_ports": "uplinks",
     "total_clients": "clients",
     "updated_at": "updated",
-    "cpu_utilization": "cpu %"
+    "cpu_utilization": "cpu %",
+    "app_name": "app",
+    "device_type": "type",
+    "classification": "class",
+    "ts": "time"
 }
 
 
@@ -122,6 +132,15 @@ def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
          for inner in data
          ]
         )
+
+
+def get_audit_logs(data: List[dict]) -> List[dict]:
+    field_order = [
+        "ts", "app_name", "classification", "device_type", "description",
+        "target", "ip_addr", "user", "id", "has_details"
+        ]
+    data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
+    return data
 
 
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:

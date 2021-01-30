@@ -29,6 +29,8 @@ class ShowArgs(str, Enum):
     variables = "variables"
     certs = "certs"
     cache = "cache"
+    log = "log"
+    logs = "logs"
 
 
 class RefreshWhat(str, Enum):
@@ -62,7 +64,7 @@ class TemplateLevel1(str, Enum):
 devices = ["switch", "aps", "gateway", "all", "device"]
 
 # wrapping keys from return for some calls that have no value
-STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites", "neighbors"]
+STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites", "neighbors", "audit_logs"]
 
 
 class ArgToWhat:
