@@ -320,6 +320,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
     elif what == "cache":
         do_json = True
         resp = Response(output=cache.all)
+    elif what in ["log", "logs"]:
+        # log_id as arg optional for details on specific log
+        resp = session.request(session.get_audit_logs, args)
 
     # TODO remove after verifying we never return a NoneType
     if resp is None:
