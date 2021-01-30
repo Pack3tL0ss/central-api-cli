@@ -216,9 +216,9 @@ class Session:
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, **kwargs: Any) -> Response:
 
-        if kwargs.get("params", {}).get("limit") and config.limit:
-            log.info(f'paging limit being overriden by config: {kwargs.get("params", {}).get("limit")} --> {config.limit}')
-            kwargs["params"]["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+        if params.get("limit") and config.limit:
+            log.info(f'paging limit being overriden by config: {params.get("limit")} --> {config.limit}')
+            params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
 
         # Output pagination loop
         paged_output = None
@@ -243,10 +243,10 @@ class Session:
                 else:
                     paged_output += r.output
 
-            _limit = kwargs.get("params", {}).get("limit", 0)
-            _offset = kwargs.get("params", {}).get("offset", 0)
-            if kwargs.get("params", {}).get("limit") and len(r.output) == _limit:
-                kwargs["params"]["offset"] = _offset + _limit
+            _limit = params.get("limit", 0)
+            _offset = params.get("offset", 0)
+            if params.get("limit") and len(r.output) == _limit:
+                params["offset"] = _offset + _limit
             else:
                 r.output = paged_output
                 break
