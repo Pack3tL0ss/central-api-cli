@@ -8,7 +8,7 @@ import string
 import sys
 import urllib.parse
 from pprint import pprint
-from typing import Any, List, Union
+from typing import Any, Dict, List, Union
 import typer
 import logging
 
@@ -167,6 +167,7 @@ class Utils:
             else host
         )
 
+    # TODO depricated will remove.  Spinner moved to Response
     @staticmethod
     def spinner(spin_txt: str, function: callable, url: str = None, *args, name: str = None,
                 spinner: str = "dots", debug: bool = False, **kwargs) -> Any:
@@ -216,6 +217,7 @@ class Utils:
 
         return r
 
+    # TODO depricated validate not used, moved to Response
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
                             return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
@@ -285,8 +287,40 @@ class Utils:
         color = "green" if value.lower() == "up" else "red"
         return value if key != "status" else typer.style(value, fg=color)
 
-    def output(self, outdata: Union[list, dict], tablefmt: str = None) -> str:
+    def output(self, outdata: Union[List[str], Dict[str, Any]], tablefmt: str = None, title: str = None) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
+        def _do_subtables(data: list, tablefmt: str = "rich"):
+            out = []
+            for inner_dict in data:
+                inner_list = []
+                for key, val in inner_dict.items():
+                    if not isinstance(val, (list, dict, tuple)):
+                        if val is None:
+                            inner_list.append('')
+                        elif isinstance(val, str) and val.lower() in ['up', 'down']:
+                            if val.lower() == 'up':
+                                inner_list.append(typer.style('Up', fg='green'))
+                            else:
+                                inner_list.append(typer.style('Down', fg="red"))
+                        else:
+                            inner_list.append(str(val))
+                    else:
+                        val = self.listify(val)
+                        if tablefmt == "rich":
+                            inner_table = Table(*(k for k in val[0].keys()),
+                                                show_header=True,
+                                                title=key,
+                                                show_edge=False,
+                                                header_style="bold cyan"
+                                                )
+                            _ = [inner_table.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
+                        else:
+                            inner_table = tabulate(val, headers="keys", tablefmt=tablefmt)
+
+                        inner_list.append(inner_table)
+                out.append(inner_list)
+            return out
+
         raw_data = outdata
         _lexer = table_data = None
 
@@ -313,8 +347,12 @@ class Utils:
         elif tablefmt == "rich":  # TODO Temporary Testing ***
             from rich.console import Console
             from rich.table import Table
-            console = Console()
-            table = Table(show_header=True, header_style="bold magenta")
+            # from rich.text import Text
+            console = Console(record=True)
+
+            if title:
+                # title = console.rule('[b cyan]Access Points') if title == 'aps' else console.rule(f'[b cyan]{title.title()}')
+                title = 'Access Points' if title == 'aps' else title.title()
 
             customer_id, customer_name = "", ""
             outdata = self.listify(outdata)
@@ -325,25 +363,19 @@ class Utils:
                 customer_name = outdata[0].get("customer_name", "")
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
 
-                def do_subtables(data):
-                    out = []
-                    for val in data:
-                        if not isinstance(val, (list, dict, tuple)):
-                            out.append(str(val))
-                        else:
-                            val = self.listify(val)
-                            subtable = Table(show_header=True, header_style="bold cyan")
-                            _ = [subtable.add_column(k) for k in val[0].keys()]
-                            _ = [subtable.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
-                            out.append(subtable)
-                    return out
+                table = Table(
+                    *outdata[0].keys(),
+                    show_edge=False,
+                    show_header=True,
+                    title=title,
+                    header_style="bold magenta"
+                )
+                formatted = _do_subtables(outdata)
+                _ = [table.add_row(*v) for v in formatted]
 
-                _ = [table.add_column(k) for k in outdata[0].keys()]
-                values = [do_subtables(list(d.values())) for d in outdata]
-                _ = [table.add_row(*v) for v in values]
-                console.print(table)
+                table_data = console.print(table)
 
-                table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
+                # table_data = tabulate(outdata, headers="keys", tablefmt="simple")
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
@@ -365,12 +397,19 @@ class Utils:
                 customer_id = outdata[0].get("customer_id", "")
                 customer_name = outdata[0].get("customer_name", "")
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
+                raw_data = outdata
+
+                values = _do_subtables(outdata, tablefmt=tablefmt)
+                outdata = [dict((k, v) for k, v in zip(outdata[0].keys(), val)) for val in values]
 
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
+                td = table_data.splitlines(keepends=True)
+                table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
-                raw_data = table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+                table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+                raw_data = f"{data_header}{raw_data}" if customer_id else f"{raw_data}"
 
             # -- // List[str, ...] \\ --
             elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:

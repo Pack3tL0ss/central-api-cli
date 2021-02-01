@@ -36,7 +36,8 @@ _short_value = {
     "uptime": _duration_words,
     "updated_at": _time_diff_words,
     "last_modified": _convert_epoch,
-    "ts": _log_timestamp
+    "ts": _log_timestamp,
+    "Unknown": "?"
 }
 
 _short_key = {
@@ -56,7 +57,8 @@ _short_key = {
     "app_name": "app",
     "device_type": "type",
     "classification": "class",
-    "ts": "time"
+    "ts": "time",
+    "ap_deployment_mode": "mode"
 }
 
 
@@ -80,23 +82,38 @@ def pre_clean(data: dict) -> dict:
 def _unlist(data: Any):
     if isinstance(data, list):
         if len(data) == 1:
-            data = data[0]
+            data = data[0] if not isinstance(data[0], str) else data[0].replace('_', ' ')
         elif not data:
             data = ''
 
     return data
 
 
+def _check_inner_dict(data: Any) -> Any:
+    if isinstance(data, list):
+        if all([isinstance(id, dict) for id in data]):
+            return _unlist(
+                        [
+                            dict(short_value(vk, vv) for vk, vv in pre_clean(inner).items()
+                                 if vk != "index")
+                            for inner in data
+                        ]
+                    )
+    return data
+
+
 def short_key(key: str) -> str:
-    return _short_key.get(key, key)
+    return _short_key.get(key, key.replace('_', ' '))
 
 
 def short_value(key: str, value: Any):
     # _unlist(value)
 
     if isinstance(value, (str, int, float)):
-        return short_key(key), _short_value.get(value, value) \
-               if key not in _short_value or not value else _short_value[key](value)
+        return (
+            short_key(key), _short_value.get(value, value)
+            if key not in _short_value or not value else _short_value[key](value)
+        )
     else:
         return short_key(key), _unlist(value)
 
@@ -126,8 +143,37 @@ def get_all_clients(data: List[dict]) -> list:
 
 def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
+    # gather all keys from all dicts in list each dict could potentially be a diff size
+    all_keys = list(set([ik for k in data for ik in k.keys()]))
+    to_front = [
+        'name',
+        'ip_address',
+        'subnet_mask',
+        'serial',
+        'macaddr',
+        'ap_deployment_mode',
+        'model',
+        'group_name',
+        'site'
+    ]
+    to_front = [i for i in to_front if i in all_keys]
+    _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
+    data = [{k: id.get(k) for k in all_keys} for id in data]
+
+    # strip out any columns that have no value in any row
+    no_val: List[List[int]] = [
+        [
+            idx for idx, v in enumerate(id.values()) if not isinstance(v, bool) and not v or (
+                isinstance(v, str) and v == "Unknown"
+            )
+        ] for id in data
+    ]
+    common_idx: set = set.intersection(*map(set, no_val))
+    data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+
+    # send all key/value pairs through formatters and return
     return _unlist(
-        [dict(short_value(k, v) for k, v in pre_clean(inner).items()
+        [dict(short_value(k, _check_inner_dict(v)) for k, v in pre_clean(inner).items()
               if "id" not in k[-3:] and k != "mac_range")
          for inner in data
          ]
