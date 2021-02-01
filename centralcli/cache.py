@@ -57,6 +57,10 @@ class Cache:
     def all(self) -> dict:
         return {t.name: getattr(self, t.name) for t in self._tables}
 
+    @property
+    def prev_acct(self) -> str:
+        return self.MetaDB.get(doc_id=1).get("prev_account")
+
     # TODO deprecated should be able to remove this method
     def insert(self, data: Union[List[dict, ], dict]) -> bool:
         _data = data
@@ -186,7 +190,7 @@ class Cache:
             query_str = " ".join(query_str)
 
         match = None
-        for i in range(0, 2 if retry else 1):
+        for _ in range(0, 2 if retry else 1):
             # Try exact match
             match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
                                       | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))

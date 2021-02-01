@@ -25,6 +25,7 @@ class Config:
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
+        self.sticky_account_file = self.cache_dir / "last_account"
         self.data = self.get_config_data(self.file) or {}
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)

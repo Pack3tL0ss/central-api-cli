@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any, List, Union
 from tinydb import TinyDB
@@ -36,10 +37,97 @@ tty = utils.tty
 app = typer.Typer()
 
 
+class AcctMsg:
+    def __init__(self, account: str = None, msg: str = None) -> None:
+        self.account = account
+        self.msg = msg
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        if self.msg and hasattr(self, self.msg):
+            return getattr(self, self.msg)
+        else:
+            return self.initial
+
+    @property
+    def initial(self):
+        acct_clr = f"{typer.style(self.account, fg='cyan')}"
+        return (
+            f"{typer.style(f'Using Account: {acct_clr}.', fg='magenta')}  "
+            f"{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
+            f"\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
+            f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}"
+        )
+
+    @property
+    def previous(self):
+        return (
+            f"{typer.style(f'Using previously specified account: ', fg='magenta')}"
+            f"{typer.style(self.account, fg='cyan', blink=True)}.  "
+            f"\n{typer.style('Use `--account <account name>` to switch to another account.', fg='magenta')}"
+            f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}"
+        )
+
+    @property
+    @staticmethod
+    def forgot():
+        typer.style(
+            "Forget option set for account, and expiration has passed.  reverting to default account",
+            fg="magenta"
+        )
+
+    @property
+    @staticmethod
+    def will_forget():
+        return typer.style(
+            f'\nForget options is configured, will revert to default account '
+            f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
+            f'After last command.',
+            fg="magenta"
+        )
+
+    @property
+    def previous_will_forget(self):
+        return f'{self.previous}\n\n{self.will_forget}'
+
+
+def default_callback(ctx: typer.Context, default: bool):
+    if ctx.resilient_parsing:  # tab completion, return without validating
+        return
+
+    if default and config.sticky_account_file.is_file():
+        typer.secho('Using default central account', fg="cyan")
+        config.sticky_account_file.unlink()
+
+
 # TODO ?? make more sense to have this return the ArubaCentralBase object ??
 def account_name_callback(ctx: typer.Context, account: str):
     if ctx.resilient_parsing:  # tab completion, return without validating
         return account
+
+    # -- // sticky last account caching and messaging \\ --
+    if account == "central_info":
+        if config.sticky_account_file.is_file():
+            last_account, last_cmd_ts = config.sticky_account_file.read_text().split('\n')
+            last_cmd_ts = float(last_cmd_ts)
+
+            # delete last_account file if they've configured forget_account_after
+            if config.forget_account_after:
+                if time.time() > last_cmd_ts + (config.forget_account_after * 60):
+                    config.sticky_account_file.unlink(missing_ok=True)
+                    typer.echo(AcctMsg(msg="forgot"))
+                else:
+                    account = last_account
+                    typer.echo(AcctMsg(account, msg='previous_will_forget'))
+            else:
+                account = last_account
+                typer.echo(AcctMsg(account, msg='previous'))
+    else:
+        if account in config.data:
+            config.sticky_account_file.write_text(f'{account}\n{round(time.time(), 2)}')
+            typer.echo(AcctMsg(account))
 
     if account in config.data:
         config.account = account
@@ -47,10 +135,9 @@ def account_name_callback(ctx: typer.Context, account: str):
         session = CentralApi(account)
         global cache
         cache = Cache(session)
-        cache.update_meta_db()
         return account
     else:
-        strip_keys = ['central_info', 'ssl_verify', 'token_store']
+        strip_keys = ['central_info', 'ssl_verify', 'token_store', 'forget_account_after', 'debug', 'debugv', 'limit']
         typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                    f"The specified account: '{account}' is not defined in the config @\n"
                    f"{config.file}\n\n")
@@ -155,6 +242,8 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+         default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                      callback=default_callback),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
          update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -343,7 +432,7 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         else:
             tablefmt = "simple"
 
-        outdata = utils.output(data, tablefmt)
+        outdata = utils.output(data, tablefmt, title=what)
         typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --
