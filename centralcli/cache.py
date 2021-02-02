@@ -2,7 +2,7 @@ from typing import Union, List, Tuple
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from centralcli.central import CentralApi
-from centralcli import config, log, utils
+from centralcli import log, utils, config
 
 import asyncio
 import time
