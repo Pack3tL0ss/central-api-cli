@@ -256,6 +256,12 @@ class Utils:
 
         return contents
 
+    @staticmethod
+    def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
+        """strip all keys from a dict where value is NoneType"""
+
+        return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
+
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = ""):
             self.file = rawdata    # found typer.unstyle AFTER I built this
@@ -350,7 +356,9 @@ class Utils:
 
         if tablefmt in ['json', 'yaml', 'yml']:
             # convert List[dict] to Dict[dev_name: dict]
-            outdata: Dict[str, dict] = {item['name']: {k: v for k, v in item.items() if k != 'name'} for item in outdata}
+            outdata = self.listify(outdata)
+            if outdata and 'name' in outdata[0]:
+                outdata: Dict[str, dict] = {item['name']: {k: v for k, v in item.items() if k != 'name'} for item in outdata}
 
         if tablefmt == "json":
             raw_data = json.dumps(outdata, indent=4)
