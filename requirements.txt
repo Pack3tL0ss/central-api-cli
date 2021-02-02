@@ -14,3 +14,4 @@ tinydb
 typer
 aiohttp
 asyncio
+tablib
