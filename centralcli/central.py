@@ -27,7 +27,7 @@
 import asyncio
 import json
 # import functools
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from pathlib import Path
 from pycentral.base_utils import tokenLocalStoreUtil
 from aiohttp import ClientSession
@@ -126,14 +126,14 @@ class CentralApi(Session):
 
     async def post(self, url, params: dict = {}, payload: dict = None,
                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
-        # if _json and payload:
+        # if json_data and payload:
         #     raise UserWarning("post method expects 1 of the 2 keys payload, json.  Providing Both is invalid\n"
         #                       f"post was provided:\n    payload: {payload}\n    _json: {_json}")
-        # elif _json:
-        #     payload = json.dumps(_json)
 
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
+        if json_data:
+            json_data = self.strip_none(json_data)
         return await self.api_call(f_url, method="POST", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
         # return Response(self.central, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
@@ -810,6 +810,64 @@ class CentralApi(Session):
             params = None
 
         return await self.get(url, params=params, callback=cleaner.get_audit_logs)
+
+    async def create_site(
+        self, site_name: str = None, address: str = None, city: str = None, state: str = None,
+        country: str = None, zipcode: str = None, latitude: int = None, longitude: int = None,
+        site_list: List[Dict[str, Union[str, dict]]] = None
+    ) -> Response:
+        """Create Site
+
+        Either address information or GeoLocation information is required.  For Geolocation attributes
+        all attributes are required.  Or a List[dict] with multiple sites to be added containing either
+        'site_address' or 'geolocation' attributes for each site.
+
+        Args:
+            site_name (str, optional): Site Name. Defaults to None.
+            address (str, optional): Address. Defaults to None.
+            city (str, optional): City. Defaults to None.
+            state (str, optional): State. Defaults to None.
+            country (str, optional): Country Name. Defaults to None.
+            zipcode (str, optional): Zipcode. Defaults to None.
+            latitude (int, optional): Latitude (in the range of -90 and 90). Defaults to None.
+            longitude (int, optional): Longitude (in the range of -100 and 180). Defaults to None.
+            site_list (List[Dict[str, Union[str, dict]]], optional): A list of sites to be created. Defaults to None.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # TODO make site constructor object that can be passed in a list vs dicts
+        url = "/central/v2/sites"
+
+        json_data = {
+            'site_name': site_name,
+            'site_address': {
+                'address': address,
+                'city': city,
+                'state': state,
+                'country': country,
+                'zipcode': zipcode
+            },
+            'geolocation': {
+                'latitude': latitude,
+                'longitude': longitude
+            }
+        }
+        if site_list:
+            resp = await self.post(url, json_data=site_list[0])
+            if not resp:
+                return resp
+            if len(site_list) > 1:
+                resp_list = cleaner._unlist([
+                    await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist))
+                    for _json in site_list[1:]
+                ])
+                # TODO make multi response packing function
+                resp.output = utils.listify(resp.output)
+                resp.output += [r.output for r in resp_list]
+                return resp
+        else:
+            return await self.post(url, json_data=json_data, callback=cleaner._unlist)
 
     # TODO move to caas.py
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
