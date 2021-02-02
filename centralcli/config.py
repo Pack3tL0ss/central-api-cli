@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 import yaml
 import json
+import tablib
 
 
 class Config:
@@ -26,7 +27,7 @@ class Config:
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
         self.sticky_account_file = self.cache_dir / "last_account"
-        self.data = self.get_config_data(self.file) or {}
+        self.data = self.get_file_data(self.file) or {}
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
         self.account = None  # Updated by cli account callback
@@ -53,17 +54,20 @@ class Config:
         return self.data.get(key, default)
 
     @staticmethod
-    def get_config_data(config_file: Path) -> dict:
+    def get_file_data(import_file: Path) -> dict:
         '''Return dict from yaml file.'''
-        if config_file.exists() and config_file.stat().st_size > 0:
-            with config_file.open() as f:
+        if import_file.exists() and import_file.stat().st_size > 0:
+            with import_file.open() as f:
                 try:
-                    if config_file.suffix == ".json":
+                    if import_file.suffix == ".json":
                         return json.loads(f.read())
-                    elif config_file.suffix in [".yaml", ".yml"]:
+                    elif import_file.suffix in [".yaml", ".yml"]:
                         return yaml.load(f, Loader=yaml.SafeLoader)
+                    elif import_file.suffix in ['.csv', '.tsv', '.dbf', '.xls', '.xlsx']:
+                        with import_file.open('r') as fh:
+                            return tablib.Dataset().load(fh)
                     else:
                         raise UserWarning("Provide valid file with"
-                                          "format/extension [.json/.yaml/.yml]!")
+                                          "format/extension [.json/.yaml/.yml/.csv]!")
                 except Exception as e:
-                    raise UserWarning(f'Unable to load configuration from {config_file}\n{e.__class__}\n\n{e}')
+                    raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__}\n\n{e}')

@@ -240,11 +240,11 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
          do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
          do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
          do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-         default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                      callback=default_callback),
          outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
          no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
          update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+         default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                      callback=default_callback),
          debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                     callback=debug_callback),
          account: str = typer.Option("central_info",
@@ -632,8 +632,8 @@ def import_vlan(import_file: str = typer.Argument(config.stored_tasks_file),
 
 
 @app.command()
-def batch(import_file: str = typer.Argument(config.stored_tasks_file),
-          command: str = None, key: str = None):
+def caas_batch(import_file: Path = typer.Argument(config.stored_tasks_file),
+               command: str = None, key: str = None):
 
     if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
@@ -665,6 +665,36 @@ def batch(import_file: str = typer.Argument(config.stored_tasks_file),
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
             resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
             caas.eval_caas_response(resp)
+
+
+@app.command()
+def batch(
+    import_file: Path = typer.Argument(None, exists=True),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback),
+    command: str = None, key: str = None
+) -> None:
+    data = config.get_file_data(import_file)
+    # TODO do more than this quick and dirty data validation.
+    if data and len(data.headers) > 3:
+        data = [
+            {'site_name': i['site_name'], 'site_address': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
+        ]
+    else:
+        data = [
+            {'site_name': i['site_name'], 'geolocation': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
+        ]
+    # TODO move callback def to cli.py so methods in central.py are usable as module for other scripts
+    # without callback or with a different custom callback unrelated to centralcli
+    resp = session.request(session.create_site, site_list=data)
+    resp_data = eval_resp(resp)
+    display_results(resp_data)
 
 
 @app.command()
@@ -747,8 +777,12 @@ def method_test(method: str = typer.Argument(...),
         else:
             tablefmt = "json"
 
-        typer.echo(f"\n{typer.style('output', fg='cyan')}:")
+        typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='cyan')}:")
         display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        data = asyncio.run(resp._response.json())
+        if data:
+            typer.echo(f"\n{typer.style('Raw Response Output', fg='cyan')}:")
+            display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.callback()
