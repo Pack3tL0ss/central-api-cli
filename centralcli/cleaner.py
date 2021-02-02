@@ -159,8 +159,11 @@ def strip_no_value(data: List[dict]) -> List[dict]:
             )
         ] for id in data
     ]
-    common_idx: set = set.intersection(*map(set, no_val))
-    data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+    if no_val:
+        common_idx: set = set.intersection(*map(set, no_val))
+        data = [
+            {k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data
+        ]
 
     return data
 
