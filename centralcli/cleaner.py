@@ -83,10 +83,14 @@ def pre_clean(data: dict) -> dict:
 
 def _unlist(data: Any):
     if isinstance(data, list):
-        if len(data) == 1:
-            data = data[0] if not isinstance(data[0], str) else data[0].replace('_', ' ')
-        elif not data:
+        if not data:
             data = ''
+        elif len(data) == 1:
+            data = data[0] if not isinstance(data[0], str) else data[0].replace('_', ' ')
+        elif all([isinstance(d, list) and len(d) == 1 for d in data]):
+            out = [i for ii in data for i in ii if not isinstance(i, list)]
+            if out:
+                data = out
 
     return data
 
