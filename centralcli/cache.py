@@ -83,7 +83,7 @@ class Cache:
         # async with self.session.get_all_devicesv2() as resp:
         # resp = await self.session.get_all_devicesv2()
         if resp.ok:
-            utils.listify(resp.output)
+            resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_devicesv2)
             self.DevDB.truncate()
             # print(f" dev db Done: {time.time() - start}")
@@ -96,7 +96,7 @@ class Cache:
         # async with self.session.get_all_sites() as resp:
         # resp = await self.session.get_all_sites()
         if resp.ok:
-            utils.listify(resp.output)
+            resp.output = utils.listify(resp.output)
             # TODO time this to see which is more efficient
             # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
             # upd = [item for in_list in upd for item in in_list]
@@ -112,7 +112,7 @@ class Cache:
         # resp = await self.session.get_all_groups()
         resp = await self.session.get_all_groups()
         if resp.ok:
-            utils.listify(resp.output)
+            resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_groups)
             self.GroupDB.truncate()
             # print(f" group db Done: {time.time() - start}")
@@ -126,7 +126,7 @@ class Cache:
         groups = self.groups if self.session.get_all_groups in self.updated else None
         resp = await self.session.get_all_templates(groups=groups)
         if resp.ok:
-            utils.listify(resp.output)
+            resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_templates)
             self.TemplateDB.truncate()
             # print(f" template db Done: {time.time() - start}")
