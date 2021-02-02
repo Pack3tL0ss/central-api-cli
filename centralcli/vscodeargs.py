@@ -17,7 +17,7 @@ def vscode_arg_handler():
             list: updated sys.argv list.
         """
         # args = utils.read_yaml(import_file)
-        args = config.get_config_data(Path(import_file))
+        args = config.get_file_data(Path(import_file))
         if key and key in args:
             args = args[key]
 
@@ -33,10 +33,12 @@ def vscode_arg_handler():
                     if "\\'" in vsc_args:
                         _loc = vsc_args.find("\\'")
                         _before = vsc_args[:_loc - 1]
+                        _before = _before.split()
                         _str_end = vsc_args.find("\\'", _loc + 1)
-                        sys.argv += _before.split()
+                        sys.argv += [i.rstrip(',') for i in _before if i != ',']
                         sys.argv += [f"{vsc_args[_loc + 2:_str_end]}"]
-                        sys.argv += vsc_args[_str_end + 2:].split()
+                        _the_rest = vsc_args[_str_end + 2:].split()
+                        sys.argv += [i.rstrip(',') for i in _the_rest if i != ',']
                     else:
                         sys.argv += vsc_args.split()
 
