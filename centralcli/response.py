@@ -183,6 +183,7 @@ class Session:
                 with Halo(spin_txt_data) as spin:
                     _start = time.time()
                     headers = self.headers if not headers else {**self.headers, **headers}
+                    # -- // THE API REQUEST \\ --
                     resp = await self.aio_session.request(method=method, url=url, params=params, data=data, json=json_data,
                                                           headers=headers, ssl=self.ssl, **kwargs)
 
@@ -206,6 +207,7 @@ class Session:
                     self.refresh_token()
                 else:
                     log.error(f"API [{method}] {url} Error Returned: {resp.error}")
+                    break
             else:
                 spin.succeed()
                 break
@@ -219,6 +221,20 @@ class Session:
         if params.get("limit") and config.limit:
             log.info(f'paging limit being overriden by config: {params.get("limit")} --> {config.limit}')
             params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+
+        # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
+        # supports 2 levels beyond that needs to be done in calling method.
+        # TODO handy to have this in one common place, but should move
+        # to central.py so it's can be used as a central library independent of cli
+        params = utils.strip_none(params)
+        json_data = utils.strip_none(json_data)
+        if json_data:  # strip second nested dict if all keys = NoneType
+            y = json_data.copy()
+            for k in y:
+                if isinstance(y[k], dict):
+                    y[k] = utils.strip_none(y[k])
+                    if not y[k]:
+                        del json_data[k]
 
         # Output pagination loop
         paged_output = None
