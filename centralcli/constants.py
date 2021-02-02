@@ -94,6 +94,33 @@ class ArgToWhat:
 arg_to_what = ArgToWhat()
 
 
+class WhatToPretty:
+    def __init__(self):
+        """Mapping option to get plural form of common 'what' attributes
+
+        The inverse of ArgToWhat, but always returns plural with apporpriate
+        case for display.  Normally title case.  i.e. switch --> Switches
+
+        """
+        self.gateway = self.gateways = "Gateways"
+        self.aps = self.ap = self.iap = "Acess Points"
+        self.switch = self.switches = "Switches"
+        self.groups = self.group = "Groups"
+        self.site = self.sites = "Sites"
+        self.template = self.templates = "Templates"
+        self.all = "All Device Types"
+        self.device = self.devices = "Devices"
+
+    def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
+        if isinstance(key, Enum):
+            key = key._value_
+        return getattr(self, key, default or key)
+
+
+arg_to_what = ArgToWhat()
+what_to_pretty = WhatToPretty()
+
+
 class ShowArg2(str, Enum):
     all = "all"
     device = "device"

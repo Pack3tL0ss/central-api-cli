@@ -37,7 +37,8 @@ _short_value = {
     "updated_at": _time_diff_words,
     "last_modified": _convert_epoch,
     "ts": _log_timestamp,
-    "Unknown": "?"
+    "Unknown": "?",
+    "HPPC": "SW"
 }
 
 _short_key = {
@@ -50,7 +51,8 @@ _short_key = {
     "ip_addr": "ip",
     "ip_address_v6": "ip (v6)",
     "macaddr": "mac",
-    "uplink_ports": "uplinks",
+    "switch_type": "type",
+    "uplink_ports": "uplk ports",
     "total_clients": "clients",
     "updated_at": "updated",
     "cpu_utilization": "cpu %",
@@ -91,14 +93,17 @@ def _unlist(data: Any):
 
 def _check_inner_dict(data: Any) -> Any:
     if isinstance(data, list):
-        if all([isinstance(id, dict) for id in data]):
-            return _unlist(
-                        [
-                            dict(short_value(vk, vv) for vk, vv in pre_clean(inner).items()
-                                 if vk != "index")
-                            for inner in data
-                        ]
-                    )
+        if True in set([isinstance(id, dict) for id in data]):
+            if list(set([dk for d in data for dk in d.keys()]))[0] == 'port':
+                return _unlist([d['port'] for d in data])
+            else:
+                return _unlist(
+                            [
+                                dict(short_value(vk, vv) for vk, vv in pre_clean(inner).items()
+                                     if vk != "index")
+                                for inner in data
+                            ]
+                        )
     return data
 
 
@@ -141,26 +146,8 @@ def get_all_clients(data: List[dict]) -> list:
     return data
 
 
-def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
-    data = utils.listify(data)
-    # gather all keys from all dicts in list each dict could potentially be a diff size
-    all_keys = list(set([ik for k in data for ik in k.keys()]))
-    to_front = [
-        'name',
-        'ip_address',
-        'subnet_mask',
-        'serial',
-        'macaddr',
-        'ap_deployment_mode',
-        'model',
-        'group_name',
-        'site'
-    ]
-    to_front = [i for i in to_front if i in all_keys]
-    _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
-    data = [{k: id.get(k) for k in all_keys} for id in data]
-
-    # strip out any columns that have no value in any row
+def strip_no_value(data: List[dict]) -> List[dict]:
+    """strip out any columns that have no value in any row"""
     no_val: List[List[int]] = [
         [
             idx for idx, v in enumerate(id.values()) if not isinstance(v, bool) and not v or (
@@ -170,6 +157,40 @@ def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     ]
     common_idx: set = set.intersection(*map(set, no_val))
     data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+
+    return data
+
+
+def sort_device_keys(data: List[dict]) -> List[dict]:
+    all_keys = list(set([ik for k in data for ik in k.keys()]))
+    to_front = [
+        'name',
+        'ip',
+        'ip_address',
+        'subnet_mask',
+        'serial',
+        'macaddr',
+        'mac',
+        'ap_deployment_mode',
+        'model',
+        'group_name',
+        'group',
+        'site'
+    ]
+    to_front = [i for i in to_front if i in all_keys]
+    _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
+    data = [{k: id.get(k) for k in all_keys} for id in data]
+
+    return data
+
+
+def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+    # gather all keys from all dicts in list each dict could potentially be a diff size
+    data = sort_device_keys(data)
+
+    # strip any cols that have no value across all rows
+    data = strip_no_value(data)
 
     # send all key/value pairs through formatters and return
     return _unlist(

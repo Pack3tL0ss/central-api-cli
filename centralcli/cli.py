@@ -71,20 +71,18 @@ class AcctMsg:
         )
 
     @property
-    @staticmethod
-    def forgot():
+    def forgot(self):
         typer.style(
             "Forget option set for account, and expiration has passed.  reverting to default account",
             fg="magenta"
         )
 
     @property
-    @staticmethod
-    def will_forget():
+    def will_forget(self):
         return typer.style(
-            f'\nForget options is configured, will revert to default account '
+            f'Forget options is configured, will revert to default account '
             f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
-            f'After last command.',
+            f'{typer.style(" after last command.", fg="magenta")}',
             fg="magenta"
         )
 
@@ -432,7 +430,15 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
         else:
             tablefmt = "simple"
 
-        outdata = utils.output(data, tablefmt, title=what)
+        outdata = utils.output(
+            data,
+            tablefmt,
+            title=what,
+            account=None if account == 'central_info' else account
+        )
+
+        # TODO investigate better options, hate this pager, clears and output not avail in scrollback
+        # if tablefmt != 'rich':  # rich currently prints in utils.output()
         typer.echo_via_pager(outdata) if not no_pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --

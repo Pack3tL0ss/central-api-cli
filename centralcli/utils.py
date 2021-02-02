@@ -287,49 +287,77 @@ class Utils:
         color = "green" if value.lower() == "up" else "red"
         return value if key != "status" else typer.style(value, fg=color)
 
-    def output(self, outdata: Union[List[str], Dict[str, Any]], tablefmt: str = None, title: str = None) -> str:
+    def output(
+        self,
+        outdata: Union[List[str], Dict[str, Any]],
+        tablefmt: str = None,
+        title: str = None,
+        account: str = None
+    ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         def _do_subtables(data: list, tablefmt: str = "rich"):
             out = []
             for inner_dict in data:
-                inner_list = []
+                # inner_list = []
                 for key, val in inner_dict.items():
                     if not isinstance(val, (list, dict, tuple)):
                         if val is None:
-                            inner_list.append('')
+                            # inner_list.append('')
+                            inner_dict[key] = ''
                         elif isinstance(val, str) and val.lower() in ['up', 'down']:
                             if val.lower() == 'up':
-                                inner_list.append(typer.style('Up', fg='green'))
+                                if tablefmt == 'rich':
+                                    inner_dict[key] = f'[b green]{val.title()}[/b green]'
+                                else:
+                                    inner_dict[key] = typer.style('Up', fg='green')
+                                    # inner_list.append(typer.style('Up', fg='green'))
                             else:
-                                inner_list.append(typer.style('Down', fg="red"))
+                                if tablefmt == 'rich':
+                                    inner_dict[key] = f'[b red]{val.title()}[/b red]'
+                                else:
+                                    inner_dict[key] = typer.style('Down', fg="red")
+                                    # inner_list.append(typer.style('Down', fg="red"))
                         else:
-                            inner_list.append(str(val))
+                            # inner_list.append(str(val))
+                            if tablefmt == 'rich':
+                                inner_dict[key] = Text(str(val), style=None)
+                            else:
+                                inner_dict[key] = str(val)
                     else:
                         val = self.listify(val)
                         if tablefmt == "rich":
                             inner_table = Table(*(k for k in val[0].keys()),
                                                 show_header=True,
-                                                title=key,
-                                                show_edge=False,
-                                                header_style="bold cyan"
+                                                # title=key,
+                                                show_edge=True,
+                                                header_style="bold cyan",
+                                                box=SIMPLE
                                                 )
                             _ = [inner_table.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
+                            with console.capture():
+                                console.print(inner_table)
+                            inner_dict[key] = console.export_text()
                         else:
                             inner_table = tabulate(val, headers="keys", tablefmt=tablefmt)
+                            inner_dict[key] = inner_table
 
-                        inner_list.append(inner_table)
-                out.append(inner_list)
+                        # inner_list.append(inner_table)
+                out.append(inner_dict)
             return out
 
         raw_data = outdata
         _lexer = table_data = None
 
+        if tablefmt in ['json', 'yaml', 'yml']:
+            # convert List[dict] to Dict[dev_name: dict]
+            outdata: Dict[str, dict] = {item['name']: {k: v for k, v in item.items() if k != 'name'} for item in outdata}
+
         if tablefmt == "json":
-            raw_data = json.dumps(outdata, sort_keys=True, indent=2)
+            raw_data = json.dumps(outdata, indent=4)
             _lexer = lexers.JsonLexer
 
         elif tablefmt in ["yml", "yaml"]:
-            raw_data = yaml.dump(outdata, sort_keys=True, )
+            raw_data = yaml.dump(outdata)
             _lexer = lexers.YamlLexer
 
         elif tablefmt == "csv":
@@ -347,12 +375,16 @@ class Utils:
         elif tablefmt == "rich":  # TODO Temporary Testing ***
             from rich.console import Console
             from rich.table import Table
-            # from rich.text import Text
+            # from rich.tabulate import Table
+            # from rich.columns import Columns
+            # from rich.style import Style
+            # from rich.segment import Segment
+            # from rich.measure import Measurement
+            from rich.box import HORIZONTALS, SIMPLE
+            # from rich.rule import Rule
+            from rich.text import Text
+            from centralcli import constants
             console = Console(record=True)
-
-            if title:
-                # title = console.rule('[b cyan]Access Points') if title == 'aps' else console.rule(f'[b cyan]{title.title()}')
-                title = 'Access Points' if title == 'aps' else title.title()
 
             customer_id, customer_name = "", ""
             outdata = self.listify(outdata)
@@ -364,22 +396,56 @@ class Utils:
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
 
                 table = Table(
-                    *outdata[0].keys(),
-                    show_edge=False,
+                    # show_edge=False,
                     show_header=True,
                     title=title,
-                    header_style="bold magenta"
+                    header_style='magenta',
+                    show_lines=False,
+                    box=HORIZONTALS,
+                    row_styles=['none', 'dark_sea_green']
                 )
-                formatted = _do_subtables(outdata)
-                _ = [table.add_row(*v) for v in formatted]
 
-                table_data = console.print(table)
+                fold_cols = ['description']
+                _min_max = {'min': 10, 'max': 20}
+                set_width_cols = {'name': _min_max, 'model': _min_max}
+                full_cols = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio']
+
+                for k in outdata[0].keys():
+                    if k in fold_cols:
+                        table.add_column(k, overflow='fold', justify='center')
+                    elif k in set_width_cols:
+                        table.add_column(
+                            k, min_width=set_width_cols[k]['min'],
+                            max_width=set_width_cols[k]['max'],
+                            justify='center'
+                        )
+                    elif k in full_cols:
+                        table.add_column(k, no_wrap=True, justify='center')
+                    else:
+                        table.add_column(k, justify='center')
+
+                formatted = _do_subtables(outdata)
+                [table.add_row(*list(in_dict.values())) for in_dict in formatted]
+
+                if title:
+                    table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
+                if account:
+                    table.caption = f'[italic dark_olive_green2]{account}'
+                    table.caption_justify = 'left'
 
                 # table_data = tabulate(outdata, headers="keys", tablefmt="simple")
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
-                raw_data = table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+
+                with console.capture():
+                    console.print(table)
+
+                raw_data = console.export_text(clear=False)
+                table_data = console.export_text(styles=True)
+
+                raw_data = f"{data_header}{raw_data}" if customer_id else f"{raw_data}"
+                table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
 
             # -- // List[str, ...] \\ --
             elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:
@@ -399,8 +465,8 @@ class Utils:
                 outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
                 raw_data = outdata
 
-                values = _do_subtables(outdata, tablefmt=tablefmt)
-                outdata = [dict((k, v) for k, v in zip(outdata[0].keys(), val)) for val in values]
+                outdata = _do_subtables(outdata, tablefmt=tablefmt)
+                # outdata = [dict((k, v) for k, v in zip(outdata[0].keys(), val)) for val in outdata]
 
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
                 td = table_data.splitlines(keepends=True)

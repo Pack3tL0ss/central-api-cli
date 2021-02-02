@@ -412,7 +412,11 @@ class CentralApi(Session):
             # return just the keys common across all device types
             dicts = [{**{"type": k.rstrip("es")}, **{kk: vv for kk, vv in idx.items()}} for k, v in _output.items() for idx in v]
             common_keys = set.intersection(*map(set, dicts))
-            resp.output = [{k: v for k, v in d.items() if k in common_keys} for d in dicts]
+            # resp.output = [{k: v for k, v in d.items() if k in common_keys} for d in dicts]
+            _output = [{k: d[k] for k in common_keys} for d in dicts]
+
+            # sort cols
+            resp.output = cleaner.sort_device_keys(_output)
 
         return resp
 
