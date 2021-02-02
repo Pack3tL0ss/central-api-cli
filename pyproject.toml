@@ -1,10 +1,24 @@
 [tool.poetry]
 name = "centralcli"
-version = "0.3a7"
+version = "0.3a8"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
-authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
-readme = "README.md"
 license = "MIT"
+authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
+maintainers = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
+readme = "README.md"
+repository = "https://github.com/Pack3tL0ss/central-api-cli"
+# documentation = "https://central-api-cli.readthedocs.org"
+keywords = [
+    "cli",
+    "Aruba Networks",
+    "Aruba Central",
+    "HPE",
+    "API"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.7"
+]
 
 [tool.poetry.scripts]
 cencli = "centralcli.cli:app"
@@ -28,12 +42,15 @@ pendulum = "^2.1.2"
 pycentral = "^0.0.1"
 aiohttp = "^3.7.3"
 asyncio = "^3.4.3"
+rich = "^9.10.0"
+tablib = "^3.0.0"
 
 [tool.poetry.dev-dependencies]
 pyflakes = "^2.2.0"
 pycodestyle = "^2.6.0"
 mccabe = "^0.6.1"
 flake8 = "^3.8.4"
+pytest = "^6.2.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

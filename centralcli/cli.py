@@ -681,15 +681,19 @@ def batch(
     command: str = None, key: str = None
 ) -> None:
     data = config.get_file_data(import_file)
-    # TODO do more than this quick and dirty data validation.
-    if data and len(data.headers) > 3:
-        data = [
-            {'site_name': i['site_name'], 'site_address': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
-        ]
-    else:
-        data = [
-            {'site_name': i['site_name'], 'geolocation': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
-        ]
+
+    #
+    if import_file.sfx in ['.csv', '.tsv', '.dbf', '.xls', '.xlsx']:
+        # TODO do more than this quick and dirty data validation.
+        if data and len(data.headers) > 3:
+            data = [
+                {'site_name': i['site_name'], 'site_address': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
+            ]
+        else:
+            data = [
+                {'site_name': i['site_name'], 'geolocation': {k: v for k, v in i.items() if k != 'site_name'}} for i in data.dict
+            ]
+
     # TODO move callback def to cli.py so methods in central.py are usable as module for other scripts
     # without callback or with a different custom callback unrelated to centralcli
     resp = session.request(session.create_site, site_list=data)
