@@ -2,24 +2,41 @@
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 '''
 
+import functools
 from centralcli import utils, constants
 from typing import List, Any, Union
 import pendulum
 
 
+def epoch_convert(func):
+    @functools.wraps(func)
+    def wrapper(epoch):
+        if len(str(int(epoch))) > 10:
+            epoch = epoch / 1000
+        func(epoch)
+
+    return wrapper
+
+
+@epoch_convert
 def _convert_epoch(epoch: float) -> str:
     # return time.strftime('%x %X',  time.localtime(epoch/1000))
     return pendulum.from_timestamp(epoch, tz="local").to_day_datetime_string()
 
 
+@epoch_convert
 def _duration_words(secs: int) -> str:
     return pendulum.duration(seconds=secs).in_words()
 
 
+@epoch_convert
 def _time_diff_words(epoch: float) -> str:
+    if len(str(int(epoch))) > 10:
+        epoch = epoch / 1000
     return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
+@epoch_convert
 def _log_timestamp(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
 
