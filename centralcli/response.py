@@ -218,7 +218,7 @@ class Session:
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, **kwargs: Any) -> Response:
 
-        if params.get("limit") and config.limit:
+        if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overriden by config: {params.get("limit")} --> {config.limit}')
             params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
 

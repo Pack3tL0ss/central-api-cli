@@ -288,9 +288,9 @@ def show(what: ShowArgs = typer.Argument(..., metavar=f"[{f'|'.join(show_help)}]
                 what, serial = cache.get_dev_identifier(args, ret_field="type-serial")
 
                 if what and serial:
-                    resp = session.request(session.get_dev_details, what, serial)
+                    resp = session.request(session.get_dev_details, what, serial, **params)
             else:  # show devices ... equiv to show all
-                resp = session.request(session.get_all_devicesv2)
+                resp = session.request(session.get_all_devicesv2, **params)
 
         elif what == "all":
             # if no params (expected result may differ) update cache if not updated this session and return results from there
@@ -729,7 +729,7 @@ def method_test(method: str = typer.Argument(...),
                 do_table: bool = typer.Option(False, "--simple", is_flag=True, help="Output in Table"),
                 do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
                 outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-                no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+                no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
                 update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
                 debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                            callback=debug_callback),
