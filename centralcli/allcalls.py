@@ -1210,6 +1210,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/aps"
 
         params = {
+            'group': group,
+            'label': label,
+            'swarm_id': swarm_id,
+            'site': site,
             'status': status,
             'serial': serial,
             'macaddr': macaddr,
@@ -2872,6 +2876,8 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/switches"
 
         params = {
+            'group': group,
+            'label': label,
             'stack_id': stack_id,
             'status': status,
             'fields': fields,
