@@ -291,7 +291,8 @@ class Utils:
         Applies color to certian columns/values prior to formatting
         """
         color = "green" if value.lower() == "up" else "red"
-        return value if key != "status" else typer.style(value, fg=color)
+        # return value if key != "status" else typer.style(value, fg=color)
+        return value if key != "status" else f'[b {color}]{value.title()}[/b {color}]'
 
     def output(
         self,
@@ -311,18 +312,11 @@ class Utils:
                             # inner_list.append('')
                             inner_dict[key] = ''
                         elif isinstance(val, str) and val.lower() in ['up', 'down']:
-                            if val.lower() == 'up':
-                                if tablefmt == 'rich':
-                                    inner_dict[key] = f'[b green]{val.title()}[/b green]'
-                                else:
-                                    inner_dict[key] = typer.style('Up', fg='green')
-                                    # inner_list.append(typer.style('Up', fg='green'))
+                            color = 'red' if val.lower() == 'down' else 'green'
+                            if tablefmt == 'rich':
+                                inner_dict[key] = f'[b {color}]{val.title()}[/b {color}]'
                             else:
-                                if tablefmt == 'rich':
-                                    inner_dict[key] = f'[b red]{val.title()}[/b red]'
-                                else:
-                                    inner_dict[key] = typer.style('Down', fg="red")
-                                    # inner_list.append(typer.style('Down', fg="red"))
+                                inner_dict[key] = typer.style(val.title(), fg=color)
                         else:
                             # inner_list.append(str(val))
                             if tablefmt == 'rich':
@@ -339,7 +333,8 @@ class Utils:
                                                 header_style="bold cyan",
                                                 box=SIMPLE
                                                 )
-                            _ = [inner_table.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
+                            # _ = [inner_table.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
+                            _ = [inner_table.add_row(*[self.do_pretty(kk, str(vv)) for kk, vv in v.items()]) for v in val]
                             with console.capture():
                                 console.print(inner_table)
                             inner_dict[key] = console.export_text()
@@ -420,17 +415,17 @@ class Utils:
 
                 for k in outdata[0].keys():
                     if k in fold_cols:
-                        table.add_column(k, overflow='fold', justify='center')
+                        table.add_column(k, overflow='fold', max_width=115, justify='left')
                     elif k in set_width_cols:
                         table.add_column(
                             k, min_width=set_width_cols[k]['min'],
                             max_width=set_width_cols[k]['max'],
-                            justify='center'
+                            justify='left'
                         )
                     elif k in full_cols:
-                        table.add_column(k, no_wrap=True, justify='center')
+                        table.add_column(k, no_wrap=True, justify='left')
                     else:
-                        table.add_column(k, justify='center')
+                        table.add_column(k, justify='left')
 
                 formatted = _do_subtables(outdata)
                 [table.add_row(*list(in_dict.values())) for in_dict in formatted]
