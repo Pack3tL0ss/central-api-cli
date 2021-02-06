@@ -6,6 +6,7 @@ import functools
 from centralcli import utils, constants
 from typing import List, Any, Union
 import pendulum
+import ipaddress
 
 
 def epoch_convert(func):
@@ -13,7 +14,7 @@ def epoch_convert(func):
     def wrapper(epoch):
         if len(str(int(epoch))) > 10:
             epoch = epoch / 1000
-        func(epoch)
+        return func(epoch)
 
     return wrapper
 
@@ -31,8 +32,8 @@ def _duration_words(secs: int) -> str:
 
 @epoch_convert
 def _time_diff_words(epoch: float) -> str:
-    if len(str(int(epoch))) > 10:
-        epoch = epoch / 1000
+    # if len(str(int(epoch))) > 10:
+    #     epoch = epoch / 1000
     return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
@@ -55,7 +56,8 @@ _short_value = {
     "last_modified": _convert_epoch,
     "ts": _log_timestamp,
     "Unknown": "?",
-    "HPPC": "SW"
+    "HPPC": "SW",
+    "vc_disconnected": "vc disc."
 }
 
 _short_key = {
@@ -187,6 +189,19 @@ def strip_no_value(data: List[dict]) -> List[dict]:
 
 def sort_device_keys(data: List[dict]) -> List[dict]:
     all_keys = list(set([ik for k in data for ik in k.keys()]))
+
+    # concat ip_address & subnet_mask fields into single ip field ip/mask
+    if 'ip_address' in all_keys:
+        if 'subnet_mask' in all_keys:
+            for inner in data:
+                if inner['ip_address'] and inner['subnet_mask']:
+                    mask = ipaddress.IPv4Network((inner['ip_address'], inner['subnet_mask']), strict=False).prefixlen
+                    inner['ip_address'] = f"{inner['ip_address']}/{mask}"
+                    del inner['subnet_mask']
+                if inner.get('public_ip_address'):
+                    inner['ip_address'] += f'\npublic: {inner["public_ip_address"]}'
+                    del inner["public_ip_address"]
+
     to_front = [
         'name',
         'ip',
@@ -208,21 +223,28 @@ def sort_device_keys(data: List[dict]) -> List[dict]:
     return data
 
 
-def get_devices(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[dict], dict]:
     data = utils.listify(data)
+
     # gather all keys from all dicts in list each dict could potentially be a diff size
+    # Also concats ip/mask if provided in sep fields
     data = sort_device_keys(data)
 
     # strip any cols that have no value across all rows
     data = strip_no_value(data)
 
     # send all key/value pairs through formatters and return
-    return _unlist(
+    data = _unlist(
         [dict(short_value(k, _check_inner_dict(v)) for k, v in pre_clean(inner).items()
               if "id" not in k[-3:] and k != "mac_range")
          for inner in data
          ]
         )
+
+    # if sort and data and sort in data[-1]:
+    #     return sorted(data, key=sort)
+    # else:
+    return data
 
 
 def get_audit_logs(data: List[dict]) -> List[dict]:
