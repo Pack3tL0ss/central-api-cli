@@ -452,26 +452,49 @@ class CentralApi(Session):
         return await self.get(url, headers=headers)
 
     # TODO ignore sort parameter and sort output from any field.  Central is inconsistent as to what they support via sort
-    async def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None,
-                          status: str = None, fields: list = None, show_resource_details: bool = False,
-                          calculate_client_count: bool = False, calculate_ssid_count: bool = False,
-                          public_ip_address: str = None, limit: int = 100, offset: int = 0, sort: str = None):
+    async def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None, swarm_id: str = None,
+                          serial: str = None, status: str = None, fields: list = None, show_resource_details: bool = False,
+                          cluster_id: str = None, model: str = None, calculate_client_count: bool = False,
+                          calculate_ssid_count: bool = False, macaddr: str = None,
+                          public_ip_address: str = None, site: str = None, limit: int = 100, offset: int = 0, sort: str = None):
         # pagenation limit default 100, max 1000
 
-        _strip = ["self", "dev_type", "url", "_strip"]
+        # _strip = ["self", "dev_type", "url", "_strip"]
 
-        params = {k: v for k, v in locals().items() if k not in _strip and v}
+        # params = {k: v for k, v in locals().items() if k not in _strip and v}
+
+        params = {
+            'group': group,
+            'label': label,
+            'swarm_id': swarm_id,
+            'site': site,
+            'serial': serial,
+            'macaddr': macaddr,
+            'model': model,
+            'cluster_id': cluster_id,
+            'stack_id': stack_id,
+            'status': status,
+            'fields': fields,
+            'show_resource_details': str(show_resource_details).lower(),
+            'calculate_client_count': str(calculate_client_count).lower(),
+            'calculate_ssid_count': str(calculate_ssid_count).lower(),
+            'public_ip_address': public_ip_address,
+            'limit': limit,
+            'offset': offset
+        }
         if dev_type == "switch":
             dev_type = "switches"
         elif dev_type == "gateway":
             dev_type = "gateways"
 
-        if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
-            if params.get("sort", "").endswith("name"):
-                del params["sort"]
-                log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort", show=True)
+        # if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
+        #     if params.get("sort", "").endswith("name"):
+        #         del params["sort"]
+        #         log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort", show=True)
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
-        return await self.get(url, params=params, callback=cleaner.get_devices)
+        if dev_type == 'aps':
+            url = url.replace('v1', 'v2')
+        return await self.get(url, params=params, callback=cleaner.get_devices, callback_kwargs={'sort': sort})
 
     async def get_dev_details(self, dev_type: str, serial: str) -> Response:
         dev_type = "switches" if dev_type == "switch" else dev_type
@@ -479,6 +502,50 @@ class CentralApi(Session):
         dev_type = "aps" if dev_type == "ap" else dev_type
         url = f"/monitoring/v1/{dev_type}/{serial}"
         return await self.get(url, callback=cleaner.get_devices)
+
+    async def monitoring_get_mcs(self, group: str = None, label: str = None, site: str = None,
+                                 status: str = None, macaddr: str = None, model: str = None,
+                                 fields: str = None, calculate_total: bool = None,
+                                 sort: str = None, offset: int = 0, limit: int = 100) -> Response:
+        """List Mobility Controllers.
+
+        You can only specify one of group, label, site
+
+        Args:
+            group (str, optional): Filter by group name
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            status (str, optional): Filter by Mobility Controller status
+            macaddr (str, optional): Filter by Mobility Controller MAC address
+            model (str, optional): Filter by Mobility Controller Model
+            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
+                status, ip_address, model, firmware_version, labels, ap_count, usage
+            calculate_total (bool, optional): Whether to calculate total Mobility Controllers
+            sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr, -macaddr.
+                Default is '+serial'
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v1/mobility_controllers"
+
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'status': status,
+            'macaddr': macaddr,
+            'model': model,
+            'fields': fields,
+            'calculate_total': calculate_total,
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_ssids_by_group(self, group):
         url = "/monitoring/v1/networks"
@@ -760,15 +827,16 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_audit_logs(self, username: str = None, start_time: int = None,
-                             end_time: int = None, description: str = None,
-                             target: str = None, classification: str = None,
-                             customer_name: str = None, ip_address: str = None,
-                             app_id: str = None, log_id: str = None,
+    async def get_audit_logs(self, log_id: str = None, username: str = None,
+                             start_time: int = None, end_time: int = None,
+                             description: str = None, target: str = None,
+                             classification: str = None, customer_name: str = None,
+                             ip_address: str = None, app_id: str = None,
                              offset: int = 0, limit: int = 100) -> Response:
         """Get all audit logs.
 
         Args:
+            log_id (str, optional): The id of the log to return details for. Defaults to None.
             username (str, optional): Filter audit logs by User Name
             start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
                 logs should be provided in epoch seconds
@@ -780,7 +848,6 @@ class CentralApi(Session):
             customer_name (str, optional): Filter audit logs by Customer Name
             ip_address (str, optional): Filter audit logs by IP Address
             app_id (str, optional): Filter audit logs by app_id
-            log_id (str, optional): The id of the log to return details for. Defaults to None.
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination Defaults to 0.
             limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
