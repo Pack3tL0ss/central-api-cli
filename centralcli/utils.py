@@ -328,8 +328,10 @@ class Utils:
                         if tablefmt == "rich":
                             inner_table = Table(*(k for k in val[0].keys()),
                                                 show_header=True,
-                                                # title=key,
-                                                show_edge=True,
+                                                # padding=(0, 0),
+                                                pad_edge=False,
+                                                collapse_padding=True,
+                                                show_edge=False,
                                                 header_style="bold cyan",
                                                 box=SIMPLE
                                                 )
