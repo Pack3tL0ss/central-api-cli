@@ -1,32 +1,22 @@
+from pathlib import Path
 from typer.testing import CliRunner
+import json
 
-from cli import app  # type: ignore # NoQA
-from . import TEST_DEVICES
+# you need to pip install -e centralcli from base directory
+try:
+    from cli import app  # type: ignore # NoQA
+except (ImportError, ModuleNotFoundError):
+    print('\nYou need to `pip install -e centralcli` from base directory\n')
+    raise
 
 runner = CliRunner()
 
+test_dev_file = Path(__file__).parent / 'test_devices.json'
+if test_dev_file.is_file():
+    TEST_DEVICES = json.loads(test_dev_file.read_text())
+else:
+    raise UserWarning(f'\nYou need to populate {test_dev_file}\n')
 
-# class Switch:
-#     def __init__(self) -> None:
-#         self.data = None
-#         self.get_data()
-
-#     def __getattr__(self, key: str):
-#         if hasattr(self, key):
-#             return getattr(self, key)
-#         elif self.data and self.data.get(key):
-#             return self.data[key]
-#         else:
-#             raise AttributeError(f"{self.__name__} object has no Attribute {key}")
-
-#     def get_data(self):
-#         cache = Identifires()
-#         self.data = cache.DevDB.search(self.Q.type == "switch")
-
-
-# class TestShow:
-# def __init__(self) -> None:
-#     self.switch = Switch()
 
 def test_show_aps():
     result = runner.invoke(app, ["show", "aps", "--debug"])

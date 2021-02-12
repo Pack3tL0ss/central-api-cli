@@ -5164,14 +5164,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def oauth2_xxx(self, client_id: str, client_secret: str, grant_type: str,
+    async def oauth2_xxx(self, client_id: str, client_secret: str,
                          refresh_token: str) -> Response:
         """Refresh API token.
 
         Args:
             client_id (str): Client ID
             client_secret (str): Client Secret
-            grant_type (str): Value should be "refresh_token"
             refresh_token (str): Refresh Token
 
         Returns:
@@ -5182,7 +5181,7 @@ class AllCalls(CentralApi):
         params = {
             'client_id': client_id,
             'client_secret': client_secret,
-            'grant_type': grant_type,
+            'grant_type': 'refresh_token',
             'refresh_token': refresh_token
         }
 

@@ -482,17 +482,13 @@ class CentralApi(Session):
             'limit': limit,
             'offset': offset
         }
-        if dev_type == "switch":
-            dev_type = "switches"
-        elif dev_type == "gateway":
-            dev_type = "gateways"
+        # if dev_type == "switch":
+        #     dev_type = "switches"
+        # elif dev_type == "gateway":
+        #     dev_type = "gateways"
 
-        # if dev_type in ["aps", "gateways"]:  # TODO remove in favor of our own sort
-        #     if params.get("sort", "").endswith("name"):
-        #         del params["sort"]
-        #         log.warning(f"name is not a valid sort option for {dev_type}, Output will have default Sort", show=True)
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
-        if dev_type == 'aps':
+        if dev_type == 'aps' and 'internal' in self.central.central_info['base_url']:
             url = url.replace('v1', 'v2')
         return await self.get(url, params=params, callback=cleaner.get_devices, callback_kwargs={'sort': sort})
 

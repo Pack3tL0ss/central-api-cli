@@ -5,8 +5,9 @@ from typing import Union
 dev_to_url = {
     "switch": "switches",
     "ap": "aps",
-    "iap": "aps"
-              }
+    "iap": "aps",
+    "gateway": "gateways"
+}
 
 
 class ShowArgs(str, Enum):
@@ -37,6 +38,14 @@ class RefreshWhat(str, Enum):
     cache = "cache"
     token = "token"
     tokens = "tokens"
+
+
+out_format_dict = {
+    "do_json": "json",
+    "do_yaml": "yaml",
+    "do_csv": "csv",
+    "do_rich": "rich"
+}
 
 
 class DoArgs(str, Enum):
@@ -76,16 +85,17 @@ class ArgToWhat:
         central.  If the API method uses a different one, we'll convert from our
         std set in the method invoking the API call.
         """
-        self.gateway = self.gateways = "gateway"
+        self.gateways = self.gateway = "gateways"
         self.aps = self.ap = self.iap = "aps"
-        self.switch = self.switches = "switch"
+        self.switches = self.switch = "switches"
         self.groups = self.group = "groups"
-        self.site = self.sites = "sites"
-        self.template = self.templates = "template"
+        self.sites = self.site = "sites"
+        self.templates = self.template = "templates"
         self.all = "all"
-        self.device = self.devices = "device"
+        self.devices = self.device = "devices"
+        self.controllers = self.controller = "controllers"
 
-    def get(self, key: Union[ShowArgs, str], default: str = None) -> str:
+    def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
             key = key._value_
         return getattr(self, key, default or key)

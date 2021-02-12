@@ -263,7 +263,8 @@ def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
                "latitude", "associated_device_count"]  # , "tags"]
     key_map = {
         "associated_device_count": "associated devices",
-        "site_id": "id"
+        "site_id": "id",
+        "site_name": "name"
     }
 
     return _unlist(

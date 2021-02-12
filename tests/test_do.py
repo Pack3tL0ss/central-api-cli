@@ -1,32 +1,17 @@
+from pathlib import Path
 from typer.testing import CliRunner
 
 from cli import app  # type: ignore # NoQA
-from . import TEST_DEVICES
+import json
+
+# from . import TEST_DEVICES
 
 runner = CliRunner()
 
+test_dev_file = Path(__file__).parent / 'test_devices.json'
+if test_dev_file.is_file():
+    TEST_DEVICES = json.loads(test_dev_file.read_text())
 
-# class Switch:
-#     def __init__(self) -> None:
-#         self.data = None
-#         self.get_data()
-
-#     def __getattr__(self, key: str):
-#         if hasattr(self, key):
-#             return getattr(self, key)
-#         elif self.data and self.data.get(key):
-#             return self.data[key]
-#         else:
-#             raise AttributeError(f"{self.__name__} object has no Attribute {key}")
-
-#     def get_data(self):
-#         cache = Identifires()
-#         self.data = cache.DevDB.search(self.Q.type == "switch")
-
-
-# class TestShow:
-# def __init__(self) -> None:
-#     self.switch = Switch()
 
 def test_do_bounce_interface():
     result = runner.invoke(app, ["do", "bounce-interface", TEST_DEVICES["switch"]["name"].lower(),

@@ -136,33 +136,47 @@ class Cache:
         self.MetaDB.truncate()
         return self.MetaDB.insert({"prev_account": config.account, "forget": time.time() + 7200})
 
-    async def _check_fresh(self):
+    async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False):
         async with ClientSession() as self.session.aio_session:
+            if dev_db:
+                await asyncio.gather(self.update_dev_db())
+            elif site_db:
+                await asyncio.gather(self.update_site_db())
+            elif template_db:
+                await asyncio.gather(self.update_template_db())
+
             # update groups first so template update can use the result, and to trigger token_refresh if necessary
-            if await self.update_group_db():
+            elif await self.update_group_db():
                 await asyncio.gather(self.update_dev_db(), self.update_site_db(), self.update_template_db())
 
-    def check_fresh(self, refresh: bool = False):
+    def check_fresh(
+        self, refresh: bool = False,
+        site_db: bool = False, dev_db: bool = False, template_db: bool = False
+    ):
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
            or time.time() - config.cache_file.stat().st_mtime > 7200:
             start = time.time()
             typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
-            asyncio.run(self._check_fresh())
-            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
-            typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
+            asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
             # loop = asyncio.get_event_loop()
             # try:
-            #     loop.run_until_complete(self._check_fresh())
+            #     loop.run_until_complete(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
             #     loop.run_until_complete(loop.shutdown_asyncgens())
             # finally:
             #     loop.close()
+            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
+            typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
-    def handle_multi_match(self, match: list, query_str: str = None) -> list:
-        typer.secho(" -- Ambiguos identifier provided.  Please select desired device. --\n", color="cyan")
-        menu = f"{' ':{len(str(len(match)))}}  {'name':29} {'serial':12} {'mac':12} type"
+    def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> list:
+        typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
+        if query_type == 'site':
+            fields = ('name', 'city', 'state', 'type')
+        else:
+            fields = ('name', 'serial', 'mac')
+        menu = f"{' ':{len(str(len(match)))}}  {fields[0]:29} {fields[1]:12} {fields[2]:12} type"
         menu += f"\n{' ':{len(str(len(match)))}}  {'-' * 29} {'-' * 12} {'-' * 18} -------\n"
-        menu += "\n".join(list(f'{idx + 1}. {m.get("name", "error"):29} {m.get("serial", "error"):12} '
-                               f'{m.get("mac", "error"):18} {m.get("type", "error")}' for idx, m in enumerate(match)))
+        menu += "\n".join(list(f'{idx + 1}. {m.get(fields[0], "error"):29} {m.get(fields[1], "error"):12} '
+                               f'{m.get(fields[2], "error"):18} {m.get("type", "-")}' for idx, m in enumerate(match)))
         if query_str:
             menu = menu.replace(query_str, typer.style(query_str, fg='green'))
             menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg='green'))
@@ -171,7 +185,7 @@ class Cache:
         valid = [str(idx + 1) for idx, _ in enumerate(match)]
         try:
             while selection not in valid:
-                selection = typer.prompt('Select Device')
+                selection = typer.prompt(f'Select {query_type.title()}')
                 if selection not in valid:
                     typer.secho(f"Invalid selection {selection}, try again.")
         except KeyboardInterrupt:
@@ -219,8 +233,8 @@ class Cache:
                                           | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower())))
 
             if retry and not match and self.session.get_all_devicesv2 not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating Device Cachce")
-                self.update_dev_db
+                typer.secho(f"No Match Found for {query_str}, Updating Device Cachce", fg="red")
+                self.check_fresh(refresh=True, dev_db=True)
             if match:
                 break
 
@@ -237,26 +251,57 @@ class Cache:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
             raise typer.Abort()
 
-    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]], ret_field: str = "id") -> str:
+    def get_site_identifier(self, query_str: Union[str, List[str], Tuple[str, ...]],
+                            ret_field: str = "id", retry: bool = True) -> str:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
-        match = self.SiteDB.search((self.Q.site_name == query_str) | (self.Q.site_id.test(lambda v: str(v) == query_str))
-                                   | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                                   | (self.Q.city == query_str) | (self.Q.state == query_str))
+        match = None
+        for _ in range(0, 2 if retry else 1):
+            # try exact site match
+            match = self.SiteDB.search(
+                (self.Q.name == query_str) | (self.Q.id.test(lambda v: str(v) == query_str))
+                | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
+                | (self.Q.city == query_str) | (self.Q.state == query_str)
+            )
 
-        # retry with case insensitive name & address match if no match with original query
-        if not match:
-            match = self.SiteDB.search((self.Q.site_name.test(lambda v: v.lower() == query_str.lower()))
-                                       | self.Q.address.test(
-                                           lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
-                                           )
-                                       )
+            # retry with case insensitive name & address match if no match with original query
+            if not match:
+                match = self.SiteDB.search(
+                    (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                    | self.Q.address.test(
+                        lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
+                    )
+                )
 
+            # retry name match swapping - for _ and _ for -
+            if not match:
+                if '-' in query_str:
+                    match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+                elif '_' in query_str:
+                    match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+
+            # Last Chance try to match name if it startswith provided value
+            if not match:
+                match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
+
+            if retry and not match and self.session.get_all_sites not in self.updated:
+                typer.secho(f"No Match Found for {query_str}, Updating Site Cachce", fg="red")
+                self.check_fresh(refresh=True, site_db=True)
+            if match:
+                break
+
+        # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
         if match:
+            if len(match) > 1:
+                # TODO update to accomodate sites handle_multi_match formatted for devs
+                match = self.handle_multi_match(match, query_str=query_str, query_type='site')
+
             return match[0].get(ret_field)
-        else:
+
+        elif retry:
             log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=True)
+            raise typer.Abort()
 
     def get_group_identifier(self, query_str: str, ret_field: str = "name") -> str:
         """Allows Case insensitive group match"""
