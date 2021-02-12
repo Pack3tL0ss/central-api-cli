@@ -1,0 +1,51 @@
+{
+    "switch": {
+        "type": "switch",
+        "group": "WadeLab",
+        "ip": "10.0.30.5",
+        "labels": "",
+        "mac": "f4:03:43:07:57:20",
+        "model": "Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)",
+        "name": "bsmt-2930F",
+        "public ip": "68.52.67.145",
+        "serial": "CN71HKZ1CL",
+        "site": "WadeLab",
+        "version": "16.10.0011",
+        "status": "Up",
+        "test_port": "2"
+        },
+    "ap": {
+        "type": "ap",
+        "version": "8.7.1.1_78245",
+        "group": "Branch1",
+        "ip": "10.101.6.200",
+        "labels": "Branch_View",
+        "mac": "A8bd.27c0.aabb",
+        "model": "315",
+        "name": "BR1_315_0c:88",
+        "serial": "CNC7J0T0GK",
+        "site": "Antigua",
+        "status": "Up"
+        },
+    "gateway": {
+        "type": "gateway",
+        "version": "8.6.0.4-2.2.0.3_77966",
+        "group": "WadeLab",
+        "ip": "192.168.30.202",
+        "labels": "Branch_View",
+        "mac": "20-4c-03-2f-f9-54",
+        "model": "A7005",
+        "name": "VPNC2",
+        "serial": "CP0044573",
+        "site": "WadeLab",
+        "status": "Up"
+        },
+    "template": {
+        "device_type": "ArubaSwitch",
+        "group": "Branch1",
+        "model": "JL258A",
+        "name": "2930F-8",
+        "template_hash": "a96df8da936389e5b71fd52d4bcb3464",
+        "version": "ALL"
+        }
+}
