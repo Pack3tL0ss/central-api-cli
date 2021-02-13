@@ -1,12 +1,26 @@
 '''
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 '''
-
+from pathlib import Path
+import sys
 import functools
-from centralcli import utils, constants
-from typing import List, Any, Union
+import logging
+from typing import Dict, List, Any, Union
 import pendulum
 import ipaddress
+
+
+# Detect if called from pypi installed package or via cloned github repo (development)
+try:
+    from centralcli import utils, constants
+except (ImportError, ModuleNotFoundError) as e:
+    pkg_dir = Path(__file__).absolute().parent
+    if pkg_dir.name == "centralcli":
+        sys.path.insert(0, str(pkg_dir.parent))
+        from centralcli import utils, constants
+    else:
+        print(pkg_dir.parts)
+        raise e
 
 
 def epoch_convert(func):
@@ -17,6 +31,11 @@ def epoch_convert(func):
         return func(epoch)
 
     return wrapper
+
+
+# show certificates
+def _convert_datestring(date_str: str) -> str:
+    return pendulum.from_format(date_str.rstrip('Z'), 'YYYYMMDDHHmmss').to_formatted_date_string()
 
 
 @epoch_convert
@@ -57,7 +76,8 @@ _short_value = {
     "ts": _log_timestamp,
     "Unknown": "?",
     "HPPC": "SW",
-    "vc_disconnected": "vc disc."
+    "vc_disconnected": "vc disc.",
+    "MAC Authentication": "MAC"
 }
 
 _short_key = {
@@ -79,7 +99,9 @@ _short_key = {
     "device_type": "type",
     "classification": "class",
     "ts": "time",
-    "ap_deployment_mode": "mode"
+    "ap_deployment_mode": "mode",
+    "authentication_type": "auth type",
+    "last_connection_time": "last connected"
 }
 
 
@@ -160,12 +182,62 @@ def get_all_groups(data: List[dict, ]) -> list:
     return [{_keys[k]: v for k, v in g.items()} for g in data]
 
 
-def get_all_clients(data: List[dict]) -> list:
-    """Remove all columns that are NA for all clients in the list"""
+def _client_concat_associated_dev(data: Dict[str, Any], cache=None,) -> Dict[str, Any]:
+    strip_keys = [
+        'associated device',
+        'associated device mac',
+        'connected device type',
+        'interface',
+        'interface mac',
+        'gateway serial'
+    ]
+    _name, _gw_name, data['gateway'] = '', '', {}
+    if data.get('associated device'):
+        _name = cache.get_dev_identifier(data["associated device"], ret_field='name')
 
-    strip_na = [[k for k, v in d.items() if str(v) == 'NA'] for d in data]
-    strip_na = set([i for o in strip_na for i in o])
-    data = [dict(short_value(k, v) for k, v in d.items() if k not in strip_na) for d in data]
+    if data.get('gateway_serial'):
+        _gw_name = cache.get_dev_identifier(data["gateway serial"], ret_field='name')
+        _gateway = {
+            'name': _gw_name,
+            'serial': data.get("gateway serial", ""),
+        }
+        data['gateway'] = _unlist(strip_no_value([_gateway]))
+    # f'[{data.get("connected device type", "")}]{_name}\n'
+    # f'{data.get("associated device", "")}\n'
+    # f'{data.get("associated device mac", "")}'
+    _connected = {
+        'name': _name,
+        'type': data.get("connected device type", ""),
+        'serial': data.get("associated device", ""),
+        'mac': data.get("associated device mac", ""),
+        'interface': data.get("interface", ""),
+        'interface mac': data.get("interface mac", "")
+    }
+    for key in strip_keys:
+        if key in data:
+            del data[key]
+    data['connect device'] = _unlist(strip_no_value([_connected]))
+
+    return data
+
+
+def get_clients(data: List[dict], **kwargs) -> list:
+    """Remove all columns that are NA for all clients in the list"""
+    data = utils.listify(data)
+    if data and all([isinstance(d, dict) for d in data]):
+        all_keys = set([k for d in data for k in d])
+        data = [
+            dict(
+                short_value(k, d.get(k),) for k in all_keys if k not in constants.CLIENT_STRIP_KEYS
+            ) for d in data
+        ]
+
+    data = [_client_concat_associated_dev(d, **kwargs) for d in data]
+    data = strip_no_value(data)
+
+    # strip_na = [[k for k, v in d.items() if str(v) == 'NA'] for d in data]
+    # strip_na = set([i for o in strip_na for i in o])
+    # data = [dict(short_value(k, v) for k, v in d.items() if k not in strip_na) for d in data]
     return data
 
 
@@ -175,6 +247,8 @@ def strip_no_value(data: List[dict]) -> List[dict]:
         [
             idx for idx, v in enumerate(id.values()) if not isinstance(v, bool) and not v or (
                 isinstance(v, str) and v == "Unknown"
+                or isinstance(v, str) and v == "NA"
+                or isinstance(v, str) and v == "--"
             )
         ] for id in data
     ]
@@ -270,3 +344,29 @@ def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     return _unlist(
         [{key_map.get(k, k): s[k] for k in _sorted} for s in data if s.get("site_name", "") != "visualrf_default"]
     )
+
+
+def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    data = utils.listify(data)
+    short_keys = {
+        'cert_name': 'name',
+        'cert_type': 'type',
+        'expire_date': 'expiration',
+        'expire': 'expired',
+        'cert_md5_checksum': 'md5 checksum',
+        'cert_sha1_checksum': 'sha1 checksum'
+    }
+
+    if data and len(data[0]) != len(short_keys):
+        log = logging.getLogger()
+        log.error(
+            f"get_certificates has returned more keys than expected, check for changes in response schema\n"
+            f"    expected keys: {short_key.keys()}\n"
+            f"    got keys: {data[0].keys()}"
+        )
+        return data
+    else:
+        data = [
+            {short_keys[k]: d[k] if k != 'expire_date' else _convert_datestring(d[k]) for k in short_keys} for d in data
+        ]
+        return data

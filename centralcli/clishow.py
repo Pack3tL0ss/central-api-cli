@@ -1,7 +1,9 @@
+import cleaner
 import typer
 import time
 import asyncio
 import sys
+import json
 from typing import List, Union, Any
 from pathlib import Path
 # from centralcli import config, log, Cache, Response, utils
@@ -20,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.central import CentralApi
-from constants import StatusOptions, SortOptions
+from constants import ClientArgs, StatusOptions, SortOptions
 
 app = typer.Typer()
 
@@ -119,6 +121,7 @@ def account_name_callback(ctx: typer.Context, account: str):
         session = CentralApi(account)
         global cache
         cache = Cache(session)
+        print("updating cleaner cache")
         return account
     else:
         strip_keys = ['central_info', 'ssl_verify', 'token_store', 'forget_account_after', 'debug', 'debugv', 'limit']
@@ -177,7 +180,11 @@ def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
     if not resp.ok:
         msg = f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
         if isinstance(resp.output, dict):
-            msg += f"{resp.output.get('description', resp.error).replace('Error: ', '')}"
+            _msg = resp.output.get('description', resp.output.get('detail', '')).replace('Error: ', '')
+            if _msg:
+                msg += _msg
+            else:
+                msg += json.dumps(resp.output)
         else:
             msg += str(resp.output)
 
@@ -191,23 +198,24 @@ def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
 
 
 # TODO combine eval_resp and display_results
-def display_results(data: Union[List[dict], List[str]], tablefmt: str = "simple",
+def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "simple",
                     pager=True, outfile: Path = None) -> Union[list, dict]:
-    outdata = utils.output(data, tablefmt)
-    typer.echo_via_pager(outdata) if pager and len(outdata) > tty.rows else typer.echo(outdata)
+    if data:
+        outdata = utils.output(data, tablefmt)
+        typer.echo_via_pager(outdata) if pager and len(outdata) > tty.rows else typer.echo(outdata)
 
-    # -- // Output to file \\ --
-    if outfile and outdata:
-        if outfile.parent.resolve() == config.base_dir.resolve():
-            config.outdir.mkdir(exist_ok=True)
-            outfile = config.outdir / outfile
+        # -- // Output to file \\ --
+        if outfile and outdata:
+            if outfile.parent.resolve() == config.base_dir.resolve():
+                config.outdir.mkdir(exist_ok=True)
+                outfile = config.outdir / outfile
 
-        print(
-            typer.style(f"\nWriting output to {outfile}... ", fg="cyan"),
-            end=""
-        )
-        outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
-        typer.secho("Done", fg="green")
+            print(
+                typer.style(f"\nWriting output to {outfile}... ", fg="cyan"),
+                end=""
+            )
+            outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
+            typer.secho("Done", fg="green")
 
 
 # def get_outformat(**kwargs):
@@ -588,7 +596,7 @@ def sites(
 
 @app.command()
 def templates(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_site, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
     group: str = typer.Option(None, "--group", help="Get Templates for Group"),
     name: str = typer.Option(None, metavar="<Template Name>", help="[Templates] Filter by Template Name"),
     device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
@@ -672,27 +680,174 @@ def templates(
         display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
+@app.command()
+def variables(
+    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback)
+):
+    cache(refresh=update_cache)
+
+    if args and args != "all":
+        args = cache.get_dev_identifier(args)
+
+    resp = session.request(session.get_variables, args)
+    data = eval_resp(resp)
+    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+
+@app.command()
+def certs(
+    name: str = typer.Argument(None, metavar='[certificate name|certificate hash]', hidden=False),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback)
+):
+    resp = session.request(session.get_certificates, name, callback=cleaner.get_certificates)
+    data = eval_resp(resp)
+    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+# 'group': group,
+# 'swarm_id': swarm_id,
+# 'label': label,
+# 'site': site,
+# 'serial': serial,
+# 'cluster_id': cluster_id,
+# # 'fields': fields,
+# 'sort': sort_by,
+# 'offset': offset,
+# 'limit': limit,
+# 'network': ssid,        # WLAN only
+# 'os_type': os_type,     # WLAN only
+# 'band': band,           # WLAN only
+# 'stack_id': stack_id    # wired only
+
+
+@app.command()
+def clients(
+    filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
+    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, help="Show clients for a specific device"),
+    # os_type:
+    # band:
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
+    reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
+    verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        callback=default_callback,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        callback=debug_callback,
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        callback=account_name_callback,
+    ),
+):
+    # TODO quick and dirty, make less dirty (the way I passed cache all the way through **kwargs to cleanerq)
+    resp = session.request(session.get_clients, filter, *args, callback_kwargs={'cache': cache})
+    data = eval_resp(resp)
+    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+
+@app.command()
+def logs(
+    # args: List[str] = typer.Argument(None, metavar=args_metavar_dev, help="Show clients for a specific device"),
+    # os_type:
+    # band:
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
+    reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
+    verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        callback=default_callback,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        callback=debug_callback,
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        callback=account_name_callback,
+    ),
+):
+    # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
+    resp = session.request(session.get_audit_logs, start_time=int(time.time() - 86400),)
+    data = eval_resp(resp)
+    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+
 def __temp():
-    # -- // SHOW TEMPLATE \\ --
-    if what == "variables":
-        # switch default output to json for show variables
-        if True not in [do_csv, do_yaml]:
-            do_json = True
-
-        if args and args != "all":
-            args = cache.get_dev_identifier(args)
-
-        resp = session.request(session.get_variables, args)
-
-    elif what == "certs":
-        resp = session.request(session.get_certificates)
-
-    elif what == "clients":
+    what = None
+    args = None
+    if what == "clients":
         resp = session.request(session.get_clients, args)
 
-    elif what == "cache":
-        do_json = True
-        resp = Response(output=cache.all)
     elif what in ["log", "logs"]:
         # log_id as arg optional for details on specific log
         resp = session.request(session.get_audit_logs, args)

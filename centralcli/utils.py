@@ -24,26 +24,39 @@ log = logging.getLogger()
 
 
 class Convert:
-    def __init__(self, mac):
+    def __init__(self, mac, fuzzy: bool = False):
         self.orig = mac
         if not mac:
             mac = '0'
-        self.clean = ''.join([c for c in list(mac) if c in string.hexdigits])
-        self.ok = True if len(self.clean) == 12 else False
-        cols = ':'.join(self.clean[i:i+2] for i in range(0, 12, 2))
+        if not fuzzy:
+            self.clean = ''.join([c for c in list(mac) if c in string.hexdigits])
+            self.ok = True if len(self.clean) == 12 else False
+        else:
+            for delim in ['.', '-', ':']:
+                mac = mac.replace(delim, '')
+
+            self.clean = mac
+            if len([c for c in list(self.clean) if c in string.hexdigits]) == len(self):
+                self.ok = True
+            else:
+                self.ok = False
+
+        cols = ':'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
         if cols.strip().endswith(':'):  # handle macs starting with 00 for oobm
             cols = f"00:{cols.strip().rstrip(':')}"
         self.cols = cols
-        self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, 12, 2))
-        self.dots = '.'.join(self.clean[i:i+4] for i in range(0, 12, 4))
-        # self.tag = f"ztp-{self.clean[-4:]}"
+        self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+        self.dots = '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
         self.dec = int(self.clean, 16) if self.ok else 0
         self.url = urllib.parse.quote(mac)
 
+    def __len__(self):
+        return len(self.clean)
+
 
 class Mac(Convert):
-    def __init__(self, mac):
-        super().__init__(mac)
+    def __init__(self, mac, fuzzy: bool = False):
+        super().__init__(mac, fuzzy=fuzzy)
         oobm = hex(self.dec + 1).lstrip('0x')
         self.oobm = Convert(oobm)
 

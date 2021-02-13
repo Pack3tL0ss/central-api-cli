@@ -47,14 +47,17 @@ class Response:
             self.url = response.url
             self.error = response.reason
             self.status = response.status
+            if not self.ok:
+                self.output = self.output or self.error
             log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
         else:
-            if output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
+            if error:
+                self.ok = ok or False
+                self.error = error
+                self.output = output or error
+            elif output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
                 self.ok = ok or True
                 self.error = error or "OK"
-            elif error:
-                self.ok = ok or False
-                self.error = self.output = error
 
             self.url = str(url)
             self.status = status_code or 299 if self.ok else 418
@@ -248,7 +251,7 @@ class Session:
 
             # data cleaner methods to strip any useless columns, change key names, etc.
             elif callback is not None:
-                r.output = callback(r.output, **callback_kwargs)
+                r.output = callback(r.output, **callback_kwargs or {})
 
             # -- // paging \\ --
             if not paged_output:

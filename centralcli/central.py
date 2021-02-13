@@ -27,7 +27,7 @@
 import asyncio
 import json
 # import functools
-from typing import Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 from pathlib import Path
 from pycentral.base_utils import tokenLocalStoreUtil
 from aiohttp import ClientSession
@@ -183,79 +183,279 @@ class CentralApi(Session):
         return await self.get(url)
 
     async def get_clients(self, *args: Tuple[str], group: str = None, swarm_id: str = None,
-                          label: str = None, ssid: str = None,
-                          serial: str = None, os_type: str = None,
-                          cluster_id: str = None, band: str = None, mac: str = None) -> Response:
-        if not args.count(str) > 0 or "all" in args:
-            return await self._get_all_clients()
-        elif "wired" in args:
-            return await self._get_wired_clients()
-        elif "wireless" in args:
-            return await self._get_wireless_clients()
-        elif mac:
-            mac = utils.Mac(args)
-            if mac.ok:
-                return await self._get_client_details(mac)
+                          label: str = None, network: str = None, site: str = None,
+                          serial: str = None, os_type: str = None, stack_id: str = None,
+                          cluster_id: str = None, band: str = None, mac: str = None,
+                          sort_by: str = None, offset: int = 0, limit: int = 500, **kwargs) -> Response:
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'serial': serial,
+            'cluster_id': cluster_id,
+            # 'fields': fields,
+            'sort_by': sort_by,
+            'offset': offset,
+            'limit': limit,
+        }
+        wlan_only_params = {
+            'network': network,
+            'os_type': os_type,
+            'band': band
+        }
+        wired_only_params = {
+            'stack_id': stack_id
+        }
+        all_params = {
+            **params,
+            **wlan_only_params,
+            **wired_only_params
+        }
+        wired_params = {
+            **params,
+            **wired_only_params
+        }
+        wlan_params = {
+            **params,
+            **wlan_only_params
+        }
+        if True in [network, os_type, band] and 'wireless' not in args:
+            args = ('wireless', *args)
+        if stack_id and 'wired' not in args:
+            args = ('wired', *args)
+
+        if 'mac' in args and args.index('mac') < len(args):
+            _mac = utils.Mac(args[args.index('mac') + 1], fuzzy=True,)
+            if _mac.ok:
+                mac = _mac
             else:
-                print(f"Invalid mac {mac}")
+                return Response(error='INVALID MAC', output=f'The Provided MAC {_mac} Appears to be invalid.')
+#
+        # if not args.count(str) > 0 or "all" in args:
+        if not args or "all" in args:
+            if mac:
+                return await self.get_client_details(mac.cols, **kwargs)
+            else:
+                return await self.get_all_clients(**all_params, **kwargs)
+        elif "wired" in args:
+            if mac:
+                return await self.get_client_details(mac.cols, dev_type='wired', **kwargs)
+            else:
+                return await self.get_wired_clients(**wired_params, **kwargs)
+        elif "wireless" in args:
+            if mac:
+                return await self.get_client_details(mac.cols, dev_type='wireless', **kwargs)
+            else:
+                return await self.get_wireless_clients(**wlan_params, **kwargs)
         else:
-            print(f"Invalid arg {args}")
+            return Response(error='INVALID ARGUMENT', output=f'{args} appears to be invalid',)
 
-    async def _get_all_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
-                               serial: str = None, os_type: str = None, cluster_id: str = None, band: str = None) -> Response:
-        params = {}
-        for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "os_type", "cluster_id", "band"],
-                        [group, swarm_id, label, ssid, serial, os_type, cluster_id, band]
-                        ):
-            if v:
-                params[k] = v
+    async def get_all_clients(
+        self, group: str = None, swarm_id: str = None,
+        label: str = None, network: str = None, site: str = None,
+        serial: str = None, os_type: str = None, stack_id: str = None,
+        cluster_id: str = None, band: str = None,
+        sort_by: str = None, offset: int = 0, limit: int = 500, **kwargs
+    ) -> Response:
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'serial': serial,
+            'cluster_id': cluster_id,
+            # 'fields': fields,
+            'sort_by': sort_by,
+            'offset': offset,
+            'limit': limit
+        }
+        wlan_only_params = {
+            'network': network,
+            'os_type': os_type,
+            'band': band
+        }
+        wired_only_params = {
+            'stack_id': stack_id
+        }
 
-        resp = await self._get_wireless_clients(**params)
+        resp = await self.get_wireless_clients(**{**params, **wlan_only_params}, **kwargs)
         if resp.ok:
             wlan_resp = resp
-            resp = await self._get_wired_clients(**params)
-            if resp.ok:
-                resp.output = wlan_resp.output + resp.output
-                resp.output = cleaner.get_all_clients(resp.output)
+            wired_resp = await self.get_wired_clients(**{**params, **wired_only_params}, **kwargs)
+            if wired_resp.ok:
+                resp.output = wlan_resp.output + wired_resp.output
+                # resp.output = cleaner.get_clients(resp.output)
+                if sort_by:  # TODO
+                    print("sort_by not implemented yet.")
         return resp
 
-    async def _get_wireless_clients(self, group: str = None, swarm_id: str = None, label: str = None,
-                                    ssid: str = None, serial: str = None, os_type: str = None,
-                                    cluster_id: str = None, band: str = None) -> Response:
-        params = {}
-        for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "os_type", "cluster_id", "band"],
-                        [group, swarm_id, label, ssid, serial, os_type, cluster_id, band]
-                        ):
-            if v:
-                params[k] = v
+    async def get_wireless_clients(
+        self, group: str = None, swarm_id: str = None,
+        label: str = None, site: str = None,
+        network: str = None, serial: str = None,
+        os_type: str = None, cluster_id: str = None,
+        band: str = None, fields: str = None,
+        calculate_total: bool = None, sort: str = None,
+        offset: int = 0, limit: int = 500, **kwargs
+    ) -> Response:
+        """List Wireless Clients.
 
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            network (str, optional): Filter by network name
+            serial (str, optional): Filter by AP serial number
+            os_type (str, optional): Filter by client os type
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            band (str, optional): Filter by band. Value can be either "2.4" or "5"
+            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
+                name, ip_address, username, os_type, connection, associated_device, group_name,
+                swarm_id, network, radio_mac, manufacturer, vlan, encryption_method, radio_number,
+                speed, usage, health, labels, site, signal_strength, signal_db, snr
+            calculate_total (bool, optional): Whether to calculate total wireless Clients
+            sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
+                '+macaddr'
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/monitoring/v1/clients/wireless"
-        return await self.get(url, params=params)
 
-    async def _get_wired_clients(self, group: str = None, swarm_id: str = None, label: str = None, ssid: str = None,
-                                 serial: str = None, cluster_id: str = None, stack_id: str = None) -> Response:
-        params = {}
-        for k, v in zip(["group", "swarm_id", "label", "ssid", "serial", "cluster_id", "stack_id"],
-                        [group, swarm_id, label, ssid, serial, cluster_id, stack_id]
-                        ):
-            if v:
-                params[k] = v
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'network': network,
+            'serial': serial,
+            'os_type': os_type,
+            'cluster_id': cluster_id,
+            'band': band,
+            'fields': fields,
+            'calculate_total': calculate_total,
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
 
+        return await self.get(url, params=params, callback=cleaner.get_clients, **kwargs)
+
+    async def get_wired_clients(self, group: str = None, swarm_id: str = None,
+                                label: str = None, site: str = None,
+                                serial: str = None, cluster_id: str = None,
+                                stack_id: str = None, fields: str = None,
+                                calculate_total: bool = None, sort_by: str = None,
+                                offset: int = 0, limit: int = 500, **kwargs) -> Response:
+        """List Wired Clients.
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            serial (str, optional): Filter by Switch or AP serial number
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            stack_id (str, optional): Filter by Switch stack_id
+            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
+                name, ip_address, username, associated_device, group_name, interface_mac, vlan
+            calculate_total (bool, optional): Whether to calculate total wired Clients
+            # sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
+            #     '+macaddr'
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/monitoring/v1/clients/wired"
-        return await self.get(url, params=params)
 
-    async def _get_client_details(self, mac: utils.Mac) -> Response:
-        # TODO THIS IS SPECIFIC TO WIRED AS IS
-        # need to check wireless if doesn't exist there check wired or see if there is generic wired/wlan method
-        url = f"/monitoring/v1/clients/wired/{mac.url}"
-        resp = await self.get(url)
-        # check if client mac found then retry wireless if not
-        return resp
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'serial': serial,
+            'cluster_id': cluster_id,
+            'stack_id': stack_id,
+            'fields': fields,
+            'calculate_total': calculate_total,
+            # 'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
 
-    async def get_certificates(self) -> Response:  # VERIFIED
+        return await self.get(url, params=params, callback=cleaner.get_clients, **kwargs)
+
+    async def get_client_details(self, macaddr: str, dev_type: str = None, **kwargs) -> Response:
+        """Get Wired/Wireless Client Details.
+
+        Args:
+            macaddr (str): MAC address of the Wireless Client to be queried
+                API will return results matching a partial Mac
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # This logic is here because Central has both methods, but given a wlan client mac
+        # central will return the client details even when using the wired url
+
+        # Mac match logic is jacked in central
+        # given a client with a MAC of ac:37:43:4a:8e:fa
+        #
+        # Make MAC invlalid (changed last octet):
+        #   ac:37:43:4a:8e:ff No Match
+        #   ac37434a8eff No Match
+        #   ac:37:43:4a:8e-ff  Returns MATCH
+        #   ac:37:43:4a:8eff  Returns MATCH
+        #   ac:37:43:4a:8eff  Returns MATCH
+        #   ac37434a8e:ff  Returns MATCH
+        #   ac-37-43-4a-8e-ff Return MATCH
+        #   ac37.434a.8eff Returns MATCH
+        if not dev_type:
+            for _dev_type in ['wired', 'wireless']:
+                url = f"/monitoring/v1/clients/{_dev_type}/{macaddr}"
+                resp = await self.get(url, callback=cleaner.get_clients, **kwargs)
+                if resp:
+                    break
+
+            return resp
+        else:
+            url = f"/monitoring/v1/clients/{dev_type}/{macaddr}"
+            return await self.get(url, callback=cleaner.get_clients, **kwargs)
+
+    async def get_certificates(
+        self, q: str = None,
+        offset: int = 0,
+        limit: int = 20,
+        callback: callable = None,
+        callback_kwargs: dict = None
+    ) -> Response:
+        """Get Certificates details.
+
+        Args:
+            q (str, optional): Search for a particular certificate by its name, md5 hash or sha1_hash
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 20, Max 20.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/configuration/v1/certificates"
-        params = {"limit": 20, "offset": 0}
-        return await self.get(url, params=params)
+
+        # offset and limit are both required by the API method.
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
     async def post_certificates(self, name: str, cert_type: str, passphrase: str,
                                 cert_data: str, format: str = "PEM") -> Response:
@@ -482,10 +682,6 @@ class CentralApi(Session):
             'limit': limit,
             'offset': offset
         }
-        # if dev_type == "switch":
-        #     dev_type = "switches"
-        # elif dev_type == "gateway":
-        #     dev_type = "gateways"
 
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
         if dev_type == 'aps' and 'internal' in self.central.central_info['base_url']:
