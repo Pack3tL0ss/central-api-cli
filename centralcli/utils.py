@@ -47,6 +47,12 @@ class Mac(Convert):
         oobm = hex(self.dec + 1).lstrip('0x')
         self.oobm = Convert(oobm)
 
+    def __str__(self):
+        return self.orig
+
+    def __bool__(self):
+        return self.ok
+
 
 class Utils:
     def __init__(self):
