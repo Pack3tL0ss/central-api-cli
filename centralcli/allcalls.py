@@ -1397,8 +1397,14 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/aps/bandwidth_usage/topn"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'cluster_id': cluster_id,
-            'count': count
+            'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
         }
 
         return await self.get(url, params=params)
@@ -2144,12 +2150,17 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/gateways"
 
         params = {
+            'group': group,
+            'label': label,
+            'site': site,
             'status': status,
             'macaddr': macaddr,
             'model': model,
             'fields': fields,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)

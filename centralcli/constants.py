@@ -34,6 +34,14 @@ class ShowArgs(str, Enum):
     logs = "logs"
 
 
+class ClientArgs(str, Enum):
+    wired = "wired"
+    wireless = "wireless"
+    all = "all"
+    mac = "mac"
+    dev = "dev"
+
+
 class RefreshWhat(str, Enum):
     cache = "cache"
     token = "token"
@@ -74,6 +82,7 @@ devices = ["switch", "aps", "gateway", "all", "device"]
 
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites", "neighbors", "audit_logs"]
+CLIENT_STRIP_KEYS = ["group_id", "label_id", "swarm_id"]
 
 
 class ArgToWhat:
@@ -94,6 +103,9 @@ class ArgToWhat:
         self.all = "all"
         self.devices = self.device = "devices"
         self.controllers = self.controller = "controllers"
+        self.certs = self.certificates = self.certificate = self.cert = "certs"
+        self.clients = self.client = "clients"
+        self.logs = self.log = self.event = self.events = "logs"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):

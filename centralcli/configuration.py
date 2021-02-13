@@ -1,6 +1,4 @@
 import sys
-import asyncio
-import json
 from pathlib import Path
 from typing import Union, List
 
@@ -8,14 +6,14 @@ from typing import Union, List
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import Response
-except (ImportError, ModuleNotFoundError) as e:
+except (ImportError, ModuleNotFoundError):
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import Response
     else:
         print(pkg_dir.parts)
-        raise e
+        raise
 
 from centralcli.central import CentralApi
 
@@ -896,7 +894,7 @@ class AllCalls(CentralApi):
         return await self.post(url)
 
     async def configuration_get_certificates(self, q: str = None, offset: int = 0,
-                                             limit: int = 100) -> Response:
+                                             limit: int = 20) -> Response:
         """Get Certificates details uploaded.
 
         Args:
@@ -904,13 +902,14 @@ class AllCalls(CentralApi):
                 sha1_hash
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 20 Max 20.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/configuration/v1/certificates"
 
+        # offset and limit are both required by the API method.
         params = {
             'q': q,
             'offset': offset,
