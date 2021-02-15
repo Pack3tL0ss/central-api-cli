@@ -71,6 +71,37 @@ class DoArgs(str, Enum):
     delete = "delete"                      # delete a group
 
 
+class BlinkArgs(str, Enum):
+    on = "on"
+    off = "off"
+
+
+class CycleArgs(str, Enum):
+    poe = "poe"              # Switches Only
+    interface = "interface"  # Switches only
+    port = "port"                      # IAP/Controllers/Switches
+    # sync = "sync"                          # Controllers
+    # blink_led = "blink-led"                # IAP/Switches
+    # factory_default = "factory-default"    # Switches only
+    # write_mem = "write-mem"                # IAP & Switches
+    # halt = "halt"                          # controllers only
+    # move = "move"                          # move device to diff group
+    # clone = "clone"                        # clone-add group
+    # add = "add"                            # add group
+    # delete = "delete"                      # delete a group
+
+
+class SendDevCommand(str, Enum):
+    reboot = 'reboot'
+    blink_led_on = 'blink_led_on'
+    blink_led_off = 'blink_led_off'
+    blink_led = 'blink_led'
+    erase_configuration = 'erase_configuration'
+    save_configuration = 'save_configuration'
+    halt = 'halt'
+    config_sync = 'config_sync'
+
+
 class TemplateLevel1(str, Enum):
     update = "update"
     delete = "delete"

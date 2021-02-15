@@ -194,6 +194,7 @@ class Cache:
             return [match.pop(int(selection) - 1)]
 
     # TODO trigger update if no match is found and db wasn't updated recently
+    # TODO create and return a device object so dev.serial dev.name etc can be used in prompts
     def get_dev_identifier(self,
                            query_str: Union[str, List[str], Tuple[str, ...]],
                            dev_type: str = None,

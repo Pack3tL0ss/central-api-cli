@@ -327,6 +327,7 @@ def get_audit_logs(data: List[dict]) -> List[dict]:
         "target", "ip_addr", "user", "id", "has_details"
         ]
     data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
+    data = strip_no_value(data)
     return data
 
 

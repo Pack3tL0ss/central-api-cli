@@ -26,9 +26,11 @@
 # import pycentral.base
 import asyncio
 import json
+import time
 # import functools
 from typing import Any, Dict, List, Tuple, Union
 from pathlib import Path
+import constants
 from pycentral.base_utils import tokenLocalStoreUtil
 from aiohttp import ClientSession
 
@@ -641,7 +643,7 @@ class CentralApi(Session):
             params = {"limit": 20, "offset": 0}
         return await self.get(url, params=params)
 
-    async def update_variables(self, serialnum: str, var_dict: dict) -> bool:
+    async def update_variables(self, serialnum: str, **var_dict: dict) -> bool:
         url = f"/configuration/v1/devices/{serialnum}/template_variables"
         var_dict = json.dumps(var_dict)
         return await self.patch(url, payload=var_dict)
@@ -797,22 +799,61 @@ class CentralApi(Session):
                 }
         return await self.post(url, _json=payload)
 
-    async def bounce_poe(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
-        """Bounce PoE on interface, valid only for switches
-        """
-        # TODO allow bounce by name or ip
-        # v2 method returns 'CSRF token missing or incorrect.'
-        url = f"/device_management/v1/device/{serial_num}/action/bounce_poe_port/port/{port}"
-        # need to check get_task_status with response.output["task_id"] from this request to get status
-        # During testing cetral always returned QUEUED
-        return await self.post(url)
+    async def send_bounce_command_to_device(self, serial: str, command: str, port: str) -> Response:
+        """Generic Action Command for bouncing interface or POE (power-over-ethernet) port.
 
-    async def bounce_interface(self, port: Union[str, int], serial_num: str = None, name: str = None, ip: str = None) -> Response:
-        """Bounce interface, valid only for switches
+        Args:
+            serial (str): Serial of device
+            command (str): Command mentioned in the description that is to be executed
+            port (str): Specify interface port in the format of port number for devices of type HPPC
+                Switch or slot/chassis/port for CX Switch
+
+        Returns:
+            Response: CentralAPI Response object
         """
-        # TODO allow bounce by name or ip
-        url = f"/device_management/v1/device/{serial_num}/action/bounce_interface/port/{port}"
-        return await self.post(url)
+        url = f"/device_management/v2/device/{serial}/action/{command}"
+
+        json_data = {
+            'port': port
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def send_command_to_device(
+        self,
+        serial: str,
+        command: constants.SendDevCommand,
+        duration: int = None,
+    ) -> Response:
+        """Generic commands for device.
+
+        Args:
+            serial (str): Serial of device
+            command (str): Command mentioned in the description that is to be executed
+                reboot: supported by IAP/Controllers/MAS Switches/Aruba Switches
+                blink_led_on: Use this command to enable the LED display, supported by IAP/Aruba Switches
+                blink_led_off: Use this command to enable the LED display, supported by IAP/Aruba Switches
+                blink_led: Use this command to blink LED display, Supported on Aruba Switches
+                erase_configuration : Factory default the switch.  Supported on Aruba Switches
+                save_configuration: Saves the running config and displays the running configuration on the screen
+                    supported by IAP/Aruba Switches
+                halt : This command performs a shutdown of the device, supported by Controllers alone.
+                config_sync : This commands performs full refresh of the device config, supported by Controllers alone
+            duration (int, Optional): Number of seconds to blink_led only applies to blink_led and blink_led_on
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/device_management/v1/device/{serial}/action/{command}"
+
+        resp = await self.post(url)
+        if resp and duration and 'blink_led' in command and 'off' not in command:
+            print(f'Blinking Led... {duration}. ', end='')
+            for i in range(1, duration):
+                time.sleep(1)
+                print(f'{duration - i}. ', end='' if i % 20 else '\n')
+            resp = await self.post(url.replace('_on', '_off'))
+        return resp
 
     async def kick_users(self, serial_num: str = None, name: str = None, kick_all: bool = False,
                          mac: str = None, ssid: str = None, hint: Union[List[str], str] = None) -> Union[Response, None]:
