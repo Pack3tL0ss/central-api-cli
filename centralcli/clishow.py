@@ -835,7 +835,7 @@ def logs(
     ),
 ):
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
-    resp = session.request(session.get_audit_logs, start_time=int(time.time() - 86400),)
+    resp = session.request(session.get_audit_logs, start_time=int(time.time() - 172800),)
     data = eval_resp(resp)
     tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
