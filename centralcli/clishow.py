@@ -215,7 +215,7 @@ def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "s
 
         # -- // Output to file \\ --
         if outfile and outdata:
-            if outfile.parent.resolve() == config.base_dir.resolve():
+            if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
                 config.outdir.mkdir(exist_ok=True)
                 outfile = config.outdir / outfile
 
@@ -309,7 +309,7 @@ def aps(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -343,7 +343,7 @@ def switches(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -372,7 +372,7 @@ def interfaces(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -410,7 +410,7 @@ def all(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -444,7 +444,7 @@ def devices(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -495,7 +495,7 @@ def gateways(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -529,7 +529,7 @@ def controllers(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -553,7 +553,7 @@ def cache(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -576,7 +576,7 @@ def cache(
 
 @app.command(short_help="Show groups/details")
 def groups(
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
                                  callback=default_callback),
@@ -602,7 +602,7 @@ def sites(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -649,7 +649,7 @@ def templates(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -727,7 +727,7 @@ def variables(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -759,7 +759,7 @@ def lldp(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -789,7 +789,7 @@ def certs(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -820,7 +820,7 @@ def clients(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
     reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
@@ -863,7 +863,7 @@ def logs(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
     reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
