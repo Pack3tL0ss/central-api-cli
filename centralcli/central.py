@@ -186,7 +186,7 @@ class CentralApi(Session):
             'serial': serial,
             'cluster_id': cluster_id,
             # 'fields': fields,
-            'sort_by': sort_by,
+            # 'sort_by': sort_by,
             'offset': offset,
             'limit': limit,
         }
@@ -257,7 +257,7 @@ class CentralApi(Session):
             'serial': serial,
             'cluster_id': cluster_id,
             # 'fields': fields,
-            'sort_by': sort_by,
+            # 'sort_by': sort_by,
             'offset': offset,
             'limit': limit
         }
@@ -287,7 +287,7 @@ class CentralApi(Session):
         network: str = None, serial: str = None,
         os_type: str = None, cluster_id: str = None,
         band: str = None, fields: str = None,
-        calculate_total: bool = None, sort: str = None,
+        calculate_total: bool = None, sort_by: str = None,
         offset: int = 0, limit: int = 500, **kwargs
     ) -> Response:
         """List Wireless Clients.
@@ -329,7 +329,7 @@ class CentralApi(Session):
             'band': band,
             'fields': fields,
             'calculate_total': calculate_total,
-            'sort': sort,
+            # 'sort': sort_by,
             'offset': offset,
             'limit': limit
         }
@@ -375,7 +375,7 @@ class CentralApi(Session):
             'stack_id': stack_id,
             'fields': fields,
             'calculate_total': calculate_total,
-            # 'sort': sort,
+            # 'sort': sort_by,
             'offset': offset,
             'limit': limit
         }
@@ -811,6 +811,19 @@ class CentralApi(Session):
                 "urls": utils.listify(urls)
                 }
         return await self.post(url, _json=payload)
+
+    async def get_ap_neighbors(self, device_serial: str) -> Response:
+        """Get neighbor details reported by AP via LLDP.
+
+        Args:
+            device_serial (str): Device serial number.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/topology_external_api/apNeighbors/{device_serial}"
+
+        return await self.get(url)
 
     async def send_bounce_command_to_device(self, serial: str, command: str, port: str) -> Response:
         """Generic Action Command for bouncing interface or POE (power-over-ethernet) port.

@@ -371,3 +371,20 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             {short_keys[k]: d[k] if k != 'expire_date' else _convert_datestring(d[k]) for k in short_keys} for d in data
         ]
         return data
+
+
+def get_lldp_neighbor(data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    strip_keys = ['cid']
+    pop_list = []
+
+    # strip bond0 interface same data++ reflected in eth0 interface
+    for idx, neighbor in enumerate(data):
+        if idx + 1 < len(data) and neighbor.get('serial', '') == data[idx + 1].get('serial', '--'):
+            if neighbor.get('localPort', '') == 'bond0':
+                pop_list += [idx]
+
+    for i in pop_list:
+        _ = data.pop(i)
+    data = {k: v for d in data for k, v in d.items() if k not in strip_keys}
+
+    return strip_no_value(utils.listify(data))
