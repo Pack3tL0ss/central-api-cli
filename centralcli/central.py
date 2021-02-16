@@ -20,17 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# from pycentral.base import ArubaCentralBase
-# import sys
-# from centralcli import constants
-# import pycentral.base
 import asyncio
 import json
 import time
-# import functools
-from typing import Any, Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from pathlib import Path
-import constants
 from pycentral.base_utils import tokenLocalStoreUtil
 from aiohttp import ClientSession
 
@@ -39,8 +33,8 @@ from .response import Session, Response
 
 
 DEFAULT_TOKEN_STORE = {
-  "type": "local",
-  "path": f"{config.dir.joinpath('.cache')}"
+    "type": "local",
+    "path": f"{config.dir.joinpath('.cache')}"
 }
 
 
@@ -102,18 +96,6 @@ class CentralApi(Session):
         self.central = get_conn_from_file(account_name)
         super().__init__(central=self.central)
 
-    # def prepare_request(func):
-    #     @functools.wraps(func)
-    #     async def aio_api_call(self, url: str, *args, params: dict = {}, headers: dict = None, **kwargs):
-    #         f_url = self.central.central_info["base_url"] + url
-    #         params = self.strip_none(params)
-    #         headers = self.headers if headers is None else {**self.headers, **headers}
-    #         return await func(self, f_url, *args, params=params, headers=headers, **kwargs)
-    #     return aio_api_call
-
-    # @prepare_request
-    # def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
-    #     pass
     async def _request(self, func, *args, **kwargs):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
@@ -128,17 +110,12 @@ class CentralApi(Session):
 
     async def post(self, url, params: dict = {}, payload: dict = None,
                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
-        # if json_data and payload:
-        #     raise UserWarning("post method expects 1 of the 2 keys payload, json.  Providing Both is invalid\n"
-        #                       f"post was provided:\n    payload: {payload}\n    _json: {_json}")
-
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
         if json_data:
             json_data = self.strip_none(json_data)
         return await self.api_call(f_url, method="POST", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
-        # return Response(self.central, f_url, method="POST", data=payload, params=params, headers=headers, **kwargs)
 
     async def put(self, url, params: dict = {}, payload: dict = None,
                   json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
@@ -151,14 +128,12 @@ class CentralApi(Session):
     async def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
-        # return Response(self.central, f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
         return await self.api_call(f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
 
     async def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.central.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
-        # return Response(self.central, f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
 
     @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
@@ -184,11 +159,25 @@ class CentralApi(Session):
         url = f"/monitoring/v1/swarms/{swarm_id}"
         return await self.get(url)
 
-    async def get_clients(self, *args: Tuple[str], group: str = None, swarm_id: str = None,
-                          label: str = None, network: str = None, site: str = None,
-                          serial: str = None, os_type: str = None, stack_id: str = None,
-                          cluster_id: str = None, band: str = None, mac: str = None,
-                          sort_by: str = None, offset: int = 0, limit: int = 500, **kwargs) -> Response:
+    async def get_clients(
+        self, *args: Tuple[str],
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        network: str = None,
+        site: str = None,
+        serial: str = None,
+        os_type: str = None,
+        stack_id: str = None,
+        cluster_id: str = None,
+        band: str = None,
+        mac: str = None,
+        sort_by: str = None,
+        offset: int = 0,
+        limit: int = 500,
+        **kwargs
+    ) -> Response:
+        """Get client details."""
         params = {
             'group': group,
             'swarm_id': swarm_id,
@@ -233,7 +222,7 @@ class CentralApi(Session):
                 mac = _mac
             else:
                 return Response(error='INVALID MAC', output=f'The Provided MAC {_mac} Appears to be invalid.')
-#
+
         # if not args.count(str) > 0 or "all" in args:
         if not args or "all" in args:
             if mac:
@@ -486,10 +475,13 @@ class CentralApi(Session):
         params = {"details": details}
         return await self.get(url, params=params, headers=headers)
 
-    # Query can be filtered by name, device_type, version, model or J number (for ArubaSwitch).
-    async def get_all_templates_in_group(self, group: str, name: str = None,
-                                         device_type: str = None,
-                                         version: str = None, model: str = None) -> Response:
+    async def get_all_templates_in_group(
+        self, group: str,
+        name: str = None,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+    ) -> Response:
         params = {
             "offset": 0,
             "limit": 20,  # 20 is the max
@@ -822,7 +814,7 @@ class CentralApi(Session):
     async def send_command_to_device(
         self,
         serial: str,
-        command: constants.SendDevCommand,
+        command: str,
         duration: int = None,
     ) -> Response:
         """Generic commands for device.
