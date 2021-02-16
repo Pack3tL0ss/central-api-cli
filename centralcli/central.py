@@ -614,6 +614,27 @@ class CentralApi(Session):
 
         return resp
 
+    async def get_switch_ports(self, serial: str, slot: str = None, cx: bool = False) -> Response:
+        """Switch Ports Details.
+
+        Args:
+            serial (str): Serial number of switch to be queried
+            slot (str, optional): Slot name of the ports to be queried {For chassis type switches
+                only}.
+            cx (bool, optional): Set to True for ArubaOS-CX switches.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        sw_url = "cx_switches" if cx else "switches"
+        url = f"/monitoring/v1/{sw_url}/{serial}/ports"
+
+        params = {
+            'slot': slot
+        }
+
+        return await self.get(url, params=params)
+
     async def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
         # iap, switch, gateway|boc

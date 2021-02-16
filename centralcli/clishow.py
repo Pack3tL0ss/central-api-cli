@@ -120,7 +120,6 @@ def account_name_callback(ctx: typer.Context, account: str):
         session = CentralApi(account)
         global cache
         cache = Cache(session)
-        print("updating cleaner cache")
         return account
     else:
         strip_keys = ['central_info', 'ssl_verify', 'token_store', 'forget_account_after', 'debug', 'debugv', 'limit']
@@ -358,6 +357,39 @@ def switches(
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_rich=do_rich)
+
+
+@app.command(short_help="Show interfaces/details")
+def interfaces(
+    device: str = typer.Argument(..., metavar=args_metavar_dev, hidden=False),
+    slot: str = typer.Argument(None, help="Slot name of the ports to query (chassis only)",),
+    # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback),
+):
+    cache(refresh=update_cache)
+    dev_type, serial = cache.get_dev_identifier(device, ret_field="type-serial")
+
+    resp = session.request(session.get_switch_ports, serial, cx=dev_type == "CX")
+    data = eval_resp(resp)
+    if data:
+        tablefmt = get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+
+        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show All Devices")
