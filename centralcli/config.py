@@ -3,21 +3,51 @@
 # Author: Wade Wells github/Pack3tL0ss
 
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 import yaml
 import json
 import tablib
 
 
+def _get_config_file(dirs: List[Path]) -> Path:
+    dirs = [dirs] if not isinstance(dirs, list) else dirs
+    for dir in dirs:
+        for f in list(Path.glob(dir, "config.*")):
+            if 'client_id' in f.read_text():
+                return f
+
+
 class Config:
     def __init__(self, base_dir: Path = None):
-        # self.base_dir = Path(__file__).parent.parent if config_dir is None else config_dir.parent
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
         self.base_dir = base_dir or Path(__file__).parent.parent
-        self.dir = self.base_dir / "config"
-        self.outdir = self.base_dir / "out"
-        self.file = self.dir / "config.yaml"
+        cwd = Path().cwd()
+        self.file = _get_config_file(
+            [
+                Path().home() / ".config" / "centralcli",
+                Path().home() / ".centralcli",
+                cwd / "config",
+                cwd,
+                Path().home() / ".config" / "centralcli" / "config",
+            ]
+        )
+        if self.file:
+            self.dir = self.file.parent
+            self.base_dir = self.dir.parent if self.dir.name != "centralcli" else self.dir
+            if Path.joinpath(cwd, "out").is_dir():
+                self.outdir = cwd / "out"
+            else:
+                self.outdir = self.dir.parent / "out"
+        else:
+            if str(Path('.config/centralcli')) in self.base_dir:
+                self.dir = self.base_dir
+                self.outdir = cwd / "out"
+            else:
+                self.dir = self.base_dir / "config"
+                self.outdir = self.base_dir / "out"
+            self.file = self.dir / "config.yaml"
+
         for ext in ["yml", "json"]:
             if self.dir.joinpath(f"config.{ext}").exists():
                 self.file = self.dir / f"config.{ext}"
@@ -27,6 +57,7 @@ class Config:
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
         self.sticky_account_file = self.cache_dir / "last_account"
+
         self.data = self.get_file_data(self.file) or {}
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
