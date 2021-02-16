@@ -202,9 +202,14 @@ def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
 
 
 # TODO combine eval_resp and display_results
+# TODO cleaner moves here (for now), then eventually to an output object (in utils now)
+#   prep for breaking API into separate package.
 def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "simple",
-                    pager=True, outfile: Path = None) -> Union[list, dict]:
+                    pager=True, outfile: Path = None, cleaner: callable = None, cleaner_kwargs: dict = {}) -> Union[list, dict]:
     if data:
+        if cleaner:
+            data = cleaner(data, **cleaner_kwargs)
+
         outdata = utils.output(data, tablefmt)
         typer.echo_via_pager(outdata) if pager and len(outdata) > tty.rows else typer.echo(outdata)
 
@@ -221,8 +226,6 @@ def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "s
             outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
             typer.secho("Done", fg="green")
 
-
-# def get_outformat(**kwargs):
 
 def show_devices(
     dev_type: str, *args, outfile: Path = None, update_cache: bool = False, group: str = None, status: str = None,
@@ -750,6 +753,36 @@ def variables(
 
 
 @app.command()
+def lldp(
+    device: List[str] = typer.Argument(..., metavar=args_metavar_dev, hidden=False),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback)
+):
+    cache(refresh=update_cache)
+
+    device = cache.get_dev_identifier(device[-1])  # take last arg from list so they can type "neighbor" if they want.
+    resp = session.request(session.get_ap_lldp_neighbor, device)
+    data = eval_resp(resp)
+    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
+
+
+@app.command()
 def certs(
     name: str = typer.Argument(None, metavar='[certificate name|certificate hash]', hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
@@ -773,21 +806,6 @@ def certs(
     tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
     display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
-
-# 'group': group,
-# 'swarm_id': swarm_id,
-# 'label': label,
-# 'site': site,
-# 'serial': serial,
-# 'cluster_id': cluster_id,
-# # 'fields': fields,
-# 'sort': sort_by,
-# 'offset': offset,
-# 'limit': limit,
-# 'network': ssid,        # WLAN only
-# 'os_type': os_type,     # WLAN only
-# 'band': band,           # WLAN only
-# 'stack_id': stack_id    # wired only
 
 
 @app.command()
@@ -877,21 +895,6 @@ def logs(
     tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
     display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
-
-
-def __temp():
-    what = None
-    args = None
-    if what == "clients":
-        resp = session.request(session.get_clients, args)
-
-    elif what in ["log", "logs"]:
-        # log_id as arg optional for details on specific log
-        resp = session.request(session.get_audit_logs, args)
-
-    # TODO remove after verifying we never return a NoneType
-    if resp is None:
-        print("Developer Message: resp returned NoneType")
 
 
 @app.callback()
