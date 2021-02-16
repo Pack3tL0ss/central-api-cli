@@ -4,26 +4,26 @@ import asyncio
 import time
 from pathlib import Path
 from typing import Any, List, Union
-import clishow
-import clido
+# import clishow
+# import clido
 from tinydb import TinyDB
 import sys
 import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, caas
+    from centralcli import config, log, utils, Cache, Response, caas, clishow, clido
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, caas
+        from centralcli import config, log, utils, Cache, Response, caas, clishow, clido
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi
-from centralcli.constants import (DoArgs, TemplateLevel1,
+from centralcli.constants import (TemplateLevel1,
                                   RefreshWhat, arg_to_what)
 
 
@@ -217,7 +217,6 @@ show_help = ["all (devices)", "device[s] (same as 'all' unless followed by devic
 args_metavar_dev = "[name|ip|mac-address|serial]"
 args_metavar_site = "[name|site_id|address|city|state|zip]"
 args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
-
 
 
 @app.command()

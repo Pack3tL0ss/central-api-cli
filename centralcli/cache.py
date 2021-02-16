@@ -1,7 +1,7 @@
 from typing import Union, List, Tuple
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli.central import CentralApi
+# from centralcli.central import CentralApi
 from centralcli import log, utils, config
 
 import asyncio
@@ -10,7 +10,7 @@ import typer
 
 
 class Cache:
-    def __init__(self,  session: CentralApi = None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
+    def __init__(self,  session=None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
         self.updated: list = []
         self.session = session
         self.DevDB = TinyDB(config.cache_file)

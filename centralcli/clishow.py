@@ -1,4 +1,3 @@
-import cleaner
 import typer
 import time
 import asyncio
@@ -11,18 +10,18 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response
+    from centralcli import config, log, utils, Cache, Response, cleaner
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response
+        from centralcli import config, log, utils, Cache, Response, cleaner
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi
-from constants import ClientArgs, StatusOptions, SortOptions
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions
 
 app = typer.Typer()
 
@@ -163,7 +162,13 @@ def debug_callback(debug: bool):
         log.DEBUG = config.debug = debug
 
 
-def get_format(do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_rich: bool = False, default: str = "simple"):
+def get_format(
+    do_json: bool = False,
+    do_yaml: bool = False,
+    do_csv: bool = False,
+    do_rich: bool = False,
+    default: str = "simple"
+) -> str:
     if do_json:
         return "json"
     elif do_yaml:
