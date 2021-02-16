@@ -283,7 +283,7 @@ class Utils:
 
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = ""):
-            self.file = rawdata    # found typer.unstyle AFTER I built this
+            # self.file = rawdata    # found typer.unstyle AFTER I built this
             self.tty = prettydata
 
         def __len__(self):
@@ -301,6 +301,10 @@ class Utils:
             out = self.tty or self.file
             for line in out.splitlines(keepends=True):
                 yield line
+
+        @property
+        def file(self):
+            return typer.unstyle(self.tty)
 
     # Not used moved to __str__ method of Output class
     @staticmethod
