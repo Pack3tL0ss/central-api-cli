@@ -32,13 +32,13 @@ else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
-log_dir = base_dir / "logs"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / f"{__name__}.log"
-
 from .logger import MyLogger
 from .config import Config
 config = Config(base_dir=base_dir)
+
+log_dir = base_dir / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / f"{__name__}.log"
 
 if '--debug' in str(sys.argv):
     config.debug = True  # for the benefit of the 2 log messages below
