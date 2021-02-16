@@ -137,6 +137,7 @@ class ArgToWhat:
         self.certs = self.certificates = self.certificate = self.cert = "certs"
         self.clients = self.client = "clients"
         self.logs = self.log = self.event = self.events = "logs"
+        self.interfaces = self.interface = self.ports = self.port = "interfaces"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
