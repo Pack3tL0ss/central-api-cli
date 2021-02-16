@@ -19,17 +19,34 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
 import asyncio
 import json
 import time
-from typing import Dict, List, Tuple, Union
+from asyncio.proactor_events import _ProactorBasePipeTransport
+from functools import wraps
 from pathlib import Path
-from pycentral.base_utils import tokenLocalStoreUtil
-from aiohttp import ClientSession
+from typing import Dict, List, Tuple, Union
 
-from . import MyLogger, config, cleaner, utils, log, ArubaCentralBase
-from .response import Session, Response
+from aiohttp import ClientSession
+from pycentral.base_utils import tokenLocalStoreUtil
+
+from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils
+from .response import Response, Session
+
+
+# https://github.com/aio-libs/aiohttp/issues/4324
+def silence_event_loop_closed(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except RuntimeError as e:
+            if str(e) != 'Event loop is closed':
+                raise
+    return wrapper
+
+
+_ProactorBasePipeTransport.__del__ = silence_event_loop_closed(_ProactorBasePipeTransport.__del__)
 
 
 DEFAULT_TOKEN_STORE = {
