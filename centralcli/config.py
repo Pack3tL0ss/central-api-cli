@@ -40,11 +40,14 @@ class Config:
             else:
                 self.outdir = self.dir.parent / "out"
         else:
-            if str(Path('.config/centralcli')) in self.base_dir:
+            if str(Path('.config/centralcli')) in str(self.base_dir):
                 self.dir = self.base_dir
                 self.outdir = cwd / "out"
             else:
-                self.dir = self.base_dir / "config"
+                if 'site-packages' in str(self.base_dir):
+                    self.base_dir = self.dir = Path().home() / ".centralcli"
+                else:
+                    self.dir = self.base_dir / "config"
                 self.outdir = self.base_dir / "out"
             self.file = self.dir / "config.yaml"
 
