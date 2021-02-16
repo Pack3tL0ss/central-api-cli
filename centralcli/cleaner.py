@@ -272,9 +272,9 @@ def sort_device_keys(data: List[dict]) -> List[dict]:
                     mask = ipaddress.IPv4Network((inner['ip_address'], inner['subnet_mask']), strict=False).prefixlen
                     inner['ip_address'] = f"{inner['ip_address']}/{mask}"
                     del inner['subnet_mask']
-                if inner.get('public_ip_address'):
-                    inner['ip_address'] += f'\npublic: {inner["public_ip_address"]}'
-                    del inner["public_ip_address"]
+                # if inner.get('public_ip_address'):
+                #     inner['ip_address'] += f'\npublic: {inner["public_ip_address"]}'
+                #     del inner["public_ip_address"]
 
     to_front = [
         'name',
