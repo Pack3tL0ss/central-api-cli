@@ -1,31 +1,13 @@
-# MIT License
-#
-# Copyright (c) 2020 Aruba, a Hewlett Packard Enterprise company
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import asyncio
 import json
 import time
 from asyncio.proactor_events import _ProactorBasePipeTransport
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
 from aiohttp import ClientSession
 from pycentral.base_utils import tokenLocalStoreUtil
@@ -41,54 +23,44 @@ def silence_event_loop_closed(func):
         try:
             return func(self, *args, **kwargs)
         except RuntimeError as e:
-            if str(e) != 'Event loop is closed':
+            if str(e) != "Event loop is closed":
                 raise
+
     return wrapper
 
 
 _ProactorBasePipeTransport.__del__ = silence_event_loop_closed(_ProactorBasePipeTransport.__del__)
 
 
-DEFAULT_TOKEN_STORE = {
-    "type": "local",
-    "path": f"{config.dir.joinpath('.cache')}"
-}
+DEFAULT_TOKEN_STORE = {"type": "local", "path": f"{config.dir.joinpath('.cache')}"}
 
 
 def get_conn_from_file(account_name, logger: MyLogger = log):
-    """Creates an instance of class`pycentral.ArubaCentralBase` based on config file
+    """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
 
     provided in the YAML/JSON config file:
         * keyword central_info: A dict containing arguments as accepted by class`pycentral.ArubaCentralBase`
         * keyword ssl_verify: A boolean when set to True, the python client validates Aruba Central's SSL certs.
         * keyword token_store: Optional. Defaults to None.
 
-    :param filename: Name of a JSON/YAML file containing the keywords required for class:`pycentral.ArubaCentralBase`
-    :type filename: str
-    :return: An instance of class:`pycentral.ArubaCentralBase` to make API calls and manage access tokens.
-    :rtype: class:`pycentral.ArubaCentralBase`
-    """
-    '''
-    if "token" in self.central_info and self.central_info["token"]:
-        if "access_token" not in self.central_info["token"]:
-            self.central_info["token"] = self.getToken()
-    else:
-        self.central_info["token"] = self.getToken()
+    Args:
+        account_name (str): Account name defined in the config file.
+        logger (MyLogger, optional): log method. Defaults to log.
 
-    if not self.central_info["token"]:
-    '''
+    Returns:
+        [pycentral.ArubaCentralBase]: An instance of class:`pycentral.ArubaCentralBase`,
+            Used to manage Auth and Tokens.
+    """
     central_info = config.data[account_name]
     token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
     ssl_verify = config.get("ssl_verify", True)
 
     conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=ssl_verify)
-    token_cache = Path(tokenLocalStoreUtil(token_store,
-                                           central_info["customer_id"],
-                                           central_info["client_id"]))
+    token_cache = Path(tokenLocalStoreUtil(token_store, central_info["customer_id"], central_info["client_id"]))
 
     # always create token cache if it doesn't exist and always use it first
-    # however if config has been modified more recently the tokens in the config will be tried first
-    # if both fail user will be prompted for token (assuming no password in file)
+    # however if config has been modified more recently any tokens in the config will be tried first
+    # if both fail user will be prompted for token if no user/pass or on Internal Cluster.
     if token_cache.is_file():
         cache_token = conn.loadToken()
         if cache_token:
@@ -110,45 +82,57 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
 class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
-        self.central = get_conn_from_file(account_name)
-        super().__init__(central=self.central)
+        self.auth = get_conn_from_file(account_name)
+        super().__init__(central=self.auth)
 
     async def _request(self, func, *args, **kwargs):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
 
     def request(self, func, *args, **kwargs):
+        """non async to async wrapper for all API calls
+
+        Args:
+            func (callable): One of the CentralApi methods
+
+        Returns:
+            centralcli.Response object
+        """
         return asyncio.run(self._request(func, *args, **kwargs))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
-        f_url = self.central.central_info["base_url"] + url
+        f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, params=params, headers=headers, **kwargs)
 
-    async def post(self, url, params: dict = {}, payload: dict = None,
-                   json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
-        f_url = self.central.central_info["base_url"] + url
+    async def post(
+        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
+    ) -> Response:
+        f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         if json_data:
             json_data = self.strip_none(json_data)
-        return await self.api_call(f_url, method="POST", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
+        return await self.api_call(
+            f_url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
+        )
 
-    async def put(self, url, params: dict = {}, payload: dict = None,
-                  json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
+    async def put(
+        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
+    ) -> Response:
 
-        f_url = self.central.central_info["base_url"] + url
+        f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
-        return await self.api_call(f_url, method="PUT", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
+        return await self.api_call(
+            f_url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
+        )
 
     async def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
-        f_url = self.central.central_info["base_url"] + url
+        f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
 
     async def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
-        f_url = self.central.central_info["base_url"] + url
+        f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
 
@@ -177,7 +161,8 @@ class CentralApi(Session):
         return await self.get(url)
 
     async def get_clients(
-        self, *args: Tuple[str],
+        self,
+        *args: Tuple[str],
         group: str = None,
         swarm_id: str = None,
         label: str = None,
@@ -192,105 +177,99 @@ class CentralApi(Session):
         sort_by: str = None,
         offset: int = 0,
         limit: int = 500,
-        **kwargs
+        # **kwargs,
     ) -> Response:
         """Get client details."""
         params = {
-            'group': group,
-            'swarm_id': swarm_id,
-            'label': label,
-            'site': site,
-            'serial': serial,
-            'cluster_id': cluster_id,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            "serial": serial,
+            "cluster_id": cluster_id,
             # 'fields': fields,
             # 'sort_by': sort_by,
-            'offset': offset,
-            'limit': limit,
+            "offset": offset,
+            "limit": limit,
         }
-        wlan_only_params = {
-            'network': network,
-            'os_type': os_type,
-            'band': band
-        }
-        wired_only_params = {
-            'stack_id': stack_id
-        }
-        all_params = {
-            **params,
-            **wlan_only_params,
-            **wired_only_params
-        }
-        wired_params = {
-            **params,
-            **wired_only_params
-        }
-        wlan_params = {
-            **params,
-            **wlan_only_params
-        }
-        if True in [network, os_type, band] and 'wireless' not in args:
-            args = ('wireless', *args)
-        if stack_id and 'wired' not in args:
-            args = ('wired', *args)
+        wlan_only_params = {"network": network, "os_type": os_type, "band": band}
+        wired_only_params = {"stack_id": stack_id}
+        all_params = {**params, **wlan_only_params, **wired_only_params}
+        wired_params = {**params, **wired_only_params}
+        wlan_params = {**params, **wlan_only_params}
+        if True in [network, os_type, band] and "wireless" not in args:
+            args = ("wireless", *args)
+        if stack_id and "wired" not in args:
+            args = ("wired", *args)
 
-        if 'mac' in args and args.index('mac') < len(args):
-            _mac = utils.Mac(args[args.index('mac') + 1], fuzzy=True,)
+        if "mac" in args and args.index("mac") < len(args):
+            _mac = utils.Mac(
+                args[args.index("mac") + 1],
+                fuzzy=True,
+            )
             if _mac.ok:
                 mac = _mac
             else:
-                return Response(error='INVALID MAC', output=f'The Provided MAC {_mac} Appears to be invalid.')
+                return Response(error="INVALID MAC", output=f"The Provided MAC {_mac} Appears to be invalid.")
 
         # if not args.count(str) > 0 or "all" in args:
         if not args or "all" in args:
             if mac:
-                return await self.get_client_details(mac.cols, **kwargs)
+                return await self.get_client_details(mac.cols,)  # **kwargs)
             else:
-                return await self.get_all_clients(**all_params, **kwargs)
+                return await self.get_all_clients(**all_params,)  # **kwargs)
         elif "wired" in args:
             if mac:
-                return await self.get_client_details(mac.cols, dev_type='wired', **kwargs)
+                return await self.get_client_details(mac.cols, dev_type="wired",)  # **kwargs)
             else:
-                return await self.get_wired_clients(**wired_params, **kwargs)
+                return await self.get_wired_clients(**wired_params,)  # **kwargs)
         elif "wireless" in args:
             if mac:
-                return await self.get_client_details(mac.cols, dev_type='wireless', **kwargs)
+                return await self.get_client_details(mac.cols, dev_type="wireless",)  # **kwargs)
             else:
-                return await self.get_wireless_clients(**wlan_params, **kwargs)
+                return await self.get_wireless_clients(**wlan_params,)  # **kwargs)
         else:
-            return Response(error='INVALID ARGUMENT', output=f'{args} appears to be invalid',)
+            return Response(
+                error="INVALID ARGUMENT",
+                output=f"{args} appears to be invalid",
+            )
 
     async def get_all_clients(
-        self, group: str = None, swarm_id: str = None,
-        label: str = None, network: str = None, site: str = None,
-        serial: str = None, os_type: str = None, stack_id: str = None,
-        cluster_id: str = None, band: str = None,
-        sort_by: str = None, offset: int = 0, limit: int = 500, **kwargs
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        network: str = None,
+        site: str = None,
+        serial: str = None,
+        os_type: str = None,
+        stack_id: str = None,
+        cluster_id: str = None,
+        band: str = None,
+        sort_by: str = None,
+        offset: int = 0,
+        limit: int = 500,
+        # **kwargs,
     ) -> Response:
         params = {
-            'group': group,
-            'swarm_id': swarm_id,
-            'label': label,
-            'site': site,
-            'serial': serial,
-            'cluster_id': cluster_id,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            "serial": serial,
+            "cluster_id": cluster_id,
             # 'fields': fields,
             # 'sort_by': sort_by,
-            'offset': offset,
-            'limit': limit
+            "offset": offset,
+            "limit": limit,
         }
-        wlan_only_params = {
-            'network': network,
-            'os_type': os_type,
-            'band': band
-        }
-        wired_only_params = {
-            'stack_id': stack_id
-        }
+        wlan_only_params = {"network": network, "os_type": os_type, "band": band}
+        wired_only_params = {"stack_id": stack_id}
 
-        resp = await self.get_wireless_clients(**{**params, **wlan_only_params}, **kwargs)
+        resp = await self.get_wireless_clients(**{**params, **wlan_only_params},)  # **kwargs)
         if resp.ok:
             wlan_resp = resp
-            wired_resp = await self.get_wired_clients(**{**params, **wired_only_params}, **kwargs)
+            wired_resp = await self.get_wired_clients(**{**params, **wired_only_params},)  # **kwargs)
             if wired_resp.ok:
                 resp.output = wlan_resp.output + wired_resp.output
                 # resp.output = cleaner.get_clients(resp.output)
@@ -299,13 +278,22 @@ class CentralApi(Session):
         return resp
 
     async def get_wireless_clients(
-        self, group: str = None, swarm_id: str = None,
-        label: str = None, site: str = None,
-        network: str = None, serial: str = None,
-        os_type: str = None, cluster_id: str = None,
-        band: str = None, fields: str = None,
-        calculate_total: bool = None, sort_by: str = None,
-        offset: int = 0, limit: int = 500, **kwargs
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        network: str = None,
+        serial: str = None,
+        os_type: str = None,
+        cluster_id: str = None,
+        band: str = None,
+        fields: str = None,
+        calculate_total: bool = None,
+        sort_by: str = None,
+        offset: int = 0,
+        limit: int = 500,
+        # **kwargs,
     ) -> Response:
         """List Wireless Clients.
 
@@ -335,30 +323,40 @@ class CentralApi(Session):
         url = "/monitoring/v1/clients/wireless"
 
         params = {
-            'group': group,
-            'swarm_id': swarm_id,
-            'label': label,
-            'site': site,
-            'network': network,
-            'serial': serial,
-            'os_type': os_type,
-            'cluster_id': cluster_id,
-            'band': band,
-            'fields': fields,
-            'calculate_total': calculate_total,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            "network": network,
+            "serial": serial,
+            "os_type": os_type,
+            "cluster_id": cluster_id,
+            "band": band,
+            "fields": fields,
+            "calculate_total": calculate_total,
             # 'sort': sort_by,
-            'offset': offset,
-            'limit': limit
+            "offset": offset,
+            "limit": limit,
         }
 
-        return await self.get(url, params=params, callback=cleaner.get_clients, **kwargs)
+        return await self.get(url, params=params,)  # callback=cleaner.get_clients, **kwargs)
 
-    async def get_wired_clients(self, group: str = None, swarm_id: str = None,
-                                label: str = None, site: str = None,
-                                serial: str = None, cluster_id: str = None,
-                                stack_id: str = None, fields: str = None,
-                                calculate_total: bool = None, sort_by: str = None,
-                                offset: int = 0, limit: int = 500, **kwargs) -> Response:
+    async def get_wired_clients(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        serial: str = None,
+        cluster_id: str = None,
+        stack_id: str = None,
+        fields: str = None,
+        calculate_total: bool = None,
+        sort_by: str = None,
+        offset: int = 0,
+        limit: int = 500,
+        # **kwargs,
+    ) -> Response:
         """List Wired Clients.
 
         Args:
@@ -383,21 +381,21 @@ class CentralApi(Session):
         url = "/monitoring/v1/clients/wired"
 
         params = {
-            'group': group,
-            'swarm_id': swarm_id,
-            'label': label,
-            'site': site,
-            'serial': serial,
-            'cluster_id': cluster_id,
-            'stack_id': stack_id,
-            'fields': fields,
-            'calculate_total': calculate_total,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            "serial": serial,
+            "cluster_id": cluster_id,
+            "stack_id": stack_id,
+            "fields": fields,
+            "calculate_total": calculate_total,
             # 'sort': sort_by,
-            'offset': offset,
-            'limit': limit
+            "offset": offset,
+            "limit": limit,
         }
 
-        return await self.get(url, params=params, callback=cleaner.get_clients, **kwargs)
+        return await self.get(url, params=params,)  # callback=cleaner.get_clients, **kwargs)
 
     async def get_client_details(self, macaddr: str, dev_type: str = None, **kwargs) -> Response:
         """Get Wired/Wireless Client Details.
@@ -425,7 +423,7 @@ class CentralApi(Session):
         #   ac-37-43-4a-8e-ff Return MATCH
         #   ac37.434a.8eff Returns MATCH
         if not dev_type:
-            for _dev_type in ['wired', 'wireless']:
+            for _dev_type in ["wired", "wireless"]:
                 url = f"/monitoring/v1/clients/{_dev_type}/{macaddr}"
                 resp = await self.get(url, callback=cleaner.get_clients, **kwargs)
                 if resp:
@@ -437,11 +435,7 @@ class CentralApi(Session):
             return await self.get(url, callback=cleaner.get_clients, **kwargs)
 
     async def get_certificates(
-        self, q: str = None,
-        offset: int = 0,
-        limit: int = 20,
-        callback: callable = None,
-        callback_kwargs: dict = None
+        self, q: str = None, offset: int = 0, limit: int = 20, callback: callable = None, callback_kwargs: dict = None
     ) -> Response:
         """Get Certificates details.
 
@@ -457,16 +451,13 @@ class CentralApi(Session):
         url = "/configuration/v1/certificates"
 
         # offset and limit are both required by the API method.
-        params = {
-            'q': q,
-            'offset': offset,
-            'limit': limit
-        }
+        params = {"q": q, "offset": offset, "limit": limit}
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
-    async def post_certificates(self, name: str, cert_type: str, passphrase: str,
-                                cert_data: str, format: str = "PEM") -> Response:
+    async def post_certificates(
+        self, name: str, cert_type: str, passphrase: str, cert_data: str, format: str = "PEM"
+    ) -> Response:
         """Upload a Certificate"""
         url = "/configuration/v1/certificates"
         payload = {
@@ -474,8 +465,8 @@ class CentralApi(Session):
             "cert_type": cert_type,
             "cert_format": format,
             "passphrase": passphrase,
-            "cert_data": cert_data
-            }
+            "cert_data": cert_data,
+        }
         return await self.post(url, payload=payload)
 
     async def del_certificates(self, name: str) -> Response:  # VERIFIED
@@ -493,7 +484,8 @@ class CentralApi(Session):
         return await self.get(url, params=params, headers=headers)
 
     async def get_all_templates_in_group(
-        self, group: str,
+        self,
+        group: str,
         name: str = None,
         device_type: str = None,
         version: str = None,
@@ -505,20 +497,23 @@ class CentralApi(Session):
             "template": name,
             "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
             "version": version,
-            "model": model
+            "model": model,
         }
         url = f"/configuration/v1/groups/{group}/templates"
         return await self.get(url, params=params)
 
-    async def update_existing_template(self, group: str, name: str, template: Path = None, payload: str = None,
-                                       device_type: str = None, version: str = None, model: str = None) -> Response:
+    async def update_existing_template(
+        self,
+        group: str,
+        name: str,
+        template: Path = None,
+        payload: str = None,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+    ) -> Response:
         url = f"/configuration/v1/groups/{group}/templates"
-        params = {
-            "name": name,
-            "device_type": device_type,
-            "version": version,
-            "model": model
-        }
+        params = {"name": name, "device_type": device_type, "version": version, "model": model}
 
         if template and template.is_file() and template.stat().st_size > 0:
             template_data: bytes = template.read_bytes()
@@ -531,9 +526,18 @@ class CentralApi(Session):
 
     # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
     # and it doesn't catch all exceptions so possible to get exception when eval resp... our Response object is better IMHO
-    async def _update_existing_template(self, group: str, name: str, template: Path = None, payload: str = None,
-                                        device_type: str = None, version: str = None, model: str = None) -> Response:
+    async def _update_existing_template(
+        self,
+        group: str,
+        name: str,
+        template: Path = None,
+        payload: str = None,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+    ) -> Response:
         from pycentral.configuration import Templates
+
         templates = Templates()
         kwargs = {
             "group_name": group,
@@ -541,10 +545,10 @@ class CentralApi(Session):
             "device_type": device_type,
             "version": version,
             "model": model,
-            "template_filename": str(template)
+            "template_filename": str(template),
         }
 
-        return templates.update_template(self.central, **kwargs)
+        return templates.update_template(self.auth, **kwargs)
 
     async def _get_group_names(self) -> Response:  # REVERIFIED
         url = "/configuration/v2/groups"
@@ -594,26 +598,23 @@ class CentralApi(Session):
         params = {"sku_type": "all"}
         return await self.get(url, params=params)
 
-    async def get_all_devices(self) -> Response:  # VERIFIED
+    async def get_all_devices(self) -> Response:
+        """Get All Devices. Not Used by CLI replaced with get_all_devicesv2"""
         url = "/platform/device_inventory/v1/devices"
         dev_types = ["iap", "switch", "gateway"]
 
-        # loop = asyncio.get_event_loop()
-        tasks = [self.get(url, params={"sku_type": dev_type})
-                 for dev_type in dev_types]
+        tasks = [self.get(url, params={"sku_type": dev_type}) for dev_type in dev_types]
         _ap, _switch, _gateway = await asyncio.gather(*tasks)
-        # loop.close()
 
         _ap.output = [*_ap.output, *_switch.output, *_gateway.output]
         _ap.url = str(_ap.url).replace("sku_type=iap", "sku_type=<3 calls: ap, switch, gw>")
         return _ap
 
-    async def get_all_devicesv2(self, **kwargs) -> Response:  # REVERIFIED
-        dev_types = ["aps", "switches", "gateways"]
+    async def get_all_devicesv2(self, **kwargs) -> Response:
+        dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
         _output = {}
 
-        tasks = [self.get_devices(dev_type, **kwargs)
-                 for dev_type in dev_types]
+        tasks = [self.get_devices(dev_type, **kwargs) for dev_type in dev_types]
         ap, sw, gw = await asyncio.gather(*tasks)
         resp = ap
         vals = [ap.output, sw.output, gw.output]
@@ -623,11 +624,9 @@ class CentralApi(Session):
             # return just the keys common across all device types
             dicts = [{**{"type": k.rstrip("es")}, **{kk: vv for kk, vv in idx.items()}} for k, v in _output.items() for idx in v]
             common_keys = set.intersection(*map(set, dicts))
-            # resp.output = [{k: v for k, v in d.items() if k in common_keys} for d in dicts]
-            _output = [{k: d[k] for k in common_keys} for d in dicts]
 
-            # sort cols
-            resp.output = cleaner.sort_device_keys(_output)
+            _output = [{k: d[k] for k in common_keys} for d in dicts]
+            resp.output = _output
 
         return resp
 
@@ -646,9 +645,7 @@ class CentralApi(Session):
         sw_url = "cx_switches" if cx else "switches"
         url = f"/monitoring/v1/{sw_url}/{serial}/ports"
 
-        params = {
-            'slot': slot
-        }
+        params = {"slot": slot}
 
         return await self.get(url, params=params)
 
@@ -683,54 +680,74 @@ class CentralApi(Session):
         headers = {"Accept": "multipart/form-data"}
         return await self.get(url, headers=headers)
 
-    # TODO ignore sort parameter and sort output from any field.  Central is inconsistent as to what they support via sort
-    async def get_devices(self, dev_type: str, group: str = None, label: str = None, stack_id: str = None, swarm_id: str = None,
-                          serial: str = None, status: str = None, fields: list = None, show_resource_details: bool = False,
-                          cluster_id: str = None, model: str = None, calculate_client_count: bool = False,
-                          calculate_ssid_count: bool = False, macaddr: str = None,
-                          public_ip_address: str = None, site: str = None, limit: int = 100, offset: int = 0, sort: str = None):
-        # pagenation limit default 100, max 1000
-
-        # _strip = ["self", "dev_type", "url", "_strip"]
-
-        # params = {k: v for k, v in locals().items() if k not in _strip and v}
+    async def get_devices(
+        self,
+        dev_type: Literal["switches", "aps", "gateways", "mobility_controllers"],
+        group: str = None,
+        label: str = None,
+        stack_id: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        status: str = None,
+        fields: list = None,
+        show_resource_details: bool = False,
+        cluster_id: str = None,
+        model: str = None,
+        calculate_client_count: bool = False,
+        calculate_ssid_count: bool = False,
+        macaddr: str = None,
+        public_ip_address: str = None,
+        site: str = None,
+        limit: int = 500,  # max allowed 1000
+        offset: int = 0,
+        sort: str = None,
+    ) -> Response:
 
         params = {
-            'group': group,
-            'label': label,
-            'swarm_id': swarm_id,
-            'site': site,
-            'serial': serial,
-            'macaddr': macaddr,
-            'model': model,
-            'cluster_id': cluster_id,
-            'stack_id': stack_id,
-            'status': status,
-            'fields': fields,
-            'show_resource_details': str(show_resource_details).lower(),
-            'calculate_client_count': str(calculate_client_count).lower(),
-            'calculate_ssid_count': str(calculate_ssid_count).lower(),
-            'public_ip_address': public_ip_address,
-            'limit': limit,
-            'offset': offset
+            "group": group,
+            "label": label,
+            "swarm_id": swarm_id,
+            "site": site,
+            "serial": serial,
+            "macaddr": macaddr,
+            "model": model,
+            "cluster_id": cluster_id,
+            "stack_id": stack_id,
+            "status": status,
+            "fields": fields,
+            "show_resource_details": str(show_resource_details).lower(),
+            "calculate_client_count": str(calculate_client_count).lower(),
+            "calculate_ssid_count": str(calculate_ssid_count).lower(),
+            "public_ip_address": public_ip_address,
+            "limit": limit,
+            "offset": offset,
         }
 
         url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
-        if dev_type == 'aps' and 'internal' in self.central.central_info['base_url']:
-            url = url.replace('v1', 'v2')
-        return await self.get(url, params=params, callback=cleaner.get_devices, callback_kwargs={'sort': sort})
+        if dev_type == "aps" and "internal" in self.auth.central_info["base_url"]:
+            url = url.replace("v1", "v2")
+        # TODO move cleaner into cli ... make this sep library dependency
+        # TODO sort not implemented yet
+        return await self.get(url, params=params, callback=cleaner.get_devices, callback_kwargs={"sort": sort})
 
     async def get_dev_details(self, dev_type: str, serial: str) -> Response:
-        dev_type = "switches" if dev_type == "switch" else dev_type
-        dev_type = "gateways" if dev_type == "gateway" else dev_type
-        dev_type = "aps" if dev_type == "ap" else dev_type
         url = f"/monitoring/v1/{dev_type}/{serial}"
         return await self.get(url, callback=cleaner.get_devices)
 
-    async def monitoring_get_mcs(self, group: str = None, label: str = None, site: str = None,
-                                 status: str = None, macaddr: str = None, model: str = None,
-                                 fields: str = None, calculate_total: bool = None,
-                                 sort: str = None, offset: int = 0, limit: int = 100) -> Response:
+    async def monitoring_get_mcs(
+        self,
+        group: str = None,
+        label: str = None,
+        site: str = None,
+        status: str = None,
+        macaddr: str = None,
+        model: str = None,
+        fields: str = None,
+        calculate_total: bool = None,
+        sort: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """List Mobility Controllers.
 
         You can only specify one of group, label, site
@@ -756,17 +773,17 @@ class CentralApi(Session):
         url = "/monitoring/v1/mobility_controllers"
 
         params = {
-            'group': group,
-            'label': label,
-            'site': site,
-            'status': status,
-            'macaddr': macaddr,
-            'model': model,
-            'fields': fields,
-            'calculate_total': calculate_total,
-            'sort': sort,
-            'offset': offset,
-            'limit': limit
+            "group": group,
+            "label": label,
+            "site": site,
+            "status": status,
+            "macaddr": macaddr,
+            "model": model,
+            "fields": fields,
+            "calculate_total": calculate_total,
+            "sort": sort,
+            "offset": offset,
+            "limit": limit,
         }
 
         return await self.get(url, params=params)
@@ -823,10 +840,7 @@ class CentralApi(Session):
 
     async def post_add_webhook(self, name: str, *urls: Union[str, List[str]]) -> Response:
         url = "/central/v1/webhooks"
-        payload = {
-                "name": name,
-                "urls": utils.listify(urls)
-                }
+        payload = {"name": name, "urls": utils.listify(urls)}
         return await self.post(url, _json=payload)
 
     async def get_ap_neighbors(self, device_serial: str) -> Response:
@@ -842,6 +856,24 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    async def get_site_vlans(self, site_id: int, search: str = None, offset: int = 0, limit: int = 100) -> Response:
+        """Get vlan list of a site.
+
+        Args:
+            site_id (int): Site ID.
+            search (str, optional): search.
+            offset (int, optional): offset. Defaults to 0.
+            limit (int, optional): limit Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/topology_external_api/vlans/{site_id}"
+
+        params = {"search": search, "offset": offset, "limit": limit}
+
+        return await self.get(url, params=params)
+
     async def send_bounce_command_to_device(self, serial: str, command: str, port: str) -> Response:
         """Generic Action Command for bouncing interface or POE (power-over-ethernet) port.
 
@@ -856,16 +888,23 @@ class CentralApi(Session):
         """
         url = f"/device_management/v2/device/{serial}/action/{command}"
 
-        json_data = {
-            'port': port
-        }
+        json_data = {"port": port}
 
         return await self.post(url, json_data=json_data)
 
     async def send_command_to_device(
         self,
         serial: str,
-        command: str,
+        command: Literal[
+            "reboot",
+            "blink_led_on",
+            "blink_led_off",
+            "blink_led",
+            "erase_configuration",
+            "save_configuration",
+            "halt",
+            "config_sync",
+        ],
         duration: int = None,
     ) -> Response:
         """Generic commands for device.
@@ -890,16 +929,23 @@ class CentralApi(Session):
         url = f"/device_management/v1/device/{serial}/action/{command}"
 
         resp = await self.post(url)
-        if resp and duration and 'blink_led' in command and 'off' not in command:
-            print(f'Blinking Led... {duration}. ', end='')
+        if resp and duration and "blink_led" in command and "off" not in command:
+            print(f"Blinking Led... {duration}. ", end="")
             for i in range(1, duration):
                 time.sleep(1)
-                print(f'{duration - i}. ', end='' if i % 20 else '\n')
-            resp = await self.post(url.replace('_on', '_off'))
+                print(f"{duration - i}. ", end="" if i % 20 else "\n")
+            resp = await self.post(url.replace("_on", "_off"))
         return resp
 
-    async def kick_users(self, serial_num: str = None, name: str = None, kick_all: bool = False,
-                         mac: str = None, ssid: str = None, hint: Union[List[str], str] = None) -> Union[Response, None]:
+    async def kick_users(
+        self,
+        serial_num: str = None,
+        name: str = None,
+        kick_all: bool = False,
+        mac: str = None,
+        ssid: str = None,
+        hint: Union[List[str], str] = None,
+    ) -> Union[Response, None]:
         url = f"/device_management/v1/device/{serial_num}/action/disconnect_user"
         if kick_all:
             payload = {"disconnect_user_all": True}
@@ -912,70 +958,126 @@ class CentralApi(Session):
 
         if payload:
             return await self.post(url, payload=payload)
-            # pprint.pprint(resp.json())
         else:
             # TODO move this validation to the cli command
             return Response(ok=False, error="Missing Required Parameters")
 
     async def post_switch_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
         url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
-        payload = {
-            "username": username,
-            "password": password
-        }
+        payload = {"username": username, "password": password}
         # returns "Success"
         return await self.post(url, _json=payload)
 
     async def get_task_status(self, task_id):
         return await self.get(f"/device_management/v1/status/{task_id}")
 
+    async def get_switch_vlans(
+        self,
+        iden: str,
+        stack: bool = False,
+        cx: bool = False,
+        name: str = None,
+        pvid: int = None,
+        tagged_port: str = None,
+        untagged_port: str = None,
+        is_jumbo_enabled: bool = None,
+        is_voice_enabled: bool = None,
+        is_igmp_enabled: bool = None,
+        type: str = None,
+        primary_vlan_id: int = None,
+        status: str = None,
+        sort: str = None,
+        calculate_total: bool = None,
+        offset: int = 0,
+        limit: int = 500,
+    ) -> Response:
+        """Get vlan info for switch (CX and SW).
+
+        Args:
+            iden (str): Serial Number of Stack ID, Identifies the dev to return VLANs from.
+            stack (bool, optional): Set to True for stack. Default: False
+            cx: (bool, optional): Set to True for ArubaOS-CX. Default: False
+            name (str, optional): Filter by vlan name
+            id (int, optional): Filter by vlan id
+            tagged_port (str, optional): Filter by tagged port name
+            untagged_port (str, optional): Filter by untagged port name
+            is_jumbo_enabled (bool, optional): Filter by jumbo enabled
+            is_voice_enabled (bool, optional): Filter by voice enabled
+            is_igmp_enabled (bool, optional): Filter by igmp enabled
+            type (str, optional): Type of the vlan to be queried
+            primary_vlan_id (int, optional): Primary Vlan Id of the vlan to be queried"
+            status (str, optional): Filter by status of VLAN. Status can be Up/Down
+            sort (str, optional): Sort parameter may be one of +name, -name
+            calculate_total (bool, optional): Whether to calculate total vlans
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if not stack:
+            sw_url = "cx_switches" if cx else "switches"
+        else:
+            sw_url = "cx_switch_stacks" if cx else "switch_stacks"
+
+        url = f"/monitoring/v1/{sw_url}/{iden}/vlan"
+
+        params = {
+            "name": name,
+            "id": pvid,
+            "tagged_port": tagged_port,
+            "untagged_port": untagged_port,
+            "is_jumbo_enabled": is_jumbo_enabled,
+            "is_voice_enabled": is_voice_enabled,
+            "is_igmp_enabled": is_igmp_enabled,
+            "type": type,
+            "primary_vlan_id": primary_vlan_id,
+            "status": status,
+            "sort": sort,
+            "calculate_total": calculate_total,
+            "offset": offset,
+            "limit": limit,
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_gateway_vlans(self, serial: str) -> Response:
+        """Get gateway VLAN details.
+
+        Args:
+            serial (str): Serial number of gateway to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/vlan"
+
+        return await self.get(url)
+
+    async def get_controller_vlans(self, serial: str) -> Response:
+        """Get Mobility Controllers VLAN details.
+
+        Args:
+            serial (str): Serial number of mobility controller to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/mobility_controllers/{serial}/vlan"
+
+        return await self.get(url)
+
     async def add_dev(self, mac: str, serial_num: str):
-        """
-        {'code': 'ATHENA_ERROR_NO_DEVICE',
-        'extra': {'error_code': 'ATHENA_ERROR_NO_DEVICE',
-                'message': {'available_device': [],
-                            'blocked_device': [],
-                            'invalid_device': [{'mac': '20:4C:03:26:28:4c',
-                                                'serial': 'CNF7JSP0N0',
-                                                'status': 'ATHENA_ERROR_DEVICE_ALREADY_EXIST'}]}},
-        'message': 'Bad Request'}
-        """
         url = "/platform/device_inventory/v1/devices"
-        payload = [
-                {
-                    "mac": mac,
-                    "serial": serial_num
-                }
-            ]
+        payload = [{"mac": mac, "serial": serial_num}]
 
         return await self.post(url, payload=payload)
-        # resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
-        # pprint.pprint(resp.json())
 
     async def verify_add_dev(self, mac: str, serial_num: str):
-        """
-        {
-            'available_device': [],
-            'blocked_device': [],
-            'invalid_device': [
-                                {
-                                    'mac': '20:4C:03:26:28:4c',
-                                    'serial': 'CNF7JSP0N0',
-                                    'status': 'ATHENA_ERROR_DEVICE_ALREADY_EXIST'
-                                }
-                              ]
-        }
-        """
         url = "/platform/device_inventory/v1/devices/verify"
-        payload = [
-                {
-                    "mac": mac,
-                    "serial": serial_num
-                }
-            ]
+        payload = [{"mac": mac, "serial": serial_num}]
 
         return await self.post(url, payload=payload)
-        # resp = requests.post(self.central.vars["base_url"] + url, headers=header, json=payload)
         # pprint.pprint(resp.json())
 
     async def move_dev_to_group(self, group: str, serial_num: Union[str, list]) -> bool:
@@ -983,43 +1085,18 @@ class CentralApi(Session):
         if not isinstance(serial_num, list):
             serial_num = [serial_num]
 
-        payload = {
-                    "group": group,
-                    "serials": serial_num
-                  }
+        payload = {"group": group, "serials": serial_num}
 
-        # resp = requests.post(self.central.vars["base_url"] + url, headers=headers, json=payload)
         return await self.post(url, json_data=payload)
 
-    # async def get_audit_logs(self, log_id: str = None) -> Response:
-    #     """Get all audit logs or details about a specifc log from Aruba Central
-
-    #     Args:
-    #         log_id (str, optional): The id of the log to return details for. Defaults to None.
-
-    #     Returns:
-    #         Response: Response object
-    #     """
-    #     # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
-    #     url = "/platform/auditlogs/v1/logs"
-    #     params = {"offset": 0, "limit": 100}
-    #     if log_id:
-    #         url = f"{url}/{log_id}"
-    #         params = None
-    #     return await self.get(url, params=params)
-
-    async def get_ts_commands(self, dev_type: str) -> Response:
-        # iap, mas, switch, controller
+    async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
         url = "/troubleshooting/v1/commands"
         params = {"device_type": dev_type}
         return await self.get(url, params=params)
 
     async def start_ts_session(self, device_serial: str, dev_type: str, commands: Union[dict, List[dict]]) -> Response:
         url = f"/troubleshooting/v1/devices/{device_serial}"
-        payload = {
-            "device_type": dev_type,
-            "commands": commands
-        }
+        payload = {"device_type": dev_type, "commands": commands}
         return await self.post(url, _json=payload)
 
     async def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
@@ -1039,20 +1116,21 @@ class CentralApi(Session):
 
     async def get_sdwan_dps_policy_compliance(self, time_frame: str = "last_week", order: str = "best") -> Response:
         url = "/sdwan-mon-api/external/noc/reports/wan/policy-compliance"
-        params = {
-            "period": time_frame,
-            "result_order": order,
-            "count": 250
-        }
+        params = {"period": time_frame, "result_order": order, "count": 250}
         return await self.get(url, params=params)
 
     async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
         url = f"/topology_external_api/apNeighbors/{device_serial}"
         return await self.get(url)
 
-    async def do_multi_group_snapshot(self, backup_name: str, include_groups: Union[list, List[str]] = None,
-                                      exclude_groups: Union[list, List[str]] = None, do_not_delete: bool = False) -> Response:
-        """"Create new configuration backup for multiple groups."
+    async def do_multi_group_snapshot(
+        self,
+        backup_name: str,
+        include_groups: Union[list, List[str]] = None,
+        exclude_groups: Union[list, List[str]] = None,
+        do_not_delete: bool = False,
+    ) -> Response:
+        """ "Create new configuration backup for multiple groups."
 
         Args:
             backup_name (str): Name of Backup
@@ -1073,7 +1151,7 @@ class CentralApi(Session):
             "backup_name": backup_name,
             "do_not_delete": do_not_delete,
             "include_groups": include_groups,
-            "exclude_groups": exclude_groups
+            "exclude_groups": exclude_groups,
         }
         payload = self.strip_none(payload)
         return await self.post(url, json_data=payload)
@@ -1082,14 +1160,14 @@ class CentralApi(Session):
         url = f"/configuration/v1/groups/{group}/snapshots"
         return await self.get(url)
 
-    async def get_mc_tunnels(self, serial: str, timerange: str, limit: int = 100, offset: int = 0) -> Response:
+    async def get_mc_tunnels(self, serial: str, timerange: str, limit: int = 250, offset: int = 0) -> Response:
         """Mobility Controllers Uplink Tunnel Details.
 
         Args:
             serial (str): Serial number of mobility controller to be queried
             timerange (str): Time range for tunnel stats information.
-                             3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.
+            limit (int, optional): Pagination limit. Max: 1000 Defaults to 250.
             offset (int, optional): Pagination offset Defaults to 0.
 
         Returns:
@@ -1097,18 +1175,25 @@ class CentralApi(Session):
         """
         url = f"/monitoring/v1/mobility_controllers/{serial}/tunnels"
 
-        params = {
-            'timerange': timerange
-        }
+        params = {"timerange": timerange, offset: offset, limit: limit}
 
         return await self.get(url, params=params)
 
-    async def get_audit_logs(self, log_id: str = None, username: str = None,
-                             start_time: int = None, end_time: int = None,
-                             description: str = None, target: str = None,
-                             classification: str = None, customer_name: str = None,
-                             ip_address: str = None, app_id: str = None,
-                             offset: int = 0, limit: int = 100) -> Response:
+    async def get_audit_logs(
+        self,
+        log_id: str = None,
+        username: str = None,
+        start_time: int = None,
+        end_time: int = None,
+        description: str = None,
+        target: str = None,
+        classification: str = None,
+        customer_name: str = None,
+        ip_address: str = None,
+        app_id: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """Get all audit logs.
 
         Args:
@@ -1135,17 +1220,17 @@ class CentralApi(Session):
         url = "/platform/auditlogs/v1/logs"
 
         params = {
-            'username': username,
-            'start_time': start_time,
-            'end_time': end_time,
-            'description': description,
-            'target': target,
-            'classification': classification,
-            'customer_name': customer_name,
-            'ip_address': ip_address,
-            'app_id': app_id,
-            'offset': offset,
-            'limit': limit
+            "username": username,
+            "start_time": start_time,
+            "end_time": end_time,
+            "description": description,
+            "target": target,
+            "classification": classification,
+            "customer_name": customer_name,
+            "ip_address": ip_address,
+            "app_id": app_id,
+            "offset": offset,
+            "limit": limit,
         }
 
         if log_id:
@@ -1155,9 +1240,16 @@ class CentralApi(Session):
         return await self.get(url, params=params, callback=cleaner.get_audit_logs)
 
     async def create_site(
-        self, site_name: str = None, address: str = None, city: str = None, state: str = None,
-        country: str = None, zipcode: str = None, latitude: int = None, longitude: int = None,
-        site_list: List[Dict[str, Union[str, dict]]] = None
+        self,
+        site_name: str = None,
+        address: str = None,
+        city: str = None,
+        state: str = None,
+        country: str = None,
+        zipcode: str = None,
+        latitude: int = None,
+        longitude: int = None,
+        site_list: List[Dict[str, Union[str, dict]]] = None,
     ) -> Response:
         """Create Site
 
@@ -1179,32 +1271,21 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO make site constructor object that can be passed in a list vs dicts
         url = "/central/v2/sites"
 
         json_data = {
-            'site_name': site_name,
-            'site_address': {
-                'address': address,
-                'city': city,
-                'state': state,
-                'country': country,
-                'zipcode': zipcode
-            },
-            'geolocation': {
-                'latitude': latitude,
-                'longitude': longitude
-            }
+            "site_name": site_name,
+            "site_address": {"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode},
+            "geolocation": {"latitude": latitude, "longitude": longitude},
         }
         if site_list:
             resp = await self.post(url, json_data=site_list[0])
             if not resp:
                 return resp
             if len(site_list) > 1:
-                resp_list = cleaner._unlist([
-                    await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist))
-                    for _json in site_list[1:]
-                ])
+                resp_list = cleaner._unlist(
+                    [await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist)) for _json in site_list[1:]]
+                )
                 # TODO make multi response packing function
                 resp.output = utils.listify(resp.output)
                 resp.output += [r.output for r in resp_list]
@@ -1221,11 +1302,8 @@ class CentralApi(Session):
 
         url = "/caasapi/v1/exec/cmd"
 
-        cfg_dict = self.central.central_info
-        params = {
-            "cid": cfg_dict["customer_id"],
-            key: group_dev
-        }
+        cfg_dict = self.auth.central_info
+        params = {"cid": cfg_dict["customer_id"], key: group_dev}
 
         payload = {"cli_cmds": cli_cmds or []}
 
