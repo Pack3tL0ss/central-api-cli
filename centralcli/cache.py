@@ -10,6 +10,8 @@ import asyncio
 import time
 import typer
 
+TinyDB.default_table_name = "devices"
+
 
 class Cache:
     def __init__(self,  session=None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
@@ -19,7 +21,6 @@ class Cache:
         self.SiteDB = self.DevDB.table("sites")
         self.GroupDB = self.DevDB.table("groups")
         self.TemplateDB = self.DevDB.table("templates")
-        self.MetaDB = self.DevDB.table("_metadata")
         self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
         self.Q = Query()
         if data:
@@ -59,11 +60,7 @@ class Cache:
     def all(self) -> dict:
         return {t.name: getattr(self, t.name) for t in self._tables}
 
-    @property
-    def prev_acct(self) -> str:
-        return self.MetaDB.get(doc_id=1).get("prev_account")
-
-    # TODO deprecated should be able to remove this method
+    # TODO ??deprecated?? should be able to remove this method. don't remember this note. looks used
     def insert(self, data: Union[List[dict, ], dict]) -> bool:
         _data = data
         if isinstance(data, list) and data:
@@ -115,10 +112,6 @@ class Cache:
             self.updated.append(self.session.get_all_templates)
             self.TemplateDB.truncate()
             return self.TemplateDB.insert_multiple(resp.output)
-
-    def update_meta_db(self):
-        self.MetaDB.truncate()
-        return self.MetaDB.insert({"prev_account": config.account, "forget": time.time() + 7200})
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False):
         async with ClientSession() as self.session.aio_session:
@@ -223,7 +216,6 @@ class Cache:
             if match:
                 break
 
-        # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
         if match:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str)
@@ -276,10 +268,8 @@ class Cache:
             if match:
                 break
 
-        # TODO if multiple matches prompt for input or show both (with warning that data was from cahce)
         if match:
             if len(match) > 1:
-                # TODO update to accomodate sites handle_multi_match formatted for devs
                 match = self.handle_multi_match(match, query_str=query_str, query_type='site')
 
             return match[0].get(ret_field)
