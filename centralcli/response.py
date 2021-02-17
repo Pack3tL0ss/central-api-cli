@@ -183,7 +183,7 @@ class Session:
                       )
 
             try:
-                with Halo(spin_txt_data) as spin:
+                with Halo(spin_txt_data, enabled=bool(utils.tty)) as spin:
                     _start = time.time()
                     headers = self.headers if not headers else {**self.headers, **headers}
                     # -- // THE API REQUEST \\ --
