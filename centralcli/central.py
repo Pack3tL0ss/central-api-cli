@@ -83,7 +83,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
         self.auth = get_conn_from_file(account_name)
-        super().__init__(central=self.auth)
+        super().__init__(auth=self.auth)
 
     async def _request(self, func, *args, **kwargs):
         async with ClientSession() as self.aio_session:
@@ -1293,7 +1293,6 @@ class CentralApi(Session):
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
 
-    # TODO move to caas.py
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
             key = "node_name"

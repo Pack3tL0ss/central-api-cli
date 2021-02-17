@@ -14,9 +14,9 @@ TinyDB.default_table_name = "devices"
 
 
 class Cache:
-    def __init__(self,  session=None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
+    def __init__(self,  central=None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
         self.updated: list = []
-        self.session = session
+        self.central = central
         self.DevDB = TinyDB(config.cache_file)
         self.SiteDB = self.DevDB.table("sites")
         self.GroupDB = self.DevDB.table("groups")
@@ -25,7 +25,7 @@ class Cache:
         self.Q = Query()
         if data:
             self.insert(data)
-        if session:
+        if central:
             self.check_fresh(refresh)
 
     def __call__(self, refresh=False) -> None:
@@ -76,45 +76,45 @@ class Cache:
         return len(ret) == len(data)
 
     async def update_dev_db(self):
-        resp = await self.session.get_all_devicesv2()
+        resp = await self.central.get_all_devicesv2()
         if resp.ok:
             resp.output = utils.listify(resp.output)
-            self.updated.append(self.session.get_all_devicesv2)
+            self.updated.append(self.central.get_all_devicesv2)
             self.DevDB.truncate()
             return self.DevDB.insert_multiple(resp.output)
 
     async def update_site_db(self):
-        resp = await self.session.get_all_sites()
+        resp = await self.central.get_all_sites()
         if resp.ok:
             resp.output = utils.listify(resp.output)
             # TODO time this to see which is more efficient
             # start = time.time()
             # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
             # upd = [item for in_list in upd for item in in_list]
-            self.updated.append(self.session.get_all_sites)
+            self.updated.append(self.central.get_all_sites)
             self.SiteDB.truncate()
             # print(f" site db Done: {time.time() - start}")
             return self.SiteDB.insert_multiple(resp.output)
 
     async def update_group_db(self):
-        resp = await self.session.get_all_groups()
+        resp = await self.central.get_all_groups()
         if resp.ok:
             resp.output = utils.listify(resp.output)
-            self.updated.append(self.session.get_all_groups)
+            self.updated.append(self.central.get_all_groups)
             self.GroupDB.truncate()
             return self.GroupDB.insert_multiple(resp.output)
 
     async def update_template_db(self):
-        groups = self.groups if self.session.get_all_groups in self.updated else None
-        resp = await self.session.get_all_templates(groups=groups)
+        groups = self.groups if self.central.get_all_groups in self.updated else None
+        resp = await self.central.get_all_templates(groups=groups)
         if resp.ok:
             resp.output = utils.listify(resp.output)
-            self.updated.append(self.session.get_all_templates)
+            self.updated.append(self.central.get_all_templates)
             self.TemplateDB.truncate()
             return self.TemplateDB.insert_multiple(resp.output)
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False):
-        async with ClientSession() as self.session.aio_session:
+        async with ClientSession() as self.central.aio_session:
             if dev_db:
                 await asyncio.gather(self.update_dev_db())
             elif site_db:
@@ -210,7 +210,7 @@ class Cache:
                                           | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
                                           | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower())))
 
-            if retry and not match and self.session.get_all_devicesv2 not in self.updated:
+            if retry and not match and self.central.get_all_devicesv2 not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Device Cachce", fg="red")
                 self.check_fresh(refresh=True, dev_db=True)
             if match:
@@ -262,7 +262,7 @@ class Cache:
             if not match:
                 match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
-            if retry and not match and self.session.get_all_sites not in self.updated:
+            if retry and not match and self.central.get_all_sites not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Site Cachce", fg="red")
                 self.check_fresh(refresh=True, site_db=True)
             if match:

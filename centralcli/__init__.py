@@ -53,6 +53,8 @@ from .utils import Utils
 utils = Utils()
 from .cache import Cache
 from .response import Response
+from .clicommon import CLICommon
+cli = CLICommon()
 
 
 if os.environ.get("TERM_PROGRAM") == "vscode":

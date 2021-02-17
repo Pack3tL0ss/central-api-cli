@@ -152,12 +152,12 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
 
 
 class Session:
-    def __init__(self, central: ArubaCentralBase = None, aio_session: aiohttp.ClientSession = None) -> None:
-        self.central = central
+    def __init__(self, auth: ArubaCentralBase = None, aio_session: aiohttp.ClientSession = None) -> None:
+        self.auth = auth
         self._aio_session = aio_session
         self.headers = DEFAULT_HEADERS
-        self.headers["authorization"] = f"Bearer {central.central_info['token']['access_token']}"
-        self.ssl = central.ssl_verify
+        self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
+        self.ssl = auth.ssl_verify
 
     @property
     def aio_session(self):
@@ -169,7 +169,7 @@ class Session:
 
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
-        central = self.central
+        auth = self.auth
         resp, spin = None, None
         _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
         spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
@@ -178,8 +178,8 @@ class Session:
                 spin_txt_data += f" retry {_}"
 
             log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
-                      f"\taccess token: {central.central_info.get('token', {}).get('access_token', {})}\n"
-                      f"\trefresh token: {central.central_info.get('token', {}).get('refresh_token', {})}"
+                      f"\taccess token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
+                      f"\trefresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
                       )
 
             try:
@@ -273,7 +273,7 @@ class Session:
         return r
 
     def _refresh_token(self, token_data: Union[dict, List[dict]] = []) -> bool:
-        central = self.central
+        auth = self.auth
         token_data = utils.listify(token_data)
         token = None
         spin = Halo("Attempting to Refresh Token")
@@ -284,16 +284,16 @@ class Session:
                     spin.fail()
                     spin.text = spin.text + " retry"
                     spin.start()
-                token = central.refreshToken(t)
+                token = auth.refreshToken(t)
                 if token:
-                    central.storeToken(token)
-                    central.central_info["token"] = token
+                    auth.storeToken(token)
+                    auth.central_info["token"] = token
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
 
         if token:
-            self.headers["authorization"] = f"Bearer {self.central.central_info['token']['access_token']}"
+            self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
             spin.succeed()
         else:
             spin.fail()
@@ -301,10 +301,10 @@ class Session:
         return token is not None
 
     def refresh_token(self, token_data: dict = None) -> None:
-        central = self.central
+        auth = self.auth
         if not token_data:
-            token: Union[dict, None] = central.central_info.get("token")
-            retry_token: Union[dict, None] = central.central_info.get("retry_token")
+            token: Union[dict, None] = auth.central_info.get("token")
+            retry_token: Union[dict, None] = auth.central_info.get("retry_token")
             token_data = [t for t in [token, retry_token] if t is not None]
         else:
             token_data: List[dict] = [token_data]
@@ -324,21 +324,21 @@ class Session:
         Args:
             central (ArubaCentralBase): ArubaCentralBase class
         """
-        central = self.central
+        auth = self.auth
         token_data: dict = None
         if sys.stdin.isatty():
-            internal = "internal" in central.central_info["base_url"]
+            internal = "internal" in auth.central_info["base_url"]
             # if internal:
             token_only = [
-                central.central_info.get("username") is None
-                or central.central_info["username"].endswith("@hpe.com") and internal,
-                central.central_info.get("password") is None
+                auth.central_info.get("username") is None
+                or auth.central_info["username"].endswith("@hpe.com") and internal,
+                auth.central_info.get("password") is None
             ]
             # if not central.central_info["username"] or not central.central_info["password"]:
             if True in token_only:
                 prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
-                        f"\n    customer_id: {central.central_info['customer_id']}" \
-                        f"\n    client_id: {central.central_info['client_id']}" \
+                        f"\n    customer_id: {auth.central_info['customer_id']}" \
+                        f"\n    client_id: {auth.central_info['client_id']}" \
                         "\n\nPaste result of `Download Tokens` from Central UI."\
                         f"\nUse {typer.style('CTRL-D', fg='magenta')} on empty line after contents to submit." \
                         f"\n{typer.style('exit', fg='magenta')} to abort." \
@@ -348,8 +348,8 @@ class Session:
                 # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
                 token_data = utils.get_multiline_input(prompt, return_type="dict")
             else:
-                central.handleTokenExpiry()
+                auth.handleTokenExpiry()
         else:
-            central.handleTokenExpiry()
+            auth.handleTokenExpiry()
 
         return token_data
