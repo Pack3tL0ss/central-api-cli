@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 from typing import Union, List, Tuple
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-# from centralcli.central import CentralApi
 from centralcli import log, utils, config
 
 import asyncio
@@ -77,27 +79,19 @@ class Cache:
         return len(ret) == len(data)
 
     async def update_dev_db(self):
-        # start = time.time()
-        # print(f" dev db start: {start}")
         resp = await self.session.get_all_devicesv2()
-        # async with self.session.get_all_devicesv2() as resp:
-        # resp = await self.session.get_all_devicesv2()
         if resp.ok:
             resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_devicesv2)
             self.DevDB.truncate()
-            # print(f" dev db Done: {time.time() - start}")
             return self.DevDB.insert_multiple(resp.output)
 
     async def update_site_db(self):
-        # start = time.time()
-        # print(f" site db start: {start}")
         resp = await self.session.get_all_sites()
-        # async with self.session.get_all_sites() as resp:
-        # resp = await self.session.get_all_sites()
         if resp.ok:
             resp.output = utils.listify(resp.output)
             # TODO time this to see which is more efficient
+            # start = time.time()
             # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
             # upd = [item for in_list in upd for item in in_list]
             self.updated.append(self.session.get_all_sites)
@@ -106,30 +100,20 @@ class Cache:
             return self.SiteDB.insert_multiple(resp.output)
 
     async def update_group_db(self):
-        # start = time.time()
-        # print(f" group db start: {start}")
-        # async with self.session.get_all_groups() as resp:
-        # resp = await self.session.get_all_groups()
         resp = await self.session.get_all_groups()
         if resp.ok:
             resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_groups)
             self.GroupDB.truncate()
-            # print(f" group db Done: {time.time() - start}")
             return self.GroupDB.insert_multiple(resp.output)
 
     async def update_template_db(self):
-        # start = time.time()
-        # print(f" template db start: {start}")
-        # async with self.session.get_all_groups() as resp:
-        # resp = await self.session.get_all_groups()
         groups = self.groups if self.session.get_all_groups in self.updated else None
         resp = await self.session.get_all_templates(groups=groups)
         if resp.ok:
             resp.output = utils.listify(resp.output)
             self.updated.append(self.session.get_all_templates)
             self.TemplateDB.truncate()
-            # print(f" template db Done: {time.time() - start}")
             return self.TemplateDB.insert_multiple(resp.output)
 
     def update_meta_db(self):
@@ -157,13 +141,13 @@ class Cache:
            or time.time() - config.cache_file.stat().st_mtime > 7200:
             start = time.time()
             typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
-            asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
-            # loop = asyncio.get_event_loop()
-            # try:
-            #     loop.run_until_complete(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
-            #     loop.run_until_complete(loop.shutdown_asyncgens())
-            # finally:
-            #     loop.close()
+            # asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
+            loop = asyncio.get_event_loop()
+            try:
+                loop.run_until_complete(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
             log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
             typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
@@ -211,7 +195,7 @@ class Cache:
         match = None
         for _ in range(0, 2 if retry else 1):
             # Try exact match
-            match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip == query_str)
+            match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip.test(lambda v: v.split('/')[0] == query_str))
                                       | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
 
             # retry with case insensitive name match if no match with original query
