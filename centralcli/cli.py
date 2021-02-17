@@ -238,7 +238,8 @@ def template(operation: TemplateLevel1 = typer.Argument(...),
                                          envvar="ARUBACLI_ACCOUNT",
                                          help="The Aruba Central Account to use (must be defined in the config)",
                                          callback=account_name_callback),
-             ):
+             ) -> None:
+
     # TODO cache template names
     if operation == "update":
         if what == "variable":
@@ -371,6 +372,7 @@ def batch(
                                 callback=account_name_callback),
     command: str = None, key: str = None
 ) -> None:
+    """Perform batch operations using import data from file."""
     data = config.get_file_data(import_file)
 
     #
@@ -403,7 +405,7 @@ def refresh(what: RefreshWhat = typer.Argument(...),
     """refresh <'token'|'cache'>"""
 
     session = CentralApi(account)
-    central = session.central
+    central = session.auth
 
     if what.startswith("token"):
         Response(central).refresh_token()
@@ -411,7 +413,7 @@ def refresh(what: RefreshWhat = typer.Argument(...),
         Cache(session=session, refresh=True)
 
 
-@app.command()
+@app.command(hidden=True)
 def method_test(method: str = typer.Argument(...),
                 kwargs: List[str] = typer.Argument(None),
                 do_json: bool = typer.Option(True, "--json", is_flag=True, help="Output in JSON"),
@@ -491,6 +493,8 @@ def callback():
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 
 if __name__ == "__main__":
+    # allow singular form and common synonyms for the defined show commands
+    # show switches / show switch ...
     if len(sys.argv) > 2 and sys.argv[1] == 'show':
         sys.argv[2] = arg_to_what(sys.argv[2])
 
