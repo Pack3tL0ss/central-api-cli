@@ -41,6 +41,7 @@ def eval_caas_response(resp) -> None:
                     typer.echo(f"\t{_r_txt}")
         typer.echo("")
 
+
 # def caasapi(self, group_dev: str, cli_cmds: list = None):
 #     if ":" in group_dev and len(group_dev) == 17:
 #         key = "node_name"

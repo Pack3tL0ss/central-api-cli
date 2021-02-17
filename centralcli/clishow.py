@@ -5,26 +5,23 @@ import typer
 import time
 import asyncio
 import sys
-import json
-from typing import List, Union, Any
+from typing import List, Union
 from pathlib import Path
-# from centralcli import config, log, Cache, Response, utils
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, cleaner
+    from centralcli import Response, cleaner, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, cleaner
+        from centralcli import Response, cleaner, cli, log, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions  # noqa
 
 app = typer.Typer()
 
@@ -38,209 +35,17 @@ args_metavar = f"""Optional Identifying Attribute: {args_metavar_dev}"""
 args_metavar_client = "[username|ip|mac]"
 
 
-class AcctMsg:
-    def __init__(self, account: str = None, msg: str = None) -> None:
-        self.account = account
-        self.msg = msg
-
-    def __repr__(self) -> str:
-        return str(self)
-
-    def __str__(self) -> str:
-        if self.msg and hasattr(self, self.msg):
-            return getattr(self, self.msg)
-        else:
-            return self.initial
-
-    @property
-    def initial(self):
-        acct_clr = f"{typer.style(self.account, fg='cyan')}"
-        return (
-            f"{typer.style(f'Using Account: {acct_clr}.', fg='magenta')}  "
-            f"{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
-            f"\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
-            f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}"
-        )
-
-    @property
-    def previous(self):
-        return (
-            f"{typer.style(f'Using previously specified account: ', fg='magenta')}"
-            f"{typer.style(self.account, fg='cyan', blink=True)}.  "
-            f"\n{typer.style('Use `--account <account name>` to switch to another account.', fg='magenta')}"
-            f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}"
-        )
-
-    @property
-    def forgot(self):
-        return typer.style(
-            "Forget option set for account, and expiration has passed.  reverting to default account",
-            fg="magenta"
-        )
-
-    @property
-    def will_forget(self):
-        return typer.style(
-            f'Forget options is configured, will revert to default account '
-            f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
-            f'{typer.style(" after last command.", fg="magenta")}',
-            fg="magenta"
-        )
-
-    @property
-    def previous_will_forget(self):
-        return f'{self.previous}\n\n{self.will_forget}'
-
-
-def account_name_callback(ctx: typer.Context, account: str):
-    if ctx.resilient_parsing:  # tab completion, return without validating
-        return account
-
-    # -- // sticky last account caching and messaging \\ --
-    if account == "central_info":
-        if config.sticky_account_file.is_file():
-            last_account, last_cmd_ts = config.sticky_account_file.read_text().split('\n')
-            last_cmd_ts = float(last_cmd_ts)
-
-            # delete last_account file if they've configured forget_account_after
-            if config.forget_account_after:
-                if time.time() > last_cmd_ts + (config.forget_account_after * 60):
-                    config.sticky_account_file.unlink(missing_ok=True)
-                    typer.echo(AcctMsg(msg="forgot"))
-                else:
-                    account = last_account
-                    typer.echo(AcctMsg(account, msg='previous_will_forget'))
-            else:
-                account = last_account
-                typer.echo(AcctMsg(account, msg='previous'))
-    else:
-        if account in config.data:
-            config.sticky_account_file.write_text(f'{account}\n{round(time.time(), 2)}')
-            typer.echo(AcctMsg(account))
-
-    if account in config.data:
-        config.account = account
-        global session
-        session = CentralApi(account)
-        global cache
-        cache = Cache(session)
-        return account
-    else:
-        strip_keys = ['central_info', 'ssl_verify', 'token_store', 'forget_account_after', 'debug', 'debugv', 'limit']
-        typer.echo(f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                   f"The specified account: '{account}' is not defined in the config @\n"
-                   f"{config.file}\n\n")
-
-        _accounts = [k for k in config.data.keys() if k not in strip_keys]
-        if _accounts:
-            typer.echo(f"The following accounts are defined {_accounts}\n"
-                       f"The default account 'central_info' is used if no account is specified via --account flag.\n"
-                       f"or the ARUBACLI_ACCOUNT environment variable.\n")
-        else:
-            if not config.data:
-                # TODO prompt user for details
-                typer.secho("Configuration doesn't exist", fg="red")
-            else:
-                typer.secho("No accounts defined in config", fg="red")
-
-        if account != "central_info" and "central_info" not in config.data:
-            typer.echo(f"{typer.style('WARNING:', fg='yellow')} "
-                       f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
-                       f"--account parameter or ARUBACLI_ACCOUNT environment variable.")
-
-        raise typer.Exit(code=1)
-
-
-def default_callback(ctx: typer.Context, default: bool):
-    if ctx.resilient_parsing:  # tab completion, return without validating
-        return
-
-    if default and config.sticky_account_file.is_file():
-        typer.secho('Using default central account', fg="cyan")
-        config.sticky_account_file.unlink()
-
-
-def debug_callback(debug: bool):
-    if debug:
-        log.DEBUG = config.debug = debug
-
-
-def get_format(
-    do_json: bool = False,
-    do_yaml: bool = False,
-    do_csv: bool = False,
-    do_rich: bool = False,
-    default: str = "simple"
-) -> str:
-    if do_json:
-        return "json"
-    elif do_yaml:
-        return "yaml"
-    elif do_csv:
-        return "csv"
-    elif do_rich:
-        return "rich"
-    else:
-        return default
-
-
-def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
-    if not resp.ok:
-        msg = f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
-        if isinstance(resp.output, dict):
-            _msg = resp.output.get('description', resp.output.get('detail', '')).replace('Error: ', '')
-            if _msg:
-                msg += _msg
-            else:
-                msg += json.dumps(resp.output)
-        else:
-            msg += str(resp.output)
-
-        typer.echo(msg)
-    else:
-        # TODO sort output
-        if sort_by is not None:
-            typer.secho("sort option not implemented yet", fg="red")
-
-        return resp.output
-
-
-# TODO combine eval_resp and display_results
-# TODO cleaner moves here (for now), then eventually to an output object (in utils now)
-#   prep for breaking API into separate package.
-def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "simple",
-                    pager=True, outfile: Path = None, cleaner: callable = None, **cleaner_kwargs) -> Union[list, dict]:
-    if data:
-        if cleaner:
-            data = cleaner(data, **cleaner_kwargs)
-
-        outdata = utils.output(data, tablefmt)
-        typer.echo_via_pager(outdata) if tty and pager and len(outdata) > tty.rows else typer.echo(outdata)
-
-        # -- // Output to file \\ --
-        if outfile and outdata:
-            if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
-                config.outdir.mkdir(exist_ok=True)
-                outfile = config.outdir / outfile
-
-            print(
-                typer.style(f"\nWriting output to {outfile}... ", fg="cyan"),
-                end=""
-            )
-            outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
-            typer.secho("Done", fg="green")
-
-
 def show_devices(
     dev_type: str, *args, outfile: Path = None, update_cache: bool = False, group: str = None, status: str = None,
     state: str = None, label: Union[str, List[str]] = None, pub_ip: str = None, do_clients: bool = False,
     do_stats: bool = False, sort_by: str = None, no_pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_rich: bool = False
 ) -> None:
-    cache(refresh=update_cache)
+    central = cli.central
+    cli.cache(refresh=update_cache)
 
     if group:
-        group = cache.get_group_identifier(group)
+        group = cli.cache.get_group_identifier(group)
         if not group:
             raise typer.Exit(1)
 
@@ -264,44 +69,44 @@ def show_devices(
 
     if dev_type == "device":
         if args:
-            dev_type, serial = cache.get_dev_identifier(args, ret_field="type-serial")
+            dev_type, serial = cli.cache.get_dev_identifier(args, ret_field="type-serial")
 
             if dev_type and serial:
-                resp = session.request(session.get_dev_details, dev_type, serial, **params)
+                resp = central.request(central.get_dev_details, dev_type, serial, **params)
         else:  # show devices ... equiv to show all
-            resp = session.request(session.get_all_devicesv2, **params)
+            resp = central.request(central.get_all_devicesv2, **params)
 
     elif dev_type == "all":
-        # if no params (expected result may differ) update cache if not updated this session and return results from there
+        # if no params (expected result may differ) update cli.cache if not updated this session and return results from there
         if len(params) == 2 and list(params.values()).count(False) == 2:
-            if session.get_all_devicesv2 not in cache.updated:
-                asyncio.run(cache.update_dev_db())
+            if central.get_all_devicesv2 not in cli.cache.updated:
+                asyncio.run(cli.cache.update_dev_db())
 
-            resp = Response(output=cache.devices)
+            resp = Response(output=cli.cache.devices)
         else:  # will only run if user specifies params (filters)
-            resp = session.request(session.get_all_devicesv2, **params)
+            resp = central.request(central.get_all_devicesv2, **params)
 
     # aps, switches, gateways, ...
     elif args:
-        serial = cache.get_dev_identifier(args)
-        resp = session.request(session.get_dev_details, dev_type, serial)
+        serial = cli.cache.get_dev_identifier(args)
+        resp = central.request(central.get_dev_details, dev_type, serial)
         # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
         if True not in [do_csv, do_json]:
             do_yaml = True
     else:
-        resp = session.request(session.get_devices, dev_type, **params)
+        resp = central.request(central.get_devices, dev_type, **params)
 
-    data = eval_resp(resp)
+    data = cli.eval_resp(resp)
 
     if data:
-        tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
 
 
 @app.command(short_help="Show APs/details")
 def aps(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -315,15 +120,15 @@ def aps(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     show_devices(
         'aps', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
@@ -335,7 +140,7 @@ def aps(
 @app.command(short_help="Show switches/details")
 def switches(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -349,15 +154,15 @@ def switches(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     show_devices(
         'switches', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
@@ -378,25 +183,25 @@ def interfaces(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
-    cache(refresh=update_cache)
-    dev_type, serial = cache.get_dev_identifier(device, ret_field="type-serial")
+    cli.cache(refresh=update_cache)
+    dev_type, serial = cli.cache.get_dev_identifier(device, ret_field="type-serial")
 
-    resp = session.request(session.get_switch_ports, serial, cx=dev_type == "CX")
-    data = eval_resp(resp)
+    resp = cli.central.request(cli.central.get_switch_ports, serial, cx=dev_type == "CX")
+    data = cli.eval_resp(resp)
     if data:
-        tablefmt = get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -410,50 +215,51 @@ def vlans(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ) -> None:
     """ Get VLAN Info for a device or site. """
     # TODO cli command lacks the filtering options available from method.
+    central = cli.central
     dev_type = None
 
-    cache(refresh=update_cache)
+    cli.cache(refresh=update_cache)
 
-    _ = cache.get_dev_identifier(dev_site, ret_field='type-serial', retry=False)
+    _ = cli.cache.get_dev_identifier(dev_site, ret_field='type-serial', retry=False)
     if not _:
-        iden = cache.get_site_identifier(dev_site)
+        iden = cli.cache.get_site_identifier(dev_site)
         if iden:
-            resp = session.request(session.get_site_vlans, iden)
+            resp = central.request(central.get_site_vlans, iden)
     else:
         dev_type, iden = _[0], _[1]
         if iden and dev_type:
             if dev_type.lower() in ['cx', 'sw']:
-                resp = session.request(session.get_switch_vlans, iden, cx=dev_type == "CX")
+                resp = central.request(central.get_switch_vlans, iden, cx=dev_type == "CX")
             elif dev_type.lower() == 'gateway':
-                resp = session.request(session.get_gateway_vlans, iden)
+                resp = central.request(central.get_gateway_vlans, iden)
             elif dev_type.lower() == 'mobility_controllers':
-                resp = session.request(session.get_controller_vlans, iden)
+                resp = central.request(central.get_controller_vlans, iden)
             else:
                 typer.secho(f"show vlans not implemented for {dev_type}")
 
-    data = eval_resp(resp)
+    data = cli.eval_resp(resp)
     if data:
-        tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
 
 
 @app.command(short_help="Show All Devices")
 def all(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -467,15 +273,15 @@ def all(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     show_devices(
         'all', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
@@ -487,7 +293,7 @@ def all(
 @app.command(short_help="Show devices [identifier]")
 def devices(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -501,15 +307,15 @@ def devices(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     type_to_link = {
         'ap': 'aps',
@@ -522,7 +328,7 @@ def devices(
         args = () if len(args) == 1 else args[1:]
 
     if args:
-        dev_type, args = cache.get_dev_identifier(args, ret_field="type-serial")
+        dev_type, args = cli.cache.get_dev_identifier(args, ret_field="type-serial")
         args = utils.listify(args)
         dev_type = type_to_link.get(dev_type, dev_type)
     else:  # show devices ... equiv to show all
@@ -538,7 +344,7 @@ def devices(
 @app.command(short_help="Show gateways/details")
 def gateways(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -552,15 +358,15 @@ def gateways(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     show_devices(
         'gateways', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
@@ -572,7 +378,7 @@ def gateways(
 @app.command(short_help="Show controllers/details")
 def controllers(
     args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cache group names
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -586,15 +392,15 @@ def controllers(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
     show_devices(
         'mobility_controllers', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
@@ -610,23 +416,23 @@ def _cache(
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
-    cache(refresh=update_cache)
-    resp = Response(output=cache.all)
-    data = eval_resp(resp)
+    cli.cache(refresh=update_cache)
+    resp = Response(output=cli.cache.all)
+    data = cli.eval_resp(resp)
     if data:
-        tablefmt = get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show groups/details")
@@ -634,20 +440,21 @@ def groups(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
-):
-    if session.get_all_groups not in cache.updated:
-        asyncio.run(cache.update_group_db())
+                                callback=cli.account_name_callback),
+) -> None:
+    central = cli.central
+    if central.get_all_groups not in cli.cache.updated:
+        asyncio.run(cli.cache.update_group_db())
 
-        resp = Response(output=cache.groups)
-        data = eval_resp(resp)
-        display_results(data, tablefmt='rich', pager=not no_pager, outfile=outfile)
+        resp = Response(output=cli.cache.groups)
+        data = cli.eval_resp(resp)
+        cli.display_results(data, tablefmt='rich', pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -660,33 +467,34 @@ def sites(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
+                                callback=cli.account_name_callback),
 ):
-    cache(refresh=update_cache)
+    central = cli.central
+    cli.cache(refresh=update_cache)
     site_id = None
     if args:
-        site_id = cache.get_site_identifier(args)
+        site_id = cli.cache.get_site_identifier(args)
 
     if site_id is None:
-        if session.get_all_sites not in cache.updated:
-            asyncio.run(cache.update_site_db())
-        resp = Response(output=cache.sites)
+        if central.get_all_sites not in cli.cache.updated:
+            asyncio.run(cli.cache.update_site_db())
+        resp = Response(output=cli.cache.sites)
     else:
-        resp = session.request(session.get_site_details, site_id)
+        resp = central.request(central.get_site_details, site_id)
 
-    data = eval_resp(resp)
+    data = cli.eval_resp(resp)
     if data:
-        tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
 
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command()
@@ -707,16 +515,17 @@ def templates(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback),
-):
+                                callback=cli.account_name_callback),
+) -> None:
+    central = cli.central
     params = {
         "name": name,
         "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
@@ -733,19 +542,19 @@ def templates(
 
     if not args:
         if not group:  # show templates
-            if session.get_all_templates not in cache.updated:
-                asyncio.run(cache.update_template_db())
+            if central.get_all_templates not in cli.cache.updated:
+                asyncio.run(cli.cache.update_template_db())
 
-            # TODO using cache breaks filtering params
-            resp = Response(output=cache.templates)
+            # TODO using cli.cache breaks filtering params
+            resp = Response(output=cli.cache.templates)
         else:  # show templates --group <group name>
-            resp = session.request(session.get_all_templates_in_group, group, **params)
+            resp = central.request(central.get_all_templates_in_group, group, **params)
     elif group:  # show template <arg> --group <group_name>
-        _args = cache.get_template_identifier(args)
+        _args = cli.cache.get_template_identifier(args)
         if _args:  # name of template
-            resp = session.request(session.get_template, group, args)
+            resp = central.request(central.get_template, group, args)
         else:
-            _args = cache.get_dev_identifier(args)
+            _args = cli.cache.get_dev_identifier(args)
             if _args:
                 typer.secho(f"{args} Does not match a Template name, but does match device with serial {_args}", fg="cyan")
                 typer.secho(f"Fetching Variablised Template for {args}", fg="cyan")
@@ -754,25 +563,25 @@ def templates(
                     f"{typer.style(f'ignoring --group {group}', fg='red')}"
                     )
                 typer.echo(msg)
-                resp = session.request(session.get_variablised_template, _args)
+                resp = central.request(central.get_variablised_template, _args)
     else:  # provided args but no group
-        _args = cache.get_dev_identifier(args, retry=False)
+        _args = cli.cache.get_dev_identifier(args, retry=False)
         if _args:  # assume arg is device identifier 1st
-            resp = session.request(session.get_variablised_template, _args)
+            resp = central.request(central.get_variablised_template, _args)
         else:  # next try template names
-            _args = cache.get_template_identifier(args, ret_field="group-name")
+            _args = cli.cache.get_template_identifier(args, ret_field="group-name")
             if _args:
                 group, tmplt_name = _args[0], _args[1]
-                resp = session.request(session.get_template, group, tmplt_name)
+                resp = central.request(central.get_template, group, tmplt_name)
             else:
                 # typer.secho(f"No Match Found for {args} in Cachce")
                 raise typer.Exit(1)
 
-    data = eval_resp(resp)
+    data = cli.eval_resp(resp)
     if data:
-        tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
 
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command()
@@ -785,26 +594,27 @@ def variables(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback)
+                                callback=cli.account_name_callback)
 ):
-    cache(refresh=update_cache)
+    central = cli.central
+    cli.cache(refresh=update_cache)
 
     if args and args != "all":
-        args = cache.get_dev_identifier(args)
+        args = cli.cache.get_dev_identifier(args)
 
-    resp = session.request(session.get_variables, args)
-    data = eval_resp(resp)
-    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    resp = central.request(central.get_variables, args)
+    data = cli.eval_resp(resp)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command()
@@ -817,24 +627,25 @@ def lldp(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback)
-):
-    cache(refresh=update_cache)
+                                callback=cli.account_name_callback)
+) -> None:
+    central = cli.central
+    cli.cache(refresh=update_cache)
 
-    device = cache.get_dev_identifier(device[-1])  # take last arg from list so they can type "neighbor" if they want.
-    resp = session.request(session.get_ap_lldp_neighbor, device)
-    data = eval_resp(resp)
-    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    device = cli.cache.get_dev_identifier(device[-1])  # take last arg from list so they can type "neighbor" if they want.
+    resp = central.request(central.get_ap_lldp_neighbor, device)
+    data = cli.eval_resp(resp)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
 
 
 @app.command()
@@ -848,19 +659,19 @@ def certs(
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=default_callback),
+                                 callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=debug_callback),
+                               callback=cli.debug_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=account_name_callback)
+                                callback=cli.account_name_callback)
 ):
-    resp = session.request(session.get_certificates, name, callback=cleaner.get_certificates)
-    data = eval_resp(resp)
-    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+    resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
+    data = cli.eval_resp(resp)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command()
@@ -876,7 +687,7 @@ def clients(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
     reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
     verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
@@ -885,28 +696,36 @@ def clients(
         False, "-d",
         is_flag=True,
         help="Use default central account",
-        callback=default_callback,
+        callback=cli.default_callback,
     ),
     debug: bool = typer.Option(
         False,
         "--debug",
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
-        callback=debug_callback,
+        callback=cli.debug_callback,
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        callback=account_name_callback,
+        callback=cli.account_name_callback,
     ),
-):
-    # TODO quick and dirty, make less dirty (the way I passed cache all the way through **kwargs to cleanerq)
-    resp = session.request(session.get_clients, filter, *args,)  # callback_kwargs={'cache': cache})
-    data = eval_resp(resp)
-    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+) -> None:
+    central = cli.central
+    # TODO quick and dirty, make less dirty (the way I passed cli.cache all the way through **kwargs to cleanerq)
+    resp = central.request(central.get_clients, filter, *args,)  # callback_kwargs={'cache': cli.cache})
+    data = cli.eval_resp(resp)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_clients, cache=cache)
+    cli.display_results(
+        data,
+        tablefmt=tablefmt,
+        pager=not no_pager,
+        outfile=outfile,
+        cleaner=cleaner.get_clients,
+        cache=cli.cache
+    )
 
 
 @app.command()
@@ -919,7 +738,7 @@ def logs(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
     reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
     verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
@@ -928,28 +747,29 @@ def logs(
         False, "-d",
         is_flag=True,
         help="Use default central account",
-        callback=default_callback,
+        callback=cli.default_callback,
     ),
     debug: bool = typer.Option(
         False,
         "--debug",
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
-        callback=debug_callback,
+        callback=cli.debug_callback,
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        callback=account_name_callback,
+        callback=cli.account_name_callback,
     ),
-):
+) -> None:
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
-    resp = session.request(session.get_audit_logs, start_time=int(time.time() - 172800),)
-    data = eval_resp(resp)
-    tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+    central = cli.central
+    resp = central.request(central.get_audit_logs, start_time=int(time.time() - 172800),)
+    data = cli.eval_resp(resp)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.callback()
