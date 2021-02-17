@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import typer
 import time
 import asyncio
@@ -32,6 +35,7 @@ show_help = ["all (devices)", "device[s] (same as 'all' unless followed by devic
 args_metavar_dev = "[name|ip|mac-address|serial]"
 args_metavar_site = "[name|site_id|address|city|state|zip]"
 args_metavar = f"""Optional Identifying Attribute: {args_metavar_dev}"""
+args_metavar_client = "[username|ip|mac]"
 
 
 class AcctMsg:
@@ -205,13 +209,13 @@ def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
 # TODO cleaner moves here (for now), then eventually to an output object (in utils now)
 #   prep for breaking API into separate package.
 def display_results(data: Union[List[dict], List[str], None], tablefmt: str = "simple",
-                    pager=True, outfile: Path = None, cleaner: callable = None, cleaner_kwargs: dict = {}) -> Union[list, dict]:
+                    pager=True, outfile: Path = None, cleaner: callable = None, **cleaner_kwargs) -> Union[list, dict]:
     if data:
         if cleaner:
             data = cleaner(data, **cleaner_kwargs)
 
         outdata = utils.output(data, tablefmt)
-        typer.echo_via_pager(outdata) if pager and len(outdata) > tty.rows else typer.echo(outdata)
+        typer.echo_via_pager(outdata) if tty and pager and len(outdata) > tty.rows else typer.echo(outdata)
 
         # -- // Output to file \\ --
         if outfile and outdata:
@@ -291,7 +295,7 @@ def show_devices(
 
     if data:
         tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
-        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
 
 
 @app.command(short_help="Show APs/details")
@@ -393,6 +397,57 @@ def interfaces(
         tablefmt = get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
         display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+
+@app.command(short_help="Show VLANs for device or site")
+def vlans(
+    dev_site: str = typer.Argument(..., metavar=f"{args_metavar_dev} OR {args_metavar_site}", hidden=False),
+    # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
+    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback),
+) -> None:
+    """ Get VLAN Info for a device or site. """
+    # TODO cli command lacks the filtering options available from method.
+    dev_type = None
+
+    cache(refresh=update_cache)
+
+    _ = cache.get_dev_identifier(dev_site, ret_field='type-serial', retry=False)
+    if not _:
+        iden = cache.get_site_identifier(dev_site)
+        if iden:
+            resp = session.request(session.get_site_vlans, iden)
+    else:
+        dev_type, iden = _[0], _[1]
+        if iden and dev_type:
+            if dev_type.lower() in ['cx', 'sw']:
+                resp = session.request(session.get_switch_vlans, iden, cx=dev_type == "CX")
+            elif dev_type.lower() == 'gateway':
+                resp = session.request(session.get_gateway_vlans, iden)
+            elif dev_type.lower() == 'mobility_controllers':
+                resp = session.request(session.get_controller_vlans, iden)
+            else:
+                typer.secho(f"show vlans not implemented for {dev_type}")
+
+    data = eval_resp(resp)
+    if data:
+        tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+
+        display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
 
 
 @app.command(short_help="Show All Devices")
@@ -548,8 +603,8 @@ def controllers(
         do_rich=do_rich)
 
 
-@app.command(short_help="Show contents of Identifier Cache.")
-def cache(
+@app.command("cache", short_help="Show contents of Identifier Cache.",)
+def _cache(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
@@ -847,11 +902,11 @@ def clients(
     ),
 ):
     # TODO quick and dirty, make less dirty (the way I passed cache all the way through **kwargs to cleanerq)
-    resp = session.request(session.get_clients, filter, *args, callback_kwargs={'cache': cache})
+    resp = session.request(session.get_clients, filter, *args,)  # callback_kwargs={'cache': cache})
     data = eval_resp(resp)
     tablefmt = get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_clients, cache=cache)
 
 
 @app.command()

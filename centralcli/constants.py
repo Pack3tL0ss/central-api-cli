@@ -1,13 +1,28 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 from enum import Enum
 from typing import Union
 
-# TODO replace references -> use arg_to_what
-dev_to_url = {
-    "switch": "switches",
-    "ap": "aps",
-    "iap": "aps",
-    "gateway": "gateways"
-}
+# wrapping keys from return for some calls that have no value
+STRIP_KEYS = [
+    "data",
+    "gateways",
+    "switches",
+    "aps",
+    "devices",
+    "mcs",
+    "group",
+    "clients",
+    "sites",
+    "neighbors",
+    "audit_logs",
+    "vlans",
+    "result"
+]
+
+
+CLIENT_STRIP_KEYS = ["group_id", "label_id", "swarm_id"]
 
 
 class ShowArgs(str, Enum):
@@ -48,27 +63,7 @@ class RefreshWhat(str, Enum):
     tokens = "tokens"
 
 
-out_format_dict = {
-    "do_json": "json",
-    "do_yaml": "yaml",
-    "do_csv": "csv",
-    "do_rich": "rich"
-}
-
-
-class DoArgs(str, Enum):
-    bounce_poe = "bounce-poe"              # Switches Only
-    bounce_interface = "bounce-interface"  # Switches only
-    reboot = "reboot"                      # IAP/Controllers/Switches
-    sync = "sync"                          # Controllers
-    blink_led = "blink-led"                # IAP/Switches
-    factory_default = "factory-default"    # Switches only
-    write_mem = "write-mem"                # IAP & Switches
-    halt = "halt"                          # controllers only
-    move = "move"                          # move device to diff group
-    clone = "clone"                        # clone-add group
-    add = "add"                            # add group
-    delete = "delete"                      # delete a group
+out_format_dict = {"do_json": "json", "do_yaml": "yaml", "do_csv": "csv", "do_rich": "rich"}
 
 
 class BlinkArgs(str, Enum):
@@ -76,30 +71,10 @@ class BlinkArgs(str, Enum):
     off = "off"
 
 
-class CycleArgs(str, Enum):
-    poe = "poe"              # Switches Only
+class BounceArgs(str, Enum):
+    poe = "poe"  # Switches Only
     interface = "interface"  # Switches only
-    port = "port"                      # IAP/Controllers/Switches
-    # sync = "sync"                          # Controllers
-    # blink_led = "blink-led"                # IAP/Switches
-    # factory_default = "factory-default"    # Switches only
-    # write_mem = "write-mem"                # IAP & Switches
-    # halt = "halt"                          # controllers only
-    # move = "move"                          # move device to diff group
-    # clone = "clone"                        # clone-add group
-    # add = "add"                            # add group
-    # delete = "delete"                      # delete a group
-
-
-class SendDevCommand(str, Enum):
-    reboot = 'reboot'
-    blink_led_on = 'blink_led_on'
-    blink_led_off = 'blink_led_off'
-    blink_led = 'blink_led'
-    erase_configuration = 'erase_configuration'
-    save_configuration = 'save_configuration'
-    halt = 'halt'
-    config_sync = 'config_sync'
+    port = "port"  # IAP/Controllers/Switches
 
 
 class TemplateLevel1(str, Enum):
@@ -109,12 +84,7 @@ class TemplateLevel1(str, Enum):
 
 
 # Used to determine if arg is for a device (vs group, templates, ...)
-devices = ["switch", "aps", "gateway", "all", "device"]
-
-# wrapping keys from return for some calls that have no value
-STRIP_KEYS = ["data", "gateways", "switches", "aps", "devices", "mcs", "group", "clients", "sites", "neighbors", "audit_logs"]
-CLIENT_STRIP_KEYS = ["group_id", "label_id", "swarm_id"]
-
+# devices = ["switch", "aps", "gateway", "all", "device"]
 
 class ArgToWhat:
     def __init__(self):
@@ -138,6 +108,7 @@ class ArgToWhat:
         self.clients = self.client = "clients"
         self.logs = self.log = self.event = self.events = "logs"
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
+        self.vlans = self.vlan = "vlans"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
@@ -216,5 +187,5 @@ class StatusOptions(str, Enum):
 MESSAGES = {
     "SPIN_TXT_AUTH": "Initializing Arunba Central Base...",
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
-    "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway..."
+    "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway...",
 }

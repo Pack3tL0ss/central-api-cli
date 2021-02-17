@@ -14,7 +14,7 @@ if test_dev_file.is_file():
 
 
 def test_do_bounce_interface():
-    result = runner.invoke(app, ["do", "bounce-interface", TEST_DEVICES["switch"]["name"].lower(),
+    result = runner.invoke(app, ["do", "bounce",  "interface", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
@@ -22,7 +22,7 @@ def test_do_bounce_interface():
 
 
 def test_do_bounce_poe():
-    result = runner.invoke(app, ["do", "bounce-poe", TEST_DEVICES["switch"]["name"].lower(),
+    result = runner.invoke(app, ["do", "bounce", "poe", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
@@ -31,6 +31,6 @@ def test_do_bounce_poe():
 
 def test_do_move_dev_to_group():
     result = runner.invoke(app, ["do", "move", "J9773A-80:C1:6E:CD:32:40",
-                           "WadeLab", "-Y", "--debug"])
+                           "wadelab", "-Y", "--debug"])
     assert result.exit_code == 0
     assert "Success" in result.stdout

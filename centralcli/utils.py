@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 import json
 import os
@@ -114,6 +115,12 @@ class Utils:
         def get_tty_size(self):
             s = shutil.get_terminal_size()
             return s.lines, s.columns
+
+        def __bool__(self):
+            return sys.stdin.isatty()
+
+        def __call__(self):
+            self._rows, self._cols = self.get_tty_size()
 
         @property
         def rows(self):
@@ -348,7 +355,7 @@ class Utils:
                                 inner_dict[key] = str(val)
                     else:
                         val = self.listify(val)
-                        if tablefmt == "rich":
+                        if val and tablefmt == "rich" and hasattr(val[0], 'keys'):
                             inner_table = Table(*(k for k in val[0].keys()),
                                                 show_header=True,
                                                 # padding=(0, 0),

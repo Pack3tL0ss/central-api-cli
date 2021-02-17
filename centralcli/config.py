@@ -101,7 +101,7 @@ class Config:
                         with import_file.open('r') as fh:
                             return tablib.Dataset().load(fh)
                     else:
-                        raise UserWarning("Provide valid file with"
+                        raise UserWarning("Provide valid file with "
                                           "format/extension [.json/.yaml/.yml/.csv]!")
                 except Exception as e:
                     raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__}\n\n{e}')
