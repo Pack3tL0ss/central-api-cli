@@ -9,15 +9,15 @@
           "id": "cliArgs",
           "description": "Select Arguments",
           // The default is updated automatically by the script, could not get vscode debugger to do it.
-          "default": "show clients"  // VSC_PREV_ARGS
+          "default": "show clients --rich"  // VSC_PREV_ARGS
         },
         {
             "type": "pickString",
             "id": "cliArgsHistory",
             "description": "Select Arguments",
             // The default is updated automatically by the script, could not get vscode debugger to do it.
-            "options": ["show clients"],  // VSC_ARG_HISTORY
-            "default": "show clients"  // VSC_PREV_ARGS
+            "options": ["show clients --rich", "show clients", "show lldp neighbors br1 --rich", "show lldp neighbors br1", "show lldp neighbors 2930f-branch13", "show lldp 2930f-branch1", "show lldp neighbors 2930f-branch1", "show aps", "do update-vars bsmt-2930f if_2_nopoe = 0", "do cycle poe bsmt-2930f 4 -y"],  // VSC_ARG_HISTORY
+            "default": "show clients --rich"  // VSC_PREV_ARGS
           },
       ],
     "configurations": [
@@ -25,13 +25,39 @@
             "name": "cli arg INPUT",
             "type": "python",
             "request": "launch",
-            "program": "cli.py",
+            "program": "${workspaceFolder}/centralcli/cli.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "env": {"BETTER_EXCEPTIONS": "1"},
-            // "preLaunchTask": "show-prev-args",  // didn't work prompt occurs before preLaunchTask
-            "preLaunchTask": "printenv",
+            "env": {"BETTER_EXCEPTIONS": "1"},  // "ARUBACLI_ACCOUNT": "nanners"},
+            // "postDebugTask": "show-prev-args",  // didn't work prompt occurs before preLaunchTask
+            "preLaunchTask": "show-prev-args",  // running as preLaunch so can copy paste if desired from task output for next run
+            "cwd": "${env:HOME}/git/myrepos/central-api-cli",
             "args": ["${input:cliArgs}"]
+        },
+        {
+            "name": "cli arg INPUT Path Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${env:HOME}/git/myrepos/central-api-cli/centralcli/cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},  // "ARUBACLI_ACCOUNT": "nanners"},
+            // "postDebugTask": "show-prev-args",  // didn't work prompt occurs before preLaunchTask
+            "preLaunchTask": "show-prev-args",  // running as preLaunch so can copy paste if desired from task output for next run
+            "cwd": "${workspaceFolder}",
+            "args": ["${input:cliArgs}"]
+        },
+        {
+            "name": "code generator",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/.vscode/central_json_schemas/_gen_code.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},  // "ARUBACLI_ACCOUNT": "nanners"},
+            // "postDebugTask": "show-prev-args",  // didn't work prompt occurs before preLaunchTask
+            // "preLaunchTask": "show-prev-args",  // running as preLaunch so can copy paste if desired from task output for next run
+            // "args": ["--out ${workspaceFolder}/centralcli/allcalls.py"]
         },
         {
             "name": "cli arg SELECT",
@@ -44,6 +70,17 @@
             "args": ["${input:cliArgsHistory}"]
         },
         {
+            "name": "cli package debug",
+            "type": "python",
+            "request": "launch",
+            "program": "${env:HOME}/.local/bin/cencli",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"BETTER_EXCEPTIONS": "1"},
+            "args": ["${input:cliArgs}"],
+            "python": "/usr/bin/python3"
+        },
+        {
             "name": "DEVCLI interactive arg selection",
             "type": "python",
             "request": "launch",
@@ -54,13 +91,14 @@
             "args": ["${input:cliArgs}"]
         },
         {
-            "name": "ana-cli interactive arg selection",
+            "name": "test_show",
             "type": "python",
             "request": "launch",
-            "program": "main.py",
+            "program": "${workspaceFolder}/tests/test_show.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["${input:cliArgs}"]
+            "cwd": "${workspaceFolder}/tests",
+            // "args": ["${input:cliArgs}"]
         },
         // One of many previous attempts to get args from environment/.env file etc
         // could not get it to work.  Not via debugger (even with "envFile": "${workspaceFolder}/.env",)
