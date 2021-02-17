@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 import time
 from pathlib import Path
 from typing import Any, List, Union
-from tinydb import TinyDB
 import sys
 import typer
-# import central
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -21,18 +20,16 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.central import CentralApi
-from centralcli.constants import (BlinkArgs, DoArgs, CycleArgs, arg_to_what)
+from centralcli.constants import (BlinkArgs, BounceArgs, arg_to_what)
 
 
-TinyDB.default_table_name = "devices"
-
-STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 tty = utils.tty
 
 app = typer.Typer()
+
 
 class AcctMsg:
     def __init__(self, account: str = None, msg: str = None) -> None:
@@ -202,16 +199,9 @@ def display_results(data: Union[List[dict], List[str]], tablefmt: str = "simple"
         typer.secho("Done", fg="green")
 
 
-# show_help = ["all (devices)", "device[s] (same as 'all' unless followed by device identifier)", "switch[es]", "ap[s]",
-#              "gateway[s]", "group[s]", "site[s]", "clients", "template[s]", "variables", "certs"]
-# args_metavar_dev = "[name|ip|mac-address|serial]"
-# args_metavar_site = "[name|site_id|address|city|state|zip]"
-# args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
-
-
 @app.command(short_help="Bounce Interface or PoE on Interface")
 def bounce(
-    what: CycleArgs = typer.Argument(...),
+    what: BounceArgs = typer.Argument(...),
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
     port: str = typer.Argument(..., ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -413,6 +403,23 @@ def move(
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
         raise typer.Abort()
+
+
+@app.command(short_help="Save Device Running Config to Startup")
+def kick(
+    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=account_name_callback),
+) -> None:
+    serial = cache.get_dev_identifier(device)
+    resp = session.request(session.send_command_to_device, serial, 'save_configuration')
+    typer.secho(str(resp), fg="green" if resp else "red")
 
 
 @app.callback()
