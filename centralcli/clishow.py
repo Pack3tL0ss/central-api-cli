@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars  # noqa
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs  # noqa
 
 app = typer.Typer()
 
@@ -399,6 +399,7 @@ def controllers(
 
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
 def _cache(
+    args: List[CacheArgs] = typer.Argument(None, hidden=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
@@ -415,12 +416,15 @@ def _cache(
                                 callback=cli.account_name_callback),
 ):
     cli.cache(refresh=update_cache)
-    resp = Response(output=cli.cache.all)
-    data = cli.eval_resp(resp)
-    if data:
-        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    args = ('all',) if not args else args
+    for arg in args:
+        cache_out = getattr(cli.cache, arg)
+        resp = Response(output=cache_out)
+        data = cli.eval_resp(resp)
+        if data:
+            tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show groups/details")
@@ -629,12 +633,17 @@ def lldp(
     central = cli.central
     cli.cache(refresh=update_cache)
 
-    device = cli.cache.get_dev_identifier(device[-1])  # take last arg from list so they can type "neighbor" if they want.
-    resp = central.request(central.get_ap_lldp_neighbor, device)
-    data = cli.eval_resp(resp)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    # We take last arg [-1] from list so they can type "neighbor" if they want.
+    dev = cli.cache.get_dev_identifier(device[-1])
+    if dev.type == "ap":
+        resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
+        data = cli.eval_resp(resp)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
+        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
+    else:
+        typer.secho(f"This command is currently only valid for APs.  {dev.name} is type: {dev.type}", fg="red")
+        raise typer.Exit(1)
 
 
 @app.command(short_help="Show certificates/details")
@@ -692,7 +701,7 @@ def wlans(
     central = cli.central
     if site:
         _site = cli.cache.get_site_identifier(site, retry=False)
-        site = _site or site
+        site = _site.name or site
 
     params = {
         "name": name,
@@ -704,7 +713,7 @@ def wlans(
     }
 
     if sort_by:
-        typer.secho("sort not implemented yet.")
+        typer.secho("sort not implemented yet.", fg="red")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
     resp = central.request(central.get_wlans, **params)

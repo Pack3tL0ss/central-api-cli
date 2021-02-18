@@ -84,6 +84,13 @@ class TemplateLevel1(str, Enum):
     add = "add"
 
 
+class CacheArgs(str, Enum):
+    devices = "devices"
+    sites = "sites"
+    templates = "templates"
+    groups = "groups"
+
+
 # Used to determine if arg is for a device (vs group, templates, ...)
 # devices = ["switch", "aps", "gateway", "all", "device"]
 
