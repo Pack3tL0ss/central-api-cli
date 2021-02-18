@@ -219,6 +219,27 @@ def test_show_template_by_name():
     assert "_sys_ip_address%" in result.stdout
 
 
+def test_show_lldp_by_ap_name():
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["ap"]["name"].lower()])
+    assert result.exit_code == 0
+    assert "_sys_hostname%" in result.stdout
+    assert "_sys_ip_address%" in result.stdout
+
+
+def test_show_lldp_by_ap_name():
+    result = runner.invoke(app, ["show", "lldp", TEST_DEVICES["ap"]["name"].lower()])
+    assert result.exit_code == 0
+    assert "localPort" in result.stdout
+    assert "serial" in result.stdout
+
+
+def test_show_certs():
+    result = runner.invoke(app, ["show", "certs"],)
+    assert result.exit_code == 0
+    assert "expired" in result.stdout
+    assert "checksum" in result.stdout
+
+
 # def test_show_snapshots_by_group():
 #     result = runner.invoke(app, ["show", "snapshots", TEST_DEVICES["switch"]["group"]])
 #     assert result.exit_code == 0
