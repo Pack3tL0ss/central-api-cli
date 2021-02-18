@@ -8,12 +8,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import log, utils, cli, cliupdate
+    from centralcli import utils, cli, cliupdate
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import log, utils, cli, cliupdate
+        from centralcli import utils, cli, cliupdate
     else:
         print(pkg_dir.parts)
         raise e
@@ -261,8 +261,6 @@ def callback():
     """
     pass
 
-
-log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 
 if __name__ == "__main__":
     if len(sys.argv) > 2 and sys.argv[1] == 'show':
