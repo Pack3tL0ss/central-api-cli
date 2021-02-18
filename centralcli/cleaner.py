@@ -203,22 +203,19 @@ def _client_concat_associated_dev(
         "interface mac",
         "gateway serial",
     ]
-    _name, _gw_name, data["gateway"] = "", "", {}
+    dev, _gw, data["gateway"] = "", "", {}
     if data.get("associated device"):
-        _name = cache.get_dev_identifier(data["associated device"], ret_field="name")
+        dev = cache.get_dev_identifier(data["associated device"], ret_field="name")
 
     if data.get("gateway_serial"):
-        _gw_name = cache.get_dev_identifier(data["gateway serial"], ret_field="name")
+        _gw = cache.get_dev_identifier(data["gateway serial"], ret_field="name")
         _gateway = {
-            "name": _gw_name,
+            "name": _gw.name,
             "serial": data.get("gateway serial", ""),
         }
         data["gateway"] = _unlist(strip_no_value([_gateway]))
-    # f'[{data.get("connected device type", "")}]{_name}\n'
-    # f'{data.get("associated device", "")}\n'
-    # f'{data.get("associated device mac", "")}'
     _connected = {
-        "name": _name,
+        "name": dev.name,
         "type": data.get("connected device type", ""),
         "serial": data.get("associated device", ""),
         "mac": data.get("associated device mac", ""),
