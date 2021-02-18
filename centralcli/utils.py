@@ -246,20 +246,20 @@ class Utils:
     # TODO depricated validate not used, moved to Response
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
-                            return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
+                            return_type: str = None, abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
         def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
             prompt = prompt or \
                 "Enter/Paste your content. Then Ctrl-D or Ctrl-Z ( windows ) to submit.\n Enter 'exit' to abort"
             print_func(prompt, **kwargs)
             contents, line = [], ''
-            while line.strip().lower() != "exit":
+            while line.strip().lower() != abort_str:
                 try:
                     line = input()
                     contents.append(line)
                 except EOFError:
                     break
 
-            if line.strip().lower() == "exit":
+            if line.strip().lower() == abort_str:
                 print("Aborted")
                 exit()
 
@@ -290,11 +290,11 @@ class Utils:
 
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = ""):
-            # self.file = rawdata    # found typer.unstyle AFTER I built this
+            self._file = rawdata    # found typer.unstyle AFTER I built this
             self.tty = prettydata
 
         def __len__(self):
-            return len(str(self.file).splitlines())
+            return len(str(self).splitlines())
 
         def __str__(self):
             pretty_up = typer.style(" Up", fg="green")
@@ -306,12 +306,30 @@ class Utils:
 
         def __iter__(self):
             out = self.tty or self.file
-            for line in out.splitlines(keepends=True):
+            out = out.splitlines(keepends=True)
+            for line in out:
                 yield line
+
+        def menu(self, data_len: int = None) -> str:
+            out = self.tty or self.file
+            out = out.splitlines(keepends=True)
+            _out = []
+            if data_len:
+                data_start = len(self) - data_len
+            else:
+                data_start = 2
+                data_len = len(self) - 2
+            for idx, line in enumerate(out):
+                i = idx - data_start + 1
+                pad = len(str(len(out[data_start:])))
+                _out += [
+                    f"  {' ':{pad}}{line}" if idx < data_start else f"{i}.{' ':{pad}}{line}"
+                ]
+            return "".join(_out)
 
         @property
         def file(self):
-            return typer.unstyle(self.tty)
+            return typer.unstyle(self._file)
 
     # Not used moved to __str__ method of Output class
     @staticmethod

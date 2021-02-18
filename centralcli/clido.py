@@ -8,12 +8,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import log, utils, cli
+    from centralcli import log, utils, cli, cliupdate
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import log, utils, cli
+        from centralcli import log, utils, cli, cliupdate
     else:
         print(pkg_dir.parts)
         raise e
@@ -27,6 +27,7 @@ SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 tty = utils.tty
 
 app = typer.Typer()
+app.add_typer(cliupdate.app, name="update")
 
 
 @app.command(short_help="Bounce Interface or PoE on Interface")
@@ -46,10 +47,10 @@ def bounce(
                                 callback=cli.account_name_callback),
 ) -> None:
     yes = yes_ if yes_ else yes
-    serial = cli.cache.get_dev_identifier(device)
+    dev = cli.cache.get_dev_identifier(device)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
-    if yes or typer.confirm(typer.style(f"Please Confirm bounce {what} on {device} port {port}", fg="cyan")):
-        resp = cli.central.request(cli.central.send_bounce_command_to_device, serial, command, port)
+    if yes or typer.confirm(typer.style(f"Please Confirm bounce {what} on {dev.name} port {port}", fg="cyan")):
+        resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
         typer.secho(str(resp), fg="green" if resp else "red")
         # !! removing this for now Central ALWAYS returns:
         # !!   reason: Sending command to device. state: QUEUED, even after command execution.
@@ -76,10 +77,10 @@ def reboot(
                                 callback=cli.account_name_callback),
 ) -> None:
     yes = yes_ if yes_ else yes
-    serial = cli.cache.get_dev_identifier(device)
-    reboot_msg = f"{typer.style('*reboot*', fg='red')} {typer.style(f'{device}', fg='cyan')}"
+    dev = cli.cache.get_dev_identifier(device)
+    reboot_msg = f"{typer.style('*reboot*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
     if yes or typer.confirm(typer.style(f"Please Confirm: {reboot_msg}", fg="cyan")):
-        resp = cli.central.request(cli.central.send_command_to_device, serial, 'reboot')
+        resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'reboot')
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
         raise typer.Abort()
@@ -103,8 +104,8 @@ def blink(
 ) -> None:
     yes = yes_ if yes_ else yes
     command = f'blink_led_{action}'
-    serial = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, serial, command, duration=secs)
+    dev = cli.cache.get_dev_identifier(device)
+    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
     typer.secho(str(resp), fg="green" if resp else "red")
 
 
@@ -123,10 +124,10 @@ def nuke(
                                 callback=cli.account_name_callback),
 ) -> None:
     yes = yes_ if yes_ else yes
-    serial = cli.cache.get_dev_identifier(device)
-    nuke_msg = f"{typer.style('*Factory Default*', fg='red')} {typer.style(f'{device}', fg='cyan')}"
+    dev = cli.cache.get_dev_identifier(device)
+    nuke_msg = f"{typer.style('*Factory Default*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
     if yes or typer.confirm(typer.style(f"Please Confirm: {nuke_msg}", fg="cyan")):
-        resp = cli.central.request(cli.central.send_command_to_device, serial, 'erase_configuration')
+        resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
         raise typer.Abort()
@@ -144,8 +145,8 @@ def save(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    serial = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, serial, 'save_configuration')
+    dev = cli.cache.get_dev_identifier(device)
+    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
     typer.secho(str(resp), fg="green" if resp else "red")
 
 
@@ -161,8 +162,8 @@ def sync(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    serial = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, serial, 'config_sync')
+    dev = cli.cache.get_dev_identifier(device)
+    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
     typer.secho(str(resp), fg="green" if resp else "red")
 
 
@@ -179,7 +180,8 @@ def update_vars(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    serial = cli.cache.get_dev_identifier(device)
+    dev = cli.cache.get_dev_identifier(device)
+    serial = dev.serial
     vars, vals, get_next = [], [], False
     for var in var_value:
         if var == '=':
@@ -203,7 +205,7 @@ def update_vars(
 
     var_dict = {k: v for k, v in zip(vars, vals)}
 
-    typer.secho(f"Please Confirm: Update {device}", fg="cyan")
+    typer.secho(f"Please Confirm: Update {dev.name}|{dev.serial}", fg="cyan")
     [typer.echo(f'    {k}: {v}') for k, v in var_dict.items()]
     if typer.confirm(typer.style("Proceed with these values", fg="cyan")):
         resp = cli.central.request(cli.central.update_variables, serial, **var_dict)
@@ -226,16 +228,16 @@ def move(
                                 callback=cli.account_name_callback),
 ) -> None:
     yes = yes_ if yes_ else yes
-    serial = cli.cache.get_dev_identifier(device)
+    dev = cli.cache.get_dev_identifier(device)
     group = cli.cache.get_group_identifier(group)
-    if yes or typer.confirm(typer.style(f"Please Confirm: move {device} to group {group}", fg="cyan")):
-        resp = cli.central.request(cli.central.move_dev_to_group, group, serial)
+    if yes or typer.confirm(typer.style(f"Please Confirm: move {dev.name} to group {group.name}", fg="cyan")):
+        resp = cli.central.request(cli.central.move_dev_to_group, group.name, dev.serial)
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
         raise typer.Abort()
 
 
-@app.command(short_help="Save Device Running Config to Startup")
+@app.command(short_help="kick a client (disconnect)")
 def kick(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -247,8 +249,8 @@ def kick(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    serial = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, serial, 'save_configuration')
+    dev = cli.cache.get_dev_identifier(device)
+    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
     typer.secho(str(resp), fg="green" if resp else "red")
 
 

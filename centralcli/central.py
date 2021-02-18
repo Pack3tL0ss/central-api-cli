@@ -512,8 +512,37 @@ class CentralApi(Session):
         version: str = None,
         model: str = None,
     ) -> Response:
+        """Update existing template.
+
+        Args:
+            group (str): Name of the group for which the template is to be updated.
+            name (str): Name of template.
+            device_type (str, optional): Device type of the template.  Valid Values: IAP,
+                ArubaSwitch, CX, MobilityController
+            version (str, optional): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model.
+                Example: 2920, J9727A etc.
+            template (Union[Path, str], optional): Template text.
+                For 'ArubaSwitch' device_type, the template text should include the following
+                commands to maintain connection with central.
+                1. aruba-central enable.
+                2. aruba-central url https://<URL | IP>/ws.
+            payload (str, optional): json representation of the required params.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/configuration/v1/groups/{group}/templates"
-        params = {"name": name, "device_type": device_type, "version": version, "model": model}
+        template = template if isinstance(template, Path) else Path(str(template))
+
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
 
         if template and template.is_file() and template.stat().st_size > 0:
             template_data: bytes = template.read_bytes()
@@ -788,9 +817,45 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_ssids_by_group(self, group):
-        url = "/monitoring/v1/networks"
-        params = {"group": group}
+    async def get_wlans(
+        self,
+        name: str = None,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        calculate_client_count: bool = None,
+        sort_by: str = None
+    ) -> Response:
+        """List all WLANs (SSIDs).
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            calculate_client_count (bool, optional): Whether to calculate client count per SSID
+            sort_by (str, optional): Sort parameter may be one of +essid, -essid. Default is '+essid'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/networks"
+        if name:
+            url = f"{url}/{name}"
+
+        if calculate_client_count in [True, False]:
+            calculate_client_count = str(calculate_client_count)
+
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'calculate_client_count': calculate_client_count,
+            'sort': sort_by,
+        }
+
         return await self.get(url, params=params)
 
     async def get_gateways_by_group(self, group):

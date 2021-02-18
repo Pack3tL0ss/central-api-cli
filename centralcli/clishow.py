@@ -11,28 +11,22 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, cli, log, utils
+    from centralcli import Response, cleaner, cli, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, cli, log, utils
+        from centralcli import Response, cleaner, cli, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions  # noqa
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars  # noqa
 
 app = typer.Typer()
 
-
 tty = utils.tty
-show_help = ["all (devices)", "device[s] (same as 'all' unless followed by device identifier)", "switch[es]", "ap[s]",
-             "gateway[s]", "group[s]", "site[s]", "clients", "template[s]", "variables", "certs"]
-args_metavar_dev = "[name|ip|mac-address|serial]"
-args_metavar_site = "[name|site_id|address|city|state|zip]"
-args_metavar = f"""Optional Identifying Attribute: {args_metavar_dev}"""
-args_metavar_client = "[username|ip|mac]"
+iden_meta = IdenMetaVars()
 
 
 def show_devices(
@@ -46,13 +40,13 @@ def show_devices(
 
     if group:
         group = cli.cache.get_group_identifier(group)
-        if not group:
-            raise typer.Exit(1)
+        # if not group:  # cache should handle exit now
+        #     raise typer.Exit(1)
 
     # -- // Peform GET Call \\ --
     resp = None
     params = {
-        "group": group,
+        "group": None if not group else group.name,
         "status": None if not status else status.title(),
         "label": label,
         "public_ip_address": pub_ip,
@@ -69,10 +63,8 @@ def show_devices(
 
     if dev_type == "device":
         if args:
-            dev_type, serial = cli.cache.get_dev_identifier(args, ret_field="type-serial")
-
-            if dev_type and serial:
-                resp = central.request(central.get_dev_details, dev_type, serial, **params)
+            dev = cli.cache.get_dev_identifier(args)
+            resp = central.request(central.get_dev_details, dev.type, dev.serial, **params)
         else:  # show devices ... equiv to show all
             resp = central.request(central.get_all_devicesv2, **params)
 
@@ -88,24 +80,22 @@ def show_devices(
 
     # aps, switches, gateways, ...
     elif args:
-        serial = cli.cache.get_dev_identifier(args)
-        resp = central.request(central.get_dev_details, dev_type, serial)
-        # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
-        if True not in [do_csv, do_json]:
-            do_yaml = True
+        dev = cli.cache.get_dev_identifier(args, dev_type=dev_type)
+        resp = central.request(central.get_dev_details, dev_type, dev.serial)
     else:
         resp = central.request(central.get_devices, dev_type, **params)
 
     data = cli.eval_resp(resp)
 
     if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="yaml")
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
 
 
 @app.command(short_help="Show APs/details")
 def aps(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -129,7 +119,7 @@ def aps(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
-):
+) -> None:
     show_devices(
         'aps', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
@@ -139,7 +129,7 @@ def aps(
 
 @app.command(short_help="Show switches/details")
 def switches(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -163,7 +153,7 @@ def switches(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
-):
+) -> None:
     show_devices(
         'switches', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
@@ -173,7 +163,7 @@ def switches(
 
 @app.command(short_help="Show interfaces/details")
 def interfaces(
-    device: str = typer.Argument(..., metavar=args_metavar_dev, hidden=False),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False),
     slot: str = typer.Argument(None, help="Slot name of the ports to query (chassis only)",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: SortOptions = typer.Option(None, "--sort"),
@@ -206,7 +196,7 @@ def interfaces(
 
 @app.command(short_help="Show VLANs for device or site")
 def vlans(
-    dev_site: str = typer.Argument(..., metavar=f"{args_metavar_dev} OR {args_metavar_site}", hidden=False),
+    dev_site: str = typer.Argument(..., metavar=f"{iden_meta.dev} OR {iden_meta.site}", hidden=False),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
@@ -225,29 +215,27 @@ def vlans(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    """ Get VLAN Info for a device or site. """
-    # TODO cli command lacks the filtering options available from method.
+    # TODO cli command lacks the filtering options available from method currently.
     central = cli.central
-    dev_type = None
 
     cli.cache(refresh=update_cache)
 
-    _ = cli.cache.get_dev_identifier(dev_site, ret_field='type-serial', retry=False)
-    if not _:
-        iden = cli.cache.get_site_identifier(dev_site)
-        if iden:
-            resp = central.request(central.get_site_vlans, iden)
-    else:
-        dev_type, iden = _[0], _[1]
-        if iden and dev_type:
-            if dev_type.lower() in ['cx', 'sw']:
-                resp = central.request(central.get_switch_vlans, iden, cx=dev_type == "CX")
-            elif dev_type.lower() == 'gateway':
-                resp = central.request(central.get_gateway_vlans, iden)
-            elif dev_type.lower() == 'mobility_controllers':
-                resp = central.request(central.get_controller_vlans, iden)
-            else:
-                typer.secho(f"show vlans not implemented for {dev_type}")
+    obj = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"))
+
+    if obj:
+        if obj.is_site:
+            resp = central.request(central.get_site_vlans, obj.id)
+        elif obj.is_dev:
+            if obj.type.lower() in ['cx', 'sw']:
+                resp = central.request(central.get_switch_vlans, obj.serial, cx=obj.type == "CX")
+            elif obj.type.lower() == 'gateway':
+                resp = central.request(central.get_gateway_vlans, obj.serial)
+            elif obj.type.lower() == 'mobility_controllers':
+                resp = central.request(central.get_controller_vlans, obj.serial)
+        else:
+            typer.secho(f"show vlans not implemented for {dev_site}", fg="red")
+            typer.echo(str(obj))
+            raise typer.exit(1)
 
     data = cli.eval_resp(resp)
     if data:
@@ -258,7 +246,7 @@ def vlans(
 
 @app.command(short_help="Show All Devices")
 def all(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -292,7 +280,7 @@ def all(
 
 @app.command(short_help="Show devices [identifier]")
 def devices(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -323,14 +311,14 @@ def devices(
         'CX': 'switches',
         'gateway': 'gateways'
     }
-    if args[0] == 'all':
+    if args and args[0] == 'all':
         dev_type = 'all'
         args = () if len(args) == 1 else args[1:]
 
     if args:
-        dev_type, args = cli.cache.get_dev_identifier(args, ret_field="type-serial")
+        dev = cli.cache.get_dev_identifier(args)
         args = utils.listify(args)
-        dev_type = type_to_link.get(dev_type, dev_type)
+        dev_type = type_to_link.get(dev.type, dev.type)
     else:  # show devices ... equiv to show all
         dev_type = 'all'
 
@@ -343,7 +331,7 @@ def devices(
 
 @app.command(short_help="Show gateways/details")
 def gateways(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -377,7 +365,7 @@ def gateways(
 
 @app.command(short_help="Show controllers/details")
 def controllers(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),  # TODO cli.cache group names
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -409,7 +397,7 @@ def controllers(
         do_rich=do_rich)
 
 
-@app.command("cache", short_help="Show contents of Identifier Cache.",)
+@app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
 def _cache(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -459,7 +447,7 @@ def groups(
 
 @app.command(short_help="Show sites/details")
 def sites(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_site, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.site, hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -479,16 +467,16 @@ def sites(
 ):
     central = cli.central
     cli.cache(refresh=update_cache)
-    site_id = None
+    site = None
     if args:
-        site_id = cli.cache.get_site_identifier(args)
+        site = cli.cache.get_site_identifier(args)
 
-    if site_id is None:
+    if not site:
         if central.get_all_sites not in cli.cache.updated:
             asyncio.run(cli.cache.update_site_db())
         resp = Response(output=cli.cache.sites)
     else:
-        resp = central.request(central.get_site_details, site_id)
+        resp = central.request(central.get_site_details, site.id)
 
     data = cli.eval_resp(resp)
     if data:
@@ -497,11 +485,13 @@ def sites(
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
-@app.command()
+@app.command(short_help="Show templates/details")
 def templates(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
-    group: str = typer.Option(None, "--group", help="Get Templates for Group"),
-    name: str = typer.Option(None, metavar="<Template Name>", help="[Templates] Filter by Template Name"),
+    # args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
+    name: str = typer.Argument(None, hidden=False, help=f"Template: [name] or Device: {iden_meta.dev}"),
+    group: List[str] = typer.Argument(None, help="Get Templates for Group"),
+    _group: str = typer.Option(None, "--group", help="Get Templates for Group"),
+    # _name: str = typer.Option(None, "--template", help="Get details for template by name"),
     device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
                                     help="[Templates] Filter by Device Type"),
     version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by dev version Template is assigned to"),
@@ -513,7 +503,7 @@ def templates(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    sort_by: SortOptions = typer.Option(None, "--sort"),
+    # sort_by: SortOptions = typer.Option(None, "--sort"),show
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -525,9 +515,20 @@ def templates(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
+    if _group:
+        group = _group
+    elif group:
+        group = group[-1]
+
+    if group:
+        group = cli.cache.get_group_identifier(group)
+        group = group.name
+
     central = cli.central
+    cli.cache(refresh=update_cache)
+
     params = {
-        "name": name,
+        # "name": name,
         "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
         "version": version,
         "model": model
@@ -535,47 +536,35 @@ def templates(
 
     params = {k: v for k, v in params.items() if v is not None}
 
-    if args:
-        if len(args) > 1:
-            log.error(f"Only expecting 1 argument for show template, ignoring {args[1:]}", show=True)
-        args = args[0]
+    if name:
+        log_name = name
+        name = cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=group)
+        if not name:
+            typer.secho(f"Unabled to find a match for {log_name}.  Listing all templates.", fg="red")
 
-    if not args:
-        if not group:  # show templates
-            if central.get_all_templates not in cli.cache.updated:
-                asyncio.run(cli.cache.update_template_db())
-
-            # TODO using cli.cache breaks filtering params
-            resp = Response(output=cli.cache.templates)
+    if not name:
+        if not group:
+            if not params:  # show templates - Just update and show data from cache
+                if central.get_all_templates not in cli.cache.updated:
+                    asyncio.run(cli.cache.update_template_db())
+                    resp = Response(output=cli.cache.templates)
+                else:
+                    # Can't use cache due to filtering options
+                    resp = central.request(central.get_all_templates, **params)
         else:  # show templates --group <group name>
             resp = central.request(central.get_all_templates_in_group, group, **params)
-    elif group:  # show template <arg> --group <group_name>
-        _args = cli.cache.get_template_identifier(args)
-        if _args:  # name of template
-            resp = central.request(central.get_template, group, args)
+    elif group:  # show template <name> --group <group_name> or show template <name> <group name>
+        if name.is_template:
+            resp = central.request(central.get_template, group, name.name)
+        elif name.is_dev:  # They provided a dev identifier
+            resp = central.request(central.get_variablised_template, name.serial)
         else:
-            _args = cli.cache.get_dev_identifier(args)
-            if _args:
-                typer.secho(f"{args} Does not match a Template name, but does match device with serial {_args}", fg="cyan")
-                typer.secho(f"Fetching Variablised Template for {args}", fg="cyan")
-                msg = (
-                    f"{typer.style(f'--group {group} is not required for device specific template output.  ', fg='cyan')}"
-                    f"{typer.style(f'ignoring --group {group}', fg='red')}"
-                    )
-                typer.echo(msg)
-                resp = central.request(central.get_variablised_template, _args)
-    else:  # provided args but no group
-        _args = cli.cache.get_dev_identifier(args, retry=False)
-        if _args:  # assume arg is device identifier 1st
-            resp = central.request(central.get_variablised_template, _args)
-        else:  # next try template names
-            _args = cli.cache.get_template_identifier(args, ret_field="group-name")
-            if _args:
-                group, tmplt_name = _args[0], _args[1]
-                resp = central.request(central.get_template, group, tmplt_name)
-            else:
-                # typer.secho(f"No Match Found for {args} in Cachce")
-                raise typer.Exit(1)
+            typer.secho(f"Something went wrong {name}", fg="red")
+    else:  # provided args but no group get group from device iden
+        if name.is_dev:
+            resp = central.request(central.get_variablised_template, name.serial)
+        elif name.is_template:
+            resp = central.request(central.get_template, name.group, name.name)
 
     data = cli.eval_resp(resp)
     if data:
@@ -584,9 +573,9 @@ def templates(
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
-@app.command()
+@app.command(short_help="Show Variables for all or specific device")
 def variables(
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, hidden=False),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -610,16 +599,16 @@ def variables(
     if args and args != "all":
         args = cli.cache.get_dev_identifier(args)
 
-    resp = central.request(central.get_variables, args)
+    resp = central.request(central.get_variables, args.serial)
     data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by)
 
 
-@app.command()
+@app.command(short_help="Show AP lldp neighbors")
 def lldp(
-    device: List[str] = typer.Argument(..., metavar=args_metavar_dev, hidden=False),
+    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -648,7 +637,7 @@ def lldp(
     cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
 
 
-@app.command()
+@app.command(short_help="Show certificates/details")
 def certs(
     name: str = typer.Argument(None, metavar='[certificate name|certificate hash]', hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
@@ -666,7 +655,7 @@ def certs(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback)
-):
+) -> None:
     resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
     data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
@@ -674,10 +663,59 @@ def certs(
     cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
-@app.command()
+@app.command(short_help="Show WLAN(SSID)/details")
+def wlans(
+    name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN"),
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+    site: str = typer.Option(None, metavar="[site identifier]", help="Filter by device status"),
+    swarm_id: str = typer.Option(None,),
+    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    cli.cache(refresh=update_cache)
+    central = cli.central
+    if site:
+        _site = cli.cache.get_site_identifier(site, retry=False)
+        site = _site or site
+
+    params = {
+        "name": name,
+        "group": group,
+        "swarm_id": swarm_id,
+        "label": label,
+        "site": site,
+        "calculate_client_count": do_clients,
+    }
+
+    if sort_by:
+        typer.secho("sort not implemented yet.")
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+    resp = central.request(central.get_wlans, **params)
+    data = cli.eval_resp(resp)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+
+
+@app.command(short_help="Show clients/details")
 def clients(
     filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
-    args: List[str] = typer.Argument(None, metavar=args_metavar_dev, help="Show clients for a specific device"),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, help="Show clients for a specific device"),
     # os_type:
     # band:
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
@@ -728,9 +766,9 @@ def clients(
     )
 
 
-@app.command()
+@app.command(short_help="Display Event Logs (2 days by default)")
 def logs(
-    # args: List[str] = typer.Argument(None, metavar=args_metavar_dev, help="Show clients for a specific device"),
+    # args: List[str] = typer.Argument(None, metavar=iden_meta.dev, help="Show clients for a specific device"),
     # os_type:
     # band:
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
@@ -763,13 +801,14 @@ def logs(
         callback=cli.account_name_callback,
     ),
 ) -> None:
+    cli.cache(refresh=update_cache)
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
     central = cli.central
     resp = central.request(central.get_audit_logs, start_time=int(time.time() - 172800),)
     data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
 @app.callback()
