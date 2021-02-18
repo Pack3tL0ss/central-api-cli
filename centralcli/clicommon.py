@@ -176,7 +176,7 @@ class CLICommon:
         elif do_csv:
             return "csv"
         elif do_rich:
-            return "rich" if default == "simple" else "simple"
+            return "rich" if default != "rich" else "simple"
         else:
             return default
 
