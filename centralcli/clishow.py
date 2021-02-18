@@ -760,7 +760,6 @@ def clients(
     ),
 ) -> None:
     central = cli.central
-    # TODO quick and dirty, make less dirty (the way I passed cli.cache all the way through **kwargs to cleanerq)
     resp = central.request(central.get_clients, filter, *args,)  # callback_kwargs={'cache': cli.cache})
     data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
