@@ -8,12 +8,14 @@ import yaml
 import json
 import tablib
 
+valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+
 
 def _get_config_file(dirs: List[Path]) -> Path:
     dirs = [dirs] if not isinstance(dirs, list) else dirs
-    for dir in dirs:
-        for f in list(Path.glob(dir, "config.*")):
-            if 'client_id' in f.read_text():
+    for _dir in dirs:
+        for f in list(Path.glob(_dir, "config.*")):
+            if f.suffix in valid_ext and 'client_id' in f.read_text():
                 return f
 
 
@@ -82,7 +84,7 @@ class Config:
 
     @property
     def cache_file(self):
-        return self.default_cache_file if self.account == "central_info" else self.dir / ".cache" / f"{self.account}.json"
+        return self.default_cache_file if self.account == "central_info" else self.cache_dir / f"{self.account}.json"
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)
