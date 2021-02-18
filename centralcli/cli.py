@@ -21,10 +21,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-# cache, session = None, None  # Updated by cli.account_name_callback
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (RefreshWhat, TemplateLevel1,  # noqa
-                                  arg_to_what)
+from centralcli.constants import RefreshWhat, arg_to_what  # noqa
+
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -44,74 +43,7 @@ args_metavar_site = "[name|site_id|address|city|state|zip]"
 args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
 
 
-@app.command()
-def template(operation: TemplateLevel1 = typer.Argument(...),
-             what: str = typer.Argument(None, hidden=False, metavar="['variable']",
-                                        help="Optional variable keyword to indicate variable update"),
-             device: str = typer.Argument(None, metavar=args_metavar_dev),
-             variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
-             value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
-             template: Path = typer.Option(None, help="Path to file containing new template"),
-             group: str = typer.Option(None, metavar="<Device Group>", help="Required for Update Template"),
-             device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
-                                             help="[Templates] Filter by Device Type"),
-             version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
-             model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
-             debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                                        callback=cli.debug_callback),
-             default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                          callback=cli.default_callback),
-             account: str = typer.Option("central_info",
-                                         envvar="ARUBACLI_ACCOUNT",
-                                         help="The Aruba Central Account to use (must be defined in the config)",
-                                         callback=cli.account_name_callback),
-             ) -> None:
-    """Add, Delete, Update a Template"""
-
-    if operation == "update":
-        if what == "variable":
-            if variable and value and device:
-                device = cli.cache.get_dev_identifier(device)
-                payload = {"variables": {variable: value}}
-                _resp = cli.central.update_variables(device, payload)
-                if _resp:
-                    log.info(f"Template Variable Updated {variable} -> {value}", show=False)
-                    typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
-                else:
-                    log.error(f"Template Update Variables {variable} -> {value} retuned error\n{_resp.output}", show=False)
-                    typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)} {_resp.error}")
-        else:  # delete or add template, what becomes device/template identifier
-            kwargs = {
-                "group": group,
-                "name": what,
-                "device_type": device_type,
-                "version": version,
-                "model": model
-            }
-            payload = None
-            do_prompt = False
-            if template:
-                if not template.is_file() or template.stat().st_size > 0:
-                    typer.secho(f"{template} not found or invalid.", fg="red")
-                    do_prompt = True
-            else:
-                typer.secho("template file not provided (--template <path/to/file>)", fg="cyan")
-                do_prompt = True
-
-            if do_prompt:
-                payload = utils.get_multiline_input("Paste in new template contents then press CTRL-D", typer.secho, fg="cyan")
-                payload = "\n".join(payload).encode()
-
-            _resp = cli.central.update_existing_template(**kwargs, template=template, payload=payload)
-            if _resp:
-                log.info(f"Template {what} Updated {_resp.output}", show=False)
-                typer.secho(_resp.output, fg="green")
-            else:
-                log.error(f"Template {what} Update from {template} Failed. {_resp.error}", show=False)
-                typer.secho(_resp.output, fg="red")
-
-
-@app.command()
+@app.command(hidden=True)
 def refresh(what: RefreshWhat = typer.Argument(...),
             debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                        callback=cli.debug_callback),

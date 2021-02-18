@@ -18,7 +18,8 @@ STRIP_KEYS = [
     "neighbors",
     "audit_logs",
     "vlans",
-    "result"
+    "result",
+    "networks",
 ]
 
 
@@ -109,6 +110,7 @@ class ArgToWhat:
         self.logs = self.log = self.event = self.events = "logs"
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
         self.vlans = self.vlan = "vlans"
+        self.wlans = self.wlan = self.ssids = self.ssid = "wlans"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
@@ -189,3 +191,11 @@ MESSAGES = {
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
     "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway...",
 }
+
+
+class IdenMetaVars:
+    def __init__(self):
+        self.dev = "[name|ip|mac-address|serial]"
+        self.site = "[name|site_id|address|city|state|zip]"
+        self.client = "[username|ip|mac]"
+        self.dev_words = f"Optional Identifying Attribute: {self.dev}"
