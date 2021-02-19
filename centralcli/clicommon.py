@@ -110,6 +110,7 @@ class CLICommon:
                     typer.echo(self.AcctMsg(account, msg="previous"))
         else:
             if account in config.data:
+                config.sticky_account_file.parent.mkdir(exist_ok=True)
                 config.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
                 typer.echo(self.AcctMsg(account))
 
