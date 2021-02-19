@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
 from aiohttp import ClientSession
+import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
 from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils
@@ -85,6 +86,19 @@ class CentralApi(Session):
         self.auth = get_conn_from_file(account_name)
         super().__init__(auth=self.auth)
 
+    @staticmethod
+    def _make_form_data(data: dict):
+        form = aiohttp.FormData()
+        for key, value in data.items():
+            form.add_field(
+                key,
+                json.dumps(value) if isinstance(value, (list, dict)) else value,
+                content_type="multipart/form-data",
+                filename="upload"
+            )
+
+        return form
+
     async def _request(self, func, *args, **kwargs):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
@@ -126,10 +140,12 @@ class CentralApi(Session):
             f_url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
         )
 
-    async def patch(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    async def patch(self, url, params: dict = {}, payload: dict = None,
+                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
-        return await self.api_call(f_url, method="PATCH", data=payload, params=params, headers=headers, **kwargs)
+        return await self.api_call(f_url, method="PATCH", data=payload,
+                                   json_data=json_data, params=params, headers=headers, **kwargs)
 
     async def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
         f_url = self.auth.central_info["base_url"] + url
@@ -699,10 +715,47 @@ class CentralApi(Session):
             params = {"limit": 20, "offset": 0}
         return await self.get(url, params=params)
 
-    async def update_variables(self, serialnum: str, **var_dict: dict) -> bool:
-        url = f"/configuration/v1/devices/{serialnum}/template_variables"
-        var_dict = json.dumps(var_dict)
-        return await self.patch(url, payload=var_dict)
+    # async def update_variables(self, serialnum: str, **var_dict: dict) -> bool:
+    #     url = f"/configuration/v1/devices/{serialnum}/template_variables"
+    #     var_dict = json.dumps(var_dict)
+    #     return await self.patch(url, payload=var_dict)
+
+    # TODO figure out how to make this work, need file like object
+    async def update_device_template_variables(
+        self,
+        device_serial: str,
+        device_mac: str,
+        # total: int,
+        # _sys_serial: str,
+        # _sys_lan_mac: str,
+        var_dict: dict,
+    ) -> Response:
+        """Update template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+            total (int): total
+            _sys_serial (str): _sys_serial
+            _sys_lan_mac (str): _sys_lan_mac
+            var_dict (dict): dict with variables to be updated
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+        headers = {"Content-Type": "multipart/form-data"}
+
+        json_data = {device_serial: var_dict}
+        #     **{
+        #         'total': len(var_dict),
+        #         '_sys_serial': device_serial,
+        #         '_sys_lan_mac': device_mac,
+        #     },
+        #     **var_dict
+        # }
+        data = self._make_form_data(json_data)
+
+        return await self.patch(url, headers=headers, payload=data)
 
     async def get_last_known_running_config(self, serialnum: str) -> Response:
         url = f"/configuration/v1/devices/{serialnum}/configuration"
@@ -1005,12 +1058,10 @@ class CentralApi(Session):
     async def kick_users(
         self,
         serial_num: str = None,
-        name: str = None,
         kick_all: bool = False,
         mac: str = None,
         ssid: str = None,
-        hint: Union[List[str], str] = None,
-    ) -> Union[Response, None]:
+    ) -> Response:
         url = f"/device_management/v1/device/{serial_num}/action/disconnect_user"
         if kick_all:
             payload = {"disconnect_user_all": True}
@@ -1022,10 +1073,9 @@ class CentralApi(Session):
             payload = {}
 
         if payload:
-            return await self.post(url, payload=payload)
+            return await self.post(url, json_data=payload)
         else:
-            # TODO move this validation to the cli command
-            return Response(ok=False, error="Missing Required Parameters")
+            return Response(error="Missing Required Parameters")
 
     async def post_switch_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
         url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
@@ -1300,9 +1350,9 @@ class CentralApi(Session):
 
         if log_id:
             url = f"{url}/{log_id}"
-            params = None
+            params = {}
 
-        return await self.get(url, params=params, callback=cleaner.get_audit_logs)
+        return await self.get(url, params=params,)
 
     async def create_site(
         self,

@@ -167,7 +167,7 @@ class CLICommon:
 
     @staticmethod
     def get_format(
-        do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_rich: bool = False, default: str = "simple"
+        do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_table: bool = False, default: str = "rich"
     ) -> FormatType:
         """Simple helper method to return the selected output format type (str)"""
         if do_json:
@@ -176,7 +176,7 @@ class CLICommon:
             return "yaml"
         elif do_csv:
             return "csv"
-        elif do_rich:
+        elif do_table:
             return "rich" if default != "rich" else "simple"
         else:
             return default
@@ -209,8 +209,9 @@ class CLICommon:
     @staticmethod
     def display_results(
         data: Union[List[dict], List[str], None],
-        tablefmt: str = "simple",
-        pager=True,
+        tablefmt: str = "rich",
+        title: str = None,
+        pager: bool = True,
         outfile: Path = None,
         cleaner: callable = None,
         **cleaner_kwargs,
@@ -219,17 +220,19 @@ class CLICommon:
 
         Args:
             data (Union[List[dict], List[str], None]): API Response Data.
-            tablefmt (str, optional): Format of output. Defaults to "simple" (tabular).
+            tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
+            title: (str, optional): Title of output table.  Only applies to "rich" tablefmt.
             pager (bool, optional): Page Output / or not. Defaults to True.
             outfile (Path, optional): path/file of output file. Defaults to None.
             cleaner (callable, optional): The Cleaner function to use.
         """
+        pager = False if config.no_pager else pager
         if data:
             if cleaner:
                 data = cleaner(data, **cleaner_kwargs)
 
-            outdata = utils.output(data, tablefmt)
-            typer.echo_via_pager(outdata) if tty and pager and len(outdata) > tty.rows else typer.echo(outdata)
+            outdata = utils.output(data, tablefmt, title=title)
+            typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             # -- // Output to file \\ --
             if outfile and outdata:

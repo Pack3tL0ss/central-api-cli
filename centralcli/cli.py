@@ -40,7 +40,7 @@ app.add_typer(clicaas.app, name="caas", hidden=True)
 
 args_metavar_dev = "[name|ip|mac-address|serial]"
 args_metavar_site = "[name|site_id|address|city|state|zip]"
-args_metavar = f"""Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"""
+args_metavar = f"Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"
 
 
 @app.command(hidden=True)
@@ -61,7 +61,7 @@ def refresh(what: RefreshWhat = typer.Argument(...),
         from centralcli.response import Session
         Session(central.auth).refresh_token()
     else:  # cache is only other option
-        cli.cache(central=cli.central, refresh=True)
+        cli.cache(refresh=True)
 
 
 @app.command(hidden=True)
@@ -70,8 +70,7 @@ def method_test(method: str = typer.Argument(...),
                 do_json: bool = typer.Option(True, "--json", is_flag=True, help="Output in JSON"),
                 do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
                 do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-                do_table: bool = typer.Option(False, "--simple", is_flag=True, help="Output in Table"),
-                do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+                do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table"),
                 outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
                 no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
                 update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -95,6 +94,7 @@ def method_test(method: str = typer.Argument(...),
 
     Displays all attributes of Response object
     """
+    cli.cache(refresh=update_cache)
     central = CentralApi(account)
     if not hasattr(central, method):
         typer.secho(f"{method} does not exist", fg="red")
@@ -115,7 +115,7 @@ def method_test(method: str = typer.Argument(...),
 
     data = cli.eval_resp(resp, pad=2)
     tablefmt = cli.get_format(
-        do_json, do_yaml, do_csv, do_rich,
+        do_json, do_yaml, do_csv, do_table
     )
 
     typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='cyan')}:")
@@ -141,5 +141,9 @@ if __name__ == "__main__":
     # show switches / show switch ...
     if len(sys.argv) > 2 and sys.argv[1] == 'show':
         sys.argv[2] = arg_to_what(sys.argv[2])
+        # allow --tab --tabl for --table option
+        for idx, a in enumerate(sys.argv):
+            if len(a) <= 7 and "--tab" in a:
+                sys.argv[idx] = "--table"
 
     app()

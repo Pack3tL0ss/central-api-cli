@@ -91,6 +91,12 @@ class CacheArgs(str, Enum):
     groups = "groups"
 
 
+class KickArgs(str, Enum):
+    all = "all"
+    mac = "mac"
+    wlan = "wlan"
+
+
 # Used to determine if arg is for a device (vs group, templates, ...)
 # devices = ["switch", "aps", "gateway", "all", "device"]
 
