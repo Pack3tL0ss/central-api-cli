@@ -774,7 +774,7 @@ def clients(
     )
 
 
-@app.command(short_help="Display Event Logs (2 days by default)")
+@app.command(short_help="Show Event Logs (2 days by default)")
 def logs(
     # args: List[str] = typer.Argument(None, metavar=iden_meta.dev, help="Show clients for a specific device"),
     # os_type:
