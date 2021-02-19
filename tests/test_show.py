@@ -19,14 +19,14 @@ else:
 
 
 def test_show_aps():
-    result = runner.invoke(app, ["show", "aps", "--debug"])
+    result = runner.invoke(app, ["show", "aps", "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switches():
-    result = runner.invoke(app, ["show", "switches", "--debug"])
+    result = runner.invoke(app, ["show", "switches", "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -37,49 +37,49 @@ def test_show_switches():
 
 
 def test_show_gateways():
-    result = runner.invoke(app, ["show", "gateways", "--debug"])
+    result = runner.invoke(app, ["show", "gateways", "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_all():
-    result = runner.invoke(app, ["show", "all", "--debug"])
+    result = runner.invoke(app, ["show", "all", "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_name():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["name"], "--debug"])
+    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["name"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_ip():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["ip"], "--debug"])
+    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["ip"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_mac():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["mac"], "--debug"])
+    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["mac"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_serial():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["serial"], "--debug"])
+    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["serial"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_name():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["name"], "--debug"])
+    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["name"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     # TODO show ap details not showing site???
     assert "model" in result.stdout
@@ -87,154 +87,154 @@ def test_show_ap_by_name():
 
 
 def test_show_ap_by_ip():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["ip"], "--debug"])
+    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["ip"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_mac():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["mac"], "--debug"])
+    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["mac"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_serial():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["serial"], "--debug"])
+    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["serial"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_name():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["name"], "--debug"])
+    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["name"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_ip():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["ip"], "--debug"])
+    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["ip"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_mac():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["mac"], "--debug"])
+    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["mac"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_serial():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["serial"], "--debug"])
+    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["serial"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_name():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["name"], "--debug"])
+    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["name"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_ip():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["ap"]["ip"], "--debug"])
+    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["ap"]["ip"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_mac():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["gateway"]["mac"], "--debug"])
+    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["gateway"]["mac"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_serial():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["serial"], "--debug"])
+    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["serial"], "--debug", "--no-pager"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_cache():
-    result = runner.invoke(app, ["show", "cache"])
+    result = runner.invoke(app, ["show", "cache", "--no-pager"],)
     assert result.exit_code == 0
     assert "devices" in result.stdout
     assert "sites" in result.stdout
 
 
 def test_show_variables():
-    result = runner.invoke(app, ["show", "variables"])
+    result = runner.invoke(app, ["show", "variables", "--no-pager"],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_variables_by_serial():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["serial"]])
+    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["serial"], "--no-pager"],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_variables_by_name():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["name"].title()])
+    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["name"].title(), "--no-pager"],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_templates_by_group():
-    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["switch"]["group"]])
+    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["switch"]["group"], "--no-pager"],)
     assert result.exit_code == 0
     assert "group" in result.stdout
     assert "version" in result.stdout
 
 
 def test_show_template_by_dev_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["name"].lower()])
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["name"].lower(), "--no-pager"],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
 
 
 def test_show_template_by_dev_serial():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["serial"]])
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["serial"], "--no-pager"],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
 
 
 def test_show_template_by_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower()])
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower(), "--no-pager"],)
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
 
 
 def test_show_lldp_by_ap_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["ap"]["name"].lower()])
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["ap"]["name"].lower(), "--no-pager"],)
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
 
 
-def test_show_lldp_by_ap_name():
-    result = runner.invoke(app, ["show", "lldp", TEST_DEVICES["ap"]["name"].lower()])
+def test_show_groups():
+    result = runner.invoke(app, ["show", "groups", "--no-pager"],)
     assert result.exit_code == 0
-    assert "localPort" in result.stdout
-    assert "serial" in result.stdout
+    assert "name" in result.stdout
+    assert "template group" in result.stdout
 
 
 def test_show_certs():
-    result = runner.invoke(app, ["show", "certs"],)
+    result = runner.invoke(app, ["show", "certs", "--no-pager"],)
     assert result.exit_code == 0
     assert "expired" in result.stdout
     assert "checksum" in result.stdout
