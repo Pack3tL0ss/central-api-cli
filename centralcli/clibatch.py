@@ -43,8 +43,6 @@ def add(
         help="The Aruba Central Account to use (must be defined in the config)",
         callback=cli.account_name_callback,
     ),
-    command: str = None,
-    key: str = None,
 ) -> None:
     """Perform batch Add operations using import data from file."""
     central = cli.central

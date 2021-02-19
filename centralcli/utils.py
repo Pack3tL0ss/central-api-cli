@@ -297,10 +297,10 @@ class Utils:
             return len(str(self).splitlines())
 
         def __str__(self):
-            pretty_up = typer.style(" Up", fg="green")
-            pretty_down = typer.style(" Down", fg="red")
+            pretty_up = typer.style("Up\n", fg="green")
+            pretty_down = typer.style("Down\n", fg="red")
             if self.tty:
-                return self.tty.replace(" Up", pretty_up).replace(" Down", pretty_down)
+                return self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
             else:
                 return self.file
 
@@ -410,7 +410,7 @@ class Utils:
             _lexer = lexers.JsonLexer
 
         elif tablefmt in ["yml", "yaml"]:
-            raw_data = yaml.dump(outdata)
+            raw_data = yaml.dump(outdata, sort_keys=False)
             _lexer = lexers.YamlLexer
 
         elif tablefmt == "csv":
@@ -459,9 +459,9 @@ class Utils:
                 )
 
                 fold_cols = ['description']
-                _min_max = {'min': 10, 'max': 20}
+                _min_max = {'min': 10, 'max': 30}
                 set_width_cols = {'name': _min_max, 'model': _min_max}
-                full_cols = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio']
+                full_cols = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio', 'id']
 
                 for k in outdata[0].keys():
                     if k in fold_cols:
@@ -486,8 +486,6 @@ class Utils:
                     table.caption = f'[italic dark_olive_green2]{account}'
                     table.caption_justify = 'left'
 
-                # table_data = tabulate(outdata, headers="keys", tablefmt="simple")
-
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
 
@@ -507,7 +505,7 @@ class Utils:
                 else:
                     raw_data = table_data = '\n'.join(outdata)
 
-        else:
+        else:  # -- tabulate --
             customer_id = customer_name = ""
             outdata = self.listify(outdata)
 

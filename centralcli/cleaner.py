@@ -288,31 +288,46 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
                 mask = ipaddress.IPv4Network((inner[ip_word], inner[mask_word]), strict=False).prefixlen
                 inner[ip_word] = f"{inner[ip_word]}/{mask}"
                 del inner[mask_word]
-            # if inner.get('public_ip_address'):
-            #     inner['ip_address'] += f'\npublic: {inner["public_ip_address"]}'
-            #     del inner["public_ip_address"]
     if order:
         to_front = order
     else:
         to_front = [
             "vlan_id",
             "name",
+            "model",
+            'mode',
             "vlan_desc",
+            "id",  # pvid for VLAN output
             "ip",
             "ip_address",
+            "ipaddress",
             "ipv4",
             "subnet_mask",
             "ipv4_mask" "serial",
             "macaddr",
             "mac",
+            "serial",
             "ap_deployment_mode",
-            "model",
             "group_name",
             "group",
             "site",
             "addr_mode",
             "admin_mode",
             "oper_mode",
+            "untagged_ports",
+            "tagged_ports",
+            "status",
+            "is_management_vlan",
+            "is_jumbo_enabled",
+            "is_voice_enabled",
+            "is_igmp_enabled",
+            "uptime",
+            'reboot_reason',
+            'cpu_utilization',
+            'mem_total',
+            'mem_free',
+            'firmware_version',
+            'firmware_backup_version'
         ]
     to_front = [i for i in to_front if i in all_keys]
     _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]

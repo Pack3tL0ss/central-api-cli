@@ -69,12 +69,18 @@ class Response:
         return self.ok
 
     def __repr__(self):
-        # f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else 'ERROR'}) object at {hex(id(self))}>"
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
+
+    @staticmethod
+    def _split_inner(val):
+        if isinstance(val, list) and len(val) == 1:
+            return val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
+        else:
+            return val
 
     def __str__(self):
         if isinstance(self.output, dict):
-            return "\n".join([f"  {k}: {v}" for k, v in self.output.items()])
+            return "\n".join([f"  {k}: {self._split_inner(v)}" for k, v in self.output.items()])
 
         return str(self.output) if self.output else self.error
 
@@ -171,19 +177,20 @@ class Session:
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
         resp, spin = None, None
-        _data_msg = ' ' if not url else f' ({url.split("arubanetworks.com/")[-1]}) '
-        spin_txt_data = f"Collecting Data{_data_msg}from Aruba Central API Gateway..."
+        _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
+        spin_txt_run = f"Collecting Data..."
+        spin_txt_fail = f"Collecting Data{_data_msg}"
         for _ in range(0, 2):
             if _ > 0:
-                spin_txt_data += f" retry {_}"
+                spin_txt_run += f" retry {_}"
 
             log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
-                      f"\taccess token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
-                      f"\trefresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
+                      f"    access token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
+                      f"    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
                       )
 
             try:
-                with Halo(spin_txt_data, enabled=bool(utils.tty)) as spin:
+                with Halo(spin_txt_run, enabled=bool(utils.tty)) as spin:
                     _start = time.time()
                     headers = self.headers if not headers else {**self.headers, **headers}
                     # -- // THE API REQUEST \\ --
@@ -203,7 +210,7 @@ class Session:
                 resp = Response(error=str(e), url=url)
                 _ += 1
 
-            fail_msg = f"{spin.text}\n  {resp.output}"
+            fail_msg = f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
                 spin.fail(fail_msg)
                 if "invalid_token" in resp.output:
@@ -212,7 +219,8 @@ class Session:
                     log.error(f"API [{method}] {url} Error Returned: {resp.error}")
                     break
             else:
-                spin.succeed()
+                # spin.succeed()
+                spin.stop()
                 break
 
         return resp
@@ -227,8 +235,6 @@ class Session:
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
-        # TODO handy to have this in one common place, but should move
-        # to central.py so it's can be used as a central library independent of cli
         params = utils.strip_none(params)
         json_data = utils.strip_none(json_data)
         if json_data:  # strip second nested dict if all keys = NoneType
@@ -251,6 +257,8 @@ class Session:
 
             # data cleaner methods to strip any useless columns, change key names, etc.
             elif callback is not None:
+                # TODO [remove] moving callbacks to display output in cli, leaving methods to return raw output
+                log.debug(f"DEV NOTE CALLBACK IN centralapi lib {url} -> {callback}")
                 r.output = callback(r.output, **callback_kwargs or {})
 
             # -- // paging \\ --
@@ -294,7 +302,8 @@ class Session:
 
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
-            spin.succeed()
+            # spin.succeed()
+            spin.stop()
         else:
             spin.fail()
 
@@ -328,13 +337,13 @@ class Session:
         token_data: dict = None
         if sys.stdin.isatty():
             internal = "internal" in auth.central_info["base_url"]
-            # if internal:
+
             token_only = [
                 auth.central_info.get("username") is None
                 or auth.central_info["username"].endswith("@hpe.com") and internal,
                 auth.central_info.get("password") is None
             ]
-            # if not central.central_info["username"] or not central.central_info["password"]:
+
             if True in token_only:
                 prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
                         f"\n    customer_id: {auth.central_info['customer_id']}" \

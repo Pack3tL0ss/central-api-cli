@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import sys
+from typing import List
 # from typing import List
 import typer
 
@@ -107,6 +108,60 @@ def template(
     # else:
     #     log.error(f"Template {what} Update from {template} Failed. {_resp.error}", show=False)
     #     typer.secho(_resp.output, fg="red")
+
+
+@app.command(short_help="Update existing or add new Variables for a device/template")
+def variables(
+    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    yes = yes_ if yes_ else yes
+    dev = cli.cache.get_dev_identifier(device)
+    serial = dev.serial
+
+    vars, vals, get_next = [], [], False
+    for var in var_value:
+        if var == '=':
+            continue
+        if '=' not in var:
+            if get_next:
+                vals += [var]
+                get_next = False
+            else:
+                vars += [var]
+                get_next = True
+        else:
+            _ = var.split('=')
+            vars += _[0]
+            vals += _[1]
+            get_next = False
+
+    if len(vars) != len(vals):
+        typer.secho("something went wrong parsing variables.  Unequal length for Variables vs Values")
+        raise typer.Exit(1)
+
+    var_dict = {k: v for k, v in zip(vars, vals)}
+
+    msg = "Sending Update" if yes else "Please Confirm: Update"
+    typer.secho(f"{msg} {dev.name}|{dev.serial}", fg="cyan")
+    [typer.echo(f'    {k}: {v}') for k, v in var_dict.items()]
+    if yes or typer.confirm(typer.style("Proceed with these values", fg="cyan")):
+        resp = cli.central.request(
+            cli.central.update_device_template_variables,
+            serial,
+            dev.mac,
+            var_dict=var_dict)
+        typer.secho(str(resp), fg="green" if resp else "red")
 
 
 @app.callback()

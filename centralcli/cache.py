@@ -13,30 +13,6 @@ import typer
 TinyDB.default_table_name = "devices"
 
 
-# class MultiQuery:
-#     def __init__(
-#         self,
-#         qry_func: callable,
-#         update_func: callable,
-#         qry_str: str,
-#         qry_kwargs: dict = {},
-#         update_kwargs: dict = {}
-#     ) -> None:
-#         self.qry_func = qry_func
-#         self.update_func = update_func
-#         self.qry_str = qry_str
-#         self.qry_kwargs = qry_kwargs
-#         self.update_kwargs = update_kwargs
-
-# def multiquery(self, queries: List(tuple)) -> List[MultiQuery]:
-#     utils.listify(queries)
-#     qry_list = []
-#     for q in queries:
-#         qry_list += MultiQuery(*q)
-
-#     return qry_list
-
-
 DBType = Literal["dev", "site", "template", "group"]
 
 
@@ -79,8 +55,10 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        raise AttributeError(f"'CentralObject' object has no attribute '{name}'")
+        log.exception(f"Cache LookUp Failure: 'CentralObject' object has no attribute '{name}'", show=True)
+        raise typer.Exit(1)
 
+    # TODO NOT USED YET, move handle multi_match from cache to here,
     def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> list:
         typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         if query_type == 'site':
@@ -88,7 +66,7 @@ class CentralObject:
         elif query_str == 'template':
             fields = ('name', 'group', 'model', 'device_type', 'version')
         else:  # device
-            fields = ('name', 'serial', 'mac')
+            fields = ('name', 'serial', 'mac', 'type')
         menu = f"{' ':{len(str(len(match)))}}  {fields[0]:29} {fields[1]:12} {fields[2]:12} type"
         menu += f"\n{' ':{len(str(len(match)))}}  {'-' * 29} {'-' * 12} {'-' * 18} -------\n"
         menu += "\n".join(list(f'{idx + 1}. {m.get(fields[0], "error"):29} {m.get(fields[1], "error"):12} '
@@ -234,12 +212,12 @@ class Cache:
         self, refresh: bool = False,
         site_db: bool = False, dev_db: bool = False, template_db: bool = False,
         group_db: bool = False
-    ):
-        if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0 \
-           or time.time() - config.cache_file.stat().st_mtime > 7200:
+    ) -> None:
+        if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
+            #  or time.time() - config.cache_file.stat().st_mtime > 7200:
             start = time.time()
-            typer.secho("-- Refreshing Identifier mapping Cache --", fg="cyan")
-            # asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db))
+            print(typer.style("-- Refreshing Identifier mapping Cache --", fg="cyan"), end="")
+
             loop = asyncio.get_event_loop()
             try:
                 loop.run_until_complete(self._check_fresh(
@@ -251,17 +229,18 @@ class Cache:
                 loop.run_until_complete(loop.shutdown_asyncgens())
             finally:
                 loop.close()
+
             log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
             typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
-    def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> list:
+    def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> List[Dict[str, Any]]:
         typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         if query_type == 'site':
             fields = ('name', 'city', 'state', 'type')
         elif query_type == 'template':
             fields = ('name', 'group', 'model', 'device_type', 'version')
         else:  # device
-            fields = ('name', 'serial', 'mac')
+            fields = ('name', 'serial', 'mac', 'type')
         out = utils.output(
             [{k: d[k] for k in d if k in fields} for d in match]
         )
@@ -350,22 +329,26 @@ class Cache:
             if match:
                 break
 
-        if match:
-            if dev_type:
-                match = [
-                    d for d in match if d["type"].lower() in "".join(dev_type[0:len(d["type"])]).lower()
-                ]
+        all_match = None
+        if dev_type:
+            all_match = match
+            match = [
+                d for d in match if d["type"].lower() in "".join(dev_type[0:len(d["type"])]).lower()
+            ]
 
+        if match:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str)
 
             return CentralObject("dev", match)
-            # if ret_field == "type-serial":
-            #     return match[0].get("type"), match[0].get("serial")
-            # else:
-            #     return match[0].get(ret_field)
         elif retry:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
+            if all_match:
+                all_match = all_match[-1]
+                log.error(
+                    f"The Following device matched {all_match.get('name')} excluded as {all_match.get('type')} != {dev_type}",
+                    show=True,
+                )
             raise typer.Abort()
         # else:
         #     log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)

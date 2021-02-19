@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
-from typing import List
 import sys
 import typer
 
@@ -18,7 +17,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (BlinkArgs, BounceArgs, arg_to_what) # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, KickArgs, arg_to_what) # noqa
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -167,51 +166,6 @@ def sync(
     typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Update existing or add new Variables for a device/template")
-def update_vars(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
-    var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
-) -> None:
-    dev = cli.cache.get_dev_identifier(device)
-    serial = dev.serial
-    vars, vals, get_next = [], [], False
-    for var in var_value:
-        if var == '=':
-            continue
-        if '=' not in var:
-            if get_next:
-                vals += [var]
-                get_next = False
-            else:
-                vars += [var]
-                get_next = True
-        else:
-            _ = var.split('=')
-            vars += _[0]
-            vals += _[1]
-            get_next = False
-
-    if len(vars) != len(vals):
-        typer.secho("something went wrong parsing variables.  Unequal length for Variables vs Values")
-        raise typer.Exit(1)
-
-    var_dict = {k: v for k, v in zip(vars, vals)}
-
-    typer.secho(f"Please Confirm: Update {dev.name}|{dev.serial}", fg="cyan")
-    [typer.echo(f'    {k}: {v}') for k, v in var_dict.items()]
-    if typer.confirm(typer.style("Proceed with these values", fg="cyan")):
-        resp = cli.central.request(cli.central.update_variables, serial, **var_dict)
-        typer.secho(str(resp), fg="green" if resp else "red")
-
-
 @app.command(short_help="Move device to a defined group")
 def move(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
@@ -237,9 +191,13 @@ def move(
         raise typer.Abort()
 
 
-@app.command(short_help="kick a client (disconnect)")
+@app.command(short_help="kick a client (disconnect)",)
 def kick(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    what: KickArgs = typer.Argument(...,),
+    who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -249,9 +207,33 @@ def kick(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
+    yes = yes_ if yes_ else yes
+    if device in ["all", "mac", "wlan"]:
+        typer.secho(f"Missing device parameter required before keyword {device}", fg="red")
+        raise typer.Exit(1)
     dev = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
-    typer.secho(str(resp), fg="green" if resp else "red")
+    if what == "mac":
+        if not who:
+            typer.secho("Missing argument <mac address>", fg="red")
+            raise typer.Exit(1)
+        mac = utils.Mac(who)
+        who = mac.cols
+        if not mac:
+            typer.secho(f"{mac.orig} does not appear to be a valid mac address", fg="red")
+            raise typer.Exit(1)
+
+    _who = f" {who}" if who else " "
+    if yes or typer.confirm(typer.style(f"Please Confirm: kick {what}{_who} on {dev.name}", fg="cyan")):
+        resp = cli.central.request(
+            cli.central.kick_users,
+            dev.serial,
+            kick_all=True if what == "all" else False,
+            mac=None if what != "mac" else mac.cols,
+            ssid=None if what != "wlan" else who,
+            )
+        typer.secho(str(resp), fg="green" if resp else "red")
+    else:
+        raise typer.Abort()
 
 
 @app.callback()

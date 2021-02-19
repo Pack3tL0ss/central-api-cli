@@ -33,15 +33,14 @@ def show_devices(
     dev_type: str, *args, outfile: Path = None, update_cache: bool = False, group: str = None, status: str = None,
     state: str = None, label: Union[str, List[str]] = None, pub_ip: str = None, do_clients: bool = False,
     do_stats: bool = False, sort_by: str = None, no_pager: bool = False, do_json: bool = False, do_csv: bool = False,
-    do_yaml: bool = False, do_rich: bool = False
+    do_yaml: bool = False, do_table: bool = False
 ) -> None:
     central = cli.central
     cli.cache(refresh=update_cache)
+    _formatter = "yaml"
 
     if group:
         group = cli.cache.get_group_identifier(group)
-        # if not group:  # cache should handle exit now
-        #     raise typer.Exit(1)
 
     # -- // Peform GET Call \\ --
     resp = None
@@ -62,13 +61,15 @@ def show_devices(
     params = {k: v for k, v in params.items() if v is not None}
 
     if dev_type == "device":
-        if args:
+        if args:  # show devices [name|ip|mac|serial]
             dev = cli.cache.get_dev_identifier(args)
             resp = central.request(central.get_dev_details, dev.type, dev.serial, **params)
         else:  # show devices ... equiv to show all
+            _formatter = "rich"
             resp = central.request(central.get_all_devicesv2, **params)
 
     elif dev_type == "all":
+        _formatter = "rich"
         # if no params (expected result may differ) update cli.cache if not updated this session and return results from there
         if len(params) == 2 and list(params.values()).count(False) == 2:
             if central.get_all_devicesv2 not in cli.cache.updated:
@@ -89,7 +90,7 @@ def show_devices(
 
     if data:
         # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="yaml")
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
 
 
@@ -107,7 +108,7 @@ def aps(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -124,7 +125,7 @@ def aps(
         'aps', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command(short_help="Show switches/details")
@@ -141,7 +142,7 @@ def switches(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -158,7 +159,7 @@ def switches(
         'switches', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command(short_help="Show interfaces/details")
@@ -170,7 +171,7 @@ def interfaces(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -189,20 +190,23 @@ def interfaces(
     resp = cli.central.request(cli.central.get_switch_ports, serial, cx=dev_type == "CX")
     data = cli.eval_resp(resp)
     if data:
-        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show VLANs for device or site")
 def vlans(
-    dev_site: str = typer.Argument(..., metavar=f"{iden_meta.dev} OR {iden_meta.site}", hidden=False),
+    dev_site: str = typer.Argument(
+        ...,
+        metavar=f"{iden_meta.dev} (vlans for a device) OR {iden_meta.site} (vlans for a site)",
+    ),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
-    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True),
+    # sort_by: SortOptions = typer.Option(None, "--sort", hidden=True),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -239,7 +243,7 @@ def vlans(
 
     data = cli.eval_resp(resp)
     if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
 
@@ -258,7 +262,7 @@ def all(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -275,7 +279,7 @@ def all(
         'all', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command(short_help="Show devices [identifier]")
@@ -292,7 +296,7 @@ def devices(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -326,7 +330,7 @@ def devices(
         dev_type, *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command(short_help="Show gateways/details")
@@ -343,7 +347,7 @@ def gateways(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -360,7 +364,7 @@ def gateways(
         'gateways', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command(short_help="Show controllers/details")
@@ -377,7 +381,7 @@ def controllers(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -394,7 +398,7 @@ def controllers(
         'mobility_controllers', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_rich=do_rich)
+        do_table=do_table)
 
 
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
@@ -402,7 +406,7 @@ def _cache(
     args: List[CacheArgs] = typer.Argument(None, hidden=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -422,7 +426,7 @@ def _cache(
         resp = Response(output=cache_out)
         data = cli.eval_resp(resp)
         if data:
-            tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+            tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
@@ -446,7 +450,7 @@ def groups(
 
         resp = Response(output=cli.cache.groups)
         data = cli.eval_resp(resp)
-        cli.display_results(data, tablefmt='rich', pager=not no_pager, outfile=outfile)
+        cli.display_results(data, tablefmt='rich', title="Groups", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -455,7 +459,7 @@ def sites(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -473,7 +477,9 @@ def sites(
     cli.cache(refresh=update_cache)
     site = None
     if args:
-        site = cli.cache.get_site_identifier(args)
+        args = tuple([i for i in args if i != "all"])
+        if args:
+            site = cli.cache.get_site_identifier(args)
 
     if not site:
         if central.get_all_sites not in cli.cache.updated:
@@ -484,9 +490,15 @@ def sites(
 
     data = cli.eval_resp(resp)
     if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(
+            data,
+            tablefmt=tablefmt,
+            title="Sites" if not args else f"{site.name} site details",
+            pager=not no_pager,
+            outfile=outfile
+        )
 
 
 @app.command(short_help="Show templates/details")
@@ -505,7 +517,7 @@ def templates(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     # sort_by: SortOptions = typer.Option(None, "--sort"),show
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -540,6 +552,7 @@ def templates(
 
     params = {k: v for k, v in params.items() if v is not None}
 
+    # TODO simplify
     if name:
         log_name = name
         name = cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=group)
@@ -572,7 +585,7 @@ def templates(
 
     data = cli.eval_resp(resp)
     if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich)
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
         cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
@@ -583,7 +596,7 @@ def variables(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -603,11 +616,18 @@ def variables(
     if args and args != "all":
         args = cli.cache.get_dev_identifier(args)
 
-    resp = central.request(central.get_variables, args.serial)
+    resp = central.request(central.get_variables, () if not args else args.serial)
     data = cli.eval_resp(resp)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by)
+    cli.display_results(
+        data,
+        tablefmt=tablefmt,
+        title="Variables" if not args else f"{args.name} Variables",
+        pager=not no_pager,
+        outfile=outfile,
+        sort_by=sort_by
+    )
 
 
 @app.command(short_help="Show AP lldp neighbors")
@@ -616,7 +636,7 @@ def lldp(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -634,13 +654,20 @@ def lldp(
     cli.cache(refresh=update_cache)
 
     # We take last arg [-1] from list so they can type "neighbor" if they want.
-    dev = cli.cache.get_dev_identifier(device[-1])
+    dev = cli.cache.get_dev_identifier(device[-1], dev_type="ap")
     if dev.type == "ap":
         resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
         data = cli.eval_resp(resp)
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_lldp_neighbor)
+        cli.display_results(
+            data,
+            tablefmt=tablefmt,
+            title="AP lldp neighbor",
+            pager=not no_pager,
+            outfile=outfile,
+            cleaner=cleaner.get_lldp_neighbor,
+        )
     else:
         typer.secho(f"This command is currently only valid for APs.  {dev.name} is type: {dev.type}", fg="red")
         raise typer.Exit(1)
@@ -652,7 +679,7 @@ def certs(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -667,7 +694,7 @@ def certs(
 ) -> None:
     resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
     data = cli.eval_resp(resp)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
@@ -684,7 +711,7 @@ def wlans(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Alpha Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -715,7 +742,7 @@ def wlans(
     if sort_by:
         typer.secho("sort not implemented yet.", fg="red")
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
     data = cli.eval_resp(resp)
     cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
@@ -729,16 +756,16 @@ def clients(
     # band:
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True,),
+    update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
     reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
     verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -762,7 +789,7 @@ def clients(
     central = cli.central
     resp = central.request(central.get_clients, filter, *args,)  # callback_kwargs={'cache': cli.cache})
     data = cli.eval_resp(resp)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="json")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
     cli.display_results(
         data,
@@ -774,15 +801,17 @@ def clients(
     )
 
 
-@app.command(short_help="Display Event Logs (2 days by default)")
+@app.command(short_help="Show Event Logs (2 days by default)")
 def logs(
-    # args: List[str] = typer.Argument(None, metavar=iden_meta.dev, help="Show clients for a specific device"),
-    # os_type:
-    # band:
+    args: List[str] = typer.Argument(None, metavar='[LOG_ID]', help="Show details for a specific log_id"),
+    user: str = typer.Option(None, help="Filter logs by user"),
+    start: str = typer.Option(None, help="Start time of range to collect logs, provide value in epoch", hidden=True,),
+    end: str = typer.Option(None, help="End time of range to collect logs, provide value in epoch", hidden=True,),
+    device: str = typer.Option(None, metavar=iden_meta.dev, help="Collect logs for a specific device",),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_rich: bool = typer.Option(False, "--rich", is_flag=True, help="Beta Testing rich formatter"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
@@ -810,13 +839,43 @@ def logs(
     ),
 ) -> None:
     cli.cache(refresh=update_cache)
+    if device:
+        device = cli.cache.get_dev_identifier(device)
+    kwargs = {
+        "log_id": None if not args else args[-1],
+        "username": user,
+        "start_time": start or int(time.time() - 172800),
+        "end_time": end,
+        # "description": description,
+        "target": None if not device else device.serial,
+        # "classification": classification,  # TODO  add support for filters
+        # "customer_name": customer_name,
+        # "ip_address": ip_address,
+        # "app_id": app_id,
+        # "offset": offset,
+        # "limit": limit,
+    }
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
     central = cli.central
-    resp = central.request(central.get_audit_logs, start_time=int(time.time() - 172800),)
+    resp = central.request(central.get_audit_logs, **kwargs)
     data = cli.eval_resp(resp)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_rich=do_rich, default="rich")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    # TODO add -v flag or something to trigger auto index of log_ids and provide a menu where they can select the log
+    # they want to see details on.
+    if kwargs.get("log_id"):
+        typer.secho(str(resp), fg="green" if resp else "red")
+    else:
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+        cli.display_results(
+            data,
+            tablefmt=tablefmt,
+            pager=not no_pager,
+            outfile=outfile,
+            # sort_by=sort_by,
+            # reverse=reverse,
+            cleaner=cleaner.get_audit_logs,
+        )
 
 
 @app.callback()
