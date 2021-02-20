@@ -4,8 +4,8 @@
 import typer
 import time
 import sys
-import json
-from typing import List, Literal, Union, Any
+# import json
+from typing import List, Literal, Union
 from pathlib import Path
 
 
@@ -116,9 +116,7 @@ class CLICommon:
 
         if account in config.data:
             config.account = self.account = account
-            # global session
             self.central = CentralApi(account)
-            # global cache
             self.cache = Cache(self.central)
             return account
         else:
@@ -177,72 +175,121 @@ class CLICommon:
         elif do_csv:
             return "csv"
         elif do_table:
-            return "rich" if default != "rich" else "simple"
+            return "rich" if default != "rich" else "tabulate"
         else:
             return default
 
     @staticmethod
-    def eval_resp(resp: Response, pad: int = 0, sort_by: str = None) -> Any:
-        if not resp.ok:
-            msg = f"{' ' * pad}{typer.style('ERROR:', fg=typer.colors.RED)} "
-            if isinstance(resp.output, dict):
-                _msg = resp.output.get("description", resp.output.get("detail", "")).replace("Error: ", "")
-                if _msg:
-                    msg += _msg
-                else:
-                    msg += json.dumps(resp.output)
-            else:
-                msg += str(resp.output)
-
-            typer.echo(msg)
-        else:
-            # TODO sort output
-            if sort_by is not None:
-                typer.secho("sort option not implemented yet", fg="red")
-
-            return resp.output
-
-    # TODO combine eval_resp and display_results
-    # TODO cleaner moves here (for now), then eventually to an output object (in utils now)
-    #   prep for breaking API into separate package.
-
-    @staticmethod
-    def display_results(
-        data: Union[List[dict], List[str], None],
+    def _display_results(
+        data: Union[List[dict], List[str], None] = None,
         tablefmt: str = "rich",
         title: str = None,
         pager: bool = True,
         outfile: Path = None,
+        sort_by: str = None,
+        reverse: bool = None,
+        pad: int = None,
         cleaner: callable = None,
         **cleaner_kwargs,
-    ) -> None:
-        """Output Formatted API Response to display and optionally to file
-
-        Args:
-            data (Union[List[dict], List[str], None]): API Response Data.
-            tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
-            title: (str, optional): Title of output table.  Only applies to "rich" tablefmt.
-            pager (bool, optional): Page Output / or not. Defaults to True.
-            outfile (Path, optional): path/file of output file. Defaults to None.
-            cleaner (callable, optional): The Cleaner function to use.
-        """
-        pager = False if config.no_pager else pager
+    ):
         if data:
+            data = utils.listify(data)
+
             if cleaner:
                 data = cleaner(data, **cleaner_kwargs)
 
-            outdata = utils.output(data, tablefmt, title=title)
+            outdata = utils.output(data, tablefmt, title=title, sanitize=config.sanitize)
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             # -- // Output to file \\ --
             if outfile and outdata:
-                if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
+                if Path().cwd() != Path.joinpath(config.outdir / outfile):
+                    if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
+                        typer.secho(
+                            "It looks like you are in the root of a git repo dir.\n"
+                            "Exporting to out subdir."
+                            )
                     config.outdir.mkdir(exist_ok=True)
                     outfile = config.outdir / outfile
 
                 print(typer.style(f"\nWriting output to {outfile}... ", fg="cyan"), end="")
                 outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
                 typer.secho("Done", fg="green")
+
+    def display_results(
+        self,
+        resp: Union[Response, List[Response]] = None,
+        data: Union[List[dict], List[str], None] = None,
+        tablefmt: str = "rich",
+        title: str = None,
+        pager: bool = True,
+        outfile: Path = None,
+        sort_by: str = None,
+        reverse: bool = None,
+        pad: int = None,
+        cleaner: callable = None,
+        **cleaner_kwargs,
+    ) -> None:
+        """Output Formatted API Response to display and optionally to file
+
+        one of resp or data attribute is required
+
+        Args:
+            resp (Union[Response, List[Response], None], optional): API Response objects.
+            data (Union[List[dict], List[str], None], optional): API Response output data.
+            tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
+            title: (str, optional): Title of output table.  Only applies to "rich" tablefmt.
+            pager (bool, optional): Page Output / or not. Defaults to True.
+            outfile (Path, optional): path/file of output file. Defaults to None.
+            sort_by (Union[str, List[str], None] optional): column or columns to sort output on.
+            reverse (bool, optional): reverse the output.
+            cleaner (callable, optional): The Cleaner function to use.
+        """
+        if pad:
+            log.warning("Depricated pad parameter referenced in display_results")
+
+        pager = False if config.no_pager else pager
+
+        if resp:
+            resp = utils.listify(resp)
+
+            data = []
+            for idx, r in enumerate(resp):
+                if len(resp) > 1:
+                    typer.secho(f"Request {idx + 1} ({r.url.path}) Response:", fg="cyan")
+                if not r:
+                    typer.secho(str(r), fg="green" if r else "red")
+                else:
+                    # TODO add sort and reverse funcs
+                    if sort_by is not None:
+                        typer.secho("sort option not implemented yet", fg="red")
+                    if reverse is not None:
+                        typer.secho("reverse option not implemented yet", fg="red")
+
+                    self._display_results(
+                        r.output,
+                        tablefmt=tablefmt,
+                        title=title,
+                        pager=pager, outfile=outfile,
+                        sort_by=sort_by,
+                        reverse=reverse,
+                        pad=pad,
+                        cleaner=cleaner,
+                        **cleaner_kwargs
+                    )
+
+        elif data:
+            self._display_results(
+                data,
+                tablefmt=tablefmt,
+                title=title,
+                pager=pager, outfile=outfile,
+                sort_by=sort_by,
+                reverse=reverse,
+                pad=pad,
+                cleaner=cleaner,
+                **cleaner_kwargs
+            )
 
 
 if __name__ == "__main__":
