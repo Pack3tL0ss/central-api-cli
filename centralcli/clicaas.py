@@ -1,5 +1,35 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Uses caas api to send commands to devices
 
+You can run the commands ad-hoc, or for more complex operations
+
+you can store them in a file and import.  The file takes a similar format
+as the command.  So
+
+cencli add-vlan <device> <pvid> <ip> <mask> [name] [description] ...
+
+can be stored in yaml as
+
+addvlan10:
+  command: add-vlan
+    args:
+      - <device>
+      - <pvid>
+      - <ip>
+      - <mask>
+    options:
+      name: myname
+      description: mydescription
+    cmds:
+        - These are ad-hoc CLI commands
+        - I can macro anything I want here they are sent to the dev
+
+Then run via
+  cencli caas-batch [import file] add-vlan addvlan10
+
+"""
 from pathlib import Path
 import sys
 import typer
