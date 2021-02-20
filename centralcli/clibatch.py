@@ -73,8 +73,7 @@ def add(
 
         resp = central.request(central.create_site, site_list=data)
 
-    resp_data = cli.eval_resp(resp)
-    cli.display_results(resp_data)
+    cli.display_results(resp)
 
 
 @app.command()

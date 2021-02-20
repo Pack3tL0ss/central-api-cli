@@ -332,19 +332,25 @@ class Utils:
                 yield line
 
         def menu(self, data_len: int = None) -> str:
+            def isborder(line: str) -> bool:
+                return all(not c.isalnum() for c in list(line))
+
             out = self.tty or self.file
             out = out.splitlines(keepends=True)
             _out = []
+            data_start = 3
             if data_len:
-                data_start = len(self) - data_len
+                data_start = len(self) - data_len - 1
             else:
-                data_start = 2
-                data_len = len(self) - 2
+                for idx, line in enumerate(out):
+                    if "name" in line:
+                        if not isborder(out[idx + 2]):
+                            data_start = idx + 2
             for idx, line in enumerate(out):
                 i = idx - data_start + 1
                 pad = len(str(len(out[data_start:])))
                 _out += [
-                    f"  {' ':{pad}}{line}" if idx < data_start else f"{i}.{' ':{pad}}{line}"
+                    f"  {' ':{pad}}{line}" if isborder(line) or idx < data_start else f"{i}.{' ':{pad}}{line}"
                 ]
             return "".join(_out)
 
@@ -424,7 +430,7 @@ class Utils:
         _lexer = table_data = None
 
         if sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
-            redact = ["mac", "serial", "neighborMac", "neighborSerial", "neighborPortMac"]
+            redact = ["mac", "serial", "neighborMac", "neighborSerial", "neighborPortMac", "longitude", "latitude"]
             outdata = [{k: d[k] if k not in redact else "--redacted--" for k in d} for d in raw_data]
 
         # -- // List[str, ...] \\ --  Bypass all formatters, (config file output, etc...)
