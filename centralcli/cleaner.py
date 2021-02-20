@@ -123,6 +123,7 @@ def pre_clean(data: dict) -> dict:
     return data
 
 
+# TODO moved to utils
 def _unlist(data: Any):
     """Remove unnecessary outer lists.
 
