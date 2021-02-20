@@ -20,6 +20,7 @@ STRIP_KEYS = [
     "vlans",
     "result",
     "networks",
+    "ports",
 ]
 
 
@@ -95,6 +96,10 @@ class KickArgs(str, Enum):
     all = "all"
     mac = "mac"
     wlan = "wlan"
+
+
+class BatchApArgs(str, Enum):
+    rename = "rename"
 
 
 # Used to determine if arg is for a device (vs group, templates, ...)
