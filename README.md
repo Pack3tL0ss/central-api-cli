@@ -2,9 +2,9 @@
 
 ---
 
-A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform / shell support. i.e. Bash, zsh, PowerShell, etc.
+A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform / shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
 
-`TODO [demo](docs/media/demo.gif)`
+![centralcli Animated Demo](docs/img/cencli-demo.gif)
 
 ## Features
 - Cross Platform Support
@@ -12,26 +12,41 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
 - multiple output formats
 - output to file
-- multiple account support (easily switch between different central accounts)
+- Numerous import formats (csv, yaml, json, xls, etc.)
+- multiple account support (easily switch between different central accounts `--account myotheraccount`)
 - Batch Operation based on data from input file.  i.e. Add sites in batch based on data from a csv.
+- Automatic Token refresh.  With prompt to paste in a new token if it becomes invalid.
+  > If using Tokens, dedicate the token to the CLI alone, using it in swagger or on another system, will eventually lead to a refresh that invalidates the tokens on the other systems using it.
+- You can also use username/Password Auth. which will facilitate autmatic retrieval of new Tokens even if they do become invalid.
+
+## CURRENT STATE OF THE PROJECT
+
+***evolving***  It's a useful tool, but as commands are built out the CLI hierarchy will evolve.  More batch automations, and orchistrated tasks are being added daily.  Please submit an issue with any requests.
 
 ## Installation
-Requires python3 and pip
+
+Requires python 3.7+ and pip
 
 `pip3 install centralcli`
 
 > You can also install in a virtual environment (venv), but you'll lose auto-completion, unless you activate the venv.
 
+### if you don't have python
+
+- You can get it for any platform @ https://www.python.org
+- On Windows 10 it's also available in the Mirosoft store.
+
+
 ## Configuration
 
 Refer to [config.yaml.example](config/config.yaml.example) to guide in the creation of config.yaml and place in the config directory.
 
-CentralCli will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>/.centralcli.
+CentralCli will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>\\.centralcli.
 i.e. on Windows `c:\Users\wade\.centralcli` or on Linux `/home/wade/.config/centralcli`
 
 Once `config.yaml` is populated per [config.yaml.example](config/config.yaml.example), run some test commands to validate the config.
 
-Example test command `cencli show all`
+For Example `cencli show all`
 
 ```bash
 wade@wellswa6:~ $ cli show all
@@ -40,7 +55,7 @@ wade@wellswa6:~ $ cli show all
 ✔ Collecting Data [monitoring/v1/gateways]
 name               ip               mac            model                 group          site     serial      type     labels       version                status
 -----------------  ---------------  -------------  --------------------  -------------  -------  ----------  -------  -----------  ---------------------  --------
-BR1_315_0c:88      10.101.6.200/24  --redacted--   315                   Branch1        Antigua  -redacted-  ap       Branch View  8.7.1.1_78245          Up
+BR1_315_7c:88      10.101.6.200/24  --redacted--   315                   Branch1        Antigua  -redacted-  ap       Branch View  8.7.1.1_78245          Up
 IAP305             10.2.30.102      --redacted--   305                   TemplateGroup           -redacted-  ap                    6.5.1.0-4.3.1.2_58595  Down
 LABAP4             10.0.30.233/24   --redacted--   345                   WadeLab                 -redacted-  ap                    8.7.1.0_77203          Down
 sw-zippity                          --redacted--   J9773A                WadeLab                 -redacted-  SW                    16.10.000x             Down
@@ -54,8 +69,7 @@ VPNC2              192.168.30.202   --redacted--   A7005                 WadeLab
 
 ```
 
-Use cencli --help to become familiar with the command options.
-> *NOTE:* Aruba Central API CLI is still evolving.  Structure and the format of outputs are likely to change over time.
+Use `cencli --help` to become familiar with the command options.
 
 ### Auto Completion
 The CLI supports auto-completion.  To configure auto-completion run `cencli --install-completion`.  This will auto-detect the type of shell you are running in, and install the necessary completion into your profile.  You'll need to exit the shell and start a new session for it to take effect.
@@ -63,15 +77,17 @@ The CLI supports auto-completion.  To configure auto-completion run `cencli --in
 ## Usage Notes:
 
 ### Caching & Friendly identifiers
-- Caching: The CLI caches information on all devices, sites, groups, and templates in Central.  It's a minimal amount per device, and is done to allow human friendly identifiers.  The API typically accepts serial #, site id, etc.  This function allows you to specify a dev for example by name, IP, mac (any format), and serial.
+- Caching: The CLI caches information on all devices, sites, groups, and templates in Central.  It's a minimal amount per device, and is done to allow human friendly identifiers.  The API typically accepts serial #, site id, etc.  This function allows you to specify a device by name, IP, mac (any format), and serial.
+
 The lookup sequence for a device:
 
-    1. Exact Match of any of the identifier fields (name, ip, mac, serial)
-    2. case insensitive match
-    3. case insensitive match disregarding all hyphens and underscores (in case you type 6200f_bot and the device name is 6200F-Bot)
-    4. Case insensitive Fuzzy match with implied wild-card, otherwise match any devices that start with the identifier provided. `cencli show switches 6200F` will result in a match of `6200F-Bot`.
+  1. Exact Match of any of the identifier fields (name, ip, mac, serial)
+  2. case insensitive match
+  3. case insensitive match disregarding all hyphens and underscores (in case you type 6200f_bot and the device name is 6200F-Bot)
+  4. Case insensitive Fuzzy match with implied wild-card, otherwise match any devices that start with the identifier provided. `cencli show switches 6200F` will result in a match of `6200F-Bot`.
 
-> If there is no match found, a cache update is triggered in most scenarios, and the match rules are re-tried.  The cache is also updated every 3 hours (if you run a command and it's older than 3 hours, it will update the cache first).  This update 3 hour update will be removed in a future release once auto-update/retry is implemented for all identifier types (groups, and templates currently lack the update/retry bit)
+
+> If there is no match found, a cache update is triggered, and the match rules are re-tried.
 
 - Caching works in a similar manner for groups, templates, and sites.  Sites can match on name and nearly any address field.  So if you only had one site in San Antonio you could specify that site with `show sites 'San Antonio'`  \<-- Note the use of quotes because there is a space in the name.
 
@@ -81,13 +97,13 @@ The lookup sequence for a device:
 
 There are a number of output formats available.  Most commands default to what is likely the easiest to view given the number of fields.  Otherwise longer outputs are typically displayed vertically by default.  If the output can reasonably fit, it's displayed in tabular format horizontally.
 
-You can specify the output format with command line flags `--json`, `--yaml`, `--csv`, `--rich`  rich is tabular format with folding (multi line within the same row) and truncating.
+You can specify the output format with command line flags `--json`, `--yaml`, `--csv`, `--table`  rich is tabular format with folding (multi line within the same row) and truncating.
 
-> Most outputs will evolve to support an output with the most commonly desired fields by default and expanded vertical output via the `-v` option (not implemented yet.)
+> Most outputs will evolve to support an output with the most commonly desired fields by default and expanded vertical output via the `-v` option (not implemented yet.).  Currently the output is tabular horizontally if the amount of data is likely to fit most displays, and vertical otherwise.
 
 ### File Output
 
-Just use --out \<filename\> (or \<path\\filename\>), and specify the desired format.
+Just use `--out \<filename\>` (or \<path\\filename\>), and specify the desired format.
 
 ## CLI Tree
 
