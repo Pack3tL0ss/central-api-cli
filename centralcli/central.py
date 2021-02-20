@@ -81,13 +81,34 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     return conn
 
 
+class BatchRequest:
+    def __init__(self, func: callable, args: Union[list, tuple] = (), kwargs: dict = {}) -> None:
+        """Contructor object for for api requests.
+
+        Used to pass multiple requests into CentralApi batch_request method for parallel
+        execution.
+
+        Args:
+            func (callable): The CentralApi method to execute.
+            args (Union[list, tuple], optional): args passed on to method. Defaults to ().
+            kwargs (dict, optional): kwargs passed on to method. Defaults to {}.
+        """
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+
+
 class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
+        self.silent = False  # toggled in _batch_request to squelch Auto logging in Response
+        self.BatchRequest = BatchRequest
         self.auth = get_conn_from_file(account_name)
         super().__init__(auth=self.auth)
 
     @staticmethod
     def _make_form_data(data: dict):
+        # TODO how to package python data struct into form-data for API call
+        # i.e. update_variables
         form = aiohttp.FormData()
         for key, value in data.items():
             form.add_field(
@@ -103,16 +124,48 @@ class CentralApi(Session):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
 
-    def request(self, func, *args, **kwargs):
+    def request(self, func: callable, *args, **kwargs):
         """non async to async wrapper for all API calls
 
         Args:
             func (callable): One of the CentralApi methods
 
         Returns:
-            centralcli.Response object
+            centralcli.response.Response object
         """
         return asyncio.run(self._request(func, *args, **kwargs))
+
+    async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+        async with ClientSession() as self.aio_session:
+            # Always run first call solo to ensure access token validity
+            self.silent = True
+            resp = await api_calls[0].func(
+                *api_calls[0].args,
+                **api_calls[0].kwargs
+                )
+            if not resp or len(api_calls) == 1:
+                return [resp]
+
+            m_resp = await asyncio.gather(
+                *[call.func(*call.args, **call.kwargs) for call in api_calls[1:]]
+            )
+            self.silent = False
+
+            return [resp, *m_resp]
+
+    def batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+        """non async to async wrapper for multiple parallel API calls
+
+        First entry is ran alone, if successful the remaining calls
+        are made in parallel.
+
+        Args:
+            api_calls (List[BatchRequest]): List of BatchRequest objects.
+
+        Returns:
+            List[Response]: List of centralcli.response.Response objects.
+        """
+        return asyncio.run(self._batch_request(api_calls))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = self.auth.central_info["base_url"] + url
@@ -687,8 +740,11 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        sw_url = "cx_switches" if cx else "switches"
-        url = f"/monitoring/v1/{sw_url}/{serial}/ports"
+        # TODO remove once confirmed the cx_ urls have been depricated in favor of the logical route of having the
+        # one url work for both.
+        # sw_url = "cx_switches" if cx else "switches"
+        # url = f"/monitoring/v1/{sw_url}/{serial}/ports"
+        url = f"/monitoring/v1/switches/{serial}/ports"
 
         params = {"slot": slot}
 
@@ -1130,8 +1186,11 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
+        # TODO looks like we can remove references to cx specific methods, they don't work
+        # schema not reflecting that wasted my time.
         if not stack:
-            sw_url = "cx_switches" if cx else "switches"
+            # sw_url = "cx_switches" if cx else "switches"
+            sw_url = "switches"
         else:
             sw_url = "cx_switch_stacks" if cx else "switch_stacks"
 
@@ -1407,6 +1466,81 @@ class CentralApi(Session):
                 return resp
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
+
+    async def get_ap_settings(self, serial_number: str) -> Response:
+        """Get an existing ap settings.
+
+        Args:
+            serial_number (str): AP serial number.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/ap_settings/{serial_number}"
+
+        return await self.get(url)
+
+    async def update_ap_settings(
+        self,
+        serial_number: str,
+        hostname: str,
+        ip_address: str = None,
+        zonename: str = None,
+        achannel: str = None,
+        atxpower: str = None,
+        gchannel: str = None,
+        gtxpower: str = None,
+        dot11a_radio_disable: bool = None,
+        dot11g_radio_disable: bool = None,
+        usb_port_disable: bool = None,
+    ) -> Response:
+        """Update an existing ap settings.
+
+        Args:
+            serial_number (str, optional): AP Serial Number
+            hostname (str): hostname
+            ip_address (str, optional): ip_address Default (DHCP)
+            zonename (str, optional): zonename. Default "" (No Zone)
+            achannel (str, optional): achannel
+            atxpower (str, optional): atxpower
+            gchannel (str, optional): gchannel
+            gtxpower (str, optional): gtxpower
+            dot11a_radio_disable (bool, optional): dot11a_radio_disable
+            dot11g_radio_disable (bool, optional): dot11g_radio_disable
+            usb_port_disable (bool, optional): usb_port_disable
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/ap_settings/{serial_number}"
+
+        _json_data = {
+            'hostname': hostname,
+            'ip_address': ip_address,
+            'zonename': zonename,
+            'achannel': achannel,
+            'atxpower': atxpower,
+            'gchannel': gchannel,
+            'gtxpower': gtxpower,
+            'dot11a_radio_disable': dot11a_radio_disable,
+            'dot11g_radio_disable': dot11g_radio_disable,
+            'usb_port_disable': usb_port_disable
+        }
+        if None in _json_data.values():
+            resp = await self._request(self.get_ap_settings, serial_number)
+            if not resp:
+                return resp
+
+            json_data = self.strip_none(_json_data)
+            json_data = {**resp.output, **json_data}
+            if not sorted(_json_data.keys()) == sorted(json_data.keys()):
+                missing = ", ".join([f"'{k}'" for k in json_data.keys() if k not in _json_data.keys()])
+                return Response(
+                    error=f"Update payload is missing required attributes: {missing}",
+                    reason="INVALID"
+                )
+
+        return await self.post(url, json_data=json_data)
 
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
