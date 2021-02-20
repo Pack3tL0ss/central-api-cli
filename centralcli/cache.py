@@ -5,14 +5,17 @@ from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from centralcli import log, utils, config
-import readline  # noqa imported for backspace support during prompt.
 
 import asyncio
 import time
 import typer
 
-TinyDB.default_table_name = "devices"
+try:
+    import readline  # noqa imported for backspace support during prompt.
+except Exception:
+    pass
 
+TinyDB.default_table_name = "devices"
 
 DBType = Literal["dev", "site", "template", "group"]
 
