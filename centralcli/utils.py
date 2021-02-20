@@ -164,6 +164,27 @@ class Utils:
         return var if isinstance(var, list) or var is None else [var]
 
     @staticmethod
+    def unlistify(data: Any):
+        """Remove unnecessary outer lists.
+
+        Returns:
+            [] = ''
+            ['single_item'] = 'single item'
+            [[item1], [item2], ...] = [item1, item2, ...]
+        """
+        if isinstance(data, list):
+            if not data:
+                data = ""
+            elif len(data) == 1:
+                data = data[0] if not isinstance(data[0], str) else data[0].replace("_", " ")
+            elif all([isinstance(d, list) and len(d) == 1 for d in data]):
+                out = [i for ii in data for i in ii if not isinstance(i, list)]
+                if out:
+                    data = out
+
+        return data
+
+    @staticmethod
     def read_yaml(filename):
         """Read variables from local yaml file
 
@@ -331,7 +352,6 @@ class Utils:
         def file(self):
             return typer.unstyle(self._file)
 
-    # Not used moved to __str__ method of Output class
     @staticmethod
     def do_pretty(key: str, value: str) -> str:
         """Apply coloring to tty output
@@ -345,14 +365,15 @@ class Utils:
     def output(
         self,
         outdata: Union[List[str], Dict[str, Any]],
-        tablefmt: str = None,
+        tablefmt: str = "rich",
         title: str = None,
-        account: str = None
+        account: str = None,
+        sanitize: bool = False,
     ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         def _do_subtables(data: list, tablefmt: str = "rich"):
             out = []
-            for inner_dict in data:
+            for inner_dict in data:  # the object: switch/vlan etc dict
                 # inner_list = []
                 for key, val in inner_dict.items():
                     if not isinstance(val, (list, dict, tuple)):
@@ -388,9 +409,12 @@ class Utils:
                             with console.capture():
                                 console.print(inner_table)
                             inner_dict[key] = console.export_text()
-                        else:
+                        elif val and tablefmt == "tabulate" and hasattr(val[0], 'keys'):
                             inner_table = tabulate(val, headers="keys", tablefmt=tablefmt)
                             inner_dict[key] = inner_table
+                        else:
+                            if all(isinstance(v, str) for v in val):
+                                inner_dict[key] = ", ".join(val)
 
                         # inner_list.append(inner_table)
                 out.append(inner_dict)
@@ -399,11 +423,22 @@ class Utils:
         raw_data = outdata
         _lexer = table_data = None
 
+        if sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
+            redact = ["mac", "serial", "neighborMac", "neighborSerial", "neighborPortMac"]
+            outdata = [{k: d[k] if k not in redact else "--redacted--" for k in d} for d in raw_data]
+
+        # -- // List[str, ...] \\ --  Bypass all formatters, (config file output, etc...)
+        if outdata and all(isinstance(x, str) for x in outdata):
+            tablefmt = "strings"
+
+        # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs
         if tablefmt in ['json', 'yaml', 'yml']:
-            # convert List[dict] to Dict[dev_name: dict]
             outdata = self.listify(outdata)
             if outdata and 'name' in outdata[0]:
-                outdata: Dict[str, dict] = {item['name']: {k: v for k, v in item.items() if k != 'name'} for item in outdata}
+                outdata: Dict[str, Dict[str, Any]] = {
+                    item['name']: {k: v for k, v in item.items() if k != 'name'}
+                    for item in outdata
+                }
 
         if tablefmt == "json":
             raw_data = json.dumps(outdata, indent=4)
@@ -425,22 +460,16 @@ class Utils:
                                 for d in outdata
                             ])
 
-        elif tablefmt == "rich":  # TODO Temporary Testing ***
+        elif tablefmt == "rich":
             from rich.console import Console
             from rich.table import Table
-            # from rich.tabulate import Table
-            # from rich.columns import Columns
-            # from rich.style import Style
-            # from rich.segment import Segment
-            # from rich.measure import Measurement
             from rich.box import HORIZONTALS, SIMPLE
-            # from rich.rule import Rule
             from rich.text import Text
             from centralcli import constants
             console = Console(record=True)
 
             customer_id, customer_name = "", ""
-            outdata = self.listify(outdata)
+            # outdata = self.listify(outdata)
 
             # -- // List[dict, ...] \\ --
             if outdata and all(isinstance(x, dict) for x in outdata):
@@ -498,14 +527,7 @@ class Utils:
                 raw_data = f"{data_header}{raw_data}" if customer_id else f"{raw_data}"
                 table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
 
-            # -- // List[str, ...] \\ --
-            elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:
-                if len(outdata) > 1:
-                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
-                else:
-                    raw_data = table_data = '\n'.join(outdata)
-
-        else:  # -- tabulate --
+        elif tablefmt == "tabulate":
             customer_id = customer_name = ""
             outdata = self.listify(outdata)
 
@@ -528,13 +550,17 @@ class Utils:
                 table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
                 raw_data = f"{data_header}{raw_data}" if customer_id else f"{raw_data}"
 
+        else:  # strings output No formatting
             # -- // List[str, ...] \\ --
-            elif outdata and [isinstance(x, str) for x in outdata].count(False) == 0:
-                if len(outdata) > 1:
-                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
+            if len(outdata) == 1:
+                if "\n" not in outdata[0]:
+                    # we can format green as only success output is sent through formatter.
+                    table_data = typer.style(f"  {outdata[0]}", fg="green")
+                    raw_data = outdata[0]
                 else:
-                    # template / config file output
-                    raw_data = table_data = '\n'.join(outdata)
+                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
+            else:  # template / config file output
+                raw_data = table_data = '\n'.join(outdata)
 
         if _lexer and raw_data:
             table_data = highlight(bytes(raw_data, 'UTF-8'),
