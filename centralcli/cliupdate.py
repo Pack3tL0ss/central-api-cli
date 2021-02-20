@@ -27,7 +27,6 @@ SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 tty = utils.tty
 iden_meta = IdenMetaVars()
-# template_iden_args = Literal["template-name", "device"]
 
 app = typer.Typer()
 
@@ -55,20 +54,6 @@ def template(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-
-    # if operation == "update":
-    #     if what == "variable":
-    #         if variable and value and device:
-    #             device = cli.cache.get_dev_identifier(device)
-    #             payload = {"variables": {variable: value}}
-    #             _resp = cli.central.update_variables(device, payload)
-    #             if _resp:
-    #                 log.info(f"Template Variable Updated {variable} -> {value}", show=False)
-    #                 typer.echo(f"{typer.style('Success', fg=typer.colors.GREEN)}")
-    #             else:
-    #                 log.error(f"Template Update Variables {variable} -> {value} retuned error\n{_resp.output}", show=False)
-    #                 typer.echo(f"{typer.style('Error Returned', fg=typer.colors.RED)} {_resp.error}")
-    #     else:  # delete or add template, what becomes device/template identifier
     cli.cache(refresh=update_cache)
 
     obj = cli.cache.get_template_identifier(name)
@@ -101,13 +86,6 @@ def template(
 
     _resp = cli.central.update_existing_template(**kwargs, template=template, payload=payload)
     typer.secho(str(_resp), fg="green" if _resp else "red")
-
-    # if _resp:
-    #     log.info(f"Template {what} Updated {_resp.output}", show=False)
-    #     typer.secho(_resp.output, fg="green")
-    # else:
-    #     log.error(f"Template {what} Update from {template} Failed. {_resp.error}", show=False)
-    #     typer.secho(_resp.output, fg="red")
 
 
 @app.command(short_help="Update existing or add new Variables for a device/template")
