@@ -5,6 +5,7 @@ from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from centralcli import log, utils, config
+import readline  # noqa imported for backspace support during prompt.
 
 import asyncio
 import time
@@ -24,9 +25,7 @@ class CentralObject:
 
         if isinstance(data, list):
             if len(data) > 1:
-                raise ValueError(
-                    f"CentralObject expects a single item presented with list of {len(data)}"
-                )
+                raise ValueError(f"CentralObject expects a single item presented with list of {len(data)}")
             elif data:
                 data = data[0]
 
@@ -58,38 +57,19 @@ class CentralObject:
         log.exception(f"Cache LookUp Failure: 'CentralObject' object has no attribute '{name}'", show=True)
         raise typer.Exit(1)
 
-    # TODO NOT USED YET, move handle multi_match from cache to here,
-    def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> list:
-        typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
-        if query_type == 'site':
-            fields = ('name', 'city', 'state', 'type')
-        elif query_str == 'template':
-            fields = ('name', 'group', 'model', 'device_type', 'version')
-        else:  # device
-            fields = ('name', 'serial', 'mac', 'type')
-        menu = f"{' ':{len(str(len(match)))}}  {fields[0]:29} {fields[1]:12} {fields[2]:12} type"
-        menu += f"\n{' ':{len(str(len(match)))}}  {'-' * 29} {'-' * 12} {'-' * 18} -------\n"
-        menu += "\n".join(list(f'{idx + 1}. {m.get(fields[0], "error"):29} {m.get(fields[1], "error"):12} '
-                               f'{m.get(fields[2], "error"):18} {m.get("type", "-")}' for idx, m in enumerate(match)))
-        if query_str:
-            menu = menu.replace(query_str, typer.style(query_str, fg='green'))
-            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg='green'))
-        typer.echo(menu)
-        selection = ''
-        valid = [str(idx + 1) for idx, _ in enumerate(match)]
-        try:
-            while selection not in valid:
-                selection = typer.prompt(f'Select {query_type.title()}')
-                if selection not in valid:
-                    typer.secho(f"Invalid selection {selection}, try again.")
-        except KeyboardInterrupt:
-            raise typer.Abort()
-        finally:
-            return [match.pop(int(selection) - 1)]
-
 
 class Cache:
-    def __init__(self,  central=None, data: Union[List[dict, ], dict] = None, refresh: bool = False) -> None:
+    def __init__(
+        self,
+        central=None,
+        data: Union[
+            List[
+                dict,
+            ],
+            dict,
+        ] = None,
+        refresh: bool = False,
+    ) -> None:
         self.updated: list = []
         self.central = central
         self.DevDB = TinyDB(config.cache_file)
@@ -136,7 +116,15 @@ class Cache:
         return {t.name: getattr(self, t.name) for t in self._tables}
 
     # TODO ??deprecated?? should be able to remove this method. don't remember this note. looks used
-    def insert(self, data: Union[List[dict, ], dict]) -> bool:
+    def insert(
+        self,
+        data: Union[
+            List[
+                dict,
+            ],
+            dict,
+        ],
+    ) -> bool:
         _data = data
         if isinstance(data, list) and data:
             _data = data[1]
@@ -202,68 +190,76 @@ class Cache:
             if update_funcs:
                 if await update_funcs[0]():
                     if len(update_funcs) > 1:
-                        await asyncio.gather(f() for f in update_funcs[1:])
+                        await asyncio.gather(*[f() for f in update_funcs[1:]])
 
             # update groups first so template update can use the result, and to trigger token_refresh if necessary
             elif await self.update_group_db():
                 await asyncio.gather(self.update_dev_db(), self.update_site_db(), self.update_template_db())
 
     def check_fresh(
-        self, refresh: bool = False,
-        site_db: bool = False, dev_db: bool = False, template_db: bool = False,
-        group_db: bool = False
+        self,
+        refresh: bool = False,
+        site_db: bool = False,
+        dev_db: bool = False,
+        template_db: bool = False,
+        group_db: bool = False,
     ) -> None:
+        if True in [site_db, dev_db, group_db, template_db]:
+            refresh = True
+
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
             #  or time.time() - config.cache_file.stat().st_mtime > 7200:
             start = time.time()
             print(typer.style("-- Refreshing Identifier mapping Cache --", fg="cyan"), end="")
-
-            loop = asyncio.get_event_loop()
-            try:
-                loop.run_until_complete(self._check_fresh(
-                    dev_db=dev_db,
-                    site_db=site_db,
-                    template_db=template_db,
-                    group_db=group_db)
-                )
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                loop.close()
+            db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db))
+            if db_res and False in db_res:
+                log.error("TinyDB returned an error during db update")
 
             log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
             typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
-    def handle_multi_match(self, match: list, query_str: str = None, query_type: str = 'device') -> List[Dict[str, Any]]:
+    def handle_multi_match(
+        self,
+        match: list,
+        query_str: str = None,
+        query_type: str = "device",
+        multi_ok: bool = False,
+    ) -> List[Dict[str, Any]]:
         typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
-        if query_type == 'site':
-            fields = ('name', 'city', 'state', 'type')
-        elif query_type == 'template':
-            fields = ('name', 'group', 'model', 'device_type', 'version')
+        if query_type == "site":
+            fields = ("name", "city", "state", "type")
+        elif query_type == "template":
+            fields = ("name", "group", "model", "device_type", "version")
         else:  # device
-            fields = ('name', 'serial', 'mac', 'type')
-        out = utils.output(
-            [{k: d[k] for k in d if k in fields} for d in match]
-        )
+            fields = ("name", "serial", "mac", "type")
+        out = utils.output([{k: d[k] for k in d if k in fields} for d in match])
         menu = out.menu(data_len=len(match))
 
         if query_str:
-            menu = menu.replace(query_str, typer.style(query_str, fg='green'))
-            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg='green'))
+            menu = menu.replace(query_str, typer.style(query_str, fg="green"))
+            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg="green"))
         typer.echo(menu)
-        selection = ''
+        selection = ""
         valid = [str(idx + 1) for idx, _ in enumerate(match)]
         try:
             while selection not in valid:
-                selection = typer.prompt(f'Select {query_type.title()}')
+                selection = typer.prompt(f"Select {query_type.title()}")
                 if selection not in valid:
                     typer.secho(f"Invalid selection {selection}, try again.")
         except KeyboardInterrupt:
             raise typer.Abort()
-        finally:
-            return [match.pop(int(selection) - 1)]
 
-    def get_identifier(self, qry_str: str, qry_funcs: tuple, device_type: str = None, group: str = None) -> CentralObject:
-        ret = None
+        return [match.pop(int(selection) - 1)]
+
+    def get_identifier(
+        self,
+        qry_str: str,
+        qry_funcs: tuple,
+        device_type: str = None,
+        group: str = None,
+        multi_ok: bool = False,
+    ) -> CentralObject:
+        match = None
         default_kwargs = {"retry": False}
         for _ in range(0, 2):
             for q in qry_funcs:
@@ -272,12 +268,13 @@ class Cache:
                     kwargs["dev_type"] = device_type
                 elif q == "template":
                     kwargs["group"] = group
-                ret: CentralObject = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)
+                match: CentralObject = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)
 
-                if ret:
-                    return ret
+                if match:
+                    return match
 
-            if not ret:
+            # No match found trigger refresh and try again.
+            if not match:
                 self.check_fresh(
                     dev_db=True if "dev" in qry_funcs else False,
                     site_db=True if "site" in qry_funcs else False,
@@ -285,12 +282,18 @@ class Cache:
                     group_db=True if "group" in qry_funcs else False,
                 )
 
-    def get_dev_identifier(self,
-                           query_str: Union[str, List[str], tuple],
-                           dev_type: str = None,
-                           ret_field: str = "serial",
-                           retry: bool = True
-                           ) -> CentralObject:
+        if not match:
+            typer.secho(f"Unable to find a matching identifier for {qry_str}, tried: {qry_funcs}", fg="red")
+            raise typer.Exit(1)
+
+    def get_dev_identifier(
+        self,
+        query_str: Union[str, List[str], tuple],
+        dev_type: str = None,
+        ret_field: str = "serial",
+        retry: bool = True,
+        multi_ok: bool = True,
+    ) -> CentralObject:
 
         # TODO dev_type currently not passed in or handled identifier for show switches would also
         # try to match APs ...  & (self.Q.type == dev_type)
@@ -301,27 +304,35 @@ class Cache:
         match = None
         for _ in range(0, 2 if retry else 1):
             # Try exact match
-            match = self.DevDB.search((self.Q.name == query_str) | (self.Q.ip.test(lambda v: v.split('/')[0] == query_str))
-                                      | (self.Q.mac == utils.Mac(query_str).cols) | (self.Q.serial == query_str))
+            match = self.DevDB.search(
+                (self.Q.name == query_str)
+                | (self.Q.ip.test(lambda v: v.split("/")[0] == query_str))
+                | (self.Q.mac == utils.Mac(query_str).cols)
+                | (self.Q.serial == query_str)
+            )
 
             # retry with case insensitive name match if no match with original query
             if not match:
-                match = self.DevDB.search((self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                                          | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
-                                          | self.Q.serial.test(lambda v: v.lower() == query_str.lower()))
+                match = self.DevDB.search(
+                    (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                    | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                    | self.Q.serial.test(lambda v: v.lower() == query_str.lower())
+                )
 
             # retry name match swapping - for _ and _ for -
             if not match:
-                if '-' in query_str:
+                if "-" in query_str:
                     match = self.DevDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
-                elif '_' in query_str:
+                elif "_" in query_str:
                     match = self.DevDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
 
             # Last Chance try to match name if it startswith provided value
             if not match:
-                match = self.DevDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                                          | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
-                                          | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower())))
+                match = self.DevDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower()))
+                )
 
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Device Cachce", fg="red")
@@ -332,13 +343,11 @@ class Cache:
         all_match = None
         if dev_type:
             all_match = match
-            match = [
-                d for d in match if d["type"].lower() in "".join(dev_type[0:len(d["type"])]).lower()
-            ]
+            match = [d for d in match if d["type"].lower() in "".join(dev_type[0:len(d["type"])]).lower()]
 
         if match:
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str)
+                match = self.handle_multi_match(match, query_str=query_str, multi_ok=multi_ok)
 
             return CentralObject("dev", match)
         elif retry:
@@ -353,8 +362,13 @@ class Cache:
         # else:
         #     log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
 
-    def get_site_identifier(self, query_str: Union[str, List[str], tuple],
-                            ret_field: str = "id", retry: bool = True) -> str:
+    def get_site_identifier(
+        self,
+        query_str: Union[str, List[str], tuple],
+        ret_field: str = "id",
+        retry: bool = True,
+        multi_ok: bool = False,
+    ) -> CentralObject:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
@@ -362,25 +376,26 @@ class Cache:
         for _ in range(0, 2 if retry else 1):
             # try exact site match
             match = self.SiteDB.search(
-                (self.Q.name == query_str) | (self.Q.id.test(lambda v: str(v) == query_str))
-                | (self.Q.zipcode == query_str) | (self.Q.address == query_str)
-                | (self.Q.city == query_str) | (self.Q.state == query_str)
+                (self.Q.name == query_str)
+                | (self.Q.id.test(lambda v: str(v) == query_str))
+                | (self.Q.zipcode == query_str)
+                | (self.Q.address == query_str)
+                | (self.Q.city == query_str)
+                | (self.Q.state == query_str)
             )
 
             # retry with case insensitive name & address match if no match with original query
             if not match:
                 match = self.SiteDB.search(
                     (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                    | self.Q.address.test(
-                        lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", "")
-                    )
+                    | self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
                 )
 
             # retry name match swapping - for _ and _ for -
             if not match:
-                if '-' in query_str:
+                if "-" in query_str:
                     match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
-                elif '_' in query_str:
+                elif "_" in query_str:
                     match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
 
             # Last Chance try to match name if it startswith provided value
@@ -395,7 +410,7 @@ class Cache:
 
         if match:
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type='site')
+                match = self.handle_multi_match(match, query_str=query_str, query_type="site", multi_ok=multi_ok)
 
             # return match[0].get(ret_field)
             return CentralObject("site", match)
@@ -404,13 +419,16 @@ class Cache:
             log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=True)
             raise typer.Abort()
 
-    def get_group_identifier(self, query_str: str, ret_field: str = "name", retry: bool = True) -> CentralObject:
+    def get_group_identifier(
+        self,
+        query_str: str,
+        ret_field: str = "name",
+        retry: bool = True,
+        multi_ok: bool = False,
+    ) -> CentralObject:
         """Allows Case insensitive group match"""
         for _ in range(0, 2):
-            match = self.GroupDB.search(
-                (self.Q.name == query_str)
-                | self.Q.name.test(lambda v: v.lower() == query_str.lower())
-            )
+            match = self.GroupDB.search((self.Q.name == query_str) | self.Q.name.test(lambda v: v.lower() == query_str.lower()))
             if retry and not match and self.central.get_all_groups not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating group Cachce", fg="red")
                 self.check_fresh(refresh=True, group_db=True)
@@ -419,12 +437,12 @@ class Cache:
 
         if match:
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type='group')
+                match = self.handle_multi_match(match, query_str=query_str, query_type="group", multi_ok=multi_ok)
 
             return CentralObject("group", match)
         elif retry:
             log.error(f"Unable to gather group {ret_field} from provided identifier {query_str}", show=True)
-            valid_groups = '\n'.join(self.group_names)
+            valid_groups = "\n".join(self.group_names)
             typer.secho(f"{query_str} appears to be invalid", fg="red")
             typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
             raise typer.Abort()
@@ -436,25 +454,21 @@ class Cache:
         query_str: str,
         ret_field: str = "name",
         group: str = None,
-        retry: bool = True
+        retry: bool = True,
+        multi_ok: bool = False,
     ) -> CentralObject:
         """Allows case insensitive template match by template name"""
         match = None
         for _ in range(0, 2 if retry else 1):
             match = self.TemplateDB.search(
-                (self.Q.name == query_str)
-                | self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                (self.Q.name == query_str) | self.Q.name.test(lambda v: v.lower() == query_str.lower())
             )
 
             if not match:
-                match = self.TemplateDB.search(
-                    self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-"))
-                )
+                match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
 
             if not match:
-                match = self.TemplateDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                )
+                match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_templates not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating template Cachce", fg="red")
@@ -468,7 +482,12 @@ class Cache:
                     match = [{k: d[k] for k in d} for d in match if d["group"].lower() == group.lower()]
 
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type='template')
+                match = self.handle_multi_match(
+                    match,
+                    query_str=query_str,
+                    query_type="template",
+                    multi_ok=multi_ok,
+                )
 
             return CentralObject("template", match)
 

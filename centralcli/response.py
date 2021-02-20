@@ -11,7 +11,6 @@ import typer
 import json
 import aiohttp
 import time
-# import asyncio
 
 
 DEFAULT_HEADERS = {
@@ -27,7 +26,8 @@ class Response:
 
     The following attributes will always be available:
         ok: (bool) indicates success/failure of aiohttp.ClientSession.request()
-        output: (Any) The content returned from the response
+        output: (Any) The content returned from the response (outer keys removed)
+        raw_output: (Any) The orginal un-cleaned response from the API request
         error: (str) Error message indicating the nature of a failed response
         status: (int) http status code returned from response
 
@@ -38,9 +38,10 @@ class Response:
         ** Only provide output orr
     '''
     def __init__(self, response: aiohttp.ClientResponse = None, url: str = None, ok: bool = None,
-                 error: str = None, output: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
+                 error: str = None, output: Any = {}, raw: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
         self._response = response
         self.output = output
+        self.raw = raw
         self.ok = ok
         if response:
             self.ok = response.ok
@@ -79,8 +80,13 @@ class Response:
             return val
 
     def __str__(self):
+        status_code = f"  status code: {self.status}\n"
         if isinstance(self.output, dict):
-            return "\n".join([f"  {k}: {self._split_inner(v)}" for k, v in self.output.items()])
+            r = "\n".join([f"  {k}: {self._split_inner(v)}" for k, v in self.output.items()])
+        # indent single line output
+        if isinstance(self.output, str) and "\n" not in self.output:
+            r = f"  {self.output}"
+        return f"{status_code}{r}"
 
         return str(self.output) if self.output else self.error
 
@@ -158,7 +164,13 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
 
 
 class Session:
-    def __init__(self, auth: ArubaCentralBase = None, aio_session: aiohttp.ClientSession = None) -> None:
+    def __init__(
+        self,
+        auth: ArubaCentralBase = None,
+        aio_session: aiohttp.ClientSession = None,
+        silent: bool = False,
+    ) -> None:
+        self.silent = silent  # squelches out automatic display of failed Responses.
         self.auth = auth
         self._aio_session = aio_session
         self.headers = DEFAULT_HEADERS
@@ -178,7 +190,7 @@ class Session:
         auth = self.auth
         resp, spin = None, None
         _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
-        spin_txt_run = f"Collecting Data..."
+        spin_txt_run = "Collecting Data..."
         spin_txt_fail = f"Collecting Data{_data_msg}"
         for _ in range(0, 2):
             if _ > 0:
@@ -201,16 +213,20 @@ class Session:
 
                     try:
                         output = await resp.json()
+                        try:
+                            raw_output = output.copy()
+                        except AttributeError:
+                            raw_output = output
                         output = cleaner.strip_outer_keys(output)
                     except (json.decoder.JSONDecodeError, ContentTypeError):
-                        output = await resp.text()
+                        output = raw_output = await resp.text()
 
-                resp = Response(resp, output=output, elapsed=elapsed)
+                resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
             except Exception as e:
                 resp = Response(error=str(e), url=url)
                 _ += 1
 
-            fail_msg = f"{spin_txt_fail}\n  {resp.output}"
+            fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
                 spin.fail(fail_msg)
                 if "invalid_token" in resp.output:
@@ -229,6 +245,7 @@ class Session:
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, **kwargs: Any) -> Response:
 
+        # Debugging flag to lower paging limit to test paging with smaller chunks.
         if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overriden by config: {params.get("limit")} --> {config.limit}')
             params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
@@ -353,8 +370,6 @@ class Session:
                         f"\n{typer.style('exit', fg='magenta')} to abort." \
                         f"\n{typer.style('Waiting for Input...', fg='cyan', blink=True)}\n"
 
-                # typer.launch doesn't work on wsl attempts powershell
-                # typer.launch(f'{central.central_info["base_url"]}/platform/frontend/#!/APIGATEWAY')
                 token_data = utils.get_multiline_input(prompt, return_type="dict")
             else:
                 auth.handleTokenExpiry()

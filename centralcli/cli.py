@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import asyncio
 import sys
 from pathlib import Path
 from typing import List
@@ -113,17 +112,15 @@ def method_test(method: str = typer.Argument(...),
             if debug or not k.startswith("_"):
                 typer.echo(f"  {typer.style(k, fg='cyan')}: {v}")
 
-    data = cli.eval_resp(resp, pad=2)
+    # data = cli.eval_resp(resp, pad=2)
     tablefmt = cli.get_format(
         do_json, do_yaml, do_csv, do_table
     )
 
     typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='cyan')}:")
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
-    data = asyncio.run(resp._response.json())
-    if data:
-        typer.echo(f"\n{typer.style('Raw Response Output', fg='cyan')}:")
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    typer.echo(f"\n{typer.style('Raw Response Output', fg='cyan')}:")
+    cli.display_results(data=resp.raw, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.callback()
