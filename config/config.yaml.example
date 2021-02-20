@@ -1,16 +1,15 @@
-#token_store:
-#  type: "local"
-#  path: "config"
-
-
 central_info:
-    client_id: "<Your Aruba Central API Client ID>"
-    client_secret: "<Client Secret for the specified Client ID>"
-    customer_id: "<Aruba Central Customer ID>"
-    username: "<Aruba Central Username>"
-    password: "<aruba-central-account-password>"
-    base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
-
+  client_id: "<Your Aruba Central API Client ID>"
+  client_secret: "<Client Secret for the specified Client ID>"
+  customer_id: "<Aruba Central Customer ID>"
+  username: "<Aruba Central Username>"
+  password: "<aruba-central-account-password>"
+  base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
+  token:
+    access_toke: <access token>     # tokens are not required if using user/pass  These tokens will be invalid
+    refresh_token: <refresh token>  # soon after you start using them, but cencli auto refreshes and stores the new tokens
+                                    # These are just to get you onboard the first time.  However they can be updated, and
+                                    # are used if the cached token returns a failure.
 
 #
 # You can pass the --acount <customer_name> option to use different Aruba Central profiles.
@@ -39,3 +38,10 @@ central_info:
 #    username: "<Aruba Central Username>"
 #    password: "<aruba-central-account-password>"
 #    base_url: "https://internal-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
+
+# -- Optional Global Options --
+# no-pager: true            # turns off the automatic paged output (for longer outputs).  There is also a `--no-pager` flag.
+
+# forget_account_after: 30  # The --account <account-name> flag allows you to switch between central accounts.  The setting is sticky
+                            # so you don't have to keep re-entering the flag on every command.  This setting will cause it to revert
+                            # back to the default account (under "central-info") 30 mins from the last command.
