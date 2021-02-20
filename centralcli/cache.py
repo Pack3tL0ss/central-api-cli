@@ -228,14 +228,18 @@ class Cache:
         query_type: str = "device",
         multi_ok: bool = False,
     ) -> List[Dict[str, Any]]:
-        typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
+        # typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
+        typer.echo()
         if query_type == "site":
             fields = ("name", "city", "state", "type")
         elif query_type == "template":
             fields = ("name", "group", "model", "device_type", "version")
         else:  # device
             fields = ("name", "serial", "mac", "type")
-        out = utils.output([{k: d[k] for k in d if k in fields} for d in match])
+        out = utils.output(
+            [{k: d[k] for k in d if k in fields} for d in match],
+            title="Ambiguos identifier. Select desired device."
+        )
         menu = out.menu(data_len=len(match))
 
         if query_str:
@@ -247,7 +251,7 @@ class Cache:
         try:
             while selection not in valid:
                 selection = typer.prompt(f"Select {query_type.title()}")
-                if selection not in valid:
+                if not selection or selection not in valid:
                     typer.secho(f"Invalid selection {selection}, try again.")
         except KeyboardInterrupt:
             raise typer.Abort()
