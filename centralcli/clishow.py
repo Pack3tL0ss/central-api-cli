@@ -86,12 +86,9 @@ def show_devices(
     else:
         resp = central.request(central.get_devices, dev_type, **params)
 
-    data = cli.eval_resp(resp)
-
-    if data:
-        # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
+    # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
 
 
 @app.command(short_help="Show APs/details")
@@ -185,14 +182,11 @@ def interfaces(
                                 callback=cli.account_name_callback),
 ):
     cli.cache(refresh=update_cache)
-    dev_type, serial = cli.cache.get_dev_identifier(device, ret_field="type-serial")
+    dev = cli.cache.get_dev_identifier(device, ret_field="type-serial")
 
-    resp = cli.central.request(cli.central.get_switch_ports, serial, cx=dev_type == "CX")
-    data = cli.eval_resp(resp)
-    if data:
-        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "CX")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -241,11 +235,9 @@ def vlans(
             typer.echo(str(obj))
             raise typer.exit(1)
 
-    data = cli.eval_resp(resp)
-    if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
 
 
 @app.command(short_help="Show All Devices")
@@ -423,12 +415,8 @@ def _cache(
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
-        resp = Response(output=cache_out)
-        data = cli.eval_resp(resp)
-        if data:
-            tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        tablefmt = cli.get_format(do_json=None, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {args[-1]}", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show groups/details")
@@ -447,10 +435,8 @@ def groups(
     central = cli.central
     if central.get_all_groups not in cli.cache.updated:
         asyncio.run(cli.cache.update_group_db())
-
         resp = Response(output=cli.cache.groups)
-        data = cli.eval_resp(resp)
-        cli.display_results(data, tablefmt='rich', title="Groups", pager=not no_pager, outfile=outfile)
+        cli.display_results(resp, tablefmt='rich', title="Groups", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -479,7 +465,7 @@ def sites(
     if args:
         args = tuple([i for i in args if i != "all"])
         if args:
-            site = cli.cache.get_site_identifier(args)
+            site = cli.cache.get_site_identifier(args, multi_ok=True)
 
     if not site:
         if central.get_all_sites not in cli.cache.updated:
@@ -488,17 +474,15 @@ def sites(
     else:
         resp = central.request(central.get_site_details, site.id)
 
-    data = cli.eval_resp(resp)
-    if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-        cli.display_results(
-            data,
-            tablefmt=tablefmt,
-            title="Sites" if not args else f"{site.name} site details",
-            pager=not no_pager,
-            outfile=outfile
-        )
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Sites" if not args else f"{site.name} site details",
+        pager=not no_pager,
+        outfile=outfile
+    )
 
 
 @app.command(short_help="Show templates/details")
@@ -583,11 +567,9 @@ def templates(
         elif name.is_template:
             resp = central.request(central.get_template, name.group, name.name)
 
-    data = cli.eval_resp(resp)
-    if data:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-        cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show Variables for all or specific device")
@@ -617,11 +599,10 @@ def variables(
         args = cli.cache.get_dev_identifier(args)
 
     resp = central.request(central.get_variables, () if not args else args.serial)
-    data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
     cli.display_results(
-        data,
+        resp,
         tablefmt=tablefmt,
         title="Variables" if not args else f"{args.name} Variables",
         pager=not no_pager,
@@ -657,11 +638,10 @@ def lldp(
     dev = cli.cache.get_dev_identifier(device[-1], dev_type="ap")
     if dev.type == "ap":
         resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
-        data = cli.eval_resp(resp)
         tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
         cli.display_results(
-            data,
+            resp,
             tablefmt=tablefmt,
             title="AP lldp neighbor",
             pager=not no_pager,
@@ -693,10 +673,9 @@ def certs(
                                 callback=cli.account_name_callback)
 ) -> None:
     resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
-    data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show WLAN(SSID)/details")
@@ -744,8 +723,7 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
-    data = cli.eval_resp(resp)
-    cli.display_results(data, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show clients/details")
@@ -788,11 +766,10 @@ def clients(
 ) -> None:
     central = cli.central
     resp = central.request(central.get_clients, filter, *args,)  # callback_kwargs={'cache': cli.cache})
-    data = cli.eval_resp(resp)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
 
     cli.display_results(
-        data,
+        resp,
         tablefmt=tablefmt,
         pager=not no_pager,
         outfile=outfile,
@@ -858,7 +835,6 @@ def logs(
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
     central = cli.central
     resp = central.request(central.get_audit_logs, **kwargs)
-    data = cli.eval_resp(resp)
 
     # TODO add -v flag or something to trigger auto index of log_ids and provide a menu where they can select the log
     # they want to see details on.
@@ -868,7 +844,7 @@ def logs(
         tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
         cli.display_results(
-            data,
+            resp,
             tablefmt=tablefmt,
             pager=not no_pager,
             outfile=outfile,
