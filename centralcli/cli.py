@@ -112,7 +112,6 @@ def method_test(method: str = typer.Argument(...),
             if debug or not k.startswith("_"):
                 typer.echo(f"  {typer.style(k, fg='cyan')}: {v}")
 
-    # data = cli.eval_resp(resp, pad=2)
     tablefmt = cli.get_format(
         do_json, do_yaml, do_csv, do_table
     )
