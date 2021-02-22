@@ -28,7 +28,67 @@ class BatchArgs(str, Enum):
 
 
 def do_lldp_rename(fstr: str) -> Response:
-    pass
+    _all_aps = cli.central.request(cli.central.get_devices, "aps", status="Up")
+    _keys = ["name", "mac", "model"]
+    _all_aps = utils.listify(_all_aps)
+    ap_dict = {d["serial"]: {k: d[k] for k in d.output if k in _keys} for d in _all_aps}
+    fstr_to_key = {
+        "h": "neighborHostName",
+        "m": "mac",
+        "p": "remotePort",
+        "M": "model"
+    }
+    req_list, name_list = [], []
+    if ap_dict:
+        for ap in ap_dict:
+            ap_dict[ap]["mac"] = utils.Mac(ap_dict[ap]["mac"]).clean
+            _lldp = cli.central.request(cli.central.get_ap_lldp_neighbor, ap)
+            if _lldp:
+                ap_dict[ap]["neighborHostName"] = _lldp.output[-1]["neighborHostName"]
+                ap_dict[ap]["remotePort"] = _lldp.output[-1]["remotePort"]
+
+            st = 0
+            x = ''
+            # TODO all int values assume 1 digit int.
+            for idx, c in enumerate(fstr):
+                if not idx >= st:
+                    continue
+                if c == '%':
+                    _src = ap_dict[ap][fstr_to_key[fstr[idx + 1]]]
+                    if fstr[idx + 2] != "[":
+                        if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
+                            x = f'{x}{_src}'
+                            st = idx + 2
+                        else:
+                            x = f'{x}{_src.split(fstr[idx + 2])[int(fstr[idx + 3]) - 1]}'
+                            st = idx + 4
+                    else:
+                        if fstr[idx + 3] == "-":
+                            x = f'{x}{"".join(_src[-int(fstr[idx + 4]):])}'
+                            st = idx + 6
+                        else:
+                            x = f'{x}{"".join(_src[slice(int(fstr[idx + 3]) - 1, int(fstr[idx + 5]))])}'
+                            st = idx + 7
+                else:
+                    x = f'{x}{c}'
+            req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
+            name_list += [x]
+
+    typer.secho(f"Resulting AP names based on '{fstr}':")
+    if len(name_list) <= 6:
+        typer.echo("\n".join(name_list))
+    else:
+        typer.echo("\n".join(
+                [
+                    *name_list[0:3],
+                    "...",
+                    *name_list[-3:]
+                ]
+            )
+        )
+
+    if typer.confirm("Proceed with AP Rename?"):
+        return cli.central.batch_request(req_list)
 
 
 @app.command()
@@ -122,25 +182,37 @@ def rename(
         rtxt = typer.style("RESULT: ", fg=typer.colors.BRIGHT_BLUE)
         typer.secho("Rename APs based on LLDP:", fg="bright_green")
         typer.echo(
-            "This function will automatically rename APs based on a combination of\n"
-            "information from the upstream switch (via LLDP) and from the AP itself.\n\n"
-            "Please provide a format string based on these examples:\n"
-            "  For the examples: hostname 'SNANTX-IDF3-sw1, AP on port 7\n"
-            "                    AP mac aa:bb:cc:dd:ee:ff\n"
-            f"{typer.style('Format String Examples:', fg='cyan')}\n"
-            "  Upstream switches hostname: \n"
-            "      '%h[1:4]%'    will use the first 3 characters of the switches hostname.\n"
-            f"         {rtxt} 'SNAN'\n"
-            "      '%H-1%'    will split the hostname into parts separating on '-' and use\n"
-            f"         the firt segment.  {rtxt} 'SNANTX\n"
-            f"      '%p%'    represents the interface.  {rtxt} '7'\n"
-            "                   note: an interface in the form 1/1/12 is converted to 1_1_12\n"
-            "       '%p/3%    seperates the port string on / and uses the 3rd segment.\n"
-            "        '%m% or %m[-4] = last 4 digits of the AP MAC\n"
-            "        '%m:1% would split on : and take the 1st segment.\n"
+            "  This function will automatically rename APs based on a combination of\n"
+            "  information from the upstream switch (via LLDP) and from the AP itself.\n\n"
+            "    Values used in the examples below: \n"
+            "      switch hostname (%h): 'SNAN-IDF3-sw1'\n"
+            "      switch port (%p): 7\n"
+            "      AP mac (%m): aa:bb:cc:dd:ee:ff\n"
+            "      AP model (%M): 535\n\n"
+            f"{typer.style('Format String Syntax:', fg='bright_green')}\n"
+            "  '%h[1:2]'  will use the first 2 characters of the switches hostname.\n"
+            f"    {rtxt} 'SN'\n"
+            "  '%h[2:4]'  will use characters 2 through 4 of the switches hostname.\n"
+            f"    {rtxt} 'NAN'\n"
+            "  '%h-1'  will split the hostname into parts separating on '-' and use\n"
+            "  the firt segment.\n"
+            f"    {rtxt} 'SNAN\n"
+            "  '%p'  represents the interface.\n"
+            f"    {rtxt} '7'\n"
+            "  '%p/3'  seperates the port string on / and uses the 3rd segment.\n"
+            f"    {rtxt} (given port 1/1/7): '7'\n"
+            f"  '%M'  represents the the AP model.\n"
+            f"    {rtxt} '535'\n"
+            "  '%m' The MAC of the AP\n"
+            "  '%m[-4]'  The last 4 digits of the AP MAC\n"
+            f"    {rtxt} 'eeff' NOTE: delimiters ':' are stripped\n\n"
+            f"{typer.style('Examples:', fg='bright_green')}\n"
+            f"  %h-1-AP%M-%m[-4]  {rtxt} SNAN-AP535-eeff\n"
+            f"  %h[1-4]-%h-2%h-3.p%p.%M-ap  {rtxt} SNAN-IDF3sw1.p7.535-ap\n"
+
         )
-        fstr = typer.prompt("Enter Desired format string:")
-        do_lldp_rename(fstr)
+        fstr = typer.prompt("Enter Desired format string")
+        resp = do_lldp_rename(fstr)
     else:
         typer.secho("import file Argument is required if --lldp flag not provided", fg="red")
 
