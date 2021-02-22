@@ -40,7 +40,7 @@ class Config:
             if Path.joinpath(cwd, "out").is_dir():
                 self.outdir = cwd / "out"
             else:
-                self.outdir = self.dir.parent / "out"
+                self.outdir = cwd
         else:
             if str(Path('.config/centralcli')) in str(self.base_dir):
                 self.dir = self.base_dir
