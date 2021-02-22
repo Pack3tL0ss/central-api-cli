@@ -854,6 +854,43 @@ def logs(
         )
 
 
+@app.command(short_help="Show config", hidden=True)
+def config(
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        callback=cli.debug_callback,
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        callback=cli.account_name_callback,
+    ),
+) -> None:
+
+    try:
+        from centralcli import config
+    except (ImportError, ModuleNotFoundError):
+        pkg_dir = Path(__file__).absolute().parent
+        if pkg_dir.name == "centralcli":
+            sys.path.insert(0, str(pkg_dir.parent))
+            from centralcli import config
+
+    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items()}
+    resp = Response(output=out)
+
+    cli.display_results(resp, tablefmt="yaml")
+
+
 @app.callback()
 def callback():
     """

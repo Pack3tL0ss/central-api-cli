@@ -184,36 +184,6 @@ class Utils:
 
         return data
 
-    @staticmethod
-    def read_yaml(filename):
-        """Read variables from local yaml file
-
-        :param filename: local yaml file, defaults to 'vars.yaml'
-        :type filename: str
-        :return: Required variables
-        :rtype: Python dictionary
-        """
-        filename = os.path.abspath(os.path.join(os.path.dirname(__file__), filename))
-        with open(filename, "r") as input_file:
-            data = yaml.load(input_file, Loader=yaml.FullLoader)
-        return data
-
-    @staticmethod
-    def get_host_short(host):
-        """Extract hostname from fqdn
-
-        Arguments:
-            host {str} -- hostname. If ip address is provided it's returned as is
-
-        Returns:
-            str -- host_short (lab1.example.com becomes lab1)
-        """
-        return (
-            host.split(".")[0]
-            if "." in host and not host.split(".")[0].isdigit()
-            else host
-        )
-
     # TODO depricated will remove.  Spinner moved to Response
     @staticmethod
     def spinner(spin_txt: str, function: callable, url: str = None, *args, name: str = None,
