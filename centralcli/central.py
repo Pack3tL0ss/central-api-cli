@@ -851,7 +851,7 @@ class CentralApi(Session):
             "model": model,
             "cluster_id": cluster_id,
             "stack_id": stack_id,
-            "status": status,
+            "status": None if not status else status.title(),
             "fields": fields,
             "show_resource_details": str(show_resource_details).lower(),
             "calculate_client_count": str(calculate_client_count).lower(),
