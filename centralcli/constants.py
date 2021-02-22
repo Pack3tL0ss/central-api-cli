@@ -120,6 +120,7 @@ class ArgToWhat:
         self.groups = self.group = "groups"
         self.sites = self.site = "sites"
         self.templates = self.template = "templates"
+        self.variables = self.variable = "variables"
         self.all = "all"
         self.devices = self.device = "devices"
         self.controllers = self.controller = "controllers"
@@ -153,6 +154,7 @@ class WhatToPretty:
         self.groups = self.group = "Groups"
         self.site = self.sites = "Sites"
         self.template = self.templates = "Templates"
+        self.variable = self.variables = "Variables"
         self.all = "All Device Types"
         self.device = self.devices = "Devices"
 
