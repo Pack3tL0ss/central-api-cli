@@ -318,9 +318,10 @@ class Utils:
                             data_start = idx + 2
             for idx, line in enumerate(out):
                 i = idx - data_start + 1
-                pad = len(str(len(out[data_start:])))
+                pad = len(str(len(out[data_start:])))  # non indexed lines
+                ipad = pad - len(str(i))               # indexed lines
                 _out += [
-                    f"  {' ':{pad}}{line}" if isborder(line) or idx < data_start else f"{i}.{' ':{pad}}{line}"
+                    f"  {' ':{pad}}{line}" if isborder(line) or idx < data_start else f"{i}.{' ' * ipad}{line}"
                 ]
             return "".join(_out)
 
