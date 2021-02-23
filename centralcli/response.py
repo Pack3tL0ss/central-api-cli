@@ -124,6 +124,10 @@ class Response:
         else:
             raise TypeError("output attribute is not a valid type for keys method.")
 
+    @property
+    def status_code(self) -> int:
+        return self.status
+
 
 def get_multiline_input(prompt: str = None, print_func: callable = print,
                         return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
