@@ -27,6 +27,11 @@ class BatchArgs(str, Enum):
     aps = "aps"
 
 
+class BatchDelArgs(str, Enum):
+    sites = "sites"
+    # aps = "aps"
+
+
 def do_lldp_rename(fstr: str) -> Response:
     _all_aps = cli.central.request(cli.central.get_devices, "aps", status="Up")
     _keys = ["name", "mac", "model"]
@@ -117,7 +122,7 @@ def add(
             if "address" in str(data.headers) and len(data.headers) > 3:  # address info
                 data = [
                     {
-                        "site_name": i.get("site_name", i.get("site", "ERROR")),
+                        "site_name": i.get("site_name", i.get("site", i.get("name"))),
                         "site_address": {k: v for k, v in i.items() if k not in ["site", "site_name"]}
                     }
                     for i in data.dict
@@ -125,13 +130,64 @@ def add(
             else:  # geoloc
                 data = [
                     {
-                        "site_name": i.get("site_name", i.get("site", "ERROR")),
+                        "site_name": i.get("site_name", i.get("site", i.get("name"))),
                         "geolocation": {k: v for k, v in i.items() if k not in ["site", "site_name"]}
                     }
                     for i in data.dict
                 ]
 
         resp = central.request(central.create_site, site_list=data)
+
+    cli.display_results(resp)
+
+
+@app.command()
+def delete(
+    what: BatchDelArgs = typer.Argument(...,),
+    import_file: Path = typer.Argument(..., exists=True, readable=True),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", callback=cli.debug_callback
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        callback=cli.account_name_callback,
+    ),
+) -> None:
+    """Perform batch Delete operations using import data from file."""
+    yes = yes_ if yes_ else yes
+    central = cli.central
+    data = config.get_file_data(import_file)
+    if hasattr(data, "dict"):  # csv
+        data = data.dict
+
+    resp = None
+    if what == "sites":
+        del_list = []
+        _msg_list = []
+        for i in data:
+            for key in ["site_id", "id"]:
+                if key in i:
+                    del_list += i[key]
+                    _msg_list += i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))
+                    break
+                elif i.get("site_name", i.get("site", i.get("name"))):
+                    site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
+                    _msg_list += [site.name]
+                    del_list += [site.id]
+                    break
+                else:
+                    typer.secho("Error getting site ids from import, unable to find required key", fg="red")
+                    raise typer.Exit(1)
+
+        typer.secho("\nSites to delete:", fg="bright_green")
+        typer.echo("\n".join(_msg_list))
+        if typer.confirm(f"\nDelete {len(del_list)} sites"):
+            resp = central.request(central.delete_site, del_list)
 
     cli.display_results(resp)
 

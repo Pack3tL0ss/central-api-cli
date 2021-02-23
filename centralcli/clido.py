@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import typer
 
+
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import utils, cli, cliupdate
@@ -77,6 +78,7 @@ def reboot(
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
+    # TODO add swarm cache and support for central.send_command_to_swarm
     reboot_msg = f"{typer.style('*reboot*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
     if yes or typer.confirm(typer.style(f"Please Confirm: {reboot_msg}", fg="cyan")):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'reboot')
@@ -191,6 +193,30 @@ def move(
         raise typer.Abort()
 
 
+@app.command(short_help="Rename a Group")
+def rename(
+    group: str = typer.Argument(..., ),
+    new_name: str = typer.Argument(..., ),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    yes = yes_ if yes_ else yes
+    group = cli.cache.get_group_identifier(group)
+    if yes or typer.confirm(typer.style(f"Please Confirm: rename group {group.name} -> {new_name}", fg="cyan")):
+        resp = cli.central.request(cli.central.update_group_name, group.name, new_name)
+        typer.secho(str(resp), fg="green" if resp else "red")
+    else:
+        raise typer.Abort()
+
+
 @app.command(short_help="kick a client (disconnect)",)
 def kick(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
@@ -245,7 +271,4 @@ def callback():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2 and sys.argv[1] == 'show':
-        sys.argv[2] = arg_to_what(sys.argv[2])
-
     app()

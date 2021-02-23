@@ -9,12 +9,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, cli, log, utils
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (clibatch, clicaas, clido, clishow, cli, log,
+        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cli, log,
                                 utils)
     else:
         print(pkg_dir.parts)
@@ -33,6 +33,7 @@ tty = utils.tty
 app = typer.Typer()
 app.add_typer(clishow.app, name="show")
 app.add_typer(clido.app, name="do")
+app.add_typer(clidel.app, name="delete")
 app.add_typer(clibatch.app, name="batch")
 app.add_typer(clicaas.app, name="caas", hidden=True)
 
@@ -96,8 +97,10 @@ def method_test(method: str = typer.Argument(...),
     cli.cache(refresh=update_cache)
     central = CentralApi(account)
     if not hasattr(central, method):
-        typer.secho(f"{method} does not exist", fg="red")
-        raise typer.Exit(1)
+        from boilerplate.allcalls import AllCalls as central
+        if not hasattr(central, method):
+            typer.secho(f"{method} does not exist", fg="red")
+            raise typer.Exit(1)
     args = [k for k in kwargs if "=" not in k]
     kwargs = [k.replace(" =", "=").replace("= ", "=").replace(",", " ").replace("  ", " ") for k in kwargs]
     kwargs = [k.split("=") for k in kwargs if "=" in k]

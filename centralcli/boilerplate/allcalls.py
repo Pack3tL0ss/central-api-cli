@@ -329,6 +329,7 @@ class AllCalls(CentralApi):
         Args:
             swarm_id (str): Swarm ID of device
             command (str): Command mentioned in the description that is to be executed
+                valid: 'reboot_swarm', 'erase_configuration'
 
         Returns:
             Response: CentralAPI Response object

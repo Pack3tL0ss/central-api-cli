@@ -88,7 +88,7 @@ class Response:
             r = f"  {self.output}"
         return f"{status_code}{r}"
 
-        return str(self.output) if self.output else self.error
+        # return str(self.output) if self.output else self.error
 
     def __setitem__(self, name: str, value: Any) -> None:
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
@@ -168,7 +168,7 @@ class Session:
         self,
         auth: ArubaCentralBase = None,
         aio_session: aiohttp.ClientSession = None,
-        silent: bool = False,
+        silent: bool = True,
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
         self.auth = auth
@@ -301,7 +301,7 @@ class Session:
         auth = self.auth
         token_data = utils.listify(token_data)
         token = None
-        spin = Halo("Attempting to Refresh Token")
+        spin = Halo("Attempting to Refresh Tokens")
         spin.start()
         for idx, t in enumerate(token_data):
             try:
@@ -319,8 +319,8 @@ class Session:
 
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
-            # spin.succeed()
-            spin.stop()
+            spin.succeed()
+            # spin.stop()
         else:
             spin.fail()
 
