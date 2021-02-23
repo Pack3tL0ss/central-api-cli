@@ -124,7 +124,7 @@ class CentralApi(Session):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
 
-    def request(self, func: callable, *args, **kwargs):
+    def request(self, func: callable, *args, **kwargs) -> Response:
         """non async to async wrapper for all API calls
 
         Args:
@@ -537,10 +537,6 @@ class CentralApi(Session):
             "cert_data": cert_data,
         }
         return await self.post(url, payload=payload)
-
-    async def del_certificates(self, name: str) -> Response:  # VERIFIED
-        url = "/configuration/v1/certificates"
-        return await self.delete(url, name)
 
     async def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
@@ -1541,6 +1537,199 @@ class CentralApi(Session):
                 )
 
         return await self.post(url, json_data=json_data)
+
+    async def update_group_name(self, group: str, new_group: str) -> Response:
+        """Update group name for the given group.
+
+        Args:
+            group (str): Group for which name need to be updated.
+            new_group (str): The new name of the group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/name"
+
+        json_data = {
+            'group': new_group
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    # TODO NotUsed Yet
+    async def get_dirty_diff(
+        self,
+        group: str,
+        offset: int = 0,
+        limit: int = 20
+    ) -> Response:
+        """Get dirty diff.
+
+        Args:
+            group (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of group config_mode records to be returned.
+                Max: 20, Defaults to 20.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dirty_diff/{group}"
+
+        params = {
+            'offset': offset,
+            'limit': limit if limit <= 20 else 20
+        }
+
+        return await self.get(url, params=params)
+
+    # TODO NotUsed Yet
+    async def get_groups_properties(self, groups: List[str]) -> Response:
+        """Get properties set for groups.
+
+        Args:
+            groups (List[str]): Group list to fetch properties.
+                Maximum 20 comma separated group names allowed.
+
+        Returns:
+            Response: CentralAPI Response object
+        [
+            {
+                "data": [
+                    {
+                        "group": "Branch1",
+                        "properties": {
+                            "AOSVersion": "AOS_10X",
+                            "MonitorOnlySwitch": false
+                        }
+                    }
+                ]
+            }
+        ]
+        """
+        url = "/configuration/v1/groups/properties"
+
+        params = {
+            'groups': groups
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_vc_firmware(
+        self,
+        swarm_id: str = None,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Firmware Details of Swarms.
+
+        Args:
+            swarm_id: (str, optional): Providing swarm_id results in details for that swarm.
+            group (str, optional): Group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Max is 1000 Defaults to 100.
+
+            Providing swarm_id is effectively a filter, it provides no additional detail.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/swarms"
+        if swarm_id:
+            url = f"{url}/{swarm_id}"
+            params = {}
+        else:
+            params = {
+                'group': group,
+                'offset': offset,
+                'limit': limit
+            }
+
+        return await self.get(url, params=params)
+
+    async def send_command_to_swarm(
+        self,
+        swarm_id: str,
+        command: Literal[
+            "reboot_swarm",
+            "erase_configuration",
+        ]
+    ) -> Response:
+        """Generic commands for swarm.
+
+        Args:
+            swarm_id (str): Swarm ID of device
+            command (str): Command mentioned in the description that is to be executed
+                valid: 'reboot_swarm', 'erase_configuration'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/device_management/v1/swarm/{swarm_id}/action/{command}"
+
+        return await self.post(url)
+
+    async def send_speed_test(
+        self,
+        serial: str,
+        host: str = "ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org",
+        options: str = None
+    ) -> Response:
+        """Speed Test.
+
+        Args:
+            serial (str): Serial of device
+            host (str, Optional): Speed-Test server IP address, Defaults to server in Central Indiana.
+            options (str): Formatted string of optional arguments
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/device_management/v1/device/{serial}/action/speedtest"
+
+        json_data = {
+            'host': host,
+            'options': options or ""
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def delete_certificate(self, certificate: str) -> Response:
+        """Delete existing certificate.
+
+        Args:
+            certificate (str): Name of the certificate to delete.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/certificates/{certificate}"
+
+        return await self.delete(url)
+
+    async def delete_site(self, site_id: Union[int, List[int]]) -> Response:
+        """Delete Site.
+
+        Args:
+            site_id (int|List[int]): Either the site_id or a list of site_ids to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        b_url = "/central/v2/sites"
+        if isinstance(site_id, list):
+            return await self._batch_request(
+                [
+                    BatchRequest(self.delete, (f"{b_url}/{_id}",))
+                    for _id in site_id
+                ]
+            )
+        else:
+            url = f"{b_url}/{site_id}"
+            return await self.delete(url)
 
     async def caasapi(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
