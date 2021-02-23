@@ -9,6 +9,7 @@ STRIP_KEYS = [
     "data",
     "gateways",
     "switches",
+    "swarms"
     "aps",
     "devices",
     "mcs",
@@ -71,6 +72,12 @@ out_format_dict = {"do_json": "json", "do_yaml": "yaml", "do_csv": "csv", "do_ri
 class BlinkArgs(str, Enum):
     on = "on"
     off = "off"
+
+
+class DeleteArgs(str, Enum):
+    certificate = "certificate"
+    cert = "cert"
+    site = "site"
 
 
 class BounceArgs(str, Enum):
