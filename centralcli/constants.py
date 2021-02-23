@@ -9,8 +9,8 @@ STRIP_KEYS = [
     "data",
     "gateways",
     "switches",
-    "swarms"
     "aps",
+    "swarms"
     "devices",
     "mcs",
     "group",
