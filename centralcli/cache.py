@@ -238,7 +238,7 @@ class Cache:
             fields = ("name", "serial", "mac", "type")
         out = utils.output(
             [{k: d[k] for k in d if k in fields} for d in match],
-            title="Ambiguos identifier. Select desired device."
+            title=f"Ambiguos identifier. Select desired {query_type}."
         )
         menu = out.menu(data_len=len(match))
 
