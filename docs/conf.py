@@ -28,8 +28,8 @@ author = 'Wade Wells ~ Pack3tL0ss'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-	'sphinx_rtd_theme', 'sphinx.ext.autodoc', 'sphinx.ext.coverage',
-	'sphinx.ext.autosummary', 'recommonmark'
+    'sphinx_rtd_theme', 'sphinx.ext.autodoc', 'sphinx.ext.coverage',
+    'sphinx.ext.autosummary', 'recommonmark'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
