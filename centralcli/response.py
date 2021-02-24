@@ -124,6 +124,10 @@ class Response:
         else:
             raise TypeError("output attribute is not a valid type for keys method.")
 
+    @property
+    def status_code(self) -> int:
+        return self.status
+
 
 def get_multiline_input(prompt: str = None, print_func: callable = print,
                         return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
@@ -176,6 +180,7 @@ class Session:
         self.headers = DEFAULT_HEADERS
         self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
         self.ssl = auth.ssl_verify
+        self.req_cnt = 1
 
     @property
     def aio_session(self):
@@ -188,10 +193,14 @@ class Session:
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
+
         resp, spin = None, None
         _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
-        spin_txt_run = "Collecting Data..."
-        spin_txt_fail = f"Collecting Data{_data_msg}"
+        run_sfx = '' if self.req_cnt == 1 else f'Request: {self.req_cnt}'
+        spin_word = "Collecting" if method == "GET" else "Sending"
+        spin_txt_run = f"{spin_word} Data...{run_sfx}"
+        spin_txt_fail = f"{spin_word} Data{_data_msg}"
+        self.req_cnt += 1
         for _ in range(0, 2):
             if _ > 0:
                 spin_txt_run += f" retry {_}"

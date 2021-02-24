@@ -170,12 +170,18 @@ def delete(
         del_list = []
         _msg_list = []
         for i in data:
+            if isinstance(i, str) and isinstance(data[i], dict):
+                i = {"name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
+            found = False
             for key in ["site_id", "id"]:
                 if key in i:
-                    del_list += i[key]
-                    _msg_list += i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))
+                    del_list += [i[key]]
+                    _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
+                    found = True
                     break
-                elif i.get("site_name", i.get("site", i.get("name"))):
+
+            if not found:
+                if i.get("site_name", i.get("site", i.get("name"))):
                     site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
                     _msg_list += [site.name]
                     del_list += [site.id]
@@ -188,8 +194,11 @@ def delete(
         typer.echo("\n".join(_msg_list))
         if typer.confirm(f"\nDelete {len(del_list)} sites"):
             resp = central.request(central.delete_site, del_list)
+        else:
+            raise typer.Abort()
 
     cli.display_results(resp)
+    cli.cache.check_fresh(site_db=True)
 
 
 @app.command()

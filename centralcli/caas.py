@@ -1,3 +1,4 @@
+from pathlib import Path
 import typer
 import csv
 from centralcli import config
@@ -11,23 +12,25 @@ def eval_caas_response(resp) -> None:
         resp = resp.output
 
     lines = "-" * 22
+
     typer.echo("")
     typer.echo(lines)
     if resp.get("_global_result", {}).get("status", '') == 0:
-        typer.echo("Global Result: Success")
+        typer.echo(f"Global Result: {typer.style('Success', fg='bright_green')}")
     else:
-        typer.echo("Global Result: Failure")
+        typer.echo(f"Global Result: {typer.style('Failure', fg='red')}")
     typer.echo(lines)
+
     _bypass = None
     if resp.get("cli_cmds_result"):
-        typer.echo("\n -- Command Results --")
+        typer.secho("\n -- Command Results --", fg="cyan")
         for cmd_resp in resp["cli_cmds_result"]:
             for _c, _r in cmd_resp.items():
                 _r_code = _r.get("status")
                 if _r_code == 0:
-                    _r_pretty = "OK"
+                    _r_pretty = typer.style("OK", fg="bright_green")
                 else:
-                    _r_pretty = f"ERROR {_r_code}"
+                    _r_pretty = typer.style(f"ERROR {_r_code}", fg="red")
                 _r_txt = _r.get("status_str")
                 typer.echo(f" [{_bypass or _r_pretty}] {_c}")
                 if not _r_code == 0:
@@ -42,46 +45,24 @@ def eval_caas_response(resp) -> None:
         typer.echo("")
 
 
-# def caasapi(self, group_dev: str, cli_cmds: list = None):
-#     if ":" in group_dev and len(group_dev) == 17:
-#         key = "node_name"
-#     else:
-#         key = "group_name"
-
-#     url = "/caasapi/v1/exec/cmd"
-
-#     cfg_dict = self.central.central_info
-#     params = {
-#         "cid": cfg_dict["customer_id"],
-#         key: group_dev
-#     }
-
-#     payload = {"cli_cmds": cli_cmds or []}
-
-#     return self.post(url, params=params, payload=payload)
-
-
 class BuildCLI:
-    def __init__(self, data: dict = None, session=None, filename: str = None):
-        filename = filename or config.bulk_edit_file
+    """Build equivelent cli commands for caas API from bulk-edit.csv import file"""
+    def __init__(self, central=None, data: dict = None, ) -> None:
+        self.central = central
 
-        self.session = session
+        # Updated in build_cmds
         self.dev_info = None
-        if data:
-            self.data = data
-        else:
-            self.data = self.get_bulkedit_data(filename)
+        self.data = data
         self.cmds = []
-        self.build_cmds()
 
     @staticmethod
-    def get_bulkedit_data(filename: str):
+    def get_bulkedit_data(filename: Path):
         cli_data = {}
         _common = {}
         _vlans = []
         _mac = "error"
         _exclude_start = ''
-        with open(filename) as csv_file:
+        with filename.open() as csv_file:
             csv_reader = csv.reader([line for line in csv_file.readlines() if not line.startswith('#')])
 
             csv_rows = [r for r in csv_reader]
@@ -94,8 +75,15 @@ class BuildCLI:
                     if k == "mac_address":
                         _mac = v
                         cli_data[v] = {}
-                    elif k in ["group", "model", "hostname", "bg_peer_ip", "controller_vlan",
-                               "zs_site_to_site_map_name", "source_fqdn"]:
+                    elif k in [
+                        "group",
+                        "model",
+                        "hostname",
+                        "bg_peer_ip",
+                        "controller_vlan",
+                        "zs_site_to_site_map_name",
+                        "source_fqdn"
+                    ]:
                         _common[k] = v
                     elif k.startswith(("vlan", "dhcp", "domain", "dns", "vrrp", "access_port", "ppoe")):
                         if k == "vlan_id":
@@ -126,27 +114,36 @@ class BuildCLI:
 
         return cli_data
 
-    def build_cmds(self):
+    def build_cmds(self, data: dict = None, file: Path = config.bulk_edit_file) -> list:
+        if data:
+            self.data = data
+        else:
+            self.data = self.get_bulkedit_data(file)
+
         for dev in self.data:
             common = self.data[dev]["_common"]
             vlans = self.data[dev]["vlans"]
-            _pretty_name = common.get('hostname', dev)
-            print(f"Verifying {_pretty_name} is in Group {common['group']}...", end='')
+            _pretty_name = typer.style(common.get('hostname', dev), fg="bright_green")
+            # print(f"Verifying {_pretty_name} is in Group {common['group']}...", end='')
             # group_devs = self.session.get_gateways_by_group(self.data[dev]["_common"]["group"])
-            gateways = self.session.get_dev_by_type("gateway")
-            self.dev_info = [_dev for _dev in gateways if _dev.get('macaddr', '').lower() == dev.lower()]
+            resp = self.central.request(self.central.get_devices, "gateways")
+            gateways = resp.output
+            self.dev_info = [_dev for _dev in gateways if _dev.get('mac', '').lower() == dev.lower()]
+
+            # if dev already exists move to group defined in bulk-edit
             if self.dev_info:
                 self.dev_info = self.dev_info[0]
-                if common["group"] == self.session.get_group_for_dev_by_serial(self.dev_info["serial"]):
-                    print(' Confirmed', end='\n')
-                else:
-                    print(" it is *Not*", end="\n")
-                    print(f"Moving {_pretty_name} to Group {common['group']}")
-                    res = self.session.move_dev_to_group(common["group"], self.dev_info["serial"])
+                if common["group"] != self.dev_info["group"]:
+                    # print(" it is *Not*", end="\n")
+                    typer.echo(f"Moving {_pretty_name} to Group {common['group']}")
+                    res = self.central.move_dev_to_group(common["group"], self.dev_info["serial"])
                     if not res:
-                        print(f"Error Returned Moving {common['hostname']} to Group {common['group']}")
+                        typer.secho(
+                            f"Error Returned Moving {common['hostname']} to Group {common['group']}", fg="red"
+                        )
+                        raise typer.Exit(1)
 
-            print(f"Building cmds for {_pretty_name}")
+            typer.echo(f"Building cmds for {_pretty_name}")
             if common.get("hostname"):
                 self.cmds += [f"hostname {common['hostname']}", "!"]
 
@@ -213,3 +210,32 @@ class BuildCLI:
 
                 if v.get("zs_site_to_site_map_name") or v.get("source_fqdn"):
                     print("Zscaler Configuration Not Supported by Script Yet")
+
+            return self.cmds
+
+
+class CaasAPI(BuildCLI):
+    def __init__(self, central=None, data: dict = None, file: Path = None) -> None:
+        self.data = data
+        self.central = central
+        self.file = file
+        self.dev_info = None
+        self.cmds = []
+        super().__init__(central=central, data=data)
+
+    async def send_commands(self, group_dev: str, cli_cmds: list = None):
+        if ":" in group_dev and len(group_dev) == 17:
+            key = "node_name"
+        else:
+            key = "group_name"
+
+        url = "/caasapi/v1/exec/cmd"
+
+        if not config.customer_id:
+            typer.secho(f"customer_id attribute not found in {config.file}")
+            raise typer.Exit(1)
+        else:
+            params = {"cid": config.customer_id, key: group_dev}
+            json_data = {"cli_cmds": cli_cmds or []}
+
+            return await self.central.post(url, params=params, json_data=json_data)

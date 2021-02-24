@@ -1987,51 +1987,6 @@ class AllCalls(CentralApi):
 
         return await self.patch(url, json_data=json_data)
 
-    async def configuration_update_wlan(self, group_name_or_guid: str, wlan_name: str, essid: str,
-                                        type: str, wpa_passphrase: str,
-                                        wpa_passphrase_changed: bool, is_locked: bool,
-                                        captive_profile_name: str, bandwidth_limit_up: str,
-                                        bandwidth_limit_down: str,
-                                        bandwidth_limit_peruser_up: str,
-                                        bandwidth_limit_peruser_down: str, access_rules: list) -> Response:
-        """(Deprecated) Update an existing WLAN.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
-            essid (str): essid
-            type (str): type  Valid Values: employee, guest
-            wpa_passphrase (str): wpa_passphrase
-            wpa_passphrase_changed (bool): wpa_passphrase_changed
-            is_locked (bool): is_locked
-            captive_profile_name (str): captive_profile_name
-            bandwidth_limit_up (str): bandwidth_limit_up
-            bandwidth_limit_down (str): bandwidth_limit_down
-            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
-            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
-            access_rules (list): access_rules
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/wlan/{group_name_or_guid}/{wlan_name}"
-
-        json_data = {
-            'essid': essid,
-            'type': type,
-            'wpa_passphrase': wpa_passphrase,
-            'wpa_passphrase_changed': wpa_passphrase_changed,
-            'is_locked': is_locked,
-            'captive_profile_name': captive_profile_name,
-            'bandwidth_limit_up': bandwidth_limit_up,
-            'bandwidth_limit_down': bandwidth_limit_down,
-            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
-            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
-            'access_rules': access_rules
-        }
-
-        return await self.put(url, json_data=json_data)
 
     async def configuration_delete_wlan(self, group_name_or_guid: str, wlan_name: str) -> Response:
         """Delete an existing WLAN.

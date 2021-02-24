@@ -18,7 +18,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (BlinkArgs, BounceArgs, KickArgs, arg_to_what) # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, KickArgs, RenameArgs, arg_to_what) # noqa
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -195,6 +195,7 @@ def move(
 
 @app.command(short_help="Rename a Group")
 def rename(
+    what: RenameArgs = typer.Argument(...,),
     group: str = typer.Argument(..., ),
     new_name: str = typer.Argument(..., ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),

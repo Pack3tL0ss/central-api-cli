@@ -6,9 +6,10 @@ Uses caas api to send commands to devices
 You can run the commands ad-hoc, or for more complex operations
 
 you can store them in a file and import.  The file takes a similar format
-as the command.  So
+as the command.  Default import file <config dir>/stored-tasks.yaml
 
-cencli add-vlan <device> <pvid> <ip> <mask> [name] [description] ...
+EXAMPLES:
+    cencli add-vlan <device> <pvid> <ip> <mask> [name] [description] ...
 
 can be stored in yaml as
 
@@ -22,51 +23,81 @@ addvlan10:
     options:
       name: myname
       description: mydescription
-    cmds:
-        - These are ad-hoc CLI commands
-        - I can macro anything I want here they are sent to the dev
 
 Then run via
-  cencli caas-batch [import file] add-vlan addvlan10
+  cencli batch add-vlan addvlan10  [--file <alternate import file>]
 
 """
 from pathlib import Path
 import sys
+from caas import CaasAPI
 import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, caas
+    from centralcli import cli, config, utils, caas
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, caas
+        from centralcli import cli, config, utils, caas
     else:
         print(pkg_dir.parts)
         raise e
 
-session = None
 tty = utils.tty
 app = typer.Typer()
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 
 
-@app.command()
-def bulk_edit(input_file: str = typer.Argument(None)):
-    cli = caas.BuildCLI(session=session, filename=input_file)
+@app.command(short_help="Import Apply settings from bulk-edit.csv")
+def bulk_edit(
+    input_file: Path = typer.Argument(config.bulk_edit_file,),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    caasapi = CaasAPI(central=cli.central)
+    cmds = caasapi.build_cmds(file=input_file)
     # TODO log cli
-    if cli.cmds:
-        for dev in cli.data:
-            group_dev = f"{cli.data[dev]['_common'].get('group')}/{dev}"
-            resp = session.caasapi(group_dev, cli.cmds)
-            caas.eval_caas_response(resp)
+    if cmds:
+        typer.secho("Commands:", fg="bright_green")
+        typer.echo("\n".join(cmds))
+        if typer.confirm("Send Commands"):
+            for dev in caasapi.data:
+                group_dev = f"{caasapi.data[dev]['_common'].get('group')}/{dev}"
+                resp = cli.central.request(caasapi.send_commands, group_dev, cmds)
+                caas.eval_caas_response(resp)
+        else:
+            raise typer.Abort()
 
 
 @app.command()
-def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(...), ip: str = typer.Argument(None),
-             mask: str = typer.Argument("255.255.255.0"), name: str = None, description: str = None,
-             interface: str = None, vrid: str = None, vrrp_ip: str = None, vrrp_pri: int = None):
+def add_vlan(
+    group_dev: str = typer.Argument(...),
+    pvid: str = typer.Argument(...),
+    ip: str = typer.Argument(None),
+    mask: str = typer.Argument("255.255.255.0"),
+    name: str = None, description: str = None,
+    interface: str = None,
+    vrid: str = None,
+    vrrp_ip: str = None,
+    vrrp_pri: int = None,
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    caasapi = CaasAPI(central=cli.central)
     cmds = []
     cmds += [f"vlan {pvid}", "!"]
     if name:
@@ -80,40 +111,90 @@ def add_vlan(group_dev: str = typer.Argument(...), pvid: str = typer.Argument(..
             cmds += [f"priority {vrrp_pri}"]
         cmds += ["no shutdown", "!"]
 
-    # TODO move command gen to BuildCLI
-    caas.eval_caas_response(session.caasapi(group_dev, cmds))
+    resp = cli.central.request(caasapi.send_commands, group_dev, cmds)
+    caas.eval_caas_response(resp)
 
 
-@app.command()
-def import_vlan(import_file: str = typer.Argument(config.stored_tasks_file),
-                key: str = None):
+@app.command(short_help="import VLAN from Stored Tasks File")
+def import_vlan(
+    key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
+    import_file: str = typer.Argument(None, exists=True),
+    file: Path = typer.Option(None, exists=True,),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    """Add VLAN from stored_tasks file.
+
+    This is the same as `cencli batch add-vlan key`, but command: add_vlan
+    is implied only need to provide key
+
+    """
+    import_file = file or import_file or config.stored_tasks_file
     if import_file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
 
-    data = utils.read_yaml(import_file)
+    data = config.get_file_data(import_file)
     if key:
-        data = data.get(key)
+        if hasattr(data, "dict"):  # csv
+            data = data.dict  # TODO not tested in csv form
+            data = {k: data[k] for k in data if data.get("key", "") == key}
+        else:
+            data = data.get(key)
 
     if data:
         args = data.get("arguments", [])
         kwargs = data.get("options", {})
-        add_vlan(*args, **kwargs)
+        _msg = (
+            f"\n{typer.style('add-vlan', fg='bright_green')}"
+            f'\n{typer.style("  settings:", fg="cyan")}'
+            f"\n    args: {', '.join(args)}\n    kwargs: {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
+        )
+        typer.echo(f"{_msg}")
+        confirm_msg = typer.style("Proceed?", fg="bright_green")
+        if typer.confirm(confirm_msg):
+            add_vlan(*args, **kwargs)
+        else:
+            raise typer.Abort()
+    else:
+        typer.secho(f"{key} Not found in {import_file}")
+        raise typer.Exit(1)
 
 
-@app.command()
-def caas_batch(import_file: Path = typer.Argument(config.stored_tasks_file),
-               command: str = None, key: str = None):
-
-    if import_file == config.stored_tasks_file and not key:
+@app.command("batch", short_help="Run Supported caas commands providing parameters via stored-tasks file")
+def caas_batch(
+    command: str = typer.Argument(None,),
+    key: str = typer.Argument(None,),
+    file: Path = typer.Option(config.stored_tasks_file, exists=True,),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    """cencli caas batch add-vlan add-vlan-99"""
+    caasapi = CaasAPI(central=cli.central)
+    if file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
-        raise typer.Exit()
+        raise typer.Exit(1)
 
-    data = utils.read_yaml(import_file)
-    if key:
+    data = config.get_file_data(file)
+    if hasattr(data, "dict"):  # csv
+        data = data.dict
+        data = {k: data[k] for k in data if data.get("key", "") == key}
+    else:
         data = data.get(key)
 
     if not data:
-        _msg = typer.style(f"{key} not found in {import_file}.  No Data to Process", fg=typer.colors.RED, bold=True)
+        _msg = typer.style(f"{key} not found in {file}.  No Data to Process", fg="red")
         typer.echo(_msg)
     else:
         args = data.get("arguments", [])
@@ -125,14 +206,26 @@ def caas_batch(import_file: Path = typer.Argument(config.stored_tasks_file),
             raise typer.Exit(1)
 
         if command:
-            try:
-                exec(f"fn = {command}")
-                fn(*args, **kwargs)  # type: ignore # NoQA
-            except AttributeError:
+            command = command.replace('-', '_')
+            _msg1 = typer.style(
+                f"Proceed with {command}:",
+                fg="cyan"
+            )
+            _msg2 = f"{', '.join(args)} {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
+            confirm_msg = typer.style(f"{_msg1} {_msg2}?", fg="bright_green")
+
+            if command in globals():
+                fn = globals()[command]
+                if typer.confirm(confirm_msg):
+                    fn(*args, **kwargs)  # type: ignore # NoQA
+                else:
+                    raise typer.Abort()
+            else:
                 typer.echo(f"{command} doesn't appear to be valid")
+
         elif cmds:
             kwargs = {**kwargs, **{"cli_cmds": cmds}}
-            resp = utils.spinner(SPIN_TXT_CMDS, session.caasapi, *args, **kwargs)
+            resp = cli.central.request(caasapi.send_commands, *args, **kwargs)
             caas.eval_caas_response(resp)
 
 
@@ -143,8 +236,6 @@ def callback():
     """
     pass
 
-
-log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 
 if __name__ == "__main__":
     app()
