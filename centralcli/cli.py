@@ -9,12 +9,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cli, log, utils
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cli, log,
+        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cli, log,
                                 utils)
     else:
         print(pkg_dir.parts)
@@ -32,9 +32,10 @@ tty = utils.tty
 
 app = typer.Typer()
 app.add_typer(clishow.app, name="show")
-app.add_typer(clido.app, name="do")
+app.add_typer(clido.app, name="do", )
 app.add_typer(clidel.app, name="delete")
 app.add_typer(cliadd.app, name="add")
+app.add_typer(cliupdate.app, name="update")
 app.add_typer(clibatch.app, name="batch")
 app.add_typer(clicaas.app, name="caas", hidden=True)
 
@@ -141,9 +142,15 @@ if __name__ == "__main__":
     # show switches / show switch ...
     if len(sys.argv) > 2 and sys.argv[1] == 'show':
         sys.argv[2] = arg_to_what(sys.argv[2])
-        # allow --tab --tabl for --table option
-        for idx, a in enumerate(sys.argv):
-            if len(a) <= 7 and "--tab" in a:
-                sys.argv[idx] = "--table"
+    elif len(sys.argv) > 2 and sys.argv[1] == 'update':
+        _cmds = {
+            "templates": "template",
+            "variable": "variables"
+        }
+        sys.argv[2] = _cmds.get(sys.argv[2], sys.argv[2])
+    # allow --tab --tabl for --table option
+    for idx, a in enumerate(sys.argv):
+        if len(a) <= 7 and a.startswith("--tab"):
+            sys.argv[idx] = "--table"
 
     app()
