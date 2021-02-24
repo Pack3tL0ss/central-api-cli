@@ -62,6 +62,7 @@ class Config:
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
         self.sticky_account_file = self.cache_dir / "last_account"
+        self.sanatize_file = self.dir / "redact.yaml"
 
         self.data = self.get_file_data(self.file) or {}
         self.debug = self.data.get("debug", False)
