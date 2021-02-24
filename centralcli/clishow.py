@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs  # noqa
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, what_to_pretty  # noqa
 
 app = typer.Typer()
 
@@ -88,7 +88,14 @@ def show_devices(
 
     # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.sort_result_keys)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=what_to_pretty(dev_type),
+        pager=not no_pager,
+        outfile=outfile,
+        cleaner=cleaner.sort_result_keys
+    )
 
 
 @app.command(short_help="Show APs/details")
@@ -237,7 +244,14 @@ def vlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, cleaner=cleaner.get_vlans)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{obj.name} Vlans",
+        pager=not no_pager,
+        outfile=outfile,
+        cleaner=cleaner.get_vlans
+    )
 
 
 @app.command(short_help="Show All Devices")
@@ -569,7 +583,8 @@ def templates(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    title = "All Templates" if not name else f"{name.name.title()} Template"
+    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show Variables for all or specific device")
@@ -675,7 +690,7 @@ def certs(
     resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, title="Certificates", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show WLAN(SSID)/details")
@@ -723,7 +738,7 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, title="WLANs (SSIDs)", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show clients/details")
@@ -771,6 +786,7 @@ def clients(
     cli.display_results(
         resp,
         tablefmt=tablefmt,
+        title="Clients",
         pager=not no_pager,
         outfile=outfile,
         cleaner=cleaner.get_clients,
@@ -846,6 +862,7 @@ def logs(
         cli.display_results(
             resp,
             tablefmt=tablefmt,
+            title="Audit Logs",
             pager=not no_pager,
             outfile=outfile,
             # sort_by=sort_by,
