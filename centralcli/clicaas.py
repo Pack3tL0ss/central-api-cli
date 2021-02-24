@@ -30,7 +30,6 @@ Then run via
 """
 from pathlib import Path
 import sys
-from caas import CaasAPI
 import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -62,7 +61,7 @@ def bulk_edit(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    caasapi = CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI(central=cli.central)
     cmds = caasapi.build_cmds(file=input_file)
     # TODO log cli
     if cmds:
@@ -97,7 +96,7 @@ def add_vlan(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    caasapi = CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI(central=cli.central)
     cmds = []
     cmds += [f"vlan {pvid}", "!"]
     if name:
@@ -181,7 +180,7 @@ def caas_batch(
                                 callback=cli.account_name_callback),
 ) -> None:
     """cencli caas batch add-vlan add-vlan-99"""
-    caasapi = CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI(central=cli.central)
     if file == config.stored_tasks_file and not key:
         typer.echo("key is required when using the default import file")
         raise typer.Exit(1)
