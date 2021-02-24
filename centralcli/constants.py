@@ -218,6 +218,11 @@ class StatusOptions(str, Enum):
     DOWN = "DOWN"
 
 
+class LogAppArgs(str, Enum):
+    account_setting = "account_setting"
+    nms = "nms"
+
+
 MESSAGES = {
     "SPIN_TXT_AUTH": "Initializing Arunba Central Base...",
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
