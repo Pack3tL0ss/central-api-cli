@@ -9,12 +9,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cli, log, utils
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cli, log,
+        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cli, log,
                                 utils)
     else:
         print(pkg_dir.parts)
@@ -34,6 +34,7 @@ app = typer.Typer()
 app.add_typer(clishow.app, name="show")
 app.add_typer(clido.app, name="do")
 app.add_typer(clidel.app, name="delete")
+app.add_typer(cliadd.app, name="add")
 app.add_typer(clibatch.app, name="batch")
 app.add_typer(clicaas.app, name="caas", hidden=True)
 
