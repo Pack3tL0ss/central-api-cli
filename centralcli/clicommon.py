@@ -198,7 +198,7 @@ class CLICommon:
             if cleaner:
                 data = cleaner(data, **cleaner_kwargs)
 
-            outdata = utils.output(data, tablefmt, title=title, sanitize=config.sanitize)
+            outdata = utils.output(data, tablefmt, title=title, config=config)
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             # -- // Output to file \\ --

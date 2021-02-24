@@ -86,6 +86,9 @@ class Response:
         # indent single line output
         if isinstance(self.output, str) and "\n" not in self.output:
             r = f"  {self.output}"
+        if config.sanitize and config.sanatize_file.is_file():
+            r = utils.Output(config=config).sanitize_strings(r)
+
         return f"{status_code}{r}"
 
         # return str(self.output) if self.output else self.error

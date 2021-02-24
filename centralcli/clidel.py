@@ -68,6 +68,30 @@ def site(
         typer.secho(str(resp), fg="green" if resp else "red")
 
 
+@app.command(short_help="Delete a WLAN (SSID)")
+def wlan(
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]"),  # metavar=IdenMetaVars.site),
+    name: str = typer.Argument(..., metavar="[WLAN NAME]"),  # metavar=IdenMetaVars.site),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    group = cli.cache.get_group_identifier(group)
+    confirm_1 = typer.style("Please Confirm:", fg="cyan")
+    confirm_2 = typer.style("Delete", fg="bright_red")
+    confirm_3 = typer.style(f"Group {group.name}, WLAN {name}", fg="cyan")
+    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}"):
+        resp = cli.central.request(cli.central.delete_wlan, group.name, name)
+        typer.secho(str(resp), fg="green" if resp else "red")
+
+
 @app.callback()
 def callback():
     """
