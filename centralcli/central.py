@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+from enum import Enum
 import json
 import time
 from asyncio.proactor_events import _ProactorBasePipeTransport
@@ -34,6 +35,28 @@ _ProactorBasePipeTransport.__del__ = silence_event_loop_closed(_ProactorBasePipe
 
 
 DEFAULT_TOKEN_STORE = {"type": "local", "path": f"{config.dir.joinpath('.cache')}"}
+DEFAULT_ACCESS_RULES = {
+    "ALLOW_ALL": [
+        {
+            "action": "allow",
+            "eport": "any",
+            "ipaddr": "any",
+            "match": "match",
+            "netmask": "any",
+            "protocol": "any",
+            "service_name": "",
+            "service_type": "network",
+            "sport": "any",
+            "throttle_downstream": "",
+            "throttle_upstream": ""
+        }
+    ],
+}
+
+
+class WlanType(str, Enum):
+    employee = "employee"
+    guest = "guest"
 
 
 def get_conn_from_file(account_name, logger: MyLogger = log):
@@ -1731,20 +1754,212 @@ class CentralApi(Session):
             url = f"{b_url}/{site_id}"
             return await self.delete(url)
 
-    async def caasapi(self, group_dev: str, cli_cmds: list = None):
-        if ":" in group_dev and len(group_dev) == 17:
-            key = "node_name"
-        else:
-            key = "group_name"
+    async def delete_wlan(self, group: str, wlan_name: str) -> Response:
+        """Delete an existing WLAN.
 
-        url = "/caasapi/v1/exec/cmd"
+        Args:
+            group (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            wlan_name (str): Name of WLAN to be deleted.
+                Example:wlan_1.
 
-        cfg_dict = self.auth.central_info
-        params = {"cid": cfg_dict["customer_id"], key: group_dev}
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group}/{wlan_name}"
 
-        payload = {"cli_cmds": cli_cmds or []}
+        return await self.delete(url)
 
-        return self.post(url, params=params, payload=payload)
+    async def get_wlan(self, group: str, wlan_name: str) -> Response:
+        """Get the information of an existing WLAN.
+
+        Args:
+            group (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            wlan_name (str): Name of WLAN selected.
+                Example:wlan_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group}/{wlan_name}"
+
+        return await self.get(url)
+
+    async def create_wlan(
+        self,
+        group: str,
+        wlan_name: str,
+        wpa_passphrase: str,
+        # wpa_passphrase_changed: bool = True,
+        vlan: str = "",
+        type: WlanType = "employee",
+        essid: str = None,
+        zone: str = "",
+        captive_profile_name: str = "",
+        bandwidth_limit_up: str = "",
+        bandwidth_limit_down: str = "",
+        bandwidth_limit_peruser_up: str = "",
+        bandwidth_limit_peruser_down: str = "",
+        access_rules: list = DEFAULT_ACCESS_RULES["ALLOW_ALL"],
+        is_locked: bool = False,
+        hide_ssid: bool = False,
+    ) -> Response:
+        """Create a new WLAN (SSID).
+
+        Args:
+            group (str): Aruba Central Group name or swarm guid
+            wlan_name (str): Name of the WLAN/Network
+            wpa_passphrase (str): WPA passphrase
+            vlan (str): Client VLAN name or id. Defaults to "" (Native AP VLAN).
+            type (WlanType, optional): Valid: ['employee', 'guest']. Defaults to "employee".
+            essid (str, optional): SSID. Defaults to None (essid = wlan_name).
+            zone (str, optional): AP Zone SSID will broadcast on. Defaults to "" (Broadcast on all APs).
+            captive_profile_name (str, optional): Captive Portal Profile. Defaults to "" (No CP Profile).
+            bandwidth_limit_up (str, optional): [description]. Defaults to "" (No BW Limit Up).
+            bandwidth_limit_down (str, optional): [description]. Defaults to "" (No BW Limit Down).
+            bandwidth_limit_peruser_up (str, optional): [description]. Defaults to "" (No per user BW Limit Up).
+            bandwidth_limit_peruser_down (str, optional): [description]. Defaults to "" (No per user BW Limit Down).
+            access_rules (list, optional): [description]. Default: unrestricted.
+            is_locked (bool, optional): [description]. Defaults to False.
+            hide_ssid (bool, optional): [description]. Defaults to False.
+            wpa_passphrase_changed (bool, optional): indicates passphrase has changed. Defaults to True.
+
+        Returns:
+            Response: [description]
+        """
+        url = f"/configuration/v2/wlan/{group}/{wlan_name}"
+
+        json_data = {
+            "wlan": {
+                'essid': essid or wlan_name,
+                'type': type,
+                'hide_ssid': hide_ssid,
+                'vlan': vlan,
+                'zone': zone,
+                'wpa_passphrase': wpa_passphrase,
+                # 'wpa_passphrase_changed': wpa_passphrase_changed,
+                'is_locked': is_locked,
+                'captive_profile_name': captive_profile_name,
+                'bandwidth_limit_up': bandwidth_limit_up,
+                'bandwidth_limit_down': bandwidth_limit_down,
+                'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+                'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+                'access_rules': access_rules
+            }
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_clean_up_and_update_wlan_v2(self, group_name_or_guid: str,
+                                                        wlan_name: str, essid: str, type: str,
+                                                        hide_ssid: bool, vlan: str, zone: str,
+                                                        wpa_passphrase: str,
+                                                        wpa_passphrase_changed: bool,
+                                                        is_locked: bool,
+                                                        captive_profile_name: str,
+                                                        bandwidth_limit_up: str,
+                                                        bandwidth_limit_down: str,
+                                                        bandwidth_limit_peruser_up: str,
+                                                        bandwidth_limit_peruser_down: str,
+                                                        access_rules: list) -> Response:
+        """Update an existing WLAN and clean up unsupported fields.
+
+        Args:
+            group_name_or_guid (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+            essid (str): essid
+            type (str): type  Valid Values: employee, guest
+            hide_ssid (bool): hide_ssid
+            vlan (str): vlan
+            zone (str): zone
+            wpa_passphrase (str): wpa_passphrase
+            wpa_passphrase_changed (bool): wpa_passphrase_changed
+            is_locked (bool): is_locked
+            captive_profile_name (str): captive_profile_name
+            bandwidth_limit_up (str): bandwidth_limit_up
+            bandwidth_limit_down (str): bandwidth_limit_down
+            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
+            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
+            access_rules (list): access_rules
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
+
+        json_data = {
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_update_wlan_v2(self, group_name_or_guid: str, wlan_name: str,
+                                           essid: str, type: str, hide_ssid: bool, vlan: str,
+                                           zone: str, wpa_passphrase: str,
+                                           wpa_passphrase_changed: bool, is_locked: bool,
+                                           captive_profile_name: str, bandwidth_limit_up: str,
+                                           bandwidth_limit_down: str,
+                                           bandwidth_limit_peruser_up: str,
+                                           bandwidth_limit_peruser_down: str, access_rules: list) -> Response:
+        """Update an existing WLAN.
+
+        Args:
+            group_name_or_guid (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+            essid (str): essid
+            type (str): type  Valid Values: employee, guest
+            hide_ssid (bool): hide_ssid
+            vlan (str): vlan
+            zone (str): zone
+            wpa_passphrase (str): wpa_passphrase
+            wpa_passphrase_changed (bool): wpa_passphrase_changed
+            is_locked (bool): is_locked
+            captive_profile_name (str): captive_profile_name
+            bandwidth_limit_up (str): bandwidth_limit_up
+            bandwidth_limit_down (str): bandwidth_limit_down
+            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
+            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
+            access_rules (list): access_rules
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
+
+        json_data = {
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
+        }
+
+        return await self.put(url, json_data=json_data)
 
 
 if __name__ == "__main__":
