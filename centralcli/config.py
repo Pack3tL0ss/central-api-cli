@@ -75,7 +75,10 @@ class Config:
         return len(self.data)
 
     def __getattr__(self, item: str, default: Any = None) -> Any:
-        return self.data.get(item, default)
+        if item in self.data:
+            return self.data.get(item, default)
+        elif self.account:
+            return self.data[self.account].get(item, default)
 
     # not used but may be handy
     @property
@@ -87,7 +90,10 @@ class Config:
         return self.default_cache_file if self.account == "central_info" else self.cache_dir / f"{self.account}.json"
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self.data.get(key, default)
+        if key in self.data:
+            return self.data.get(key, default)
+        elif self.account and key in self.data[self.account]:
+            return self.data[self.account].get(key, default)
 
     @staticmethod
     def get_file_data(import_file: Path) -> dict:
