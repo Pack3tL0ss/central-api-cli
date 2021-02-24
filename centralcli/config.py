@@ -87,6 +87,13 @@ class Config:
         return self.data.get(self.account, {}).get("token", {})
 
     @property
+    def token_store(self):
+        return self.data.get(
+            "token_store",
+            {"type": "local", "path": f"{self.dir.joinpath('.cache')}"}
+        )
+
+    @property
     def cache_file(self):
         return self.default_cache_file if self.account == "central_info" else self.cache_dir / f"{self.account}.json"
 
