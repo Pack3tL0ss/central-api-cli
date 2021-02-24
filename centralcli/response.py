@@ -255,7 +255,7 @@ class Session:
 
     async def api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
-                       callback_kwargs: Any = {}, **kwargs: Any) -> Response:
+                       callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
 
         # Debugging flag to lower paging limit to test paging with smaller chunks.
         if params and params.get("limit") and config.limit:
@@ -302,7 +302,15 @@ class Session:
             _limit = params.get("limit", 0)
             _offset = params.get("offset", 0)
             if params.get("limit") and len(r.output) == _limit:
-                params["offset"] = _offset + _limit
+                if count and len(paged_output) >= count:
+                    r.output = paged_output
+                    break
+                elif count and len(paged_output) < count:
+                    next_limit = count - len(paged_output)
+                    next_limit = _limit if next_limit > _limit else next_limit
+                    params["offset"] = _offset + next_limit
+                else:
+                    params["offset"] = _offset + _limit
             else:
                 r.output = paged_output
                 break
