@@ -76,8 +76,8 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
             Used to manage Auth and Tokens.
     """
     central_info = config.data[account_name]
-    token_store = config.get("token_store", DEFAULT_TOKEN_STORE)
-    ssl_verify = config.get("ssl_verify", True)
+    token_store = config.token_store
+    ssl_verify = config.data.get("ssl_verify", True)
 
     conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=ssl_verify)
     token_cache = Path(tokenLocalStoreUtil(token_store, central_info["customer_id"], central_info["client_id"]))
@@ -639,7 +639,7 @@ class CentralApi(Session):
         else:
             template_data = None
 
-        return self.patch(url, params=params, files={"template": template_data})
+        return await self.patch(url, params=params, payload=template_data)
 
     # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
     # and it doesn't catch all exceptions so possible to get exception when eval resp... our Response object is better IMHO
@@ -1152,11 +1152,28 @@ class CentralApi(Session):
         else:
             return Response(error="Missing Required Parameters")
 
-    async def post_switch_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
+    async def update_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
+        """Set Username, password required for establishing SSH connection to switch.
+
+        This method only applies to switches
+
+        Args:
+            device_serial (str): Serial number of the switch.
+            username (str): SSH username
+            password (str): SSH password
+
+        Returns:
+            Response: CentralAPI Response object
+            Successful Response body (Response.output): "Success"
+        """
         url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
-        payload = {"username": username, "password": password}
-        # returns "Success"
-        return await self.post(url, _json=payload)
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def get_task_status(self, task_id):
         return await self.get(f"/device_management/v1/status/{task_id}")
@@ -1386,6 +1403,7 @@ class CentralApi(Session):
         app_id: str = None,
         offset: int = 0,
         limit: int = 100,
+        count: int = None,
     ) -> Response:
         """Get all audit logs.
 
@@ -1402,9 +1420,11 @@ class CentralApi(Session):
             customer_name (str, optional): Filter audit logs by Customer Name
             ip_address (str, optional): Filter audit logs by IP Address
             app_id (str, optional): Filter audit logs by app_id
-            offset (int, optional): Number of items to be skipped before returning the data, useful
-                for pagination Defaults to 0.
-            limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
+            offset (int, optional): Number of items to be skipped before returning the data.
+                Default to 0.
+            limit (int, optional): Maximum number of audit events to be returned max: 100
+                Defaults to 100.
+            count: Only return <count> results.
 
         Returns:
             Response: CentralAPI Response object
@@ -1421,16 +1441,16 @@ class CentralApi(Session):
             "classification": classification,
             "customer_name": customer_name,
             "ip_address": ip_address,
-            "app_id": app_id,
+            "app_id": app_id if not hasattr(app_id, "value") else app_id.value,
             "offset": offset,
-            "limit": limit,
+            "limit": limit if not count or limit < count else count,
         }
 
         if log_id:
             url = f"{url}/{log_id}"
             params = {}
 
-        return await self.get(url, params=params,)
+        return await self.get(url, params=params, count=count)
 
     async def create_site(
         self,

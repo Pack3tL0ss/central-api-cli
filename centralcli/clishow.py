@@ -3,6 +3,7 @@
 
 import typer
 import time
+import pendulum
 import asyncio
 import sys
 from typing import List, Union
@@ -21,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, what_to_pretty  # noqa
+from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, what_to_pretty  # noqa
 
 app = typer.Typer()
 
@@ -798,9 +799,14 @@ def clients(
 def logs(
     args: List[str] = typer.Argument(None, metavar='[LOG_ID]', help="Show details for a specific log_id"),
     user: str = typer.Option(None, help="Filter logs by user"),
-    start: str = typer.Option(None, help="Start time of range to collect logs, provide value in epoch", hidden=True,),
-    end: str = typer.Option(None, help="End time of range to collect logs, provide value in epoch", hidden=True,),
-    device: str = typer.Option(None, metavar=iden_meta.dev, help="Collect logs for a specific device",),
+    start: str = typer.Option(None, help="Start time of range to collect logs, format: yyyy-mm-ddThh:mm (24 hour notation)",),
+    end: str = typer.Option(None, help="End time of range to collect logs, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
+    past: str = typer.Option(None, help="Collect Logs for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    device: str = typer.Option(None, metavar=iden_meta.dev, help="Filter logs by device",),
+    app: LogAppArgs = typer.Option(None, help="Filter logs by app_id", hidden=True),
+    ip: str = typer.Option(None, help="Filter logs by device IP address",),
+    description: str = typer.Option(None, help="Filter logs by description (fuzzy match)",),
+    count: int = typer.Option(None, "-n", is_flag=False, help="Collect Last n logs",),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -808,7 +814,11 @@ def logs(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
-    reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
     verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     default: bool = typer.Option(
@@ -832,21 +842,52 @@ def logs(
     ),
 ) -> None:
     cli.cache(refresh=update_cache)
+    if app:
+        if app == "user":
+            app = "User Activity"
+        elif app in ["firmware", "sites", "gateway"]:
+            app = f"{app.title()} Management"
+
     if device:
         device = cli.cache.get_dev_identifier(device)
+
+    if start:
+        try:
+            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+            start = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"start appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if end:
+        try:
+            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+            end = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"end appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if past:
+        now = int(time.time())
+        past = past.lower().replace(" ", "")
+        if past.endswith("d"):
+            start = now - (int(past.rstrip("d")) * 86400)
+        if past.endswith("h"):
+            start = now - (int(past.rstrip("h")) * 3600)
+        if past.endswith("m"):
+            start = now - (int(past.rstrip("m")) * 60)
+
     kwargs = {
         "log_id": None if not args else args[-1],
         "username": user,
         "start_time": start or int(time.time() - 172800),
         "end_time": end,
-        # "description": description,
+        "description": description,
         "target": None if not device else device.serial,
-        # "classification": classification,  # TODO  add support for filters
+        # "classification": classification,
         # "customer_name": customer_name,
-        # "ip_address": ip_address,
-        # "app_id": app_id,
+        "ip_address": ip,
+        "app_id": app,
         # "offset": offset,
-        # "limit": limit,
+        "count": count
     }
     # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
     central = cli.central
@@ -866,7 +907,7 @@ def logs(
             pager=not no_pager,
             outfile=outfile,
             # sort_by=sort_by,
-            # reverse=reverse,
+            reverse=reverse,
             cleaner=cleaner.get_audit_logs,
         )
 
