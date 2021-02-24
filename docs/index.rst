@@ -15,6 +15,8 @@ Welcome to cencli Aruba Central API CLI's documentation!
 Indices and tables
 ==================
 
+Placeholder: Refer to GitHub for current documentation.
+
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
