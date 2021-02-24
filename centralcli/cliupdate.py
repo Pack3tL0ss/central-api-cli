@@ -38,7 +38,7 @@ def template(
     # device: str = typer.Argument(None, metavar=iden_meta.dev, help="The device associated with the template"),
     # variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
     # value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
-    template: Path = typer.Argument(None, help="Path to file containing new template"),
+    template: Path = typer.Argument(None, help="Path to file containing new template", exists=True),
     group: str = typer.Option(None, help="The template group associated with the template"),
     device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
                                     help="[Templates] Filter by Device Type"),
@@ -67,16 +67,16 @@ def template(
         "version": version,
         "model": model
     }
-    payload = None
     do_prompt = False
     if template:
-        if not template.is_file() or template.stat().st_size > 0:
+        if not template.is_file() or not template.stat().st_size > 0:
             typer.secho(f"{template} not found or invalid.", fg="red")
             do_prompt = True
     else:
         typer.secho("template file not provided.", fg="cyan")
         do_prompt = True
 
+    payload = None
     if do_prompt:
         payload = utils.get_multiline_input(
             "Paste in new template contents then press CTRL-D to proceed. Type 'abort!' to abort",
@@ -84,7 +84,7 @@ def template(
         )
         payload = "\n".join(payload).encode()
 
-    _resp = cli.central.update_existing_template(**kwargs, template=template, payload=payload)
+    _resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
     typer.secho(str(_resp), fg="green" if _resp else "red")
 
 
