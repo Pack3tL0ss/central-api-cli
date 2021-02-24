@@ -198,6 +198,9 @@ class CLICommon:
             if cleaner:
                 data = cleaner(data, **cleaner_kwargs)
 
+            if reverse:
+                data = data[::-1]
+
             outdata = utils.output(data, tablefmt, title=title, config=config)
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
@@ -250,7 +253,7 @@ class CLICommon:
 
         pager = False if config.no_pager else pager
 
-        if resp:
+        if resp is not None:
             resp = utils.listify(resp)
 
             data = []
@@ -263,8 +266,6 @@ class CLICommon:
                     # TODO add sort and reverse funcs
                     if sort_by is not None:
                         typer.secho("sort option not implemented yet", fg="red")
-                    if reverse is not None:
-                        typer.secho("reverse option not implemented yet", fg="red")
 
                     self._display_results(
                         r.output,
