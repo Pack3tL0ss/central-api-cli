@@ -280,7 +280,8 @@ class Utils:
         return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
 
     class Output:
-        def __init__(self, rawdata: str = "", prettydata: str = ""):
+        def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
+            self.config = config
             self._file = rawdata    # found typer.unstyle AFTER I built this
             self.tty = prettydata
 
@@ -291,15 +292,31 @@ class Utils:
             pretty_up = typer.style("Up\n", fg="green")
             pretty_down = typer.style("Down\n", fg="red")
             if self.tty:
-                return self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
+                out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
             else:
-                return self.file
+                out = self.file
+            if self.config and self.config.sanitize:
+                out = self.sanitize_strings(out)
+            return out
 
         def __iter__(self):
             out = self.tty or self.file
             out = out.splitlines(keepends=True)
+            out = self.sanitize_strings(out)
             for line in out:
                 yield line
+
+        def sanitize_strings(self, strings: str, config=None) -> str:
+            config = config or self.config
+            if config and config.sanitize and config.sanatize_file.is_file():
+                sanitize_data = config.get_file_data(config.sanatize_file)
+                for s in sanitize_data.get("redact_strings", {}):
+                    strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
+                for s in sanitize_data.get("replace_strings", []):
+                    if s:
+                        for old, new in s.items():
+                            strings = strings.replace(old, f"{new:{len(old)}}")
+            return strings
 
         def menu(self, data_len: int = None) -> str:
             def isborder(line: str) -> bool:
@@ -307,6 +324,7 @@ class Utils:
 
             out = self.tty or self.file
             out = out.splitlines(keepends=True)
+            out = self.sanitize_strings(out)
             _out = []
             data_start = 3
             if data_len:
@@ -345,7 +363,7 @@ class Utils:
         tablefmt: str = "rich",
         title: str = None,
         account: str = None,
-        sanitize: bool = False,
+        config=None,
     ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         def _do_subtables(data: list, tablefmt: str = "rich"):
@@ -400,7 +418,7 @@ class Utils:
         raw_data = outdata
         _lexer = table_data = None
 
-        if sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
+        if config and config.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
             redact = ["mac", "serial", "neighborMac", "neighborSerial", "neighborPortMac", "longitude", "latitude"]
             outdata = [{k: d[k] if k not in redact else "--redacted--" for k in d} for d in raw_data]
 
@@ -545,4 +563,4 @@ class Utils:
                                    formatters.Terminal256Formatter(style='solarized-dark')
                                    )
 
-        return self.Output(rawdata=raw_data, prettydata=table_data)
+        return self.Output(rawdata=raw_data, prettydata=table_data, config=config)
