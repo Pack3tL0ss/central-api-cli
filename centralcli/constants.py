@@ -109,6 +109,11 @@ class BatchApArgs(str, Enum):
     rename = "rename"
 
 
+class RenameArgs(str, Enum):
+    group = "group"
+    # ap = "ap"
+
+
 # Used to determine if arg is for a device (vs group, templates, ...)
 # devices = ["switch", "aps", "gateway", "all", "device"]
 
