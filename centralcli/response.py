@@ -3,6 +3,7 @@ from pycentral.base import ArubaCentralBase
 from . import cleaner
 from typing import Union, List, Any
 
+
 from centralcli import config, utils, log
 from halo import Halo
 
@@ -184,6 +185,8 @@ class Session:
         self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
         self.ssl = auth.ssl_verify
         self.req_cnt = 1
+        self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
+        self.spinner._spinner_id = "spin_thread"
 
     @property
     def aio_session(self):
@@ -197,16 +200,17 @@ class Session:
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
 
-        resp, spin = None, None
+        resp = None
         _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
-        run_sfx = '' if self.req_cnt == 1 else f'Request: {self.req_cnt}'
+        run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
         spin_txt_fail = f"{spin_word} Data{_data_msg}"
+        self.spinner.text = spin_txt_run
         self.req_cnt += 1
         for _ in range(0, 2):
             if _ > 0:
-                spin_txt_run += f" retry {_}"
+                spin_txt_run = f"{spin_txt_run} (retry after token refresh)"
 
             log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
                       f"    access token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
@@ -214,24 +218,32 @@ class Session:
                       )
 
             try:
-                with Halo(spin_txt_run, enabled=bool(utils.tty)) as spin:
-                    _start = time.time()
-                    headers = self.headers if not headers else {**self.headers, **headers}
-                    # -- // THE API REQUEST \\ --
-                    resp = await self.aio_session.request(method=method, url=url, params=params, data=data, json=json_data,
-                                                          headers=headers, ssl=self.ssl, **kwargs)
+                _start = time.time()
+                headers = self.headers if not headers else {**self.headers, **headers}
+                # -- // THE API REQUEST \\ --
+                self.spinner.start(spin_txt_run)
+                resp = await self.aio_session.request(
+                    method=method,
+                    url=url,
+                    params=params,
+                    data=data,
+                    json=json_data,
+                    headers=headers,
+                    ssl=self.ssl,
+                    **kwargs
+                )
 
-                    elapsed = time.time() - _start
+                elapsed = time.time() - _start
 
+                try:
+                    output = await resp.json()
                     try:
-                        output = await resp.json()
-                        try:
-                            raw_output = output.copy()
-                        except AttributeError:
-                            raw_output = output
-                        output = cleaner.strip_outer_keys(output)
-                    except (json.decoder.JSONDecodeError, ContentTypeError):
-                        output = raw_output = await resp.text()
+                        raw_output = output.copy()
+                    except AttributeError:
+                        raw_output = output
+                    output = cleaner.strip_outer_keys(output)
+                except (json.decoder.JSONDecodeError, ContentTypeError):
+                    output = raw_output = await resp.text()
 
                 resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
             except Exception as e:
@@ -240,15 +252,15 @@ class Session:
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
-                spin.fail(fail_msg)
+                self.spinner.fail(fail_msg)
                 if "invalid_token" in resp.output:
                     self.refresh_token()
                 else:
                     log.error(f"API [{method}] {url} Error Returned: {resp.error}")
                     break
             else:
-                # spin.succeed()
-                spin.stop()
+                # self.spinner.succeed()
+                self.spinner.stop()
                 break
 
         return resp
@@ -321,8 +333,8 @@ class Session:
         auth = self.auth
         token_data = utils.listify(token_data)
         token = None
-        spin = Halo("Attempting to Refresh Tokens")
-        spin.start()
+        spin = self.spinner
+        spin.start("Attempting to Refresh Tokens")
         for idx, t in enumerate(token_data):
             try:
                 if idx == 1:
@@ -333,6 +345,7 @@ class Session:
                 if token:
                     auth.storeToken(token)
                     auth.central_info["token"] = token
+                    spin.stop()
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
@@ -358,7 +371,8 @@ class Session:
         if self._refresh_token(token_data):
             return
         else:
-            self._refresh_token(self.get_token_from_user())
+            token_data = self.get_token_from_user()
+            self._refresh_token(token_data)
 
     def get_token_from_user(self) -> None:
         """Handle invalid or expired tokens

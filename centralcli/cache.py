@@ -216,10 +216,14 @@ class Cache:
             print(typer.style("-- Refreshing Identifier mapping Cache --", fg="cyan"), end="")
             db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db))
             if db_res and False in db_res:
-                log.error("TinyDB returned an error during db update")
-
+                res_map = ["dev_db", "site_db", "template_db", "group_db"]
+                res_map = ", ".join([db for idx, db in enumerate(res_map) if not db_res(idx)])
+                log.error(f"TinyDB returned error ({res_map}) during db update")
+                self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
+            else:
+                self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.time() - start, 2)} sec")
             log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
-            typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
+            # typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
     def handle_multi_match(
         self,
