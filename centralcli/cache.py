@@ -79,6 +79,10 @@ class Cache:
         self.SiteDB = self.DevDB.table("sites")
         self.GroupDB = self.DevDB.table("groups")
         self.TemplateDB = self.DevDB.table("templates")
+        # log db is used to provide simple index to get details for logs
+        # vs the actual log id in form 'audit_trail_2021_2,AXfQAu2hkwsSs1O3R7kv'
+        # it is updated anytime show logs is ran.
+        self.LogDB = self.DevDB.table("logs")
         self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
         self.Q = Query()
         if data:
@@ -105,6 +109,10 @@ class Cache:
     @property
     def groups(self) -> list:
         return self.GroupDB.all()
+
+    @property
+    def logs(self) -> list:
+        return self.LogDB.all()
 
     @property
     def group_names(self) -> list:
@@ -178,6 +186,10 @@ class Cache:
             self.updated.append(self.central.get_all_templates)
             self.TemplateDB.truncate()
             return self.TemplateDB.insert_multiple(resp.output)
+
+    def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
+        self.LogDB.truncate()
+        return self.LogDB.insert_multiple(log_data)
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs = []
@@ -507,3 +519,24 @@ class Cache:
             raise typer.Abort()
         else:
             log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
+
+    def get_log_identifier(self, query: str) -> str:
+        if "audit_trail" in query:
+            return query
+
+        try:
+
+            match = self.LogDB.search(self.Q.id == int(query))
+            if not match:
+                log.warning(f"Unable to gather log id from short index query {query}", show=True)
+                typer.echo("Short log_id aliases are built each time 'show logs' is ran.")
+                typer.echo("  You can verify the cache by running (hidden command) 'show cache logs'")
+                typer.echo("  run 'show logs [OPTIONS]' then use the short index for details")
+                raise typer.Abort()
+            else:
+                return match[-1]["long_id"]
+
+        except ValueError as e:
+            log.exception(f"Exception in get_log_identifier {e.__class__.__name__}\n{e}")
+            typer.secho(f"Exception in get_log_identifier {e.__class__.__name__}", fg="red")
+            raise typer.Exit(1)
