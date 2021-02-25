@@ -22,4 +22,5 @@
         "cencli",
         "centralcli"
     ],
+    "restructuredtext.confPath": "${workspaceFolder}/docs",
 }
