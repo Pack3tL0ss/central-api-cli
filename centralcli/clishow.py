@@ -22,7 +22,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, what_to_pretty  # noqa
+from centralcli.constants import (
+    ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, what_to_pretty  # noqa
+)
 
 app = typer.Typer()
 
@@ -750,15 +752,21 @@ def clients(
     # band:
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", ),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False,),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False,),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True,),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
     sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
-    reverse: SortOptions = typer.Option(None, "-r", hidden=True,),  # TODO Unhide after implemented
-    verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False,),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting) (vertically)",
+        show_default=False,
+    ),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
@@ -772,6 +780,7 @@ def clients(
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
         callback=cli.debug_callback,
+        show_default=False,
     ),
     account: str = typer.Option(
         "central_info",
@@ -780,18 +789,28 @@ def clients(
         callback=cli.account_name_callback,
     ),
 ) -> None:
+    cli.cache(refresh=update_cache)
     central = cli.central
     resp = central.request(central.get_clients, filter, *args,)  # callback_kwargs={'cache': cli.cache})
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+
+    _format = "rich" if not verbose and not verbose2 else "yaml"
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
+
+    verbose_kwargs = {}
+    if not verbose2:
+        verbose_kwargs["cleaner"] = cleaner.get_clients
+        verbose_kwargs["cache"] = cli.cache
+        verbose_kwargs["verbose"] = verbose
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title="Clients",
+        caption="Use -v for more details, -vv for unformatted response." if not verbose else None,
         pager=not no_pager,
         outfile=outfile,
-        cleaner=cleaner.get_clients,
-        cache=cli.cache
+        reverse=reverse,
+        **verbose_kwargs
     )
 
 
@@ -806,21 +825,22 @@ def logs(
     app: LogAppArgs = typer.Option(None, help="Filter logs by app_id", hidden=True),
     ip: str = typer.Option(None, help="Filter logs by device IP address",),
     description: str = typer.Option(None, help="Filter logs by description (fuzzy match)",),
+    _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)",),
     count: int = typer.Option(None, "-n", is_flag=False, help="Collect Last n logs",),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True,),  # TODO Unhide after implemented
+    sort_by: LogSortBy = typer.Option(None, "--sort",),  # Uses post formatting field headers
     reverse: bool = typer.Option(
         True, "-r",
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
-    verbose: bool = typer.Option(False, "-v", hidden=True,),  # TODO Unhide after implemented
+    verbose: bool = typer.Option(False, "-v", help="Show raw unformatted logs (vertically)"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -842,73 +862,69 @@ def logs(
     ),
 ) -> None:
     cli.cache(refresh=update_cache)
-    if app:
-        if app == "user":
-            app = "User Activity"
-        elif app in ["firmware", "sites", "gateway"]:
-            app = f"{app.title()} Management"
+    if args:
+        log_id = cli.cache.get_log_identifier(args[-1])
+    else:
+        log_id = None
+        if device:
+            device = cli.cache.get_dev_identifier(device)
 
-    if device:
-        device = cli.cache.get_dev_identifier(device)
-
-    if start:
-        try:
-            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
-            start = (dt.int_timestamp)
-        except Exception:
-            typer.secho(f"start appears to be invalid {start}", fg="red")
-            raise typer.Exit(1)
-    if end:
-        try:
-            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
-            end = (dt.int_timestamp)
-        except Exception:
-            typer.secho(f"end appears to be invalid {start}", fg="red")
-            raise typer.Exit(1)
-    if past:
-        now = int(time.time())
-        past = past.lower().replace(" ", "")
-        if past.endswith("d"):
-            start = now - (int(past.rstrip("d")) * 86400)
-        if past.endswith("h"):
-            start = now - (int(past.rstrip("h")) * 3600)
-        if past.endswith("m"):
-            start = now - (int(past.rstrip("m")) * 60)
+        if start:
+            try:
+                dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+                start = (dt.int_timestamp)
+            except Exception:
+                typer.secho(f"start appears to be invalid {start}", fg="red")
+                raise typer.Exit(1)
+        if end:
+            try:
+                dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+                end = (dt.int_timestamp)
+            except Exception:
+                typer.secho(f"end appears to be invalid {start}", fg="red")
+                raise typer.Exit(1)
+        if past:
+            now = int(time.time())
+            past = past.lower().replace(" ", "")
+            if past.endswith("d"):
+                start = now - (int(past.rstrip("d")) * 86400)
+            if past.endswith("h"):
+                start = now - (int(past.rstrip("h")) * 3600)
+            if past.endswith("m"):
+                start = now - (int(past.rstrip("m")) * 60)
 
     kwargs = {
-        "log_id": None if not args else args[-1],
+        "log_id": log_id,
         "username": user,
         "start_time": start or int(time.time() - 172800),
         "end_time": end,
         "description": description,
         "target": None if not device else device.serial,
-        # "classification": classification,
-        # "customer_name": customer_name,
+        "classification": _class,
         "ip_address": ip,
         "app_id": app,
-        # "offset": offset,
         "count": count
     }
-    # TODO start_time typer.Option pendumlum.... 3H 5h 20m etc. add other filter options
+
     central = cli.central
     resp = central.request(central.get_audit_logs, **kwargs)
 
-    # TODO add -v flag or something to trigger auto index of log_ids and provide a menu where they can select the log
-    # they want to see details on.
     if kwargs.get("log_id"):
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-
+        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        _cmd_txt = typer.style('show logs <id>', fg='bright_green')
         cli.display_results(
             resp,
             tablefmt=tablefmt,
             title="Audit Logs",
             pager=not no_pager,
             outfile=outfile,
-            # sort_by=sort_by,
+            sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
             reverse=reverse,
-            cleaner=cleaner.get_audit_logs,
+            cleaner=cleaner.get_audit_logs if not verbose else None,
+            cache_update_func=cli.cache.update_log_db if not verbose else None,
+            caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details",
         )
 
 
