@@ -237,11 +237,11 @@ def test_show_certs():
     assert "checksum" in result.stdout
 
 
-def test_show_logs():
-    result = runner.invoke(app, ["show", "logs"],)
+def test_show_logs_past():
+    result = runner.invoke(app, ["show", "logs", "--past", "1d"],)
     print(result.stdout)
     assert result.exit_code == 0
-    assert "audit_trail" in result.stdout
+    assert "Audit Logs" in result.stdout
     assert "id" in result.stdout
 
 
