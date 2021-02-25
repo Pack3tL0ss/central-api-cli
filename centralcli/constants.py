@@ -25,7 +25,31 @@ STRIP_KEYS = [
 ]
 
 
-CLIENT_STRIP_KEYS = ["group_id", "label_id", "swarm_id"]
+CLIENT_STRIP_KEYS_VERBOSE = ["group_id", "label_id", "swarm_id"]
+CLIENT_STRIP_KEYS = [
+    *CLIENT_STRIP_KEYS_VERBOSE,
+    "interface_mac",
+    "labels",
+    "phy_type",
+    "radio_mac",
+    "radio_number",
+    "ht_type",
+    "maxspeed",
+    "speed",
+    "signal_db",
+    "signal_strength",
+    "encryption_method",
+    "usage",
+    "manufacturer",
+    "health",
+    "signal_strength"
+    "channel",
+    "os_type",
+    "band",
+    "snr",
+    "username",
+    "client_type",
+    ]
 
 
 class ShowArgs(str, Enum):
@@ -97,6 +121,7 @@ class CacheArgs(str, Enum):
     sites = "sites"
     templates = "templates"
     groups = "groups"
+    logs = "logs"
 
 
 class KickArgs(str, Enum):
@@ -236,3 +261,16 @@ class IdenMetaVars:
         self.site = "[name|site_id|address|city|state|zip]"
         self.client = "[username|ip|mac]"
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
+
+
+class LogSortBy(str, Enum):
+    time = "time"
+    app = "app"
+    _class = "class"
+    _type = "type"
+    description = "description"
+    target = "target"
+    ip = "ip"
+    user = "user"
+    id = "id"
+    has_details = "has_details"
