@@ -184,10 +184,11 @@ class CLICommon:
         data: Union[List[dict], List[str], None] = None,
         tablefmt: str = "rich",
         title: str = None,
+        caption: str = None,
         pager: bool = True,
         outfile: Path = None,
         sort_by: str = None,
-        reverse: bool = None,
+        reverse: bool = False,
         pad: int = None,
         cleaner: callable = None,
         **cleaner_kwargs,
@@ -198,10 +199,16 @@ class CLICommon:
             if cleaner:
                 data = cleaner(data, **cleaner_kwargs)
 
+            if sort_by and all(isinstance(d, dict) for d in data):
+                if not all([True if sort_by in d else False for d in data]):
+                    typer.secho(f"Invalid dataset for {sort_by} not all entries contain a {sort_by} key")
+                else:
+                    data = sorted(data, key=lambda d: d[sort_by])
+
             if reverse:
                 data = data[::-1]
 
-            outdata = utils.output(data, tablefmt, title=title, config=config)
+            outdata = utils.output(data, tablefmt, title=title, caption=caption, config=config)
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             # -- // Output to file \\ --
@@ -225,6 +232,7 @@ class CLICommon:
         data: Union[List[dict], List[str], None] = None,
         tablefmt: str = "rich",
         title: str = None,
+        caption: str = None,
         pager: bool = True,
         outfile: Path = None,
         sort_by: str = None,
@@ -241,7 +249,10 @@ class CLICommon:
             resp (Union[Response, List[Response], None], optional): API Response objects.
             data (Union[List[dict], List[str], None], optional): API Response output data.
             tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
-            title: (str, optional): Title of output table.  Only applies to "rich" tablefmt.
+            title: (str, optional): Title of output table.
+                Only applies to "rich" tablefmt. Defaults to None.
+            caption: (str, optional): Caption displayed at bottome of table.
+                Only applies to "rich" tablefmt. Defaults to None.
             pager (bool, optional): Page Output / or not. Defaults to True.
             outfile (Path, optional): path/file of output file. Defaults to None.
             sort_by (Union[str, List[str], None] optional): column or columns to sort output on.
@@ -271,7 +282,9 @@ class CLICommon:
                         r.output,
                         tablefmt=tablefmt,
                         title=title,
-                        pager=pager, outfile=outfile,
+                        caption=caption,
+                        pager=pager,
+                        outfile=outfile,
                         sort_by=sort_by,
                         reverse=reverse,
                         pad=pad,
@@ -284,7 +297,9 @@ class CLICommon:
                 data,
                 tablefmt=tablefmt,
                 title=title,
-                pager=pager, outfile=outfile,
+                caption=caption,
+                pager=pager,
+                outfile=outfile,
                 sort_by=sort_by,
                 reverse=reverse,
                 pad=pad,

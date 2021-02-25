@@ -64,6 +64,10 @@ def _log_timestamp(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
 
 
+def _short_connection(value: str) -> str:
+    return value.replace("802.11", "")
+
+
 _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
 
@@ -79,6 +83,8 @@ _short_value = {
     "HPPC": "SW",
     "vc_disconnected": "vc disc.",
     "MAC Authentication": "MAC",
+    "connection": _short_connection,
+    "DOT1X": ".1X"
 }
 
 _short_key = {
@@ -101,8 +107,10 @@ _short_key = {
     "classification": "class",
     "ts": "time",
     "ap_deployment_mode": "mode",
-    "authentication_type": "auth type",
+    "authentication_type": "auth",
     "last_connection_time": "last connected",
+    "connection": "802.11",
+    "user_role": "role",
 }
 
 
@@ -194,6 +202,7 @@ def get_all_groups(
 
 def _client_concat_associated_dev(
     data: Dict[str, Any],
+    verbose: bool = False,
     cache=None,
 ) -> Dict[str, Any]:
     strip_keys = [
@@ -205,55 +214,89 @@ def _client_concat_associated_dev(
         "gateway serial",
     ]
     dev, _gw, data["gateway"] = "", "", {}
-    if data.get("associated device"):
-        dev = cache.get_dev_identifier(data["associated device"], ret_field="name")
+    if data.get("associated_device"):
+        dev = cache.get_dev_identifier(data["associated_device"], ret_field="name")
 
     if data.get("gateway_serial"):
-        _gw = cache.get_dev_identifier(data["gateway serial"], ret_field="name")
+        _gw = cache.get_dev_identifier(data["gateway_serial"], ret_field="name")
         _gateway = {
             "name": _gw.name,
-            "serial": data.get("gateway serial", ""),
+            "serial": data.get("gateway_serial", ""),
         }
-        data["gateway"] = _unlist(strip_no_value([_gateway]))
+        if verbose:
+            data["gateway"] = _unlist(strip_no_value([_gateway]))
+        else:
+            data["gateway"] = _gw.name or data["gateway_serial"]
     _connected = {
-        "name": dev.name,
-        "type": data.get("connected device type", ""),
-        "serial": data.get("associated device", ""),
-        "mac": data.get("associated device mac", ""),
-        "interface": data.get("interface", ""),
-        "interface mac": data.get("interface mac", ""),
+        "name": None if not hasattr(dev, "name") else dev.name,
+        "type": data.get("connected_device_type"),
+        "serial": data.get("associated_device"),
+        "mac": data.get("associated_device_mac"),
+        "interface": data.get("interface_port"),
+        "interface mac": data.get("interface_mac"),
     }
     for key in strip_keys:
         if key in data:
             del data[key]
-    data["connect device"] = _unlist(strip_no_value([_connected]))
+    if verbose:
+        data["connected device"] = _unlist(strip_no_value([_connected]))
+    else:
+        data["connected device"] = f"{_connected['name']} ({_connected['type']})"
 
     return data
 
 
-def get_clients(data: List[dict], **kwargs) -> list:
+def get_clients(data: List[dict], verbose: bool = False, cache: callable = None, **kwargs) -> list:
     """Remove all columns that are NA for all clients in the list"""
     data = utils.listify(data)
-    if data and all([isinstance(d, dict) for d in data]):
-        all_keys = set([k for d in data for k in d])
-        data = [
-            dict(
-                short_value(
-                    k,
-                    d.get(k),
-                )
-                for k in all_keys
-                if k not in constants.CLIENT_STRIP_KEYS
-            )
-            for d in data
-        ]
 
-    data = [_client_concat_associated_dev(d, **kwargs) for d in data]
+    data = [_client_concat_associated_dev(d, verbose=verbose, cache=cache, **kwargs) for d in data]
+    if verbose:
+        strip_keys = constants.CLIENT_STRIP_KEYS_VERBOSE
+        if data and all([isinstance(d, dict) for d in data]):
+            all_keys = set([k for d in data for k in d])
+            data = [
+                dict(
+                    short_value(
+                        k,
+                        d.get(k),
+                    )
+                    for k in all_keys
+                    if k not in strip_keys
+                )
+                for d in data
+            ]
+    else:
+        _sort_keys = [
+            "name",
+            "macaddr",
+            "vlan",
+            "ip_address",
+            "user_role",
+            "network",
+            "connection",
+            "connected device",
+            "gateway",
+            "site",
+            "group_name",
+            "last_connection_time",
+        ]
+        if data and all([isinstance(d, dict) for d in data]):
+            # all_keys = set([k for d in data for k in d])
+            data = [
+                dict(
+                    short_value(
+                        k,
+                        d.get(k),
+                    )
+                    for k in _sort_keys
+                )
+                for d in data
+            ]
+
+    # data = [_client_concat_associated_dev(d, verbose=verbose, cache=cache, **kwargs) for d in data]
     data = strip_no_value(data)
 
-    # strip_na = [[k for k, v in d.items() if str(v) == 'NA'] for d in data]
-    # strip_na = set([i for o in strip_na for i in o])
-    # data = [dict(short_value(k, v) for k, v in d.items() if k not in strip_na) for d in data]
     return data
 
 
@@ -365,8 +408,9 @@ def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[d
     return data
 
 
-def get_audit_logs(data: List[dict]) -> List[dict]:
+def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List[dict]:
     field_order = [
+        "id",
         "ts",
         "app_name",
         "classification",
@@ -375,11 +419,24 @@ def get_audit_logs(data: List[dict]) -> List[dict]:
         "target",
         "ip_addr",
         "user",
-        "id",
         "has_details",
     ]
     data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
     data = strip_no_value(data)
+
+    if len(data) > 1 and cache_update_func:
+        idx, cache_list = 1, []
+        for d in data:
+            if d.get("has details") is True:
+                cache_list += [{"id": idx, "long_id": d["id"]}]
+                d["id"] = idx
+                idx += 1
+            else:
+                d["id"] = "-"
+            del d["has details"]
+        if cache_list:
+            cache_update_func(cache_list)
+
     return data
 
 
