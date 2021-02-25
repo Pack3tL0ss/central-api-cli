@@ -362,6 +362,7 @@ class Utils:
         outdata: Union[List[str], Dict[str, Any]],
         tablefmt: str = "rich",
         title: str = None,
+        caption: str = None,
         account: str = None,
         config=None,
     ) -> str:
@@ -369,11 +370,9 @@ class Utils:
         def _do_subtables(data: list, tablefmt: str = "rich"):
             out = []
             for inner_dict in data:  # the object: switch/vlan etc dict
-                # inner_list = []
                 for key, val in inner_dict.items():
                     if not isinstance(val, (list, dict, tuple)):
                         if val is None:
-                            # inner_list.append('')
                             inner_dict[key] = ''
                         elif isinstance(val, str) and val.lower() in ['up', 'down']:
                             color = 'red' if val.lower() == 'down' else 'green'
@@ -382,7 +381,6 @@ class Utils:
                             else:
                                 inner_dict[key] = typer.style(val.title(), fg=color)
                         else:
-                            # inner_list.append(str(val))
                             if tablefmt == 'rich':
                                 inner_dict[key] = Text(str(val), style=None)
                             else:
@@ -399,7 +397,6 @@ class Utils:
                                                 header_style="bold cyan",
                                                 box=SIMPLE
                                                 )
-                            # _ = [inner_table.add_row(*[json.dumps(vv) for vv in v.values()]) for v in val]
                             _ = [inner_table.add_row(*[self.do_pretty(kk, str(vv)) for kk, vv in v.items()]) for v in val]
                             with console.capture():
                                 console.print(inner_table)
@@ -410,8 +407,6 @@ class Utils:
                         else:
                             if all(isinstance(v, str) for v in val):
                                 inner_dict[key] = ", ".join(val)
-
-                        # inner_list.append(inner_table)
                 out.append(inner_dict)
             return out
 
@@ -506,9 +501,11 @@ class Utils:
 
                 if title:
                     table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
-                if account:
-                    table.caption = f'[italic dark_olive_green2]{account}'
+                if account or caption:
                     table.caption_justify = 'left'
+                    table.caption = '' if not account else f'[italic dark_olive_green2]{account}'
+                    if caption:
+                        table.caption = f"[italic dark_olive_green2]{table.caption}  {caption}"
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
