@@ -696,6 +696,29 @@ def certs(
     cli.display_results(resp, tablefmt=tablefmt, title="Certificates", pager=not no_pager, outfile=outfile)
 
 
+@app.command(short_help="Show last known running config for a device")
+def run(
+    device: str = typer.Argument(..., metavar="[WLAN NAME]", help="Get Details for a specific WLAN"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    cli.cache(refresh=update_cache)
+    central = cli.central
+    dev = cli.cache.get_dev_identifier(device)
+
+    resp = central.request(central.get_device_configuration, dev.serial)
+    cli.display_results(resp, pager=not no_pager, outfile=outfile)
+
+
 @app.command(short_help="Show WLAN(SSID)/details")
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN"),

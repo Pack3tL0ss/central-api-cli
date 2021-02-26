@@ -59,6 +59,29 @@ class WlanType(str, Enum):
     guest = "guest"
 
 
+def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
+    if formatter is None:
+        formatter = lambda v: (None, v)  # noqa Multipart representation of value
+
+    if type(data) is not dict:
+        return {parent_key: formatter(data)}
+
+    converted = []
+
+    for key, value in data.items():
+        current_key = key if parent_key is None else f"{parent_key}[{key}]"
+        if type(value) is dict:
+            converted.extend(multipartify(value, current_key, formatter).items())
+        elif type(value) is list:
+            for ind, list_value in enumerate(value):
+                iter_key = f"{current_key}[{ind}]"
+                converted.extend(multipartify(list_value, iter_key, formatter).items())
+        else:
+            converted.append((current_key, formatter(value)))
+
+    return dict(converted)
+
+
 def get_conn_from_file(account_name, logger: MyLogger = log):
     """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
 
@@ -828,13 +851,24 @@ class CentralApi(Session):
         #     },
         #     **var_dict
         # }
-        data = self._make_form_data(json_data)
+        # data = self._make_form_data(json_data)
+        data = multipartify(json_data)
+        # TODO this doesn't work yet. Trying to figure out what API expects
 
         return await self.patch(url, headers=headers, payload=data)
 
-    async def get_last_known_running_config(self, serialnum: str) -> Response:
-        url = f"/configuration/v1/devices/{serialnum}/configuration"
+    async def get_device_configuration(self, device_serial: str) -> Response:
+        """Get last known running configuration for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/configuration"
         headers = {"Accept": "multipart/form-data"}
+
         return await self.get(url, headers=headers)
 
     async def get_devices(

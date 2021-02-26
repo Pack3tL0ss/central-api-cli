@@ -167,6 +167,7 @@ class ArgToWhat:
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
         self.vlans = self.vlan = "vlans"
         self.wlans = self.wlan = self.ssids = self.ssid = "wlans"
+        self.run = self.running = "run"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
         if isinstance(key, Enum):
