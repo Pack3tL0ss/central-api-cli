@@ -239,6 +239,7 @@ class CLICommon:
         reverse: bool = None,
         pad: int = None,
         cleaner: callable = None,
+        exit_on_fail: bool = False,
         **cleaner_kwargs,
     ) -> None:
         """Output Formatted API Response to display and optionally to file
@@ -273,6 +274,8 @@ class CLICommon:
                     typer.secho(f"Request {idx + 1} ({r.url.path}) Response:", fg="cyan")
                 if not r:
                     typer.secho(str(r), fg="green" if r else "red")
+                    if exit_on_fail:
+                        raise typer.Exit(1)
                 else:
                     # TODO add sort and reverse funcs
                     if sort_by is not None:
