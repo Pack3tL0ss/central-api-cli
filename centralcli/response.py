@@ -98,13 +98,32 @@ class Response:
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
             self.output[name] = value
 
+    def __len__(self):
+        return(len(self.output))
+
     def __getitem__(self, key):
         return self.output[key]
 
+    def __reversed__(self):
+        return self.output[::-1]
+
+    def __bytes__(self):
+        if not self.output:
+            return
+        r = json.dumps(self.output)
+        return r.encode("UTF-8")
+
     def __getattr__(self, name: str) -> Any:
         if hasattr(self, "output") and self.output:
-            if name in self.output:
-                return self.output[name]
+            if isinstance(self.output, list) and len(self.output) == 1:
+                output = self.output[0]
+
+                if name in output:
+                    return output[name]
+
+            # return the responses list / dict attr if exist
+            if hasattr(self.output, name):
+                return getattr(self.output, name)
 
         if hasattr(self._response, name):
             return getattr(self._response, name)
@@ -130,6 +149,7 @@ class Response:
 
     @property
     def status_code(self) -> int:
+        """Make attributes used for status code for both aiohttp and requests valid."""
         return self.status
 
 

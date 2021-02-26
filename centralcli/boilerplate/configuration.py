@@ -1987,7 +1987,6 @@ class AllCalls(CentralApi):
 
         return await self.patch(url, json_data=json_data)
 
-
     async def configuration_delete_wlan(self, group_name_or_guid: str, wlan_name: str) -> Response:
         """Delete an existing WLAN.
 
