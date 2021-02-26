@@ -33,10 +33,15 @@ class BatchDelArgs(str, Enum):
 
 
 def do_lldp_rename(fstr: str) -> Response:
-    _all_aps = cli.central.request(cli.central.get_devices, "aps", status="Up")
+    resp = cli.central.request(cli.central.get_devices, "aps", status="Up")
+
+    if not resp:
+        typer.secho(resp)
+        raise typer.Exit(1)
+
     _keys = ["name", "mac", "model"]
-    _all_aps = utils.listify(_all_aps)
-    ap_dict = {d["serial"]: {k: d[k] for k in d.output if k in _keys} for d in _all_aps}
+    _all_aps = resp.output
+    ap_dict = {d["serial"]: {k: d[k] for k in d if k in _keys} for d in _all_aps}
     fstr_to_key = {
         "h": "neighborHostName",
         "m": "mac",

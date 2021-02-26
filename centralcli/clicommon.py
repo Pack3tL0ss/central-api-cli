@@ -276,7 +276,7 @@ class CLICommon:
                 else:
                     # TODO add sort and reverse funcs
                     if sort_by is not None:
-                        typer.secho("sort option not implemented yet", fg="red")
+                        typer.secho("sort by is not implemented for all commands yet", fg="red")
 
                     self._display_results(
                         r.output,
