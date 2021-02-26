@@ -4,20 +4,25 @@
 from pathlib import Path
 from enum import Enum
 import sys
+from typing import List
 import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, utils, cli, Response
+    from centralcli import config, utils, cli, log, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, utils, cli, Response
+        from centralcli import config, utils, cli, log, Response
     else:
         print(pkg_dir.parts)
         raise e
 
+from centralcli.constants import IdenMetaVars
+
+
+iden_meta_vars = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
 
@@ -32,15 +37,84 @@ class BatchDelArgs(str, Enum):
     # aps = "aps"
 
 
-def do_lldp_rename(fstr: str) -> Response:
-    resp = cli.central.request(cli.central.get_devices, "aps", status="Up")
+class FstrInt:
+    def __init__(self, val: int) -> None:
+        self.i = val
+        self.o = val + 1
+
+    def __len__(self):
+        return len(str(self.i))
+
+
+def _get_full_int(val: List[str]) -> FstrInt:
+    rv = []
+    while True:
+        for i in val:
+            if i.isdigit():
+                rv += [i]
+            else:
+                return FstrInt(int("".join(rv)) - 1)
+
+
+def _lldp_rename_get_fstr():
+    rtxt = typer.style("RESULT: ", fg=typer.colors.BRIGHT_BLUE)
+    while True:
+        typer.secho("Rename APs based on LLDP:", fg="bright_green")
+        typer.echo(
+            "  This function will automatically rename APs based on a combination of\n"
+            "  information from the upstream switch (via LLDP) and from the AP itself.\n\n"
+            "    Values used in the examples below: \n"
+            "      switch hostname (%h): 'SNAN-IDF3-sw1'\n"
+            "      switch port (%p): 7\n"
+            "      AP mac (%m): aa:bb:cc:dd:ee:ff\n"
+            "      AP model (%M): 535\n\n"
+            f"{typer.style('Format String Syntax:', fg='bright_green')}\n"
+            "  '%h[1:2]'  will use the first 2 characters of the switches hostname.\n"
+            f"    {rtxt} 'SN'\n"
+            "  '%h[2:4]'  will use characters 2 through 4 of the switches hostname.\n"
+            f"    {rtxt} 'NAN'\n"
+            "  '%h-1'  will split the hostname into parts separating on '-' and use\n"
+            "  the firt segment.\n"
+            f"    {rtxt} 'SNAN\n"
+            "  '%p'  represents the interface.\n"
+            f"    {rtxt} '7'\n"
+            "  '%p/3'  seperates the port string on / and uses the 3rd segment.\n"
+            f"    {rtxt} (given port 1/1/7): '7'\n"
+            f"  '%M'  represents the the AP model.\n"
+            f"    {rtxt} '535'\n"
+            "  '%m' The MAC of the AP NOTE: delimiters ':' are stripped from MAC\n"
+            "  '%m[-4]'  The last 4 digits of the AP MAC\n"
+            f"    {rtxt} 'eeff'\n\n"
+            f"{typer.style('Examples:', fg='bright_green')}\n"
+            f"  %h-1-AP%M-%m[-4]  {rtxt} SNAN-AP535-eeff\n"
+            f"  %h[1-4]-%h-2%h-3.p%p.%M-ap  {rtxt} SNAN-IDF3sw1.p7.535-ap\n"
+            f"  %h-1-%M.%m[-4]-ap  {rtxt} SNAN-535.eeff-ap\n"
+
+        )
+        fstr = typer.prompt("Enter Desired format string",)
+        if "%%" in fstr:
+            typer.clear()
+            typer.secho(f"\n{fstr} appears to be invalid.  Should never be 2 consecutive '%'.\n", fg="red")
+        else:
+            return fstr
+
+
+def do_lldp_rename(fstr: str, **kwargs) -> Response:
+    resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
 
     if not resp:
-        typer.secho(resp)
-        raise typer.Exit(1)
+        cli.display_results(resp, exit_on_fail=True)
+    elif not resp.output:
+        filters = ", ".join([f"{k}: {v}" for k, v in kwargs.items()])
+        resp.output = {
+            "description": "API called was successful but returned no results.",
+            "error": f"No Up APs found matching provided filters ({filters})."
+        }
+        resp.ok = False
+        cli.display_results(resp, exit_on_fail=True)
 
+    _all_aps = utils.listify(resp.output)
     _keys = ["name", "mac", "model"]
-    _all_aps = resp.output
     ap_dict = {d["serial"]: {k: d[k] for k in d if k in _keys} for d in _all_aps}
     fstr_to_key = {
         "h": "neighborHostName",
@@ -48,7 +122,7 @@ def do_lldp_rename(fstr: str) -> Response:
         "p": "remotePort",
         "M": "model"
     }
-    req_list, name_list = [], []
+    req_list, name_list, shown_promt = [], [], False
     if ap_dict:
         for ap in ap_dict:
             ap_dict[ap]["mac"] = utils.Mac(ap_dict[ap]["mac"]).clean
@@ -57,34 +131,93 @@ def do_lldp_rename(fstr: str) -> Response:
                 ap_dict[ap]["neighborHostName"] = _lldp.output[-1]["neighborHostName"]
                 ap_dict[ap]["remotePort"] = _lldp.output[-1]["remotePort"]
 
-            st = 0
-            x = ''
-            # TODO all int values assume 1 digit int.
-            for idx, c in enumerate(fstr):
-                if not idx >= st:
-                    continue
-                if c == '%':
-                    _src = ap_dict[ap][fstr_to_key[fstr[idx + 1]]]
-                    if fstr[idx + 2] != "[":
-                        if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
-                            x = f'{x}{_src}'
-                            st = idx + 2
-                        else:
-                            x = f'{x}{_src.split(fstr[idx + 2])[int(fstr[idx + 3]) - 1]}'
-                            st = idx + 4
-                    else:
-                        if fstr[idx + 3] == "-":
-                            x = f'{x}{"".join(_src[-int(fstr[idx + 4]):])}'
-                            st = idx + 6
-                        else:
-                            x = f'{x}{"".join(_src[slice(int(fstr[idx + 3]) - 1, int(fstr[idx + 5]))])}'
-                            st = idx + 7
-                else:
-                    x = f'{x}{c}'
-            req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
-            name_list += [x]
+            while True:
+                st = 0
+                x = ''
+                try:
+                    # TODO all int values assume 1 digit int.
+                    for idx, c in enumerate(fstr):
+                        if not idx >= st:
+                            continue
+                        if c == '%':
+                            if fstr[idx + 1] not in fstr_to_key.keys():
+                                _e1 = typer.style(
+                                        f"Invalid source specifier ({fstr[idx + 1]}) in format string {fstr}: ",
+                                        fg="red"
+                                )
+                                _e2 = "Valid values:\n{}".format(
+                                    ", ".join(fstr_to_key.keys())
+                                )
+                                typer.echo(f"{_e1}\n{_e2}")
+                                raise KeyError(f"{fstr[idx + 1]} is not valid")
 
-    typer.secho(f"Resulting AP names based on '{fstr}':")
+                            _src = ap_dict[ap][fstr_to_key[fstr[idx + 1]]]
+                            if fstr[idx + 2] != "[":
+                                if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
+                                    x = f'{x}{_src}'
+                                    st = idx + 2
+                                else:
+                                    try:
+                                        fi = _get_full_int(fstr[idx + 3:])
+                                        x = f'{x}{_src.split(fstr[idx + 2])[fi.i]}'
+                                        st = idx + 3 + len(fi)
+                                    except IndexError:
+                                        _e1 = ", ".join(_src.split(fstr[idx + 2]))
+                                        _e2 = len(_src.split(fstr[idx + 2]))
+                                        typer.secho(
+                                            f"\nCan't use segment {fi.o} of '{_e1}'\n"
+                                            f"  It only has {_e2} segments.\n",
+                                            fg="red"
+                                        )
+                                        raise
+                            else:  # +2 is '['
+                                if fstr[idx + 3] == "-":
+                                    try:
+                                        fi = _get_full_int(fstr[idx + 4:])
+                                        x = f'{x}{"".join(_src[-fi.o:])}'
+                                        st = idx + 4 + len(fi) + 1  # +1 for closing ']'
+                                    except IndexError:
+                                        typer.secho(
+                                            f"Can't extract the final {fi.o} characters from {_src}"
+                                            f"It's only {len(_src)} characters."
+                                        )
+                                        raise
+                                else:  # +2 is '[' +3: should be int [1:4]
+                                    fi = _get_full_int(fstr[idx + 3:])
+                                    fi2 = _get_full_int(fstr[idx + 3 + len(fi) + 1:])  # +1 for expected ':'
+                                    if len(_src[slice(fi.i, fi2.o)]) < fi2.o - fi.i:
+                                        _e1 = typer.style(
+                                            f"\n{fstr} wants to take characters "
+                                            f"\n{fi.o} through {fi2.o}"
+                                            f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
+                                            fg="red"
+                                        )
+                                        if not shown_promt and typer.confirm(
+                                            f"{_e1}"
+                                            f"\n\nResult will be \""
+                                            f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
+                                            " for this segment."
+                                            "\nOK to continue?"
+                                        ):
+                                            shown_promt = True
+                                            x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
+                                            st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
+                                        else:
+                                            raise typer.Abort()
+                        else:
+                            x = f'{x}{c}'
+                    req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
+                    name_list += [f"  {x}"]
+                    break
+                except typer.Abort:
+                    fstr = _lldp_rename_get_fstr()
+                except Exception as e:
+                    log.exception(f"LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
+                    typer.secho(f"\nThere Appears to be a problem with {fstr}: {e.__class__.__name__}", fg="red")
+                    if typer.confirm("Do you want to edit the fomat string and try again?", abort="True"):
+                        fstr = _lldp_rename_get_fstr()
+
+    typer.secho(f"Resulting AP names based on '{fstr}':", fg="bright_green")
     if len(name_list) <= 6:
         typer.echo("\n".join(name_list))
     else:
@@ -97,7 +230,7 @@ def do_lldp_rename(fstr: str) -> Response:
             )
         )
 
-    if typer.confirm("Proceed with AP Rename?"):
+    if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
 
@@ -209,8 +342,13 @@ def delete(
 @app.command()
 def rename(
     what: BatchArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, exists=True),
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),
     lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
+    ap: str = typer.Option(None, metavar=iden_meta_vars.dev, help="[LLDP rename] Perform on specified AP",),
+    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label",),
+    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group",),
+    site: str = typer.Option(None, metavar=iden_meta_vars.site, help="[LLDP rename] Perform on APs in specified site",),
+    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model",),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback),
@@ -225,12 +363,23 @@ def rename(
     ),
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
+    yes = yes_ if yes_ else yes
+
+    if str(import_file).lower() == "lldp":
+        lldp = True
+        import_file = None
+
     central = cli.central
     if import_file:
+        if not import_file.exists():
+            typer.secho(f"Error: {import_file} not found.", fg="red")
+            raise typer.Exit(1)
+
         data = config.get_file_data(import_file)
 
         resp = None
         if what == "aps":
+            # transform flat csv struct to dict with dict with AP serials as keys
             if import_file.suffix in [".csv", ".tsv", ".dbf", ".xls", ".xlsx"]:
                 if data and len(data.headers) < 3:
                     if "name" in data.headers:
@@ -242,51 +391,37 @@ def rename(
                         i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
                         {k: v for k, v in i.items() if not k.startswith("serial")} for i in data.dict
                     }
-            calls = []
-            for ap in data:
+
+            calls, conf_msg = [], [typer.style("Names Gathered from import:", fg="bright_green")]
+            for ap in data:  # serial num
+                conf_msg += [f"  {ap}: {data[ap]['hostname']}"]
                 calls.append(central.BatchRequest(central.update_ap_settings, (ap,), data[ap]))
 
-            resp = central.batch_request(calls)
+            if len(conf_msg) > 6:
+                conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
+            typer.echo("\n".join(conf_msg))
+
+            if yes or typer.confirm("Proceed with AP rename?", abort=True):
+                resp = central.batch_request(calls)
 
     elif lldp:
-        rtxt = typer.style("RESULT: ", fg=typer.colors.BRIGHT_BLUE)
-        typer.secho("Rename APs based on LLDP:", fg="bright_green")
-        typer.echo(
-            "  This function will automatically rename APs based on a combination of\n"
-            "  information from the upstream switch (via LLDP) and from the AP itself.\n\n"
-            "    Values used in the examples below: \n"
-            "      switch hostname (%h): 'SNAN-IDF3-sw1'\n"
-            "      switch port (%p): 7\n"
-            "      AP mac (%m): aa:bb:cc:dd:ee:ff\n"
-            "      AP model (%M): 535\n\n"
-            f"{typer.style('Format String Syntax:', fg='bright_green')}\n"
-            "  '%h[1:2]'  will use the first 2 characters of the switches hostname.\n"
-            f"    {rtxt} 'SN'\n"
-            "  '%h[2:4]'  will use characters 2 through 4 of the switches hostname.\n"
-            f"    {rtxt} 'NAN'\n"
-            "  '%h-1'  will split the hostname into parts separating on '-' and use\n"
-            "  the firt segment.\n"
-            f"    {rtxt} 'SNAN\n"
-            "  '%p'  represents the interface.\n"
-            f"    {rtxt} '7'\n"
-            "  '%p/3'  seperates the port string on / and uses the 3rd segment.\n"
-            f"    {rtxt} (given port 1/1/7): '7'\n"
-            f"  '%M'  represents the the AP model.\n"
-            f"    {rtxt} '535'\n"
-            "  '%m' The MAC of the AP\n"
-            "  '%m[-4]'  The last 4 digits of the AP MAC\n"
-            f"    {rtxt} 'eeff' NOTE: delimiters ':' are stripped\n\n"
-            f"{typer.style('Examples:', fg='bright_green')}\n"
-            f"  %h-1-AP%M-%m[-4]  {rtxt} SNAN-AP535-eeff\n"
-            f"  %h[1-4]-%h-2%h-3.p%p.%M-ap  {rtxt} SNAN-IDF3sw1.p7.535-ap\n"
+        kwargs = {}
+        if group:
+            kwargs["group"] = cli.cache.get_group_identifier(group).name
+        if ap:
+            kwargs["serial"] = cli.cache.get_dev_identifier(ap, dev_type="ap").serial
+        if site:
+            kwargs["site"] = cli.cache.get_site_identifier(site).name
+        if model:
+            kwargs["model"] = model
+        if label:
+            kwargs["label"] = label
 
-        )
-        fstr = typer.prompt("Enter Desired format string")
-        resp = do_lldp_rename(fstr)
+        resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
     else:
         typer.secho("import file Argument is required if --lldp flag not provided", fg="red")
 
-    cli.display_results(resp)
+    cli.display_results(resp, exit_on_fail=True)
 
 
 @app.callback()
