@@ -549,10 +549,13 @@ class Utils:
                     # we can format green as only success output is sent through formatter.
                     table_data = typer.style(f"  {outdata[0]}", fg="green")
                     raw_data = outdata[0]
-                else:
-                    raw_data = table_data = "{}{}{}".format("--\n", '\n'.join(outdata), "\n--")
-            else:  # template / config file output
+                else:  # template / config file output
+                    # get rid of double nl @ EoF (configs)
+                    raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+            else:
                 raw_data = table_data = '\n'.join(outdata)
+                # Not sure what hit's this, but it was created so something must
+                log.debugv("List[str] else hit")
 
         if _lexer and raw_data:
             table_data = highlight(bytes(raw_data, 'UTF-8'),
