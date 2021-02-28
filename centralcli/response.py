@@ -82,11 +82,20 @@ class Response:
 
     def __str__(self):
         status_code = f"  status code: {self.status}\n"
+        r = self.output
+        # indent single line output
+        if isinstance(self.output, str):
+            if "\n" not in self.output:
+                r = f"  {self.output}"
+            elif "{\n" in self.output:
+                try:
+                    self.output = json.loads(self.output)
+                except Exception:
+                    r = self.output
+
         if isinstance(self.output, dict):
             r = "\n".join([f"  {k}: {self._split_inner(v)}" for k, v in self.output.items()])
-        # indent single line output
-        if isinstance(self.output, str) and "\n" not in self.output:
-            r = f"  {self.output}"
+
         if config.sanitize and config.sanatize_file.is_file():
             r = utils.Output(config=config).sanitize_strings(r)
 
