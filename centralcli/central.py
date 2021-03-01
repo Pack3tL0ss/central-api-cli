@@ -1722,7 +1722,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # TODO NotUsed Yet
-    async def get_groups_properties(self, groups: List[str]) -> Response:
+    async def get_groups_properties(self, groups: Union[str, List[str]]) -> Response:
         """Get properties set for groups.
 
         Args:
@@ -1756,6 +1756,43 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def update_group_properties(
+        self,
+        group: str,
+        aos10: bool = None,
+        monitor_only_switch: bool = None,
+    ) -> Response:
+        """Update properties for the given group.
+
+        If aos10 argument is not provided an additional API call is made to gather the current aos_version
+        and use the current setting as the argument is required by the Central API gw.
+
+        Args:
+            group (str): Group for which properties need to be updated.
+            aos10 (bool, optional): If True will upgrade the group to AOS10
+                Note: AOS10 groups can not be downgraded back to AOS8
+            MonitorOnlySwitch (bool, optional): Indicates if the Monitor Only mode for switches is enabled for
+                the group.  Defaults to False
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/properties"
+        json_data = {}
+
+        if aos10 is None:
+            resp = await self.get_groups_properties(group)
+            if not resp:
+                return resp
+            json_data['AOSVersion'] = resp[0]["properties"]["AOSVersion"]
+        else:
+            json_data['AOSVersion'] = "AOS_10X" if aos10 else "AOS_8X"
+
+        if monitor_only_switch is not None:
+            json_data['MonitorOnlySwitch'] = monitor_only_switch
+
+        return await self.patch(url, json_data=json_data)
 
     async def get_vc_firmware(
         self,
