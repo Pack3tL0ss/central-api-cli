@@ -244,6 +244,12 @@ class StatusOptions(str, Enum):
     DOWN = "DOWN"
 
 
+class UpgradeArgs(str, Enum):
+    ap = "ap"
+    switch = "switch"
+    gateway = "gateway"
+
+
 class LogAppArgs(str, Enum):
     account_setting = "account_setting"
     nms = "nms"
