@@ -440,6 +440,7 @@ def _cache(
 def groups(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    verbose: bool = typer.Option(False, "-v", help="Verbose: adds AoS10 / Monitor only switch attributes", show_default=False,),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
                                  callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -453,6 +454,15 @@ def groups(
     if central.get_all_groups not in cli.cache.updated:
         asyncio.run(cli.cache.update_group_db())
         resp = Response(output=cli.cache.groups)
+        if verbose:
+            groups = [g["name"] for g in resp.output]
+            verbose_resp = central.request(central.get_groups_properties, groups=groups)
+            for idx, g in enumerate(verbose_resp.output):
+                for grp in resp.output:
+                    if g["group"] == grp["name"]:
+                        verbose_resp.output[idx] = {**grp, **g["properties"]}
+            resp = verbose_resp
+
         cli.display_results(resp, tablefmt='rich', title="Groups", pager=not no_pager, outfile=outfile)
 
 

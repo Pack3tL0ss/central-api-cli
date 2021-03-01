@@ -1688,6 +1688,10 @@ class CentralApi(Session):
         """
         url = "/configuration/v1/groups/properties"
 
+        # Central API method doesn't actually take a list it takes a string with
+        # group names separated by comma (NO SPACES)
+        groups = ",".join(utils.listify(groups))
+
         params = {
             'groups': groups
         }
