@@ -76,9 +76,12 @@ class Response:
     @staticmethod
     def _split_inner(val):
         if isinstance(val, list) and len(val) == 1:
-            return val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
-        else:
-            return val
+            val = val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
+
+        if isinstance(val, dict):
+            val = "".join([f"\n    {k}: {val[k]}" for k in val if val[k]])
+
+        return val
 
     def __str__(self):
         status_code = f"  status code: {self.status}\n"
@@ -94,7 +97,9 @@ class Response:
                     r = self.output
 
         if isinstance(self.output, dict):
-            r = "\n".join([f"  {k}: {self._split_inner(v)}" for k, v in self.output.items()])
+            r = "\n".join(
+                [f"  {k}: {self._split_inner(v)}" for k, v in self.output.items() if v is not False and v]
+            )
 
         if config.sanitize and config.sanatize_file.is_file():
             r = utils.Output(config=config).sanitize_strings(r)
