@@ -272,9 +272,9 @@ class CLICommon:
             for idx, r in enumerate(resp):
                 if len(resp) > 1:
                     typer.secho(f"Request {idx + 1} ({r.url.path}) Response:", fg="cyan")
-                if not r:
+                if not r or tablefmt == "action":
                     typer.secho(str(r), fg="green" if r else "red")
-                    if exit_on_fail:
+                    if not r and exit_on_fail:
                         raise typer.Exit(1)
                 else:
                     # TODO add sort and reverse funcs
