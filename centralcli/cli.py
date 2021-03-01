@@ -9,12 +9,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cli, log, utils
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cli, log,
+        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log,
                                 utils)
     else:
         print(pkg_dir.parts)
@@ -35,7 +35,9 @@ app.add_typer(clishow.app, name="show")
 app.add_typer(clido.app, name="do", )
 app.add_typer(clidel.app, name="delete")
 app.add_typer(cliadd.app, name="add")
+app.add_typer(cliclone.app, name="clone")
 app.add_typer(cliupdate.app, name="update")
+app.add_typer(cliupgrade.app, name="upgrade")
 app.add_typer(clibatch.app, name="batch")
 app.add_typer(clicaas.app, name="caas", hidden=True)
 
@@ -50,7 +52,7 @@ def refresh(what: RefreshWhat = typer.Argument(...),
             debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                        callback=cli.debug_callback),
             default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                         callback=cli.default_callback),
+                                         callback=cli.default_callback), show_default=False,
             account: str = typer.Option("central_info",
                                         envvar="ARUBACLI_ACCOUNT",
                                         help="The Aruba Central Account to use (must be defined in the config)",
@@ -76,7 +78,7 @@ def method_test(method: str = typer.Argument(...),
                 outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
                 no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
                 update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
-                default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                              callback=cli.default_callback),
                 debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                            callback=cli.debug_callback),

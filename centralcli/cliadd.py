@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import asyncio
 from enum import Enum
 from pathlib import Path
 import sys
@@ -34,6 +35,53 @@ class AddWlanArgs(str, Enum):
     bw_limit_user_up = "bw_limit_user_up"
     bw_limit_user_down = "bw_limit_user_down"
     portal_profile = "portal_profile"
+
+
+@app.command(short_help="Add a group")
+def group(
+    group: str = typer.Argument(..., metavar="[GROUP NAME]"),
+    group_password: str = typer.Argument(
+        None,
+        show_default=False,
+        help="Group password is required. You will be prompted for password if not provided.",
+    ),
+    wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
+    wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage IAP configurations via templates"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    yes = yes_ if yes_ else yes
+    if not group_password:
+        group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
+    _msg = f'{typer.style(f"Create group", fg="cyan")}'
+    _msg = f'{_msg} {typer.style(group, fg="bright_green")}'
+
+    _word = None
+    if wired_tg:
+        _word = "switches"
+    if wlan_tg:
+        _word = "instant APs" if not _word else f"{_word} and {'instant APs'}"
+
+    if _word:
+        _msg = f'{_msg} {typer.style(f"with {_word} managed via template?", fg="cyan")}'
+    else:
+        _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
+
+    if yes or typer.confirm(_msg):
+        resp = cli.central.request(cli.central.create_group, group, group_password, wired_tg=wired_tg, wlan_tg=wlan_tg)
+        cli.display_results(resp)
+        if resp:
+            asyncio.run(
+                cli.cache.update_group_db({'name': group, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
+            )
 
 
 @app.command(short_help="Add WLAN (SSID)")

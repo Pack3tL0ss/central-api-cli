@@ -170,13 +170,17 @@ class Cache:
             # print(f" site db Done: {time.time() - start}")
             return self.SiteDB.insert_multiple(resp.output)
 
-    async def update_group_db(self):
-        resp = await self.central.get_all_groups()
-        if resp.ok:
-            resp.output = utils.listify(resp.output)
-            self.updated.append(self.central.get_all_groups)
-            self.GroupDB.truncate()
-            return self.GroupDB.insert_multiple(resp.output)
+    async def update_group_db(self, data: Union[list, dict] = None) -> List[int]:
+        if data:
+            data = utils.listify(data)
+            return self.GroupDB.insert_multiple(data)
+        else:
+            resp = await self.central.get_all_groups()
+            if resp.ok:
+                resp.output = utils.listify(resp.output)
+                self.updated.append(self.central.get_all_groups)
+                self.GroupDB.truncate()
+                return self.GroupDB.insert_multiple(resp.output)
 
     async def update_template_db(self):
         groups = self.groups if self.central.get_all_groups in self.updated else None
@@ -455,6 +459,7 @@ class Cache:
             if retry and not match and self.central.get_all_groups not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating group Cachce", fg="red")
                 self.check_fresh(refresh=True, group_db=True)
+                _ += 1
             if match:
                 break
 

@@ -756,6 +756,11 @@ class CentralApi(Session):
 
         tasks = [self.get_devices(dev_type, **kwargs) for dev_type in dev_types]
         ap, sw, gw = await asyncio.gather(*tasks)
+
+        for rv in [ap, sw, gw]:
+            if not rv:
+                return rv
+
         resp = ap
         vals = [ap.output, sw.output, gw.output]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, vals) if v}
@@ -1540,6 +1545,60 @@ class CentralApi(Session):
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
 
+    async def create_group(
+        self,
+        group: str,
+        group_password: str,
+        wired_tg: bool = False,
+        wlan_tg: bool = False
+    ) -> Response:
+        """Create new group.
+
+        Args:
+            group (str): Group Name
+            group_password (str): local admin password used to access devices added to the group.
+            wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups"
+
+        json_data = {
+            "group": group,
+            "group_attributes": {
+                "group_password": group_password,
+                "template_info": {
+                    "Wired": wired_tg,
+                    "Wireless": wlan_tg
+                }
+            }
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def clone_group(self, clone_group: str, new_group: str) -> Response:
+        """Clone and create new group.
+
+        Args:
+            clone_group (str): Group to be cloned.
+            new_group (str): Name of group to be created based on clone.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups/clone"
+
+        json_data = {
+            'group': new_group,
+            'clone_group': clone_group
+        }
+
+        return await self.post(url, json_data=json_data)
+
     async def get_ap_settings(self, serial_number: str) -> Response:
         """Get an existing ap settings.
 
@@ -1791,6 +1850,19 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
+    async def delete_group(self, group: str) -> Response:
+        """Delete existing group.
+
+        Args:
+            group (str): Name of the group that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}"
+
+        return await self.delete(url)
+
     async def delete_site(self, site_id: Union[int, List[int]]) -> Response:
         """Delete Site.
 
@@ -2018,6 +2090,48 @@ class CentralApi(Session):
         }
 
         return await self.put(url, json_data=json_data)
+
+    async def upgrade_firmware(
+        self,
+        scheduled_at: int = None,
+        swarm_id: str = None,
+        serial: str = None,
+        group: str = None,
+        device_type: Literal["IAP", "MAS", "HP", "CONTROLLER"] = None,
+        firmware_version: str = None,
+        model: str = None,
+        reboot: bool = False,
+    ) -> Response:
+        """Initiate firmware upgrade on device(s).
+
+        Args:
+            scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
+            swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
+            serial (str, optional): Upgrade a specific device by serial. Defaults to None.
+            group (str, optional): Upgrade devices belonging to group. Defaults to None.
+            device_type (str["IAP"|"MAS"|"HP"|"CONTROLLER"]): Type of device to upgrade. Defaults to None.
+            firmware_version (str, optional): Version to upgrade to. Defaults to None(recommended version).
+            model (str, optional): To initiate upgrade at group level for specific model family. Applicable
+                only for Aruba switches. Defaults to None.
+            reboot (bool, optional): Automatically reboot device after firmware download. Defaults to False.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade"
+
+        json_data = {
+            'firmware_scheduled_at': scheduled_at,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'group': group,
+            'device_type': device_type,
+            'firmware_version': firmware_version,
+            'reboot': reboot,
+            'model': model
+        }
+
+        return await self.post(url, json_data=json_data)
 
 
 if __name__ == "__main__":

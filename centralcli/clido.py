@@ -18,7 +18,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (BlinkArgs, BounceArgs, KickArgs, RenameArgs, arg_to_what) # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, KickArgs, RenameArgs, arg_to_what) # noqa
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -68,7 +68,7 @@ def reboot(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -95,7 +95,7 @@ def blink(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -116,7 +116,7 @@ def nuke(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -126,11 +126,9 @@ def nuke(
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     nuke_msg = f"{typer.style('*Factory Default*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
-    if yes or typer.confirm(typer.style(f"Please Confirm: {nuke_msg}", fg="cyan")):
+    if yes or typer.confirm(typer.style(f"Please Confirm: {nuke_msg}", fg="cyan"), abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
         typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
 
 
 @app.command(short_help="Save Device Running Config to Startup")
@@ -138,7 +136,7 @@ def save(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -155,7 +153,7 @@ def sync(
     device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -175,7 +173,7 @@ def move(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -201,7 +199,7 @@ def rename(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -226,7 +224,7 @@ def kick(
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",

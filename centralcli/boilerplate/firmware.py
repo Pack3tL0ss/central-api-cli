@@ -2,7 +2,7 @@ import sys
 import asyncio
 import json
 from pathlib import Path
-from typing import Union, List
+from typing import Literal, Union, List
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -149,27 +149,28 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def firmware_upgrade_firmware(self, firmware_scheduled_at: int, swarm_id: str,
-                                        serial: str, group: str, device_type: str,
-                                        firmware_version: str, reboot: bool, model: str) -> Response:
-        """Firmware Upgrade.
+    async def firmware_upgrade_firmware(
+        self, scheduled_at: int = None,
+        swarm_id: str = None,
+        serial: str = None,
+        group: str = None,
+        device_type: Literal["IAP", "MAS", "HP", "CONTROLLER"] = None,
+        firmware_version: str = None,
+        reboot: bool = False,
+        model: str = None
+    ) -> Response:
+        """Initiate firmware upgrade on device(s).
 
         Args:
-            firmware_scheduled_at (int): Firmware upgrade will be scheduled at,
-                firmware_scheduled_at - current time. firmware_scheduled_at is epoch in seconds and
-                default value is current time
-            swarm_id (str): Swarm ID
-            serial (str): Serial of device
-            group (str): Specify Group Name to initiate upgrade  for whole group.
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            firmware_version (str): Specify firmware version to which you want device to upgrade. If
-                you do not specify this field then firmware upgrade initiated with recommended
-                firmware version
-            reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
-            model (str): To initiate upgrade at group level for specific model family. Applicable
-                only for Aruba switches.
+            scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
+            swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
+            serial (str, optional): Upgrade a specific device by serial. Defaults to None.
+            group (str, optional): Upgrade devices belonging to group. Defaults to None.
+            device_type (str["IAP"|"MAS"|"HP"|"CONTROLLER"]): Type of device to upgrade. Defaults to None.
+            firmware_version (str, optional): Version to upgrade to. Defaults to None(recommended version).
+            reboot (bool, optional): Automatically reboot device after firmware download. Defaults to False.
+            model (str, optional): To initiate upgrade at group level for specific model family. Applicable
+                only for Aruba switches. Defaults to None.
 
         Returns:
             Response: CentralAPI Response object
@@ -177,7 +178,7 @@ class AllCalls(CentralApi):
         url = "/firmware/v1/upgrade"
 
         json_data = {
-            'firmware_scheduled_at': firmware_scheduled_at,
+            'firmware_scheduled_at': scheduled_at,
             'swarm_id': swarm_id,
             'serial': serial,
             'group': group,
