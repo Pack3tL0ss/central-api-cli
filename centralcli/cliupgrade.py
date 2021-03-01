@@ -62,7 +62,7 @@ def device(
         abort=True,
     ):
         resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, reboot=reboot)
-        cli.display_results(resp)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Upgrade firmware by group",)
