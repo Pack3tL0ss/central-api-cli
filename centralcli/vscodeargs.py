@@ -30,6 +30,10 @@ def vscode_arg_handler():
             if " " in sys.argv[1] or not sys.argv[1]:
                 vsc_args = sys.argv.pop(1)
                 if vsc_args:
+                    # strip 'cli ' from 'cli command options' ocasionally paste in command from
+                    # external terminal where we use an alias cli to run cli.py with venv for dev.
+                    if vsc_args.startswith("cli "):
+                        vsc_args = vsc_args.lstrip("cli ")
                     if "\\'" in vsc_args:
                         _loc = vsc_args.find("\\'")
                         _before = vsc_args[:_loc - 1]
