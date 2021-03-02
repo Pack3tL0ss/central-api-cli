@@ -44,11 +44,13 @@ class Response:
         self.output = output
         self.raw = raw
         self.ok = ok
+        self.method = ""
         if response:
             self.ok = response.ok
             self.url = response.url
             self.error = response.reason
             self.status = response.status
+            self.method = response.method
             if not self.ok:
                 self.output = self.output or self.error
             log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
