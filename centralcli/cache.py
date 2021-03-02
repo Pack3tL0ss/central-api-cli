@@ -157,23 +157,51 @@ class Cache:
             self.DevDB.truncate()
             return self.DevDB.insert_multiple(resp.output)
 
-    async def update_site_db(self):
-        resp = await self.central.get_all_sites()
-        if resp.ok:
-            resp.output = utils.listify(resp.output)
-            # TODO time this to see which is more efficient
-            # start = time.time()
-            # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
-            # upd = [item for in_list in upd for item in in_list]
-            self.updated.append(self.central.get_all_sites)
-            self.SiteDB.truncate()
-            # print(f" site db Done: {time.time() - start}")
-            return self.SiteDB.insert_multiple(resp.output)
-
-    async def update_group_db(self, data: Union[list, dict] = None) -> List[int]:
+    async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
+        # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
         if data:
             data = utils.listify(data)
-            return self.GroupDB.insert_multiple(data)
+            if not remove:
+                return self.SiteDB.insert_multiple(data)
+            else:
+                doc_ids = []
+                for qry in data:
+                    # provided list of site_ids to remove
+                    if isinstance(qry, (int, str)) and str(qry).isdigit():
+                        doc_ids += [self.SiteDB.get((self.Q.id == int(qry))).doc_id]
+                    else:
+                        # list of dicts with {search_key: value_to_search_for}
+                        if len(qry.keys()) > 1:
+                            raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
+                        q = list(qry.keys())[0]
+                        doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
+                return self.SiteDB.remove(doc_ids=doc_ids)
+        else:
+            resp = await self.central.get_all_sites()
+            if resp.ok:
+                resp.output = utils.listify(resp.output)
+                # TODO time this to see which is more efficient
+                # start = time.time()
+                # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
+                # upd = [item for in_list in upd for item in in_list]
+                self.updated.append(self.central.get_all_sites)
+                self.SiteDB.truncate()
+                # print(f" site db Done: {time.time() - start}")
+                return self.SiteDB.insert_multiple(resp.output)
+
+    async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
+        if data:
+            data = utils.listify(data)
+            if not remove:
+                return self.GroupDB.insert_multiple(data)
+            else:
+                doc_ids = []
+                for qry in data:
+                    if len(qry.keys()) > 1:
+                        raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
+                    q = list(qry.keys())[0]
+                    doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
+                return self.GroupDB.remove(doc_ids=doc_ids)
         else:
             resp = await self.central.get_all_groups()
             if resp.ok:
@@ -362,7 +390,7 @@ class Cache:
                 )
 
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating Device Cachce", fg="red")
+                typer.secho(f"No Match Found for {query_str}, Updating Device Cache", fg="red")
                 self.check_fresh(refresh=True, dev_db=True)
             if match:
                 break
@@ -430,7 +458,7 @@ class Cache:
                 match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_sites not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating Site Cachce", fg="red")
+                typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
                 self.check_fresh(refresh=True, site_db=True)
             if match:
                 break
@@ -457,7 +485,7 @@ class Cache:
         for _ in range(0, 2):
             match = self.GroupDB.search((self.Q.name == query_str) | self.Q.name.test(lambda v: v.lower() == query_str.lower()))
             if retry and not match and self.central.get_all_groups not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating group Cachce", fg="red")
+                typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
                 self.check_fresh(refresh=True, group_db=True)
                 _ += 1
             if match:
@@ -499,7 +527,7 @@ class Cache:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_templates not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating template Cachce", fg="red")
+                typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
                 self.check_fresh(refresh=True, template_db=True)
             if match:
                 break

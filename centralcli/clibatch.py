@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import asyncio
 from pathlib import Path
 from enum import Enum
 import sys
@@ -238,7 +239,11 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
 def add(
     what: BatchArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(..., exists=True),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback, show_default=False
+    ),
     debug: bool = typer.Option(
         False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", callback=cli.debug_callback
     ),
@@ -250,6 +255,7 @@ def add(
     ),
 ) -> None:
     """Perform batch Add operations using import data from file."""
+    yes = yes_ if yes_ else yes
     central = cli.central
     data = config.get_file_data(import_file)
 
@@ -273,8 +279,30 @@ def add(
                     }
                     for i in data.dict
                 ]
-
-        resp = central.request(central.create_site, site_list=data)
+        site_names = [
+            d.get("site_name", "ERROR") for d in data
+        ]
+        if len(site_names) > 7:
+            site_names = [*site_names[0:3], "...", *site_names[-3:]]
+        _msg = [
+            typer.style("Batch Add Sites:", fg="cyan"),
+            typer.style(
+                "\n".join([typer.style(f'  {n}', fg="bright_green" if n != "..." else "reset") for n in site_names])
+            ),
+            typer.style("Proceed with Site Additions?", fg="cyan")
+        ]
+        _msg = "\n".join(_msg)
+        if yes or typer.confirm(_msg, abort=True):
+            resp = central.request(central.create_site, site_list=data)
+            if resp:
+                cache_data = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
+                cache_res = asyncio.run(cli.cache.update_site_db(data=cache_data))
+                if len(cache_res) != len(data):
+                    log.warning(
+                        "Attempted to add entries to Site Cache after batch import.  Cache Response "
+                        f"{len(cache_res)} but we added {len(data)} sites.",
+                        show=True
+                    )
 
     cli.display_results(resp)
 
@@ -309,14 +337,23 @@ def delete(
         _msg_list = []
         for i in data:
             if isinstance(i, str) and isinstance(data[i], dict):
-                i = {"name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
-            found = False
-            for key in ["site_id", "id"]:
-                if key in i:
-                    del_list += [i[key]]
-                    _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
+                i = {"site_name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
+
+            if "site_id" not in i and "id" not in i:
+                if "site_name" in i or "name" in i:
+                    _name = i.get("site_name", i.get("name"))
+                    _id = cli.cache.get_site_identifier(_name).id
                     found = True
-                    break
+                    _msg_list += [_name]
+                    del_list += [_id]
+            else:
+                found = False
+                for key in ["site_id", "id"]:
+                    if key in i:
+                        del_list += [i[key]]
+                        _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
+                        found = True
+                        break
 
             if not found:
                 if i.get("site_name", i.get("site", i.get("name"))):
@@ -328,15 +365,22 @@ def delete(
                     typer.secho("Error getting site ids from import, unable to find required key", fg="red")
                     raise typer.Exit(1)
 
+        if len(_msg_list) > 7:
+            _msg_list = [*_msg_list[0:3], "...", *_msg_list[-3:]]
         typer.secho("\nSites to delete:", fg="bright_green")
-        typer.echo("\n".join(_msg_list))
-        if typer.confirm(f"\nDelete {len(del_list)} sites"):
+        typer.echo("\n".join([f"  {m}" for m in _msg_list]))
+        if yes or typer.confirm(f"\n{typer.style('Delete', fg='red')} {len(del_list)} sites", abort=True):
             resp = central.request(central.delete_site, del_list)
-        else:
-            raise typer.Abort()
+            if resp:
+                cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
+                if len(cache_del_res) != len(del_list):
+                    log.warning(
+                        f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
+                        f"but we tried to delete {len(del_list)} sites.",
+                        show=True
+                    )
 
     cli.display_results(resp)
-    cli.cache.check_fresh(site_db=True)
 
 
 @app.command()

@@ -2,18 +2,19 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
-import sys
 from typing import List
+import sys
 import typer
+import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli
+    from centralcli import cli, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
+        from centralcli import cli, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -46,7 +47,7 @@ def certificate(
 
 @app.command(short_help="Delete a site")
 def site(
-    name: str = typer.Argument(...,),  # metavar=IdenMetaVars.site),
+    sites: List[str] = typer.Argument(..., help="Site(s) to delete (can provide more than one)."),  # metavar=IdenMetaVars.site),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -59,13 +60,32 @@ def site(
                                 callback=cli.account_name_callback),
 ) -> None:
     yes = yes_ if yes_ else yes
-    site = cli.cache.get_site_identifier(name)
-    confirm_1 = typer.style("Please Confirm:", fg="cyan")
-    confirm_2 = typer.style("Delete", fg="bright_red")
-    confirm_3 = typer.style(f"site {name}", fg="cyan")
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}"):
-        resp = cli.central.request(cli.central.delete_site, site.id)
-        typer.secho(str(resp), fg="green" if resp else "red")
+    sites = [cli.cache.get_site_identifier(s) for s in sites]
+
+    _del_msg = [
+        f"  {typer.style(s.name, fg='reset')}" for s in sites
+    ]
+    if len(_del_msg) > 7:
+        _del_msg = [*_del_msg[0:3], "  ...", *_del_msg[-3:]]
+    _del_msg = "\n".join(_del_msg)
+    confirm_1 = typer.style("About to", fg="cyan")
+    confirm_2 = typer.style("Delete:", fg="bright_red")
+    confirm_3 = f'{typer.style(f"Confirm", fg="cyan")} {typer.style(f"delete", fg="red")}'
+    confirm_3 = f'{confirm_3} {typer.style(f"{len(sites)} sites?", fg="cyan")}'
+    _msg = f"{confirm_1} {confirm_2}\n{_del_msg}\n{confirm_3}"
+
+    if yes or typer.confirm(_msg, abort=True):
+        del_list = [s.id for s in sites]
+        resp = cli.central.request(cli.central.delete_site, del_list)
+        cli.display_results(resp)
+        if resp:
+            cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
+            if len(cache_del_res) != len(del_list):
+                log.warning(
+                    f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
+                    f"but we tried to delete {len(del_list)}",
+                    show=True
+                )
 
 
 @app.command(short_help="Delete group(s)")
@@ -95,6 +115,8 @@ def group(
     if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3} {confirm_4}"):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp)
+        if resp:
+            asyncio.run(cli.cache.update_group_db(data=[{"name": g.name} for g in groups], remove=True))
 
 
 @app.command(short_help="Delete a WLAN (SSID)")
