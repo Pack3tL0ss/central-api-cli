@@ -187,7 +187,8 @@ def firmware(
         typer.echo(f"Unknown extra arguments in {[x for x in list(_group)[0:-1] if x.lower() != 'group']}")
         raise typer.Exit(1)
 
-    group = _group[-1] or group_name
+    _group = None if not _group else _group[-1]
+    group = _group or group_name
     if group:
         group = cli.cache.get_group_identifier(group).name
 
