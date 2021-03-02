@@ -29,8 +29,8 @@ def test_do_bounce_poe():
     assert "task_id:" in result.stdout
 
 
-def test_do_move_dev_to_group():
-    result = runner.invoke(app, ["do", "move", "J9773A-80:C1:6E:CD:32:40",
-                           "wadelab", "-Y", "--debug"])
-    assert result.exit_code == 0
-    assert "Success" in result.stdout
+# def test_do_move_dev_to_group():
+#     result = runner.invoke(app, ["do", "move", "J9773A-80:C1:6E:CD:32:40",
+#                            "wadelab", "-Y", "--debug"])
+#     assert result.exit_code == 0
+#     assert "Success" in result.stdout
