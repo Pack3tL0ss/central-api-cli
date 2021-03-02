@@ -134,8 +134,7 @@ def group(
             model=model,
             reboot=reboot
         )
-        cli.display_results(resp)
-        # typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Upgrade firmware for an IAP cluster",)
