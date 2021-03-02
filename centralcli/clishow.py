@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import clishowfirmware
 import typer
 import time
 import pendulum
@@ -13,12 +12,12 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, cli, utils
+    from centralcli import Response, cleaner, clishowfirmware, cli, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, cli, utils
+        from centralcli import Response, cleaner, clishowfirmware, cli, utils
     else:
         print(pkg_dir.parts)
         raise e
