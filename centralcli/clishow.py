@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import clishowfirmware
 import typer
 import time
 import pendulum
@@ -27,6 +28,7 @@ from centralcli.constants import (
 )
 
 app = typer.Typer()
+app.add_typer(clishowfirmware.app, name="firmware")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
