@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from enum import Enum
 from pathlib import Path
 from typing import List
 import sys
@@ -112,7 +113,7 @@ def group(
     confirm_3 = typer.style("group" if len(groups) == 1 else "groups", fg="cyan")
     confirm_4 = f'{_delim.join(typer.style(g.name, fg="bright_green") for g in groups)}{typer.style("?", fg="cyan")}'
 
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3} {confirm_4}"):
+    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3} {confirm_4}", abort=True):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp)
         if resp:
@@ -139,9 +140,75 @@ def wlan(
     confirm_1 = typer.style("Please Confirm:", fg="cyan")
     confirm_2 = typer.style("Delete", fg="bright_red")
     confirm_3 = typer.style(f"Group {group.name}, WLAN {name}", fg="cyan")
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}"):
+    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}", abort=True):
         resp = cli.central.request(cli.central.delete_wlan, group.name, name)
         typer.secho(str(resp), fg="green" if resp else "red")
+
+
+class DelFirmwareArgs(str, Enum):
+    compliance = "compliance"
+
+
+class FirmwareDevType(str, Enum):
+    ap = "ap"
+    gateway = "gateway"
+    switch = "switch"
+
+
+class ShowFirmwareKwags(str, Enum):
+    group = "group"
+
+
+@app.command(short_help="Delete/Clear firmware compliance")
+def firmware(
+    what: DelFirmwareArgs = typer.Argument(...),
+    device_type: FirmwareDevType = typer.Argument(..., metavar="[AP|GATEWAY|SWITCH]",),
+    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]",),
+    group_name: str = typer.Option(None, "--group", help="Filter by group"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    _type_to_name = {
+        "AP": "IAP",
+        "GATEWAY": "CONTROLLER",
+        "SWITCH": "HP"
+    }
+    yes = yes_ if yes_ else yes
+
+    if len(_group) > 2:
+        typer.echo(f"Unknown extra arguments in {[x for x in list(_group)[0:-1] if x.lower() != 'group']}")
+        raise typer.Exit(1)
+
+    group = _group[-1] or group_name
+    if group:
+        group = cli.cache.get_group_identifier(group).name
+
+    kwargs = {
+        'device_type': _type_to_name.get(device_type.upper(), device_type),
+        'group': group
+    }
+
+    confirm_1 = typer.style("Please Confirm:", fg="cyan")
+    confirm_2 = typer.style("remove", fg="bright_red")
+    confirm_3 = typer.style(f"compliance for {device_type} {'Globally?' if not group else f'in group {group}?'}", fg="cyan")
+    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}", abort=True):
+        resp = cli.central.request(cli.central.delete_firmware_compliance, **kwargs)
+        if resp.status == 404 and resp.output.lower() == "not found":
+            resp.output = (
+                f"Invalid URL or No compliance set for {device_type.lower()} "
+                f"{'Globally' if not group else f'in group {group}'}"
+            )
+            typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
+        else:
+            cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

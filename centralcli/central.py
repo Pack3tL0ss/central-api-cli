@@ -2170,6 +2170,47 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    DevType = Literal["IAP", "HP", "CONTROLLER"]
+
+    async def get_firmware_compliance(self, device_type: DevType, group: str = None) -> Response:
+        """Get Firmware Compliance Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name. Defaults to None (Global Compliance)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # API method returns 404 if compliance is not set!
+        url = "/firmware/v1/upgrade/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def delete_firmware_compliance(self, device_type: str, group: str = None) -> Response:
+        """Clear Firmware Compliance Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name. Defaults to None (Global Compliance)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.delete(url, params=params)
+
 
 if __name__ == "__main__":
     pass
