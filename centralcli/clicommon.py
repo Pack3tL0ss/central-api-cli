@@ -99,7 +99,6 @@ class CLICommon:
             return f"{self.previous}\n\n{self.will_forget}"
 
     def account_name_callback(self, ctx: typer.Context, account: str):
-        print("ACCOUNT NAME CALLBACK")
         if ctx.resilient_parsing:  # tab completion, return without validating
             return account
 
@@ -130,7 +129,6 @@ class CLICommon:
             config.account = self.account = account
             self.central = CentralApi(account)
             self.cache = Cache(self.central)
-            print("INIT CACHE", id(self.cache))
             return account
         else:
             typer.echo(
@@ -163,7 +161,6 @@ class CLICommon:
             raise typer.Exit(code=1)
 
     def default_callback(self, ctx: typer.Context, default: bool):
-        print("DEFAULT CALLBACK")
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 

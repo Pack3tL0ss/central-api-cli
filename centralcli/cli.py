@@ -292,7 +292,6 @@ def callback(
     """
     Aruba Central API CLI
     """
-    print("APP MAIN CALLBACK cache id:", id(cli.cache))
     pass
 
 
