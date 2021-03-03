@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from enum import Enum
 import sys
 from pathlib import Path
 from typing import List
@@ -21,7 +22,8 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import RefreshWhat, arg_to_what  # noqa
+from centralcli.constants import RefreshWhat, IdenMetaVars, arg_to_what  # noqa
+iden = IdenMetaVars()
 
 
 STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
@@ -42,9 +44,146 @@ app.add_typer(clibatch.app, name="batch")
 app.add_typer(clicaas.app, name="caas", hidden=True)
 
 
-args_metavar_dev = "[name|ip|mac-address|serial]"
-args_metavar_site = "[name|site_id|address|city|state|zip]"
-args_metavar = f"Optional Identifying Attribute: device: {args_metavar_dev} site: {args_metavar_site}"
+class MoveArgs(str, Enum):
+    site = "site"
+    group = "group"
+
+
+def move_copmpletion(ctx, args, incomplete):
+    return [k for k in ["site", "group"] if incomplete in k]
+
+
+def dev_completion(ctx, args, incomplete):
+    devs = cli.cache.devices
+    _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
+    _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
+    _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
+    print(args)
+    ["site", "group"]
+    return [k for k in [*_completion, "site", "group"] if incomplete in k]
+
+
+@app.command(
+    short_help="Move device(s) to a defined group and/or site",
+    help="Move device(s) to a defined group and/or site.",
+
+)
+def move(
+    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=dev_completion),
+    # _: str = typer.Argument(None, metavar="[site <SITE>] [group <GROUP>]", hidden=True),
+    kw1: str = typer.Argument(None, metavar="", show_default=False, hidden=True, autocompletion=move_copmpletion,),
+    kw1_val: str = typer.Argument(None, metavar="[site <SITE>]", show_default=False),
+    kw2: str = typer.Argument(None, metavar="", show_default=False, hidden=True, autocompletion=move_copmpletion),
+    kw2_val: str = typer.Argument(None, metavar="[group <GROUP>]", show_default=False, help="[site and/or group required]"),
+    # kw1: Tuple[MoveArgs, str] = typer.Argument(("site", None), metavar="site [SITE]", show_default=False),
+    # kw2: Tuple[MoveArgs, str] = typer.Argument(
+    #     ("group", None),
+    #     metavar="group [GROUP]",
+    #     show_default=False,
+    #     help="At least one of group or site is required"
+    #     ),
+    # more: List[str] = typer.Argument(None, hidden=True),
+    _group: str = typer.Option(None, help="Group to Move device(s) to", hidden=True),
+    _site: str = typer.Option(None, help="Site to move device(s) to", hidden=True),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback),
+) -> None:
+    central = cli.central
+    yes = yes_ if yes_ else yes
+
+    group, site, = None, None
+    for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
+        if a == "group":
+            group = b
+        elif a == "site":
+            site = b
+        else:
+            device += tuple([aa for aa in [a, b] if aa])
+
+    if not device:
+        typer.echo("Error: Missing argument '[[name|ip|mac-address|serial] ...]'.")
+        raise typer.Exit(1)
+
+    group = group or _group
+    site = site or _site
+
+    if not kw1 and not kw2 and not _group and not _site:
+        typer.secho("Missing Required Argument, group and/or site is required.")
+        raise typer.Exite(1)
+
+    dev = [cli.cache.get_dev_identifier(d) for d in device]
+    devs_by_type = {
+    }
+    dev_all_names, dev_all_serials = [], []
+    for d in dev:
+        if d.generic_type not in devs_by_type:
+            devs_by_type[d.generic_type] = [d]
+        else:
+            devs_by_type[d.generic_type] += [d]
+        dev_all_names += [d.name]
+        dev_all_serials += [d.serial]
+
+    _s = "," if len(dev_all_names) > 2 else " &"
+    _s = typer.style(_s, fg="bright_green")
+    _msg_devs = f'{_s} '.join(typer.style(n, fg="reset") for n in dev_all_names)
+    _msg_end = typer.style("?", fg="bright_green")
+    _msg = None
+
+    if group:
+        _group = cli.cache.get_group_identifier(group)
+        _msg = [
+            typer.style("Please Confirm: move", fg="bright_green"),
+            _msg_devs,
+            typer.style("to group", fg="bright_green"),
+            typer.style((_group.name), fg='reset'),
+        ]
+        _msg = f"{' '.join(_msg)}{_msg_end}"
+    if site:
+        _site = cli.cache.get_site_identifier(site)
+        if not _msg:
+            _msg = [
+                typer.style("Please Confirm: move", fg="bright_green"),
+                _msg_devs,
+                typer.style("to site", fg="bright_green"),
+                typer.style((_site.name), fg='reset'),
+            ]
+            _msg = f"{' '.join(_msg)}{_msg_end}"
+        else:
+            _msg_site = typer.style((_site.name), fg=typer.colors.RESET)
+            _msg = f'{_msg.replace("?", "")} {typer.style(f"and site", fg="bright_green")} {_msg_site}{_msg_end}'
+
+    resp = None
+    confirmed = True if yes or typer.confirm(_msg, abort=True) else False
+    if confirmed and _group and _site:
+        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)]
+        for _type in devs_by_type:
+            serials = [d.serial for d in devs_by_type[_type]]
+            reqs += [
+                central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
+            ]
+        resp = central.batch_request(reqs)
+
+    elif confirmed and _group:
+        resp = cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)
+
+    elif confirmed and _site:
+        for _type in devs_by_type:
+            serials = [d.serial for d in devs_by_type[_type]]
+            reqs = [
+                central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
+            ]
+
+        resp = central.batch_request(reqs)
+
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)
