@@ -18,8 +18,8 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, KickArgs, RenameArgs, arg_to_what) # noqa
-
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, KickArgs, RenameArgs) # noqa
+iden = IdenMetaVars()
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
@@ -163,31 +163,6 @@ def sync(
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
     typer.secho(str(resp), fg="green" if resp else "red")
-
-
-@app.command(short_help="Move device to a defined group")
-def move(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
-    group: str = typer.Argument(..., ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
-) -> None:
-    yes = yes_ if yes_ else yes
-    dev = cli.cache.get_dev_identifier(device)
-    group = cli.cache.get_group_identifier(group)
-    if yes or typer.confirm(typer.style(f"Please Confirm: move {dev.name} to group {group.name}", fg="cyan")):
-        resp = cli.central.request(cli.central.move_dev_to_group, group.name, dev.serial)
-        typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
 
 
 @app.command(short_help="Rename a Group")

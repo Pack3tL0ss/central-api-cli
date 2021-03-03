@@ -60,6 +60,11 @@ class CentralObject:
         log.exception(f"Cache LookUp Failure: 'CentralObject' object has no attribute '{name}'", show=True)
         raise typer.Exit(1)
 
+    @property
+    def generic_type(self):
+        if "type" in self.data:
+            return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
+
 
 class Cache:
     def __init__(
@@ -225,13 +230,14 @@ class Cache:
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs = []
-        if dev_db:
+        # TODO remove commented out stuff (waiting for a token expiration to debug a corner case.)
+        if dev_db:  # and self.central.get_all_devicesv2 not in self.updated:
             update_funcs += [self.update_dev_db]
-        if site_db:
+        if site_db:  # and self.central.get_all_sites not in self.updated:
             update_funcs += [self.update_site_db]
-        if template_db:
+        if template_db:  # and self.central.get_all_templates not in self.updated:
             update_funcs += [self.update_template_db]
-        if group_db:
+        if group_db:  # and self.central.get_all_groups not in self.updated:
             update_funcs += [self.update_group_db]
         async with ClientSession() as self.central.aio_session:
             if update_funcs:

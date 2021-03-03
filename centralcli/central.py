@@ -8,13 +8,13 @@ import time
 from asyncio.proactor_events import _ProactorBasePipeTransport
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 from aiohttp import ClientSession
 import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
-from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils
+from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils, constants
 from .response import Response, Session
 
 
@@ -128,7 +128,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
 
 class BatchRequest:
-    def __init__(self, func: callable, args: Union[list, tuple] = (), kwargs: dict = {}) -> None:
+    def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
         """Contructor object for for api requests.
 
         Used to pass multiple requests into CentralApi batch_request method for parallel
@@ -136,11 +136,11 @@ class BatchRequest:
 
         Args:
             func (callable): The CentralApi method to execute.
-            args (Union[list, tuple], optional): args passed on to method. Defaults to ().
+            args (Any, optional): args passed on to method. Defaults to ().
             kwargs (dict, optional): kwargs passed on to method. Defaults to {}.
         """
         self.func = func
-        self.args = args
+        self.args: Union[list, tuple] = args if isinstance(args, (list, tuple)) else (args, )
         self.kwargs = kwargs
 
 
@@ -754,16 +754,15 @@ class CentralApi(Session):
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
         _output = {}
 
-        tasks = [self.get_devices(dev_type, **kwargs) for dev_type in dev_types]
-        ap, sw, gw = await asyncio.gather(*tasks)
+        reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
+        res = await self._batch_request(reqs)
+        _failures = [idx for idx, r in enumerate(res) if not (r)]
+        if _failures:
+            return res[_failures[0]]
 
-        for rv in [ap, sw, gw]:
-            if not rv:
-                return rv
-
-        resp = ap
-        vals = [ap.output, sw.output, gw.output]
-        _output = {k: utils.listify(v) for k, v in zip(dev_types, vals) if v}
+        resp = res[0]
+        _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
+        resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
         if _output:
             # return just the keys common across all device types
@@ -1328,15 +1327,6 @@ class CentralApi(Session):
 
         return await self.post(url, payload=payload)
         # pprint.pprint(resp.json())
-
-    async def move_dev_to_group(self, group: str, serial_num: Union[str, list]) -> bool:
-        url = "/configuration/v1/devices/move"
-        if not isinstance(serial_num, list):
-            serial_num = [serial_num]
-
-        payload = {"group": group, "serials": serial_num}
-
-        return await self.post(url, json_data=payload)
 
     async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
         url = "/troubleshooting/v1/commands"
@@ -2210,6 +2200,66 @@ class CentralApi(Session):
         }
 
         return await self.delete(url, params=params)
+
+    async def move_devices_to_group(
+        self,
+        group: str,
+        serial_nums: Union[str, List[str]],
+    ) -> Response:
+        """Move devices to a group.
+
+        Args:
+            group (str): Group Name to move device to.
+            serials (List[str]): Serial numbers of devices to be added to group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/move"
+        serial_nums = utils.listify(serial_nums)
+
+        json_data = {
+            'group': group,
+            'serials': serial_nums
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def move_devices_to_site(
+        self,
+        site_id: int,
+        serial_nums: Union[str, List[str]],
+        device_type: Literal["ap", "cx", "sw", "switch", "gw"],
+    ) -> Response:
+        """Associate list of devices to a site.
+
+        Args:
+            site_id (int): Site ID
+            device_type (str): Device type. Valid Values: ap, cx, sw, switch, gw
+                cx and sw are the same as the more generic switch.
+            serial_nums (List[str]): List of device serial numbers of the devices to which the site
+                has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # TODO make device_types consistent throughout
+        device_type = constants.lib_to_api("site", device_type)
+        if not device_type:
+            raise ValueError(
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
+            )
+
+        url = "/central/v2/sites/associations"
+        serial_nums = utils.listify(serial_nums)
+
+        json_data = {
+            'site_id': site_id,
+            'device_ids': serial_nums,
+            'device_type': device_type
+        }
+
+        return await self.post(url, json_data=json_data)
 
 
 if __name__ == "__main__":
