@@ -10,13 +10,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log,
-                                utils)
+        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -25,23 +24,18 @@ from centralcli.central import CentralApi  # noqa
 from centralcli.constants import RefreshWhat, IdenMetaVars, arg_to_what  # noqa
 iden = IdenMetaVars()
 
-
-STRIP_KEYS = ["data", "devices", "mcs", "group", "clients", "sites", "switches", "aps"]
-SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
-SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
-SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-tty = utils.tty
+CONTEXT_SETTINGS = dict(token_normalize_func=lambda x: x.lower())
 
 app = typer.Typer()
-app.add_typer(clishow.app, name="show")
-app.add_typer(clido.app, name="do", )
+app.add_typer(clishow.app, name="show",)
+app.add_typer(clido.app, name="do",)
 app.add_typer(clidel.app, name="delete")
-app.add_typer(cliadd.app, name="add")
-app.add_typer(cliclone.app, name="clone")
-app.add_typer(cliupdate.app, name="update")
-app.add_typer(cliupgrade.app, name="upgrade")
-app.add_typer(clibatch.app, name="batch")
-app.add_typer(clicaas.app, name="caas", hidden=True)
+app.add_typer(cliadd.app, name="add",)
+app.add_typer(cliclone.app, name="clone",)
+app.add_typer(cliupdate.app, name="update",)
+app.add_typer(cliupgrade.app, name="upgrade",)
+app.add_typer(clibatch.app, name="batch",)
+app.add_typer(clicaas.app, name="caas", hidden=True,)
 
 
 class MoveArgs(str, Enum):
@@ -50,54 +44,70 @@ class MoveArgs(str, Enum):
 
 
 def move_copmpletion(ctx, args, incomplete):
-    return [k for k in ["site", "group"] if incomplete in k]
+    # return [k for k in ["site", "group"] if incomplete in k]
+    return cli.cache.completion
 
 
 def dev_completion(ctx, args, incomplete):
-    devs = cli.cache.devices
-    _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
-    _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
-    _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
-    print(args)
-    ["site", "group"]
-    return [k for k in [*_completion, "site", "group"] if incomplete in k]
+    # devs = cli.cache.devices
+    # _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
+    # _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
+    # _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
+    # print(args)
+    # ["site", "group"]
+    # return [k for k in [*_completion, "site", "group"] if incomplete in k]
+    return cli.cache.completion
 
 
 @app.command(
     short_help="Move device(s) to a defined group and/or site",
     help="Move device(s) to a defined group and/or site.",
-
+    context_settings=CONTEXT_SETTINGS,
 )
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=dev_completion),
-    # _: str = typer.Argument(None, metavar="[site <SITE>] [group <GROUP>]", hidden=True),
-    kw1: str = typer.Argument(None, metavar="", show_default=False, hidden=True, autocompletion=move_copmpletion,),
+    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=dev_completion,),
+    kw1: str = typer.Argument(
+        None,
+        metavar="",
+        show_default=False,
+        hidden=True,
+        autocompletion=move_copmpletion,
+        # cache=["site", "group"],
+    ),
     kw1_val: str = typer.Argument(None, metavar="[site <SITE>]", show_default=False),
-    kw2: str = typer.Argument(None, metavar="", show_default=False, hidden=True, autocompletion=move_copmpletion),
+    kw2: str = typer.Argument(
+        None, metavar="",
+        show_default=False,
+        hidden=True,
+        autocompletion=move_copmpletion,
+        # cache=["site", "group"],
+    ),
     kw2_val: str = typer.Argument(None, metavar="[group <GROUP>]", show_default=False, help="[site and/or group required]"),
-    # kw1: Tuple[MoveArgs, str] = typer.Argument(("site", None), metavar="site [SITE]", show_default=False),
-    # kw2: Tuple[MoveArgs, str] = typer.Argument(
-    #     ("group", None),
-    #     metavar="group [GROUP]",
-    #     show_default=False,
-    #     help="At least one of group or site is required"
-    #     ),
-    # more: List[str] = typer.Argument(None, hidden=True),
-    _group: str = typer.Option(None, help="Group to Move device(s) to", hidden=True),
-    _site: str = typer.Option(None, help="Site to move device(s) to", hidden=True),
+    _group: str = typer.Option(
+        None,
+        "--group",
+        help="Group to Move device(s) to",
+        hidden=True,
+        autocompletion=move_copmpletion,
+        # cache="group",
+    ),
+    _site: str = typer.Option(
+        None, "--site",
+        help="Site to move device(s) to",
+        hidden=True,
+        autocompletion=move_copmpletion,
+        # cache="site",
+    ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+    # yes_: bool = typer.Option(False, "-y", hidden=True),
 ) -> None:
     central = cli.central
-    yes = yes_ if yes_ else yes
+    # yes = yes_ if yes_ else yes
 
     group, site, = None, None
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
@@ -117,7 +127,7 @@ def move(
 
     if not kw1 and not kw2 and not _group and not _site:
         typer.secho("Missing Required Argument, group and/or site is required.")
-        raise typer.Exite(1)
+        raise typer.Exit(1)
 
     dev = [cli.cache.get_dev_identifier(d) for d in device]
     devs_by_type = {
@@ -269,10 +279,20 @@ def method_test(method: str = typer.Argument(...),
 
 
 @app.callback()
-def callback():
+def callback(
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+                                 callback=cli.default_callback), show_default=False,
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                callback=cli.account_name_callback)
+) -> None:
     """
     Aruba Central API CLI
     """
+    print("APP MAIN CALLBACK cache id:", id(cli.cache))
     pass
 
 

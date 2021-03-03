@@ -25,6 +25,17 @@ from centralcli.central import CentralApi
 
 
 tty = utils.tty
+NOT_ACCOUNT_KEYS = [
+    "central_info",
+    "ssl_verify",
+    "token_store",
+    "forget_account_after",
+    "debug",
+    "debugv",
+    "limit",
+    "no_pager",
+    "sanitize",
+]
 FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
@@ -88,6 +99,7 @@ class CLICommon:
             return f"{self.previous}\n\n{self.will_forget}"
 
     def account_name_callback(self, ctx: typer.Context, account: str):
+        print("ACCOUNT NAME CALLBACK")
         if ctx.resilient_parsing:  # tab completion, return without validating
             return account
 
@@ -118,16 +130,16 @@ class CLICommon:
             config.account = self.account = account
             self.central = CentralApi(account)
             self.cache = Cache(self.central)
+            print("INIT CACHE", id(self.cache))
             return account
         else:
-            strip_keys = ["central_info", "ssl_verify", "token_store", "forget_account_after", "debug", "debugv", "limit"]
             typer.echo(
                 f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                 f"The specified account: '{account}' is not defined in the config @\n"
                 f"{config.file}\n\n"
             )
 
-            _accounts = [k for k in config.data.keys() if k not in strip_keys]
+            _accounts = [k for k in config.data.keys() if k not in NOT_ACCOUNT_KEYS]
             if _accounts:
                 typer.echo(
                     f"The following accounts are defined {_accounts}\n"
@@ -151,6 +163,7 @@ class CLICommon:
             raise typer.Exit(code=1)
 
     def default_callback(self, ctx: typer.Context, default: bool):
+        print("DEFAULT CALLBACK")
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 
