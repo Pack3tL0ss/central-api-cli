@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import Union
+from typing import Literal, Union
+
+# ------ // Central API Consistent Device Types \\ ------
+lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
+LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
 
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = [
@@ -90,9 +94,6 @@ class RefreshWhat(str, Enum):
     tokens = "tokens"
 
 
-out_format_dict = {"do_json": "json", "do_yaml": "yaml", "do_csv": "csv", "do_rich": "rich"}
-
-
 class BlinkArgs(str, Enum):
     on = "on"
     off = "off"
@@ -139,9 +140,6 @@ class RenameArgs(str, Enum):
     # ap = "ap"
 
 
-# Used to determine if arg is for a device (vs group, templates, ...)
-# devices = ["switch", "aps", "gateway", "all", "device"]
-
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
@@ -176,6 +174,60 @@ class ArgToWhat:
 
 
 arg_to_what = ArgToWhat()
+
+APIMethodType = Literal[
+    "site"
+]
+
+
+class LibToAPI:
+    """Convert device type stored in Cache to type required by the different API methods
+
+    # TODO Working toward a consistent set of device_types, needs review, goal is to have
+    all API methods in CentralApi use a consistent set of device type values.  i.e.
+    'ap', 'switch', 'gw' ('controller' appears to be the same as gw).  Then use this callable
+    object to convert appropriate device type to whatever random value is reqd by the API
+    method.
+    """
+    def __init__(self):
+        # default from random to CentralApi consistent value
+        self.gateways = self.gateway = self.gw = "gw"
+        self.controller = self.mcd = "gw"
+        self.aps = self.ap = self.iap = "ap"
+        self.switches = self.switch = "switch"
+        self.SW = self.sw = self.HPPC = self.HP = "sw"
+        self.CX = self.cx = "cx"
+        self.method_iden = None
+
+        # from CentralApi consistent value to Random API value.
+        self.site_to_api = {
+            "gw": "CONTROLLER",
+            "ap": "IAP",
+            "switch": "SWITCH",
+            "cx": "SWITCH",
+            "sw": "SWITCH"
+        }
+
+    def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
+        if isinstance(key, Enum):
+            key = key._value_
+
+        if hasattr(self, f"{method}_to_api"):
+            self.method_iden = method
+            return getattr(self, f"{method}_to_api").get(key.lower(), default or key)
+
+        return getattr(self, key, default or key)
+
+    @property
+    def valid(self) -> list:
+        return lib_dev_idens
+
+    @property
+    def valid_str(self) -> list:
+        return ", ".join(lib_dev_idens)
+
+
+lib_to_api = LibToAPI()
 
 
 class WhatToPretty:
