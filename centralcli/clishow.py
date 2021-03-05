@@ -834,7 +834,7 @@ def clients(
     cli.cache(refresh=update_cache)
     central = cli.central
     kwargs = {}
-    if filter.value == "dev":
+    if filter.value == "device":
         dev = cli.cache.get_dev_identifier(args[-1])
         kwargs["serial"] = dev.serial
         args = tuple()

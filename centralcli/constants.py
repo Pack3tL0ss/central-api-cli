@@ -93,7 +93,7 @@ class ClientArgs(str, Enum):
     wireless = "wireless"
     all = "all"
     mac = "mac"
-    dev = "dev"
+    device = "device"
 
 
 class RefreshWhat(str, Enum):

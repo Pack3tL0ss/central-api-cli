@@ -135,6 +135,9 @@ class Config:
             account = "central_info"
 
         if account == "central_info":
+            if " -d" in str(sys.argv):
+                return account
+
             if self.sticky_account_file.is_file():
                 last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
                 last_cmd_ts = float(last_cmd_ts)

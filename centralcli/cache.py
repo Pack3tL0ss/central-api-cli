@@ -175,7 +175,7 @@ class Cache:
     def dev_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_dev_identifier(
             incomplete,
@@ -192,7 +192,7 @@ class Cache:
     def group_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_group_identifier(
             incomplete,
@@ -209,7 +209,7 @@ class Cache:
     def site_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_site_identifier(
             incomplete,
@@ -226,7 +226,7 @@ class Cache:
     def template_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_template_identifier(
             incomplete,
@@ -243,7 +243,7 @@ class Cache:
     def dev_template_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_template_identifier(
             incomplete,
@@ -266,7 +266,7 @@ class Cache:
     def dev_site_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_dev_identifier(
             incomplete,

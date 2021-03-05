@@ -266,12 +266,12 @@ def callback(
     ctx: typer.Context,
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
 ) -> None:
     """
     Aruba Central API CLI
