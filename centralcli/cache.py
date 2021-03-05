@@ -184,7 +184,17 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+                if m.name.startswith(incomplete):
+                    out += [tuple([m.name, m.help_text])]
+                elif m.serial.startswith(incomplete):
+                    out += [tuple([f"{m.serial}({m.name})", m.help_text])]
+                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                    out += [tuple([f"{m.mac}({m.name})", m.help_text])]
+                elif m.ip.address.startswith(incomplete):
+                    out += [tuple([f"{m.ip}({m.name})", m.help_text])]
+                else:
+                    # failsafe, shouldn't hit
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -204,7 +214,7 @@ class Cache:
                 out += [tuple([m.name, m.help_text])]
 
         for m in out:
-            yield m
+            yield m[0], m[1]
 
     def site_completion(
         self,
