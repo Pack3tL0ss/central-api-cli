@@ -10,10 +10,11 @@ import typer
 from pathlib import Path
 import sys
 
-try:
-    from icecream import ic
-except Exception:
-    ic = print
+# try:
+#     from icecream import ic
+# except Exception:
+#     def ic(*_, **__):
+#         pass
 
 _calling_script = Path(sys.argv[0])
 if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
