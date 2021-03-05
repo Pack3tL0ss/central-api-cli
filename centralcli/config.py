@@ -128,6 +128,9 @@ class Config:
         # -- // sticky last account caching and messaging \\ --
         if "--account" in sys.argv:
             account = sys.argv[sys.argv.index("--account") + 1]
+        elif "--account" in str(sys.argv):  # vscode debug workaround
+            args = [a.split(" ") for a in sys.argv if "--account " in a][0]
+            account = args[args.index("--account") + 1]
         else:
             account = "central_info"
 

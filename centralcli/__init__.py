@@ -60,10 +60,6 @@ from .response import Response
 from .central import CentralApi
 from .clicommon import CLICommon
 
-central = CentralApi(config.account)
-cache = Cache(central)
-cli = CLICommon(config.account, cache, central)
-
 # if no environ vars set for LESS command line options
 # set -X to retain scrollback after quiting less
 #     -R for color output (default for the pager but defaults are not used if LESS is set)
@@ -74,3 +70,7 @@ if not os.environ.get("LESS"):
 if os.environ.get("TERM_PROGRAM") == "vscode":
     from .vscodeargs import vscode_arg_handler
     vscode_arg_handler()
+
+central = CentralApi(config.account)
+cache = Cache(central)
+cli = CLICommon(config.account, cache, central)
