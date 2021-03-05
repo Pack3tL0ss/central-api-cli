@@ -11,12 +11,12 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response
+    from centralcli import config, log, utils, ic, Cache, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response
+        from centralcli import config, log, utils, ic, Cache, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -25,15 +25,26 @@ from centralcli.central import CentralApi
 
 
 tty = utils.tty
+NOT_ACCOUNT_KEYS = [
+    "central_info",
+    "ssl_verify",
+    "token_store",
+    "forget_account_after",
+    "debug",
+    "debugv",
+    "limit",
+    "no_pager",
+    "sanitize",
+]
 FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
 
 class CLICommon:
-    def __init__(self, account: str = "default"):
+    def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None):
         self.account = account
-        self.cache = None
-        self.central = None
+        self.cache = cache
+        self.central = central
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -120,14 +131,13 @@ class CLICommon:
             self.cache = Cache(self.central)
             return account
         else:
-            strip_keys = ["central_info", "ssl_verify", "token_store", "forget_account_after", "debug", "debugv", "limit"]
             typer.echo(
                 f"{typer.style('ERROR:', fg=typer.colors.RED)} "
                 f"The specified account: '{account}' is not defined in the config @\n"
                 f"{config.file}\n\n"
             )
 
-            _accounts = [k for k in config.data.keys() if k not in strip_keys]
+            _accounts = [k for k in config.data.keys() if k not in NOT_ACCOUNT_KEYS]
             if _accounts:
                 typer.echo(
                     f"The following accounts are defined {_accounts}\n"
@@ -161,7 +171,23 @@ class CLICommon:
     @staticmethod
     def debug_callback(debug: bool):
         if debug:
+            ic()
             log.DEBUG = config.debug = debug
+
+    def dev_completion(
+        self,
+        ctx: typer.Context,
+        args: List[str],
+        incomplete: str,
+    ) -> str:
+        # devs = cli.cache.devices
+        # _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
+        # _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
+        # _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
+        # print(args)
+        # ["site", "group"]
+        # return [k for k in [*_completion, "site", "group"] if incomplete in k]
+        return self.cache.completion(incomplete, cache="dev")
 
     @staticmethod
     def get_format(

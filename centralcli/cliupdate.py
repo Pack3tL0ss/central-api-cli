@@ -19,7 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars
+from centralcli.constants import IdenMetaVars, TemplateDevIdens
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -34,25 +34,32 @@ app = typer.Typer()
 @app.command(short_help="Update an existing template")
 def template(
     # identifier: template_iden_args = typer.Argument(...,),
-    name: str = typer.Argument(..., hidden=False, help=f"Template: [name] or Device: {iden_meta.dev}"),
+    name: str = typer.Argument(
+        ...,
+        help=f"Template: [name] or Device: {iden_meta.dev}",
+        autocompletion=cli.cache.dev_template_completion,
+    ),
     # device: str = typer.Argument(None, metavar=iden_meta.dev, help="The device associated with the template"),
     # variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
     # value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
     template: Path = typer.Argument(None, help="Path to file containing new template", exists=True),
-    group: str = typer.Option(None, help="The template group associated with the template"),
-    device_type: str = typer.Option(None, "--dev-type", metavar="[IAP|ArubaSwitch|MobilityController|CX]>",
-                                    help="[Templates] Filter by Device Type"),
+    group: str = typer.Option(
+        None,
+        help="The template group the template belongs to",
+        autocompletion=cli.cache.group_completion
+    ),
+    device_type: TemplateDevIdens = typer.Option(
+        None, "--dev-type",
+        help="Filter by Device Type",
+    ),
     version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
     model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     cli.cache(refresh=update_cache)
 
@@ -94,14 +101,11 @@ def variables(
     var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
@@ -147,20 +151,17 @@ def variables(
     help="Update group properties (AOS8 vs AOS10 & Monitor Only Switch enabled/disabled)"
 )
 def group(
-    group_name: str = typer.Argument(..., ),
+    group_name: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
     aos_version: int = typer.Argument(None, metavar="[10]", help="Set to 10 to Upgrade group to AOS 10"),
     mos: bool = typer.Option(None, help="Enable monitor only for switches in the group"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     cli.cache(refresh=update_cache)

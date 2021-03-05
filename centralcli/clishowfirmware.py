@@ -30,7 +30,8 @@ iden_meta = IdenMetaVars()
 
 class ShowFirmwareDevType(str, Enum):
     ap = "ap"
-    gateway = "gateway"
+    # gateway = "gateway"
+    gw = "gw"
     switch = "switch"
 
 
@@ -41,9 +42,9 @@ class ShowFirmwareKwags(str, Enum):
 
 @app.command(short_help="Show firmware compliance details")
 def compliance(
-    device_type: ShowFirmwareDevType = typer.Argument(..., metavar="[AP|GATEWAY|SWITCH]",),
-    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]",),
-    group_name: str = typer.Option(None, "--group", help="Filter by group"),
+    device_type: ShowFirmwareDevType = typer.Argument(..., metavar="[ap|gw|switch]",),
+    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
+    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -51,20 +52,18 @@ def compliance(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ):
     central = cli.central
     cli.cache(refresh=update_cache)
     _type_to_name = {
         "AP": "IAP",
         "GATEWAY": "CONTROLLER",
+        "GW": "CONTROLLER",
         "SWITCH": "HP"
     }
     # Allows both:

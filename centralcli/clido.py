@@ -32,13 +32,13 @@ app = typer.Typer()
 @app.command(short_help="Bounce Interface or PoE on Interface")
 def bounce(
     what: BounceArgs = typer.Argument(...),
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
-    port: str = typer.Argument(..., ),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -63,7 +63,7 @@ def bounce(
 
 @app.command(short_help="Reboot a device")
 def reboot(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -88,7 +88,7 @@ def reboot(
 
 @app.command(short_help="Blink LED")
 def blink(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     action: BlinkArgs = typer.Argument(..., ),  # metavar="Device: [on|off|<# of secs to blink>]"),
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -111,7 +111,7 @@ def blink(
 
 @app.command(short_help="Factory Default A Device")
 def nuke(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -133,7 +133,7 @@ def nuke(
 
 @app.command(short_help="Save Device Running Config to Startup")
 def save(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
@@ -150,7 +150,7 @@ def save(
 
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
 def sync(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
@@ -168,8 +168,8 @@ def sync(
 @app.command(short_help="Rename a Group")
 def rename(
     what: RenameArgs = typer.Argument(...,),
-    group: str = typer.Argument(..., ),
-    new_name: str = typer.Argument(..., ),
+    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
+    new_name: str = typer.Argument(..., autocompletion=lambda incomplete: []),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -192,7 +192,11 @@ def rename(
 
 @app.command(short_help="kick a client (disconnect)",)
 def kick(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(
+        ...,
+        metavar=iden.dev,
+        autocompletion=lambda incomplete: ["all", [m for m in cli.cache.dev_completion(incomplete)]]
+    ),
     what: KickArgs = typer.Argument(...,),
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),

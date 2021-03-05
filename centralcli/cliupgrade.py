@@ -19,14 +19,18 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import UpgradeArgs  # noqa
+from centralcli.constants import UpgradeArgs, lib_to_api # noqa
 
 app = typer.Typer()
 
 
 @app.command(short_help="Upgrade firmware on a specific device",)
 def device(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]",),
+    device: str = typer.Argument(
+        ...,
+        metavar="Device: [serial #|name|ip address|mac address]",
+        autocompletion=cli.cache.completion,
+    ),
     version: str = typer.Argument(None, help="Version to upgrade to [Default: recommended version]", show_default=False),
     at: datetime = typer.Option(
         None,
@@ -37,14 +41,11 @@ def device(
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
@@ -61,17 +62,18 @@ def device(
         ),
         abort=True,
     ):
-        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, reboot=reboot)
+        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial,
+                                   firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Upgrade firmware by group",)
 def group(
     group: str = typer.Argument(
-        None,
+        ...,
         metavar="[GROUP NAME]",
         help="Upgrade devices by group",
-        # autocompletion=cli.cache.get_group_names,  # TODO see if we can load cache earlier and autocomplete from cache
+        autocompletion=cli.cache.group_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
     at: datetime = typer.Option(
@@ -85,14 +87,12 @@ def group(
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                ),
 ) -> None:
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
@@ -113,9 +113,9 @@ def group(
     ver_msg += [f"in group {typer.style(f'{group.name}', fg='bright_green')}"]
 
     if version:
-        _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
-    else:
         _version = [f"to {typer.style(version, fg='bright_green')}"]
+    else:
+        _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
     ver_msg += _version
     ver_msg = " ".join(ver_msg)
 
@@ -154,14 +154,11 @@ def swarm(
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     at = None if not at else int(round(datetime.timestamp(at)))

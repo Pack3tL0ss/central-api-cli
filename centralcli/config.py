@@ -7,6 +7,8 @@ from typing import Any, List
 import yaml
 import json
 import tablib
+import sys
+import time
 
 valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
 
@@ -67,7 +69,7 @@ class Config:
         self.data = self.get_file_data(self.file) or {}
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
-        self.account = None  # Updated by cli account callback
+        self.account = self.get_account_from_args()
 
     def __bool__(self):
         return len(self.data) > 0
@@ -121,3 +123,31 @@ class Config:
                                           "format/extension [.json/.yaml/.yml/.csv]!")
                 except Exception as e:
                     raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__}\n\n{e}')
+
+    def get_account_from_args(self):
+        # -- // sticky last account caching and messaging \\ --
+        if "--account" in sys.argv:
+            account = sys.argv[sys.argv.index("--account") + 1]
+        else:
+            account = "central_info"
+
+        if account == "central_info":
+            if self.sticky_account_file.is_file():
+                last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
+                last_cmd_ts = float(last_cmd_ts)
+
+                # delete last_account file if they've configured forget_account_after
+                if self.forget_account_after:
+                    if time.time() > last_cmd_ts + (self.forget_account_after * 60):
+                        self.sticky_account_file.unlink(missing_ok=True)
+                    else:
+                        account = last_account
+                else:
+                    account = last_account
+        else:
+            if account in self.data:
+                self.sticky_account_file.parent.mkdir(exist_ok=True)
+                self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
+
+        if account in self.data:
+            return account

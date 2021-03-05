@@ -23,7 +23,7 @@ app = typer.Typer()
 
 @app.command(short_help="Clone a group")
 def group(
-    clone_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CLONE]"),
+    clone_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CLONE]", autocompletion=cli.cache.group_completion),
     new_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CREATE]"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),

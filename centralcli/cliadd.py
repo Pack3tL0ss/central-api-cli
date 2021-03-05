@@ -39,7 +39,7 @@ class AddWlanArgs(str, Enum):
 
 @app.command(short_help="Add a group")
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]"),
+    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=lambda incomplete: []),
     group_password: str = typer.Argument(
         None,
         show_default=False,
@@ -86,7 +86,7 @@ def group(
 
 @app.command(short_help="Add WLAN (SSID)")
 def wlan(
-    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]"),
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=lambda incomplete: []),
     name: str = typer.Argument(..., ),
     kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]",),
     kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']",),
