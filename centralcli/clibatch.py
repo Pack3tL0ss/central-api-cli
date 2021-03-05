@@ -242,16 +242,15 @@ def add(
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback, show_default=False
+        False, "-d", is_flag=True, help="Use default central account", show_default=False
     ),
     debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", callback=cli.debug_callback
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        callback=cli.account_name_callback,
     ),
 ) -> None:
     """Perform batch Add operations using import data from file."""
@@ -313,15 +312,16 @@ def delete(
     import_file: Path = typer.Argument(..., exists=True, readable=True),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
     debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", callback=cli.debug_callback
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        callback=cli.account_name_callback,
     ),
 ) -> None:
     """Perform batch Delete operations using import data from file."""
@@ -395,15 +395,14 @@ def rename(
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model",),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", callback=cli.default_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", callback=cli.debug_callback
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        callback=cli.account_name_callback,
     ),
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""

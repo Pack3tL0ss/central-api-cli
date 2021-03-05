@@ -19,14 +19,18 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import UpgradeArgs  # noqa
+from centralcli.constants import UpgradeArgs, lib_to_api # noqa
 
 app = typer.Typer()
 
 
 @app.command(short_help="Upgrade firmware on a specific device",)
 def device(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]",),
+    device: str = typer.Argument(
+        ...,
+        metavar="Device: [serial #|name|ip address|mac address]",
+        autocompletion=cli.cache.completion,
+    ),
     version: str = typer.Argument(None, help="Version to upgrade to [Default: recommended version]", show_default=False),
     at: datetime = typer.Option(
         None,
@@ -38,7 +42,7 @@ def device(
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
@@ -58,17 +62,18 @@ def device(
         ),
         abort=True,
     ):
-        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, reboot=reboot)
+        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial,
+                                   firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Upgrade firmware by group",)
 def group(
     group: str = typer.Argument(
-        None,
+        ...,
         metavar="[GROUP NAME]",
         help="Upgrade devices by group",
-        # autocompletion=cli.cache.get_group_names,  # TODO see if we can load cache earlier and autocomplete from cache
+        autocompletion=cli.cache.group_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
     at: datetime = typer.Option(
@@ -83,7 +88,7 @@ def group(
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
@@ -150,7 +155,7 @@ def swarm(
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),

@@ -10,12 +10,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, ic
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
+        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, ic
     else:
         print(pkg_dir.parts)
         raise e
@@ -43,35 +43,19 @@ class MoveArgs(str, Enum):
     group = "group"
 
 
-def move_copmpletion(ctx, args, incomplete):
-    # return [k for k in ["site", "group"] if incomplete in k]
-    return cli.cache.completion
-
-
-def dev_completion(ctx, args, incomplete):
-    # devs = cli.cache.devices
-    # _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
-    # _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
-    # _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
-    # print(args)
-    # ["site", "group"]
-    # return [k for k in [*_completion, "site", "group"] if incomplete in k]
-    return cli.cache.completion
-
-
 @app.command(
     short_help="Move device(s) to a defined group and/or site",
     help="Move device(s) to a defined group and/or site.",
     context_settings=CONTEXT_SETTINGS,
 )
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=dev_completion,),
+    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_completion,),
     kw1: str = typer.Argument(
         None,
         metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=move_copmpletion,
+        autocompletion=cli.cache.completion,
         # cache=["site", "group"],
     ),
     kw1_val: str = typer.Argument(None, metavar="[site <SITE>]", show_default=False),
@@ -79,7 +63,7 @@ def move(
         None, metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=move_copmpletion,
+        autocompletion=cli.cache.completion,
         # cache=["site", "group"],
     ),
     kw2_val: str = typer.Argument(None, metavar="[group <GROUP>]", show_default=False, help="[site and/or group required]"),
@@ -88,14 +72,14 @@ def move(
         "--group",
         help="Group to Move device(s) to",
         hidden=True,
-        autocompletion=move_copmpletion,
+        autocompletion=cli.cache.completion,
         # cache="group",
     ),
     _site: str = typer.Option(
         None, "--site",
         help="Site to move device(s) to",
         hidden=True,
-        autocompletion=move_copmpletion,
+        autocompletion=cli.cache.completion,
         # cache="site",
     ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -116,7 +100,7 @@ def move(
         elif a == "site":
             site = b
         else:
-            device += tuple([aa for aa in [a, b] if aa])
+            device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site"]])
 
     if not device:
         typer.echo("Error: Missing argument '[[name|ip|mac-address|serial] ...]'.")
@@ -125,7 +109,7 @@ def move(
     group = group or _group
     site = site or _site
 
-    if not kw1 and not kw2 and not _group and not _site:
+    if not group and not site:
         typer.secho("Missing Required Argument, group and/or site is required.")
         raise typer.Exit(1)
 
@@ -198,14 +182,12 @@ def move(
 
 @app.command(hidden=True)
 def refresh(what: RefreshWhat = typer.Argument(...),
-            debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                                       callback=cli.debug_callback),
-            default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                         callback=cli.default_callback), show_default=False,
+            debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+            default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
             account: str = typer.Option("central_info",
                                         envvar="ARUBACLI_ACCOUNT",
-                                        help="The Aruba Central Account to use (must be defined in the config)",
-                                        callback=cli.account_name_callback),):
+                                        help="The Aruba Central Account to use (must be defined in the config)",),
+            ):
     """refresh <'token'|'cache'>"""
 
     central = CentralApi(account)
@@ -252,6 +234,7 @@ def method_test(method: str = typer.Argument(...),
     if not hasattr(central, method):
         from boilerplate.allcalls import AllCalls as central
         if not hasattr(central, method):
+            ic()
             typer.secho(f"{method} does not exist", fg="red")
             raise typer.Exit(1)
     args = [k for k in kwargs if "=" not in k]
@@ -280,19 +263,20 @@ def method_test(method: str = typer.Argument(...),
 
 @app.callback()
 def callback(
+    ctx: typer.Context,
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
                                callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback), show_default=False,
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback)
+                                callback=cli.account_name_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
 ) -> None:
     """
     Aruba Central API CLI
     """
-    pass
+    ctx.help_option_names += ["?"]
 
 
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')

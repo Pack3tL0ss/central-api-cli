@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from types import GeneratorType
 from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli import log, utils, config
+from centralcli import log, utils, config, ic
 
 import asyncio
 import time
@@ -19,6 +18,13 @@ except Exception:
 TinyDB.default_table_name = "devices"
 
 DBType = Literal["dev", "site", "template", "group"]
+DEV_COMPLETION = ["move", "device"]
+SITE_COMPLETION = ["site"]
+GROUP_COMPLETION = ["group", "wlan"]
+TEMPLATE_COMPLETION = []
+EXTRA_COMPLETION = {
+    "move": ["site", "group"]
+}
 
 
 class CentralObject:
@@ -44,7 +50,7 @@ class CentralObject:
         return bool(self.data)
 
     def __repr__(self):
-        return f"<{self.__module__}.{type(self).__name__} ({bool(self)}) object at {hex(id(self))}>"
+        return f"<{self.__module__}.{type(self).__name__} ({self.get('name', bool(self))}) object at {hex(id(self))}>"
 
     def __str__(self):
         if isinstance(self.data, dict):
@@ -73,30 +79,32 @@ class CentralObject:
 
     @property
     def help_text(self):
+        parts = []
         if self.cache == "site":
-            rv = "Site"
-            x = [a for a in [self.city, self.state, self.zipcode] if a]
-            if x:
-                rv = f"{rv} ({', '.join(x)})"
+            parts = [
+                "Site",
+                *[a for a in [self.city, self.state, self.zipcode] if a]
+            ]
         elif self.cache == "template":
-            rv = "Template"
-            if self.device_type:
-                rv = f"{self.device_type.title()} {rv.lower()}"
-            if self.group:
-                rv = f"{rv} in group {self.group}"
-            if self.model:
-                rv = f"{rv} for model {self.model}"
+            parts = [
+                self.device_type,
+                self.model,
+                f"s:{self.group}",
+            ]
         elif self.cache == "dev":
             parts = [
-                (None, self.generic_type),
-                ("serial", self.serial),
-                ("mac", self.mac),
-                ("ip", self.ip),
-                ("in site", self.site),
+                self.generic_type.upper(),
+                self.serial,
+                self.mac,
+                self.ip,
+                f"s:{self.site}",
             ]
-            return " ".join(
-                [f"{f'{p[0]}:' or ''}{p[1]}" for p in parts]
-            )
+
+        return "|".join(
+            [
+                typer.style(p, fg="blue" if not idx % 2 == 0 else "cyan") for idx, p in enumerate(parts)
+            ]
+        )
 
 
 class Cache:
@@ -164,15 +172,137 @@ class Cache:
     def all(self) -> dict:
         return {t.name: getattr(self, t.name) for t in self._tables}
 
+    def dev_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_dev_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def group_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_group_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def site_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_site_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def template_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_template_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def dev_template_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_template_identifier(
+            incomplete,
+            completion=True,
+        )
+        match = match or []
+        dev_match = self.get_dev_identifier(
+            incomplete,
+            completion=True,
+        )
+        match += dev_match or []
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def dev_site_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        match = self.get_dev_identifier(
+            incomplete,
+            completion=True,
+        )
+        match = match or []
+        match = self.get_site_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
     def completion(
         self,
         incomplete: str,
-        cache: Union[
-            Literal["dev", "group", "site", "template"],
-            List[Literal["dev", "group", "site", "template"]]
-        ]
-    ) -> GeneratorType:
-        cache = utils.listify(cache)
+        args: List[str],
+    ):
+        if config.debug:
+            ic()
+
+        cache = ()
+        if [True for m in DEV_COMPLETION if args[-1].endswith(m)]:
+            cache += tuple(["dev"])
+        elif [True for m in GROUP_COMPLETION if args[-1].endswith(m)]:
+            cache += tuple(["group"])
+        elif [True for m in SITE_COMPLETION if args[-1].endswith(m)]:
+            cache += tuple(["site"])
+        elif [True for m in TEMPLATE_COMPLETION if args[-1].endswith(m)]:
+            cache += tuple(["template"])
+
         if not cache:
             match = self.get_identifier(
                 incomplete,
@@ -185,8 +315,21 @@ class Cache:
                 tuple(cache),
                 completion=True,
             )
-        for m in match:
-            yield (m.name, m.help_text)
+
+        out = []
+        _extra = [e for e in EXTRA_COMPLETION if e in args and args[-1] != e]
+        if _extra:
+            out += [
+                tuple([m, "COMMAND KEYWORD"]) for e in _extra for m in EXTRA_COMPLETION[e]
+                if m.startswith(incomplete) and args[-1] != m
+                ]
+
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
 
     # TODO ??deprecated?? should be able to remove this method. don't remember this note. looks used
     def insert(
@@ -400,7 +543,7 @@ class Cache:
                     group_db=True if "group" in qry_funcs else False,
                 )
 
-        if completion and match:
+        if completion:
             return match
 
         if not match:
@@ -454,9 +597,14 @@ class Cache:
                 match = self.DevDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str).cols.lower()))
                 )
-
+                if not match:
+                    qry_mac = utils.Mac(query_str)
+                    qry_mac_fuzzy = utils.Mac(query_str, fuzzy=True)
+                    if qry_mac or len(qry_mac) == len(qry_mac_fuzzy):
+                        match = self.DevDB.search(
+                            self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
+                        )
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Device Cache", fg="red")
                 self.check_fresh(refresh=True, dev_db=True)
@@ -560,7 +708,26 @@ class Cache:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
-            match = self.GroupDB.search((self.Q.name == query_str) | self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+            match = self.GroupDB.search(
+                (self.Q.name == query_str)
+                | self.Q.name.test(lambda v: v.lower() == query_str.lower())
+            )
+
+            # swap _ and - and case insensitive
+            if not match:
+                match = self.GroupDB.search(
+                    self.Q.name.test(
+                        lambda v: v.lower() == query_str.lower().replace("_", "-")
+                    )
+                )
+
+            # startswith
+            if not match:
+                match = self.GroupDB.search(
+                    (self.Q.name == query_str)
+                    | self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
             if retry and not match and self.central.get_all_groups not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
                 self.check_fresh(refresh=True, group_db=True)
@@ -583,7 +750,8 @@ class Cache:
             typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
             raise typer.Exit(1)
         else:
-            log.error(f"Unable to gather group {ret_field} from provided identifier {query_str}", show=True)
+            if not completion:
+                log.error(f"Unable to gather group {ret_field} from provided identifier {query_str}", show=True)
 
     def get_template_identifier(
         self,
@@ -636,11 +804,14 @@ class Cache:
             log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
             raise typer.Exit(1)
         else:
-            log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
+            if not completion:
+                log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
 
     def get_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
             return query
+        elif query == "":  # tab completion
+            return [x["id"] for x in self.logs]
 
         try:
 

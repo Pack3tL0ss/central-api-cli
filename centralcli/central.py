@@ -598,10 +598,13 @@ class CentralApi(Session):
         self,
         group: str,
         name: str = None,
-        device_type: str = None,
+        device_type: Literal["ap", "sw", "cx", "gw"] = None,
         version: str = None,
         model: str = None,
     ) -> Response:
+        if device_type:
+            device_type = constants.lib_to_api("template", device_type)
+
         params = {
             "offset": 0,
             "limit": 20,  # 20 is the max
@@ -628,8 +631,8 @@ class CentralApi(Session):
         Args:
             group (str): Name of the group for which the template is to be updated.
             name (str): Name of template.
-            device_type (str, optional): Device type of the template.  Valid Values: IAP,
-                ArubaSwitch, CX, MobilityController
+            device_type (str, optional): Device type of the template.
+                Valid Values: ap, sw (ArubaOS-SW), cx (ArubaOS-CX), gw (controllers/gateways)
             version (str, optional): Firmware version property of template.
                 Example: ALL, 6.5.4 etc.
             model (str, optional): Model property of template.
@@ -647,6 +650,9 @@ class CentralApi(Session):
         """
         url = f"/configuration/v1/groups/{group}/templates"
         template = template if isinstance(template, Path) else Path(str(template))
+
+        if device_type:
+            device_type = constants.lib_to_api("template", device_type)
 
         params = {
             'name': name,
@@ -2130,6 +2136,8 @@ class CentralApi(Session):
         reboot: bool = False,
     ) -> Response:
         """Initiate firmware upgrade on device(s).
+
+        You can only specify one of device_type, swarm_id or serial parameters
 
         Args:
             scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).

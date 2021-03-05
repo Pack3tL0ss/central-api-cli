@@ -8,6 +8,14 @@ from typing import Literal, Union
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
 
+
+class TemplateDevIdens(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+
+
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = [
     "data",
@@ -206,6 +214,13 @@ class LibToAPI:
             "switch": "SWITCH",
             "cx": "SWITCH",
             "sw": "SWITCH"
+        }
+        self.template_to_api = {
+            "gw": "MobilityController",
+            "ap": "IAP",
+            "switch": "CX",
+            "cx": "CX",
+            "sw": "ArubaSwitch"
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:

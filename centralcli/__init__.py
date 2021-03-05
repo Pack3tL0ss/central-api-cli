@@ -10,6 +10,10 @@ import typer
 from pathlib import Path
 import sys
 
+try:
+    from icecream import ic
+except Exception:
+    ic = print
 
 _calling_script = Path(sys.argv[0])
 if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
@@ -53,8 +57,12 @@ from .utils import Utils
 utils = Utils()
 from .cache import Cache
 from .response import Response
+from .central import CentralApi
 from .clicommon import CLICommon
-cli = CLICommon()
+
+central = CentralApi(config.account)
+cache = Cache(central)
+cli = CLICommon(config.account, cache, central)
 
 # if no environ vars set for LESS command line options
 # set -X to retain scrollback after quiting less

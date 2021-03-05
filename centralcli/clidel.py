@@ -28,14 +28,11 @@ def certificate(
     name: str = typer.Argument(..., ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     confirm_1 = typer.style("Please Confirm:", fg="cyan")
@@ -48,17 +45,18 @@ def certificate(
 
 @app.command(short_help="Delete a site")
 def site(
-    sites: List[str] = typer.Argument(..., help="Site(s) to delete (can provide more than one)."),  # metavar=IdenMetaVars.site),
+    sites: List[str] = typer.Argument(
+        ...,
+        help="Site(s) to delete (can provide more than one).",
+        autocompletion=cli.cache.site_completion,
+    ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     sites = [cli.cache.get_site_identifier(s) for s in sites]
@@ -91,17 +89,18 @@ def site(
 
 @app.command(short_help="Delete group(s)")
 def group(
-    groups: List[str] = typer.Argument(..., help="Group to delete (can provide more than one)."),
+    groups: List[str] = typer.Argument(
+        ...,
+        help="Group to delete (can provide more than one).",
+        autocompletion=cli.cache.group_completion
+    ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     groups = [cli.cache.get_group_identifier(g) for g in groups]
@@ -122,18 +121,15 @@ def group(
 
 @app.command(short_help="Delete a WLAN (SSID)")
 def wlan(
-    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]"),  # metavar=IdenMetaVars.site),
-    name: str = typer.Argument(..., metavar="[WLAN NAME]"),  # metavar=IdenMetaVars.site),
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion),
+    name: str = typer.Argument(..., metavar="[WLAN NAME]", autocompletion=lambda incomplete: tuple(["<WLAN NAME>"])),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
@@ -163,18 +159,15 @@ class ShowFirmwareKwags(str, Enum):
 def firmware(
     what: DelFirmwareArgs = typer.Argument(...),
     device_type: FirmwareDevType = typer.Argument(..., metavar="[AP|GATEWAY|SWITCH]",),
-    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]",),
-    group_name: str = typer.Option(None, "--group", help="Filter by group"),
+    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
+    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     _type_to_name = {
         "AP": "IAP",
