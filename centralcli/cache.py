@@ -4,7 +4,7 @@
 from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli import log, utils, config, ic
+from centralcli import log, utils, config
 
 import asyncio
 import time
@@ -300,9 +300,6 @@ class Cache:
         incomplete: str,
         args: List[str],
     ):
-        if config.debug:
-            ic()
-
         cache = ()
         if [True for m in DEV_COMPLETION if args[-1].endswith(m)]:
             cache += tuple(["dev"])

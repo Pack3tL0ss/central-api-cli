@@ -3,12 +3,18 @@
 # Author: Wade Wells github/Pack3tL0ss
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Union
 import yaml
 import json
 import tablib
 import sys
 import time
+
+# try:
+#     from icecream import ic
+# except Exception:
+#     def ic(*_, **__):
+#         pass
 
 valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
 
@@ -67,6 +73,7 @@ class Config:
         self.sanatize_file = self.dir / "redact.yaml"
 
         self.data = self.get_file_data(self.file) or {}
+        self.forget: Union[int, None] = self.data.get("forget_account_after")
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
         self.account = self.get_account_from_args()
@@ -80,13 +87,19 @@ class Config:
     def __getattr__(self, item: str, default: Any = None) -> Any:
         if item in self.data:
             return self.data.get(item, default)
-        elif self.account:
+        elif self.data.get(self.account):
             return self.data[self.account].get(item, default)
+        else:
+            return self.data.get("central_info", {}).get(item, default)
 
     # not used but may be handy
     @property
     def tokens(self):
         return self.data.get(self.account, {}).get("token", {})
+
+    @property
+    def valid(self):
+        return self.account in self.data
 
     @property
     def token_store(self):
@@ -107,7 +120,7 @@ class Config:
 
     @staticmethod
     def get_file_data(import_file: Path) -> dict:
-        '''Return dict from yaml file.'''
+        '''Return dict from yaml/json/csv... file.'''
         if import_file.exists() and import_file.stat().st_size > 0:
             with import_file.open() as f:
                 try:
@@ -119,13 +132,22 @@ class Config:
                         with import_file.open('r') as fh:
                             return tablib.Dataset().load(fh)
                     else:
-                        raise UserWarning("Provide valid file with "
-                                          "format/extension [.json/.yaml/.yml/.csv]!")
+                        raise UserWarning(
+                            "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
+                        )
                 except Exception as e:
                     raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__}\n\n{e}')
 
-    def get_account_from_args(self):
-        # -- // sticky last account caching and messaging \\ --
+    def get_account_from_args(self) -> str:
+        """Determine account to use based on arguments & last_account file.
+
+        Method does no harm / triggers no errors.  Any errors are handled
+        in account_name_callback after cli is loaded.  We need to determine the
+        account during init to load the cache for auto completion.
+
+        Returns:
+            str: The account to use based on --account -d flags and last_account file.
+        """
         if "--account" in sys.argv:
             account = sys.argv[sys.argv.index("--account") + 1]
         elif "--account" in str(sys.argv):  # vscode debug workaround
@@ -135,25 +157,26 @@ class Config:
             account = "central_info"
 
         if account == "central_info":
-            if " -d" in str(sys.argv):
-                return account
-
             if self.sticky_account_file.is_file():
+                if "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).endswith("-d"):
+                    if self.sticky_account_file.is_file():
+                        self.sticky_account_file.unlink()
+                    return account
+
                 last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
                 last_cmd_ts = float(last_cmd_ts)
 
                 # delete last_account file if they've configured forget_account_after
-                if self.forget_account_after:
-                    if time.time() > last_cmd_ts + (self.forget_account_after * 60):
+                if self.forget:
+                    if time.time() > last_cmd_ts + (self.forget * 60):
                         self.sticky_account_file.unlink(missing_ok=True)
                     else:
                         account = last_account
                 else:
                     account = last_account
-        else:
-            if account in self.data:
-                self.sticky_account_file.parent.mkdir(exist_ok=True)
-                self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
 
         if account in self.data:
-            return account
+            self.sticky_account_file.parent.mkdir(exist_ok=True)
+            self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
+
+        return account

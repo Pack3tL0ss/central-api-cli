@@ -10,12 +10,12 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, ic
+    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, ic
+        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -24,9 +24,12 @@ from centralcli.central import CentralApi  # noqa
 from centralcli.constants import RefreshWhat, IdenMetaVars, arg_to_what  # noqa
 iden = IdenMetaVars()
 
-CONTEXT_SETTINGS = dict(token_normalize_func=lambda x: x.lower())
+CONTEXT_SETTINGS = {
+    # "token_normalize_func": lambda x: cli.normalize_tokens(x),
+    "help_option_names": ["?", "--help"]
+}
 
-app = typer.Typer()
+app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
 app.add_typer(clido.app, name="do",)
 app.add_typer(clidel.app, name="delete")
@@ -46,7 +49,6 @@ class MoveArgs(str, Enum):
 @app.command(
     short_help="Move device(s) to a defined group and/or site",
     help="Move device(s) to a defined group and/or site.",
-    context_settings=CONTEXT_SETTINGS,
 )
 def move(
     device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_completion,),
@@ -234,7 +236,6 @@ def method_test(method: str = typer.Argument(...),
     if not hasattr(central, method):
         from boilerplate.allcalls import AllCalls as central
         if not hasattr(central, method):
-            ic()
             typer.secho(f"{method} does not exist", fg="red")
             raise typer.Exit(1)
     args = [k for k in kwargs if "=" not in k]
@@ -276,7 +277,7 @@ def callback(
     """
     Aruba Central API CLI
     """
-    ctx.help_option_names += ["?"]
+    pass
 
 
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
@@ -286,15 +287,20 @@ if __name__ == "__main__":
     # show switches / show switch ...
     if len(sys.argv) > 2 and sys.argv[1] == 'show':
         sys.argv[2] = arg_to_what(sys.argv[2])
+
     elif len(sys.argv) > 2 and sys.argv[1] == 'update':
         _cmds = {
             "templates": "template",
             "variable": "variables"
         }
         sys.argv[2] = _cmds.get(sys.argv[2], sys.argv[2])
+
     # allow --tab --tabl for --table option
     for idx, a in enumerate(sys.argv):
         if len(a) <= 7 and a.startswith("--tab"):
             sys.argv[idx] = "--table"
+
+    if "?" in sys.argv:
+        sys.argv[sys.argv.index("?")] = "--help"
 
     app()
