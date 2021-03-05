@@ -4,7 +4,7 @@
 from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli import log, utils, config, ic
+from centralcli import log, utils, config
 
 import asyncio
 import time
@@ -175,7 +175,7 @@ class Cache:
     def dev_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_dev_identifier(
             incomplete,
@@ -184,7 +184,17 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+                if m.name.startswith(incomplete):
+                    out += [tuple([m.name, m.help_text])]
+                elif m.serial.startswith(incomplete):
+                    out += [tuple([f"{m.serial}({m.name})", m.help_text])]
+                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                    out += [tuple([f"{m.mac}({m.name})", m.help_text])]
+                elif m.ip.address.startswith(incomplete):
+                    out += [tuple([f"{m.ip}({m.name})", m.help_text])]
+                else:
+                    # failsafe, shouldn't hit
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -192,7 +202,7 @@ class Cache:
     def group_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_group_identifier(
             incomplete,
@@ -204,12 +214,12 @@ class Cache:
                 out += [tuple([m.name, m.help_text])]
 
         for m in out:
-            yield m
+            yield m[0], m[1]
 
     def site_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_site_identifier(
             incomplete,
@@ -226,7 +236,7 @@ class Cache:
     def template_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_template_identifier(
             incomplete,
@@ -243,7 +253,7 @@ class Cache:
     def dev_template_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_template_identifier(
             incomplete,
@@ -266,7 +276,7 @@ class Cache:
     def dev_site_completion(
         self,
         incomplete: str,
-        args: List[str],
+        args: List[str] = None,
     ):
         match = self.get_dev_identifier(
             incomplete,
@@ -290,9 +300,6 @@ class Cache:
         incomplete: str,
         args: List[str],
     ):
-        if config.debug:
-            ic()
-
         cache = ()
         if [True for m in DEV_COMPLETION if args[-1].endswith(m)]:
             cache += tuple(["dev"])

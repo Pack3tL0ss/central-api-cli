@@ -98,7 +98,12 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
         [pycentral.ArubaCentralBase]: An instance of class:`pycentral.ArubaCentralBase`,
             Used to manage Auth and Tokens.
     """
-    central_info = config.data[account_name]
+    if account_name in config.data:
+        central_info = config.data[account_name]
+    else:
+        # Account name callback will kick back errors
+        # falling back to default for load of central for auto completion
+        central_info = config.data["central_info"]
     token_store = config.token_store
     ssl_verify = config.data.get("ssl_verify", True)
 

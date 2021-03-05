@@ -195,7 +195,7 @@ def kick(
     device: str = typer.Argument(
         ...,
         metavar=iden.dev,
-        autocompletion=lambda incomplete: ["all", [m for m in cli.cache.dev_completion(incomplete)]]
+        autocompletion=lambda incomplete: ["all", *[m for m in cli.cache.dev_completion(incomplete)]]
     ),
     what: KickArgs = typer.Argument(...,),
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),

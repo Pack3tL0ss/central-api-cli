@@ -2,21 +2,19 @@
 # -*- coding: utf-8 -*-
 
 import typer
-import time
 import sys
-# import json
 from typing import List, Literal, Union
 from pathlib import Path
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, ic, Cache, Response
+    from centralcli import config, log, utils, Cache, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, ic, Cache, Response
+        from centralcli import config, log, utils, Cache, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -36,6 +34,7 @@ NOT_ACCOUNT_KEYS = [
     "no_pager",
     "sanitize",
 ]
+CASE_SENSITIVE_TOKENS = ["R", "U"]
 FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
@@ -98,49 +97,50 @@ class CLICommon:
         def previous_will_forget(self):
             return f"{self.previous}\n\n{self.will_forget}"
 
-    def account_name_callback(self, ctx: typer.Context, account: str):
+    @staticmethod
+    def account_name_callback(ctx: typer.Context, account: str):
         if ctx.resilient_parsing:  # tab completion, return without validating
             return account
 
         # -- // sticky last account caching and messaging \\ --
-        if account == "central_info":
-            if config.sticky_account_file.is_file():
-                last_account, last_cmd_ts = config.sticky_account_file.read_text().split("\n")
-                last_cmd_ts = float(last_cmd_ts)
+        # if account == "central_info":
+        #     if config.sticky_account_file.is_file():
+        #         last_account, last_cmd_ts = config.sticky_account_file.read_text().split("\n")
+        #         last_cmd_ts = float(last_cmd_ts)
 
-                # delete last_account file if they've configured forget_account_after
-                if config.forget_account_after:
-                    if time.time() > last_cmd_ts + (config.forget_account_after * 60):
-                        config.sticky_account_file.unlink(missing_ok=True)
-                        typer.echo(self.AcctMsg(msg="forgot"))
-                    else:
-                        account = last_account
-                        typer.echo(self.AcctMsg(account, msg="previous_will_forget"))
-                else:
-                    account = last_account
-                    typer.echo(self.AcctMsg(account, msg="previous"))
-        else:
-            if account in config.data:
-                config.sticky_account_file.parent.mkdir(exist_ok=True)
-                config.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
-                typer.echo(self.AcctMsg(account))
+        #         # delete last_account file if they've configured forget_account_after
+        #         if config.forget_account_after:
+        #             if time.time() > last_cmd_ts + (config.forget_account_after * 60):
+        #                 config.sticky_account_file.unlink(missing_ok=True)
+        #                 typer.echo(self.AcctMsg(msg="forgot"))
+        #             else:
+        #                 account = last_account
+        #                 typer.echo(self.AcctMsg(account, msg="previous_will_forget"))
+        #         else:
+        #             account = last_account
+        #             typer.echo(self.AcctMsg(account, msg="previous"))
+        # else:
+        #     if account in config.data:
+        #         config.sticky_account_file.parent.mkdir(exist_ok=True)
+        #         config.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
+        #         typer.echo(self.AcctMsg(account))
 
-        if account in config.data:
-            config.account = self.account = account
-            self.central = CentralApi(account)
-            self.cache = Cache(self.central)
+        if config.valid:
+            # config.account = self.account = account
+            # self.central = CentralApi(account)
+            # self.cache = Cache(self.central)
             return account
         else:
             typer.echo(
                 f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                f"The specified account: '{account}' is not defined in the config @\n"
+                f"The specified account: '{config.account}' is not defined in the config @\n"
                 f"{config.file}\n\n"
             )
 
             _accounts = [k for k in config.data.keys() if k not in NOT_ACCOUNT_KEYS]
             if _accounts:
                 typer.echo(
-                    f"The following accounts are defined {_accounts}\n"
+                    f"The following accounts are defined {', '.join(_accounts)}\n"
                     f"The default account 'central_info' is used if no account is specified via --account flag.\n"
                     f"or the ARUBACLI_ACCOUNT environment variable.\n"
                 )
@@ -160,19 +160,29 @@ class CLICommon:
 
             raise typer.Exit(code=1)
 
-    def default_callback(self, ctx: typer.Context, default: bool):
+    @staticmethod
+    def default_callback(ctx: typer.Context, default: bool):
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 
         if default and config.sticky_account_file.is_file():
-            typer.secho("Using default central account", fg="cyan")
+            typer.secho("Using default central account", fg="bright_green")
             config.sticky_account_file.unlink()
+            return default
 
     @staticmethod
-    def debug_callback(debug: bool):
+    def debug_callback(ctx: typer.Context, debug: bool):
+        if ctx.resilient_parsing:  # tab completion, return without validating
+            return False
+
         if debug:
-            ic()
             log.DEBUG = config.debug = debug
+            return debug
+
+    @staticmethod
+    # not used at the moment but could be used to allow unambiguous partial tokens
+    def normalize_tokens(token: str) -> str:
+        return token.lower() if token not in CASE_SENSITIVE_TOKENS else token
 
     def dev_completion(
         self,

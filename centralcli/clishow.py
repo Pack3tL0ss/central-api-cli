@@ -833,7 +833,19 @@ def clients(
 ) -> None:
     cli.cache(refresh=update_cache)
     central = cli.central
-    resp = central.request(central.get_clients, filter, *args,)
+    kwargs = {}
+    if filter.value == "device":
+        dev = cli.cache.get_dev_identifier(args[-1])
+        kwargs["serial"] = dev.serial
+        args = tuple()
+    else:
+        args = (filter.value, *args)
+
+    resp = central.request(central.get_clients, *args, **kwargs)
+    _tot = len(resp)
+    _wired = len([x for x in resp.output if x["client_type"] == "WIRED"])
+    _wireless = len([x for x in resp.output if x["client_type"] == "WIRELESS"])
+    _count_text = f"{_tot} Clients, (Wired: {_wired}, Wireless: {_wireless})."
 
     _format = "rich" if not verbose and not verbose2 else "yaml"
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
@@ -848,7 +860,7 @@ def clients(
         resp,
         tablefmt=tablefmt,
         title="Clients",
-        caption="Use -v for more details, -vv for unformatted response." if not verbose else None,
+        caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose else None,
         pager=not no_pager,
         outfile=outfile,
         reverse=reverse,
