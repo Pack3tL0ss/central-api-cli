@@ -833,7 +833,15 @@ def clients(
 ) -> None:
     cli.cache(refresh=update_cache)
     central = cli.central
-    resp = central.request(central.get_clients, filter, *args,)
+    kwargs = {}
+    if filter.value == "dev":
+        dev = cli.cache.get_dev_identifier(args[-1])
+        kwargs["serial"] = dev.serial
+        args = tuple()
+    else:
+        args = (filter.value, *args)
+
+    resp = central.request(central.get_clients, *args, **kwargs)
 
     _format = "rich" if not verbose and not verbose2 else "yaml"
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
