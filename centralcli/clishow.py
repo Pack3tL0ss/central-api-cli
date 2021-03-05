@@ -393,6 +393,46 @@ def controllers(
         do_table=do_table)
 
 
+@app.command(short_help="Show firmware upgrade status")
+def upgrade(
+    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+):
+    central = cli.central
+    if len(device) > 2:
+        typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
+
+    params, dev = {}, None
+    if device and device[-1] != "status":
+        dev = cli.cache.get_dev_identifier(device[-1])
+        params["serial"] = dev.serial
+    else:
+        typer.echo("Missing required parameter <device>")
+
+    resp = central.request(central.get_upgrade_status, **params)
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Upgrade Status" if not dev else f"{dev.name} Upgrade Status",
+        pager=not no_pager,
+        outfile=outfile
+    )
+
+
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
 def _cache(
     args: List[CacheArgs] = typer.Argument(None, hidden=False),

@@ -2168,6 +2168,25 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    async def get_upgrade_status(self, swarm_id: str = None, serial: str = None) -> Response:
+        """Get firmware upgrade status.
+
+        Args:
+            swarm_id (str, optional): Swarm ID
+            serial (str, optional): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/status"
+
+        params = {
+            "swarm_id": swarm_id,
+            "serial": serial
+        }
+
+        return await self.get(url, params=params)
+
     DevType = Literal["IAP", "HP", "CONTROLLER"]
 
     async def get_firmware_compliance(self, device_type: DevType, group: str = None) -> Response:
