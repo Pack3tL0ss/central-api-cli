@@ -4,7 +4,7 @@
 from typing import Any, Literal, Dict, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli import log, utils, config
+from centralcli import log, utils, config, CentralApi
 
 import asyncio
 import time
@@ -110,7 +110,7 @@ class CentralObject:
 class Cache:
     def __init__(
         self,
-        central=None,
+        central: CentralApi = None,
         data: Union[
             List[
                 dict,
@@ -171,6 +171,12 @@ class Cache:
     @property
     def all(self) -> dict:
         return {t.name: getattr(self, t.name) for t in self._tables}
+
+    @staticmethod
+    def account_completion(incomplete: str,):
+        for a in config.iter_accounts:
+            if a.lower().startwith(incomplete.lower()):
+                yield a
 
     def dev_completion(
         self,
