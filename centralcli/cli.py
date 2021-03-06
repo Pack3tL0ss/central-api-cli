@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -262,17 +263,38 @@ def method_test(method: str = typer.Argument(...),
     cli.display_results(data=resp.raw, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
 
 
+def all_commands_callback(ctx: typer.Context, debug: bool):
+    if not ctx.resilient_parsing:
+        account, debug, default = None, None, None
+        for idx, arg in enumerate(sys.argv):
+            if arg == "--debug":
+                debug = True
+            elif arg == "-d":
+                default = True
+            elif arg == "--account" and "-d" not in sys.argv:
+                account = sys.argv[idx + 1]
+
+        account = account or os.environ.get("ARUBACLI_ACCOUNT", False)
+        debug = debug or os.environ.get("ARUBACLI_DEBUG", False)
+
+        if default:
+            default = cli.default_callback(ctx, True)
+        elif account:
+            cli.account_name_callback(ctx, account=account)
+        if debug:
+            cli.debug_callback(ctx, debug=debug)
+
+
 @app.callback()
 def callback(
     ctx: typer.Context,
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+                               callback=all_commands_callback),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     """
     Aruba Central API CLI
