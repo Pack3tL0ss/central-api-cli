@@ -187,7 +187,7 @@ class ArgToWhat:
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
 
     def _init_upgrade(self):
-        self.site = self.sites = "site"
+        self.device = self.devices = "device"
         self.group = self.groups = "group"
         self.swarm = "swarm"
 
