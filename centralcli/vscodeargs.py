@@ -1,4 +1,4 @@
-from centralcli import config, utils, log
+from centralcli import log
 from pathlib import Path
 import sys
 
@@ -6,24 +6,24 @@ import sys
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():
 
-    def get_arguments_from_import(import_file: str, key: str = None) -> list:
-        """Get arguments from default import_file (stored_tasks.yaml)
+    # def get_arguments_from_import(import_file: str, key: str = None) -> list:
+    #     """Get arguments from default import_file (stored_tasks.yaml)
 
-        Args:
-            import_file (str): name of import file
-            key (str, optional): return single value for specific key if provided. Defaults to None.
+    #     Args:
+    #         import_file (str): name of import file
+    #         key (str, optional): return single value for specific key if provided. Defaults to None.
 
-        Returns:
-            list: updated sys.argv list.
-        """
-        # args = utils.read_yaml(import_file)
-        args = config.get_file_data(Path(import_file))
-        if key and key in args:
-            args = args[key]
+    #     Returns:
+    #         list: updated sys.argv list.
+    #     """
+    #     # args = utils.read_yaml(import_file)
+    #     args = config.get_file_data(Path(import_file))
+    #     if key and key in args:
+    #         args = args[key]
 
-        sys.argv += args
+    #     sys.argv += args
 
-        return sys.argv
+    #     return sys.argv
 
     try:
         if len(sys.argv) > 1:
@@ -46,18 +46,18 @@ def vscode_arg_handler():
                     else:
                         sys.argv += vsc_args.split()
 
-        if len(sys.argv) > 2:
-            _import_file, _import_key = None, None
-            if sys.argv[2].endswith((".yaml", ".yml", "json")):
-                _import_file = sys.argv.pop(2)
-                if not utils.valid_file(_import_file):
-                    if utils.valid_file(config.dir.joinpath(_import_file)):
-                        _import_file = config.dir.joinpath(_import_file)
+        # if len(sys.argv) > 2:
+        #     _import_file, _import_key = None, None
+        #     if sys.argv[2].endswith((".yaml", ".yml", "json")):
+        #         _import_file = sys.argv.pop(2)
+        #         if not utils.valid_file(_import_file):
+        #             if utils.valid_file(config.dir.joinpath(_import_file)):
+        #                 _import_file = config.dir.joinpath(_import_file)
 
-                if len(sys.argv) > 2:
-                    _import_key = sys.argv.pop(2)
+        #         if len(sys.argv) > 2:
+        #             _import_key = sys.argv.pop(2)
 
-                sys.argv = get_arguments_from_import(_import_file, key=_import_key)
+        #         sys.argv = get_arguments_from_import(_import_file, key=_import_key)
 
     except Exception as e:
         log.exception(f"Exception in vscode arg handler (arg split) {e.__class__.__name__}.{e}", show=True)
@@ -67,7 +67,8 @@ def vscode_arg_handler():
     try:
         # Update prev_args history file
         history_lines = None
-        history_file = config.base_dir / ".vscode" / "prev_args"
+        base_dir = Path(__file__).parent.parent
+        history_file = base_dir / ".vscode" / "prev_args"
         this_args = " ".join(sys.argv[1:])
         if not this_args:
             return
@@ -87,8 +88,8 @@ def vscode_arg_handler():
         # update launch.json default arg
         do_update = False
         launch_data = None
-        launch_file = config.base_dir / ".vscode" / "launch.json"
-        launch_file_bak = config.base_dir / ".vscode" / "launch.json.bak"
+        launch_file = base_dir / ".vscode" / "launch.json"
+        launch_file_bak = base_dir / ".vscode" / "launch.json.bak"
         if launch_file.is_file():
             launch_data = launch_file.read_text()
             launch_data = launch_data.splitlines()
@@ -99,8 +100,8 @@ def vscode_arg_handler():
                     if line != new_line:
                         do_update = True
                         log.debug(f"changing default arg for promptString:\n"
-                                  f"\t from: {line}\n"
-                                  f"\t to: {new_line}"
+                                  f"    from: {line}\n"
+                                  f"    to: {new_line}"
                                   )
                         launch_data[idx] = new_line
 
@@ -111,8 +112,8 @@ def vscode_arg_handler():
                     if line != new_line:
                         do_update = True
                         log.debug(f"changing options arg for pickString:\n"
-                                  f"\t from: {line}\n"
-                                  f"\t to: {new_line}"
+                                  f"    from: {line}\n"
+                                  f"    to: {new_line}"
                                   )
                         launch_data[idx] = new_line
 
