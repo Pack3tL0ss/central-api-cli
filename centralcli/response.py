@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 from aiohttp.client_exceptions import ContentTypeError
 from pycentral.base import ArubaCentralBase
 from . import cleaner
