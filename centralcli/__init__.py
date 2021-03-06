@@ -60,6 +60,7 @@ from .cache import Cache
 from .response import Response
 from .central import CentralApi
 from .clicommon import CLICommon
+from . import constants
 
 # if no environ vars set for LESS command line options
 # set -X to retain scrollback after quiting less
@@ -75,3 +76,11 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
 central = CentralApi(config.account)
 cache = Cache(central)
 cli = CLICommon(config.account, cache, central)
+
+# allow singular form and common synonyms for the defined show commands
+# show switches / show switch ...
+if len(sys.argv) > 2:
+    sys.argv[2] = constants.arg_to_what(sys.argv[2], cmd=sys.argv[1])
+
+if "?" in sys.argv:
+    sys.argv[sys.argv.index("?")] = "--help"
