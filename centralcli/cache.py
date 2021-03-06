@@ -193,11 +193,11 @@ class Cache:
                 if m.name.startswith(incomplete):
                     out += [tuple([m.name, m.help_text])]
                 elif m.serial.startswith(incomplete):
-                    out += [tuple([f"{m.serial}({m.name})", m.help_text])]
+                    out += [tuple([m.serial, m.help_text])]
                 elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
-                    out += [tuple([f"{m.mac}({m.name})", m.help_text])]
+                    out += [tuple([m.mac, m.help_text])]
                 elif m.ip.address.startswith(incomplete):
-                    out += [tuple([f"{m.ip}({m.name})", m.help_text])]
+                    out += [tuple([m.ip, m.help_text])]
                 else:
                     # failsafe, shouldn't hit
                     out += [tuple([m.name, m.help_text])]
