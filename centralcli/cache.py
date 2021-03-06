@@ -174,8 +174,8 @@ class Cache:
 
     @staticmethod
     def account_completion(incomplete: str,):
-        for a in config.iter_accounts:
-            if a.lower().startwith(incomplete.lower()):
+        for a in config.defined_accounts:
+            if a.lower().startswith(incomplete.lower()):
                 yield a
 
     def dev_completion(
@@ -289,7 +289,7 @@ class Cache:
             completion=True,
         )
         match = match or []
-        match = self.get_site_identifier(
+        match += self.get_site_identifier(
             incomplete,
             completion=True,
         )

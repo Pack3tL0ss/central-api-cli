@@ -7,17 +7,6 @@ from typing import Literal, Union
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
-NOT_ACCOUNT_KEYS = [
-    "central_info",
-    "ssl_verify",
-    "token_store",
-    "forget_account_after",
-    "debug",
-    "debugv",
-    "limit",
-    "no_pager",
-    "sanitize",
-]
 
 
 class TemplateDevIdens(str, Enum):
@@ -196,6 +185,14 @@ class ArgToWhat:
         self.site = self.sites = "site"
         self.group = self.groups = "group"
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
+
+    def _init_upgrade(self):
+        self.site = self.sites = "site"
+        self.group = self.groups = "group"
+        self.swarm = "swarm"
+
+    def _init_clone(self):
+        self.group = self.groups = "group"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
