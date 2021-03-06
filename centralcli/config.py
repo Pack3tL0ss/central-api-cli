@@ -175,7 +175,7 @@ class Config:
                 else:
                     account = last_account
 
-        if account in self.data:
+        if account in self.data and account not in ["central-info", "default"]:
             self.sticky_account_file.parent.mkdir(exist_ok=True)
             self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
 

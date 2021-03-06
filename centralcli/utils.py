@@ -503,12 +503,11 @@ class Utils:
                     table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
                 if account or caption:
                     table.caption_justify = 'left'
-                    table.caption = '' if not account else f'[italic dark_olive_green2]{account}'
+                    table.caption = '' if not account else f'[italic dark_olive_green2] Account: {account}'
                     if caption:
                         table.caption = f"[italic dark_olive_green2]{table.caption}  {caption}"
 
-                data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
-                              f"{'Customer Name:':15} {customer_name}\n--\n"
+                data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
 
                 with console.capture():
                     console.print(table)
