@@ -10,12 +10,12 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response
+    from centralcli import config, log, utils, constants, Cache, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response
+        from centralcli import config, log, utils, constants, Cache, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -24,17 +24,6 @@ from centralcli.central import CentralApi
 
 
 tty = utils.tty
-NOT_ACCOUNT_KEYS = [
-    "central_info",
-    "ssl_verify",
-    "token_store",
-    "forget_account_after",
-    "debug",
-    "debugv",
-    "limit",
-    "no_pager",
-    "sanitize",
-]
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
@@ -103,7 +92,7 @@ class CLICommon:
             return account
 
         # -- // sticky last account messaging account is loaded in __init__ \\ --
-        if account == "central_info":
+        if account in ["central_info", "default"]:
             if config.sticky_account_file.is_file():
                 last_account, last_cmd_ts = config.sticky_account_file.read_text().split("\n")
                 last_cmd_ts = float(last_cmd_ts)
@@ -137,7 +126,7 @@ class CLICommon:
                 f"{config.file}\n\n"
             )
 
-            _accounts = [k for k in config.data.keys() if k not in NOT_ACCOUNT_KEYS]
+            _accounts = [k for k in config.data.keys() if k not in constants.NOT_ACCOUNT_KEYS]
             if _accounts:
                 typer.echo(
                     f"The following accounts are defined {', '.join(_accounts)}\n"
