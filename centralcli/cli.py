@@ -283,24 +283,4 @@ def callback(
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 
 if __name__ == "__main__":
-    # allow singular form and common synonyms for the defined show commands
-    # show switches / show switch ...
-    if len(sys.argv) > 2 and sys.argv[1] == 'show':
-        sys.argv[2] = arg_to_what(sys.argv[2])
-
-    elif len(sys.argv) > 2 and sys.argv[1] == 'update':
-        _cmds = {
-            "templates": "template",
-            "variable": "variables"
-        }
-        sys.argv[2] = _cmds.get(sys.argv[2], sys.argv[2])
-
-    # allow --tab --tabl for --table option
-    for idx, a in enumerate(sys.argv):
-        if len(a) <= 7 and a.startswith("--tab"):
-            sys.argv[idx] = "--table"
-
-    if "?" in sys.argv:
-        sys.argv[sys.argv.index("?")] = "--help"
-
     app()

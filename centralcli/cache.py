@@ -483,7 +483,7 @@ class Cache:
 
     def handle_multi_match(
         self,
-        match: list,
+        match: List[CentralObject],
         query_str: str = None,
         query_type: str = "device",
         multi_ok: bool = False,
@@ -497,14 +497,14 @@ class Cache:
         else:  # device
             fields = ("name", "serial", "mac", "type")
         out = utils.output(
-            [{k: d[k] for k in d if k in fields} for d in match],
+            [{k: d[k] for k in d.data if k in fields} for d in match],
             title=f"Ambiguos identifier. Select desired {query_type}."
         )
         menu = out.menu(data_len=len(match))
 
         if query_str:
-            menu = menu.replace(query_str, typer.style(query_str, fg="green"))
-            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg="green"))
+            menu = menu.replace(query_str, typer.style(query_str, fg="bright_cyan"))
+            menu = menu.replace(query_str.upper(), typer.style(query_str.upper(), fg="bright_cyan"))
         typer.echo(menu)
         selection = ""
         valid = [str(idx + 1) for idx, _ in enumerate(match)]
@@ -616,27 +616,27 @@ class Cache:
                 typer.secho(f"No Match Found for {query_str}, Updating Device Cache", fg="red")
                 self.check_fresh(refresh=True, dev_db=True)
             if match:
-                break
+                match = [CentralObject("dev", dev) for dev in match]
 
         all_match = None
         if dev_type:
             all_match = match
-            match = [d for d in match if d["type"].lower() in "".join(dev_type[0:len(d["type"])]).lower()]
+            match = [d for d in match if d.generic_type.lower() in "".join(dev_type[0:len(d.generic_type)]).lower()]
 
         if match:
             if completion:
-                return [CentralObject("dev", dev) for dev in match]
+                return match
 
             elif len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, multi_ok=multi_ok)
 
-            return CentralObject("dev", match)
+            return utils.unlistify(match)
         elif retry:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
             if all_match:
                 all_match = all_match[-1]
                 log.error(
-                    f"The Following device matched {all_match.get('name')} excluded as {all_match.get('type')} != {dev_type}",
+                    f"The Following device matched {all_match.name} excluded as {all_match.type} != {dev_type}",
                     show=True,
                 )
             raise typer.Exit(1)

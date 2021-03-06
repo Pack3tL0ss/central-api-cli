@@ -7,6 +7,17 @@ from typing import Literal, Union
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
+NOT_ACCOUNT_KEYS = [
+    "central_info",
+    "ssl_verify",
+    "token_store",
+    "forget_account_after",
+    "debug",
+    "debugv",
+    "limit",
+    "no_pager",
+    "sanitize",
+]
 
 
 class TemplateDevIdens(str, Enum):
@@ -157,6 +168,9 @@ class ArgToWhat:
         central.  If the API method uses a different one, we'll convert from our
         std set in the method invoking the API call.
         """
+        self._init_show()
+
+    def _init_show(self):
         self.gateways = self.gateway = "gateways"
         self.aps = self.ap = self.iap = "aps"
         self.switches = self.switch = "switches"
@@ -167,7 +181,6 @@ class ArgToWhat:
         self.all = "all"
         self.devices = self.device = "devices"
         self.controllers = self.controller = "controllers"
-        self.certs = self.certificates = self.certificate = self.cert = "certs"
         self.clients = self.client = "clients"
         self.logs = self.log = self.event = self.events = "logs"
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
@@ -175,10 +188,28 @@ class ArgToWhat:
         self.wlans = self.wlan = self.ssids = self.ssid = "wlans"
         self.run = self.running = "run"
 
-    def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
+    def _init_update(self):
+        self.template = self.templates = "template"
+        self.variable = self.variables = "variables"
+
+    def _init_delete(self):
+        self.site = self.sites = "site"
+        self.group = self.groups = "group"
+        self.certificate = self.certs = self.certificates = self.cert = "certificate"
+
+    def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
+        if cmd != "show":
+            if hasattr(self, f"_init_{cmd}"):
+                getattr(self, f"_init_{cmd}")()
+
         if isinstance(key, Enum):
-            key = key._value_
-        return getattr(self, key, default or key)
+            key = key.value
+        rv = getattr(self, key, default or key)
+
+        # always reset instance to show defaults
+        self._init_show()
+
+        return rv
 
 
 arg_to_what = ArgToWhat()
@@ -269,7 +300,6 @@ class WhatToPretty:
         return getattr(self, key, default or key)
 
 
-arg_to_what = ArgToWhat()
 what_to_pretty = WhatToPretty()
 
 

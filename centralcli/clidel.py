@@ -215,11 +215,3 @@ def callback():
 
 if __name__ == "__main__":
     app()
-else:
-    if len(sys.argv) > 2 and sys.argv[1] == 'delete':
-        if sys.argv[2] == "sites":
-            sys.argv[2] = "site"
-        if sys.argv[2] == "groups":
-            sys.argv[2] = "group"
-        elif sys.argv[2] in ["certificates", "certs", "cert"]:
-            sys.argv[2] = "certificate"
