@@ -186,6 +186,14 @@ class ArgToWhat:
         self.group = self.groups = "group"
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
 
+    def _init_upgrade(self):
+        self.site = self.sites = "site"
+        self.group = self.groups = "group"
+        self.swarm = "swarm"
+
+    def _init_clone(self):
+        self.group = self.groups = "group"
+
     def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
             if hasattr(self, f"_init_{cmd}"):
