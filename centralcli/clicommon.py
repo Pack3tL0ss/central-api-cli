@@ -168,8 +168,8 @@ class CLICommon:
             log.DEBUG = config.debug = debug
             return debug
 
-    @staticmethod
     # not used at the moment but could be used to allow unambiguous partial tokens
+    @staticmethod
     def normalize_tokens(token: str) -> str:
         return token.lower() if token not in CASE_SENSITIVE_TOKENS else token
 

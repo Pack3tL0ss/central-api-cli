@@ -4,6 +4,7 @@
 
 from pathlib import Path
 from typing import Any, List, Union
+import constants
 import yaml
 import json
 import tablib
@@ -118,6 +119,12 @@ class Config:
         elif self.account and key in self.data[self.account]:
             return self.data[self.account].get(key, default)
 
+    def iter_accounts(self):
+        if self.data:
+            for k in self.data:
+                if k not in constants.NOT_ACCOUNT_KEYS:
+                    yield k
+
     @staticmethod
     def get_file_data(import_file: Path) -> dict:
         '''Return dict from yaml/json/csv... file.'''
@@ -153,30 +160,30 @@ class Config:
         elif "--account" in str(sys.argv):  # vscode debug workaround
             args = [a.split(" ") for a in sys.argv if "--account " in a][0]
             account = args[args.index("--account") + 1]
+        elif "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).endswith("-d"):
+            return "central_info"
         else:
             account = "central_info"
 
-        if account == "central_info":
+        if account in ["central_info", "default"]:
             if self.sticky_account_file.is_file():
-                if "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).endswith("-d"):
-                    if self.sticky_account_file.is_file():
-                        self.sticky_account_file.unlink()
-                    return account
-
                 last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
                 last_cmd_ts = float(last_cmd_ts)
 
-                # delete last_account file if they've configured forget_account_after
+                # last account sticky file handling -- messaging is in cli callback --
                 if self.forget:
                     if time.time() > last_cmd_ts + (self.forget * 60):
                         self.sticky_account_file.unlink(missing_ok=True)
+                        # typer.echo(self.AcctMsg(msg="forgot"))
                     else:
                         account = last_account
+                        # typer.echo(self.AcctMsg(account, msg="previous_will_forget"))
                 else:
                     account = last_account
-
-        if account in self.data and account not in ["central-info", "default"]:
-            self.sticky_account_file.parent.mkdir(exist_ok=True)
-            self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
-
+                    # typer.echo(self.AcctMsg(account, msg="previous"))
+        else:
+            if account in self.data:
+                self.sticky_account_file.parent.mkdir(exist_ok=True)
+                self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
+                # typer.echo(self.AcctMsg(account))
         return account

@@ -56,9 +56,9 @@ log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict
 from pycentral.base import ArubaCentralBase
 from .utils import Utils
 utils = Utils()
-from .cache import Cache
 from .response import Response
 from .central import CentralApi
+from .cache import Cache
 from .clicommon import CLICommon
 from . import constants
 
