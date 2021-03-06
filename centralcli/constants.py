@@ -7,17 +7,6 @@ from typing import Literal, Union
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
-NOT_ACCOUNT_KEYS = [
-    "central_info",
-    "ssl_verify",
-    "token_store",
-    "forget_account_after",
-    "debug",
-    "debugv",
-    "limit",
-    "no_pager",
-    "sanitize",
-]
 
 
 class TemplateDevIdens(str, Enum):

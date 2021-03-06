@@ -4,7 +4,6 @@
 
 from pathlib import Path
 from typing import Any, List, Union
-import constants
 import yaml
 import json
 import tablib
@@ -18,6 +17,17 @@ import time
 #         pass
 
 valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+NOT_ACCOUNT_KEYS = [
+    "central_info",
+    "ssl_verify",
+    "token_store",
+    "forget_account_after",
+    "debug",
+    "debugv",
+    "limit",
+    "no_pager",
+    "sanitize",
+]
 
 
 def _get_config_file(dirs: List[Path]) -> Path:
@@ -78,6 +88,7 @@ class Config:
         self.debug = self.data.get("debug", False)
         self.debugv = self.data.get("debugv", False)
         self.account = self.get_account_from_args()
+        self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
 
     def __bool__(self):
         return len(self.data) > 0
@@ -111,19 +122,13 @@ class Config:
 
     @property
     def cache_file(self):
-        return self.default_cache_file if self.account == "central_info" else self.cache_dir / f"{self.account}.json"
+        return self.default_cache_file if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}.json"
 
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:
             return self.data.get(key, default)
         elif self.account and key in self.data[self.account]:
             return self.data[self.account].get(key, default)
-
-    def iter_accounts(self):
-        if self.data:
-            for k in self.data:
-                if k not in constants.NOT_ACCOUNT_KEYS:
-                    yield k
 
     @staticmethod
     def get_file_data(import_file: Path) -> dict:

@@ -38,6 +38,7 @@ else:
         print(f"base_dir Parts: {base_dir.parts}")
 
 from .logger import MyLogger
+from . import constants
 from .config import Config
 config = Config(base_dir=base_dir)
 
@@ -60,7 +61,6 @@ from .response import Response
 from .central import CentralApi
 from .cache import Cache
 from .clicommon import CLICommon
-from . import constants
 
 # if no environ vars set for LESS command line options
 # set -X to retain scrollback after quiting less

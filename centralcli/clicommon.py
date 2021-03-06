@@ -10,12 +10,12 @@ from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, constants, Cache, Response
+    from centralcli import config, log, utils, Cache, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, constants, Cache, Response
+        from centralcli import config, log, utils, Cache, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -126,10 +126,9 @@ class CLICommon:
                 f"{config.file}\n\n"
             )
 
-            _accounts = [k for k in config.data.keys() if k not in constants.NOT_ACCOUNT_KEYS]
-            if _accounts:
+            if config.defined_accounts:
                 typer.echo(
-                    f"The following accounts are defined {', '.join(_accounts)}\n"
+                    f"The following accounts are defined {', '.join(config.defined_accounts)}\n"
                     f"The default account 'central_info' is used if no account is specified via --account flag.\n"
                     f"or the ARUBACLI_ACCOUNT environment variable.\n"
                 )
@@ -140,12 +139,13 @@ class CLICommon:
                 else:
                     typer.secho("No accounts defined in config", fg="red")
 
-            if account != "central_info" and "central_info" not in config.data:
-                typer.echo(
-                    f"{typer.style('WARNING:', fg='yellow')} "
-                    f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
-                    f"--account parameter or ARUBACLI_ACCOUNT environment variable."
-                )
+            if account not in ["central_info", "default"]:
+                if "central_info" not in config.data and "default" not in config.data:
+                    typer.echo(
+                        f"{typer.style('WARNING:', fg='yellow')} "
+                        f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
+                        f"--account parameter or ARUBACLI_ACCOUNT environment variable."
+                    )
 
             raise typer.Exit(code=1)
 
