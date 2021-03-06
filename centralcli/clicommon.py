@@ -244,7 +244,14 @@ class CLICommon:
             if reverse:
                 data = data[::-1]
 
-            outdata = utils.output(data, tablefmt, title=title, caption=caption, config=config)
+            outdata = utils.output(
+                data,
+                tablefmt,
+                title=title,
+                caption=caption,
+                account=None if config.account in ["central_info", "account"] else config.account,
+                config=config
+            )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             # -- // Output to file \\ --
