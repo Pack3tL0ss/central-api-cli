@@ -90,7 +90,8 @@ def move(
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
     # yes_: bool = typer.Option(False, "-y", hidden=True),
 ) -> None:
     central = cli.central
@@ -189,7 +190,8 @@ def refresh(what: RefreshWhat = typer.Argument(...),
             default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
             account: str = typer.Option("central_info",
                                         envvar="ARUBACLI_ACCOUNT",
-                                        help="The Aruba Central Account to use (must be defined in the config)",),
+                                        help="The Aruba Central Account to use (must be defined in the config)",
+                                        autocompletion=cli.cache.account_completion),
             ):
     """refresh <'token'|'cache'>"""
 
@@ -219,7 +221,8 @@ def method_test(method: str = typer.Argument(...),
                 account: str = typer.Option("central_info",
                                             envvar="ARUBACLI_ACCOUNT",
                                             help="The Aruba Central Account to use (must be defined in the config)",
-                                            callback=cli.account_name_callback),
+                                            autocompletion=cli.cache.account_completion,
+                                            ),
                 ) -> None:
     """dev testing commands to run CentralApi methods from command line
 
@@ -234,18 +237,35 @@ def method_test(method: str = typer.Argument(...),
     """
     cli.cache(refresh=update_cache)
     central = CentralApi(account)
+    found = True
     if not hasattr(central, method):
-        from boilerplate.allcalls import AllCalls as central
-        if not hasattr(central, method):
-            typer.secho(f"{method} does not exist", fg="red")
-            raise typer.Exit(1)
-    args = [k for k in kwargs if "=" not in k]
-    kwargs = [k.replace(" =", "=").replace("= ", "=").replace(",", " ").replace("  ", " ") for k in kwargs]
-    kwargs = [k.split("=") for k in kwargs if "=" in k]
-    kwargs = {k[0]: k[1] for k in kwargs}
+        try:
+            from centralcli.boilerplate.allcalls import AllCalls
+            central = AllCalls()
+        except (ModuleNotFoundError, ImportError):
+            log.error("method-test was ubale to import allcalls", show=True)
+            found = False
 
-    typer.secho(f"session.{method}({', '.join(a for a in args)}, "
+        if not hasattr(central, method):
+            found = False
+
+    if not found:
+        typer.secho(f"{method} does not exist", fg="red")
+        raise typer.Exit(1)
+
+    kwargs = (
+        "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", ",").split("~")
+    )
+    args = [k if not k.isdigit() else int(k) for k in kwargs if "=" not in k]
+    kwargs = [k.split("=") for k in kwargs if "=" in k]
+    kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
+    for k, v in kwargs.items():
+        if v.startswith("[") and v.endswith("]"):
+            kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
+
+    typer.secho(f"session.{method}({', '.join(str(a) for a in args)}, "
                 f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})", fg="cyan")
+
     resp = central.request(getattr(central, method), *args, **kwargs)
 
     for k, v in resp.__dict__.items():
