@@ -29,7 +29,7 @@ def device(
     device: str = typer.Argument(
         ...,
         metavar="Device: [serial #|name|ip address|mac address]",
-        autocompletion=cli.cache.completion,
+        autocompletion=cli.cache.dev_completion,
     ),
     version: str = typer.Argument(
         None,
