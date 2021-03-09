@@ -734,15 +734,17 @@ class CentralApi(Session):
             else:
                 return resp
 
-        template_groups = groups = [g["name"] for g in groups if True in g.get("template group", {}).values()]
-        all_templates = []
-        for group in template_groups:
-            resp = await self.get_all_templates_in_group(group, **params)
-            if not resp.ok:
-                return resp
-            else:
-                all_templates += resp.output
-        return Response(ok=True, output=all_templates)
+        template_groups = [g["name"] for g in groups if True in g.get("template group", {}).values()]
+        reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
+        responses = await self._batch_request(reqs)
+        failed = [r for r in responses if not r]
+        if failed:
+            return failed[-1]
+
+        all_templates = [rr for r in responses for rr in r.output]
+        responses[-1].output = all_templates
+
+        return responses[-1]
 
     async def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
         url = "/platform/orders/v1/skus"
@@ -2292,6 +2294,41 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def remove_devices_from_site(
+        self,
+        site_id: int,
+        serial_nums: List[str],
+        device_type: Literal["ap", "cx", "sw", "switch", "gw"],
+    ) -> Response:
+        """Unassociate a site from a list of devices.
+
+        Args:
+            site_id (int): Site ID
+            device_type (str): Device type. Valid Values: ap, cx, sw, switch, gw
+                cx and sw are the same as the more generic switch.
+            serial_nums (List[str]): List of device serial numbers of the devices to which the site
+                has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        device_type = constants.lib_to_api("site", device_type)
+        if not device_type:
+            raise ValueError(
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
+            )
+
+        url = "/central/v2/sites/associations"
+        serial_nums = utils.listify(serial_nums)
+
+        json_data = {
+            'site_id': site_id,
+            'device_ids': serial_nums,
+            'device_type': device_type
+        }
+
+        return await self.delete(url, json_data=json_data)
 
 
 if __name__ == "__main__":
