@@ -39,11 +39,12 @@ class AddWlanArgs(str, Enum):
 
 @app.command(short_help="Add a group")
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=lambda incomplete: []),
+    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=lambda incomplete: None),
     group_password: str = typer.Argument(
         None,
         show_default=False,
         help="Group password is required. You will be prompted for password if not provided.",
+        autocompletion=lambda incomplete: incomplete
     ),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage IAP configurations via templates"),

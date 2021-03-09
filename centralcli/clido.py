@@ -21,11 +21,6 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, KickArgs, RenameArgs) # noqa
 iden = IdenMetaVars()
 
-SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
-SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
-SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-tty = utils.tty
-
 app = typer.Typer()
 
 
@@ -36,14 +31,12 @@ def bounce(
     port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
@@ -66,14 +59,12 @@ def reboot(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
@@ -93,14 +84,12 @@ def blink(
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     command = f'blink_led_{action}'
@@ -114,14 +103,12 @@ def nuke(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
@@ -134,14 +121,12 @@ def nuke(
 @app.command(short_help="Save Device Running Config to Startup")
 def save(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
@@ -151,14 +136,12 @@ def save(
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
 def sync(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
@@ -169,25 +152,25 @@ def sync(
 def rename(
     what: RenameArgs = typer.Argument(...,),
     group: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
-    new_name: str = typer.Argument(..., autocompletion=lambda incomplete: []),
+    new_name: str = typer.Argument(..., autocompletion=lambda incomplete: None),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
-    if yes or typer.confirm(typer.style(f"Please Confirm: rename group {group.name} -> {new_name}", fg="cyan")):
+    if yes or typer.confirm(typer.style(f"Please Confirm: rename group {group.name} -> {new_name}", fg="cyan"), abort=True):
         resp = cli.central.request(cli.central.update_group_name, group.name, new_name)
-        typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
+
+        if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
+            resp.output["description"] = f"{group.name} is an AOS_10X group, rename only supported on AOS_8X groups. Use clone."
+
+        cli.display_results(resp)
 
 
 @app.command(short_help="kick a client (disconnect)",)
@@ -201,14 +184,12 @@ def kick(
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
     if device in ["all", "mac", "wlan"]:

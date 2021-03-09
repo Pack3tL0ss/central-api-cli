@@ -31,7 +31,12 @@ def device(
         metavar="Device: [serial #|name|ip address|mac address]",
         autocompletion=cli.cache.completion,
     ),
-    version: str = typer.Argument(None, help="Version to upgrade to [Default: recommended version]", show_default=False),
+    version: str = typer.Argument(
+        None,
+        help="Version to upgrade to [Default: recommended version]",
+        show_default=False,
+        autocompletion=lambda incomplete: [],
+    ),
     at: datetime = typer.Option(
         None,
         help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [Default: Now]",
@@ -52,8 +57,7 @@ def device(
     at = None if not at else int(round(at.timestamp()))
 
     ver_msg = "Recommended version" if not version else version
-    if reboot:
-        ver_msg = f"{ver_msg} and reboot"
+    ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
     if yes or typer.confirm(
         typer.style(

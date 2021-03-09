@@ -179,17 +179,23 @@ class ArgToWhat:
 
     def _init_update(self):
         self.template = self.templates = "template"
-        self.variable = self.variables = "variables"
+        self.variables = self.variable = "variables"
+        self.group = self.groups = "group"
 
     def _init_delete(self):
         self.site = self.sites = "site"
         self.group = self.groups = "group"
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
+        self.wlan = self.wlans = "wlan"
 
     def _init_upgrade(self):
-        self.device = self.devices = "device"
+        self.device = self.devices = self.dev = "device"
         self.group = self.groups = "group"
         self.swarm = "swarm"
+
+    def _init_add(self):
+        self.group = self.groups = "group"
+        self.wlan = self.wlans = "wlan"
 
     def _init_clone(self):
         self.group = self.groups = "group"
