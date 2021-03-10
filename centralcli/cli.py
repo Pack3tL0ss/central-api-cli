@@ -237,19 +237,14 @@ def method_test(method: str = typer.Argument(...),
     """
     cli.cache(refresh=update_cache)
     central = CentralApi(account)
-    found = True
     if not hasattr(central, method):
         try:
             from centralcli.boilerplate.allcalls import AllCalls
             central = AllCalls()
         except (ModuleNotFoundError, ImportError):
             log.error("method-test was ubale to import allcalls", show=True)
-            found = False
 
-        if not hasattr(central, method):
-            found = False
-
-    if not found:
+    if not hasattr(central, method):
         typer.secho(f"{method} does not exist", fg="red")
         raise typer.Exit(1)
 
@@ -315,10 +310,12 @@ def callback(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),
 ) -> None:
     """
     Aruba Central API CLI
     """
+    cli.cache(refresh=update_cache)
     pass
 
 

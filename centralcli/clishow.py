@@ -733,6 +733,52 @@ def run(
     cli.display_results(resp, pager=not no_pager, outfile=outfile)
 
 
+@app.command(short_help="Show device routing table")
+def routes(
+    device: str = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
+    sort_by: SortOptions = typer.Option(None, "--sort"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion,),
+) -> None:
+    cli.cache(refresh=update_cache)
+    central = cli.central
+    device = cli.cache.get_dev_identifier(device)
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = central.request(central.get_device_ip_routes, device.serial)
+    if "summary" in resp.output:
+        s = resp.summary
+        caption = (
+            f'max: {s.get("maximum")} total: {s.get("total")} default: {s.get("default")} connected: {s.get("connected")} '
+            f'static: {s.get("static")} dynamic: {s.get("dynamic")} overlay: {s.get("overlay")} '
+
+        )
+    else:
+        caption = ""
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{device.name} IP Routes",
+        caption=caption,
+        sort_by=sort_by,
+        pager=not no_pager,
+        outfile=outfile,
+        cleaner=cleaner.routes,
+    )
+
+
 @app.command(short_help="Show WLAN(SSID)/details")
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN"),
@@ -780,6 +826,7 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
+    # if "summary"
     cli.display_results(resp, tablefmt=tablefmt, title="WLANs (SSIDs)", pager=not no_pager, outfile=outfile)
 
 

@@ -4129,6 +4129,29 @@ class AllCalls(CentralApi):
 
         Returns:
             Response: CentralAPI Response object
+
+        Raw API Response Example:
+            [
+                {
+                    "devices": [
+                        {
+                            "aruba_part_no": "6200",
+                            "customer_id": "abc123",
+                            "customer_name": "acme",
+                            "device_type": "switch",
+                            "imei": "",
+                            "macaddr": "AA:BB...",
+                            "model": "JL728A",
+                            "serial": "SGABC1234",
+                            "services": [
+                                "foundation_switch_6200"
+                            ],
+                            "tier_type": "foundation"
+                        },
+                    ],
+                    "total": 6
+                }
+            ]
         """
         url = "/platform/device_inventory/v1/devices"
 
@@ -4153,18 +4176,23 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
-    async def platform_delete_device(self, NoName: list = None) -> Response:
+    async def platform_delete_device(self, devices: Union[List[str], str]) -> Response:
         """Delete devices using Serial number.
 
         Args:
-            NoName (list, optional): ...
+            devices (List[str]|str): Device(s) to delete.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
+        devices = [devices] if not isinstance(list, devices) else devices
 
-        return await self.delete(url)
+        json_data = [
+            devices
+        ]
+
+        return await self.delete(url, payload=json_data)
 
     async def platform_get_devices_stats(self, sku_type: str, service_type: str) -> Response:
         """Get devices stats.

@@ -530,3 +530,15 @@ def get_vlans(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     ]
 
     return data
+
+
+def routes(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    data = utils.unlistify(data)
+    if isinstance(data, list) or "routes" not in data:
+        return data
+    else:
+        rv: list = data["routes"]
+
+    return [
+        {"destination": f'{r["prefix"]}/{r["length"]}', "next hop": r["nexthop"]} for r in rv
+    ]
