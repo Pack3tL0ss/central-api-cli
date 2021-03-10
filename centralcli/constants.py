@@ -176,6 +176,7 @@ class ArgToWhat:
         self.vlans = self.vlan = "vlans"
         self.wlans = self.wlan = self.ssids = self.ssid = "wlans"
         self.run = self.running = "run"
+        self.routes = self.route = "routes"
 
     def _init_update(self):
         self.template = self.templates = "template"

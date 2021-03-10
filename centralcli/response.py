@@ -134,15 +134,16 @@ class Response:
 
     def __getattr__(self, name: str) -> Any:
         if hasattr(self, "output") and self.output:
-            # if isinstance(self.output, list) and len(self.output) == 1:
-            #     output = self.output[0]
-
-            #     if name in output:
-            #         return output[name]
-
+            output = self.output
             # return the responses list / dict attr if exist
-            if hasattr(self.output, name):
-                return getattr(self.output, name)
+            if hasattr(output, name):
+                return getattr(output, name)
+
+            if isinstance(output, list) and len(output) == 1:
+                output = output[0]
+
+            if isinstance(output, dict) and name in output:
+                return output[name]
 
         if hasattr(self._response, name):
             return getattr(self._response, name)

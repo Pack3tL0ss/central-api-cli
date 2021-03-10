@@ -2330,6 +2330,35 @@ class CentralApi(Session):
 
         return await self.delete(url, json_data=json_data)
 
+    async def get_device_ip_routes(
+        self,
+        serial_num: str,
+        api: str = "V1",
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """Get routes for a device.
+
+        Args:
+            serial_num (str): Device serial number
+            api (str, optional): API version (V0|V1), Defaults to V1.
+            offset (str, optional): Pagination offset.
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/route"
+
+        params = {
+            'device': serial_num,
+            'api': api,
+            'marker': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
 
 if __name__ == "__main__":
     pass

@@ -309,7 +309,7 @@ class CLICommon:
                     if not r and exit_on_fail:
                         raise typer.Exit(1)
                 else:
-                    # TODO add sort and reverse funcs
+                    # TODO add sort and reverse funcs (as available methods in Response object)
                     if sort_by is not None:
                         typer.secho("sort by is not implemented for all commands yet", fg="red")
 
