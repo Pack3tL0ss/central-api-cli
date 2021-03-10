@@ -4176,23 +4176,25 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
-    async def platform_delete_device(self, devices: Union[List[str], str]) -> Response:
+    async def platform_delete_device(self, serial_nums: Union[List[str], str]) -> Response:
         """Delete devices using Serial number.
 
+        VALID FOR Central On Prem Only
+
         Args:
-            devices (List[str]|str): Device(s) to delete.
+            serial_nums (List[str]|str): serial_num(s) of devices to delete.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
-        devices = [devices] if not isinstance(list, devices) else devices
+        serial_nums = [serial_nums] if not isinstance(serial_nums, list) else serial_nums
 
         json_data = [
-            devices
+            {"serial": s} for s in serial_nums
         ]
 
-        return await self.delete(url, payload=json_data)
+        return await self.delete(url, json_data=json_data)
 
     async def platform_get_devices_stats(self, sku_type: str, service_type: str) -> Response:
         """Get devices stats.
