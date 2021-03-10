@@ -276,6 +276,8 @@ class Utils:
     @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
         """strip all keys from a dict where value is NoneType"""
+        if not isinstance(_dict, dict):
+            return _dict
 
         return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
 

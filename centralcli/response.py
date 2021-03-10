@@ -321,7 +321,7 @@ class Session:
         if json_data:  # strip second nested dict if all keys = NoneType
             y = json_data.copy()
             for k in y:
-                if isinstance(y[k], dict):
+                if isinstance(y, dict) and isinstance(y[k], dict):
                     y[k] = utils.strip_none(y[k])
                     if not y[k]:
                         del json_data[k]

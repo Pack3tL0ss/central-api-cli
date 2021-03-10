@@ -251,14 +251,25 @@ class CentralApi(Session):
         return await self.api_call(f_url, method="PATCH", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
 
-    async def delete(self, url, params: dict = {}, payload: dict = None, headers: dict = None, **kwargs) -> Response:
+    async def delete(
+        self,
+        url,
+        params: dict = {},
+        payload: dict = None,
+        json_data: Union[dict, list] = None,
+        headers: dict = None,
+        **kwargs
+    ) -> Response:
         f_url = self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
-        return await self.api_call(f_url, method="DELETE", data=payload, params=params, headers=headers, **kwargs)
+        return await self.api_call(f_url, method="DELETE", data=payload,
+                                   json_data=json_data, params=params, headers=headers, **kwargs)
 
     @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
         """strip all keys from a dict where value is NoneType"""
+        if not isinstance(_dict, dict):
+            return _dict
 
         return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
 
