@@ -2401,7 +2401,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def add_device(
+    async def add_devices(
         self,
         mac_address: str = None,
         serial_num: str = None,
@@ -2409,7 +2409,7 @@ class CentralApi(Session):
         part_num: str = None,
         device_list: List[Dict[str, str]] = None
     ) -> Response:
-        """Add device using Mac and Serial number (part_num also required for CoP)
+        """Add device(s) using Mac and Serial number (part_num also required for CoP)
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
 
