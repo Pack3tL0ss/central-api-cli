@@ -178,6 +178,12 @@ class Cache:
             if a.lower().startswith(incomplete.lower()):
                 yield a
 
+    def null_completeion(self, incomplete: str):
+        incomplete = "NULL_COMPLETION"
+        _ = incomplete
+        for m in ["|", "<cr>"]:
+            yield m
+
     def dev_completion(
         self,
         incomplete: str,
@@ -205,6 +211,50 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_kwarg_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for commands that allow a list of devices followed by grouop/site.
+
+        i.e. cencli move dev1 dev2 dev3 site site_name group group_name
+
+        Args:
+            incomplete (str): The incomplete word for autocompletion
+            args (List[str], optional): The prev args passed into the command.
+
+        Yields:
+            tuple: matching completion string, help text
+        """
+        if args[-1].lower() == "group":
+            out = [m for m in self.group_completion(incomplete)]
+            for m in out:
+                yield m
+
+        elif args[-1].lower() == "site":
+            out = [m for m in self.site_completion(incomplete)]
+            out = [m for m in self.site_completion(incomplete)]
+            for m in out:
+                yield m
+
+        else:
+            out = []
+            if len(args) > 1:
+                if "site" not in args and "site".startswith(incomplete.lower()):
+                    out += ("site", )
+                if "group" not in args and "group".startswith(incomplete.lower()):
+                    out += ("group", )
+
+            if "site" not in args and "group" not in args:
+                out += [m for m in self.dev_completion(incomplete)]
+            elif "site" in args and "group" in args:
+                incomplete = "NULL_COMPLETION"
+                out += ["|", "<cr>"]
+
+            for m in out:
+                yield m
+
     def group_completion(
         self,
         incomplete: str,
@@ -228,13 +278,13 @@ class Cache:
         args: List[str] = None,
     ):
         match = self.get_site_identifier(
-            incomplete,
+            incomplete.replace('"', "").replace("'", ""),
             completion=True,
         )
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+                out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
 
         for m in out:
             yield m
