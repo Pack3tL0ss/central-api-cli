@@ -1613,6 +1613,92 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    async def update_group(
+        self,
+        group: str,
+        group_password: str,
+        template_group: bool
+    ) -> Response:
+        """Update existing group.
+
+        Args:
+            group (str): Name of the group to be updated.
+            group_password (str): - GET API will always return empty,  This is mandatory for POST
+                and PATCH APIs.
+                - The password set in the group API is applicable for configuration that are done
+                from UI, we ignore the password for templates.
+                - To set the password for template group devices please use the following CLI in
+                template file.                                     mgmt-user admin <actual_password>
+                OR mgmt-user admin %admin_password%
+            template_group (bool): Set to true if group is of type template.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}"
+
+        json_data = {
+            'group_password': group_password,
+            'template_group': template_group
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def update_group_properties(
+        self,
+        group: str,
+        aos10: bool = None,
+        monitor_only_switch: bool = None,
+    ) -> Response:
+        """Update properties for the given group.
+
+        If aos10 argument is not provided an additional API call is made to gather the current aos_version
+        and use the current setting as the argument is required by the Central API gw.
+
+        Args:
+            group (str): Group for which properties need to be updated.
+            aos10 (bool, optional): If True will upgrade the group to AOS10
+                Note: AOS10 groups can not be downgraded back to AOS8
+            MonitorOnlySwitch (bool, optional): Indicates if the Monitor Only mode for switches is enabled for
+                the group.  Defaults to False
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/properties"
+        json_data = {}
+
+        if aos10 is None:
+            resp = await self.get_groups_properties(group)
+            if not resp:
+                return resp
+            json_data['AOSVersion'] = resp[0]["properties"]["AOSVersion"]
+        else:
+            json_data['AOSVersion'] = "AOS_10X" if aos10 else "AOS_8X"
+
+        if monitor_only_switch is not None:
+            json_data['MonitorOnlySwitch'] = monitor_only_switch
+
+        return await self.patch(url, json_data=json_data)
+
+    async def update_group_name(self, group: str, new_group: str) -> Response:
+        """Update group name for the given group.
+
+        Args:
+            group (str): Group for which name need to be updated.
+            new_group (str): The new name of the group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/name"
+
+        json_data = {
+            'group': new_group
+        }
+
+        return await self.patch(url, json_data=json_data)
+
     async def get_ap_settings(self, serial_number: str) -> Response:
         """Get an existing ap settings.
 
@@ -1688,24 +1774,6 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def update_group_name(self, group: str, new_group: str) -> Response:
-        """Update group name for the given group.
-
-        Args:
-            group (str): Group for which name need to be updated.
-            new_group (str): The new name of the group.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/groups/{group}/name"
-
-        json_data = {
-            'group': new_group
-        }
-
-        return await self.patch(url, json_data=json_data)
-
     # TODO NotUsed Yet
     async def get_dirty_diff(
         self,
@@ -1770,43 +1838,6 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
-
-    async def update_group_properties(
-        self,
-        group: str,
-        aos10: bool = None,
-        monitor_only_switch: bool = None,
-    ) -> Response:
-        """Update properties for the given group.
-
-        If aos10 argument is not provided an additional API call is made to gather the current aos_version
-        and use the current setting as the argument is required by the Central API gw.
-
-        Args:
-            group (str): Group for which properties need to be updated.
-            aos10 (bool, optional): If True will upgrade the group to AOS10
-                Note: AOS10 groups can not be downgraded back to AOS8
-            MonitorOnlySwitch (bool, optional): Indicates if the Monitor Only mode for switches is enabled for
-                the group.  Defaults to False
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/groups/{group}/properties"
-        json_data = {}
-
-        if aos10 is None:
-            resp = await self.get_groups_properties(group)
-            if not resp:
-                return resp
-            json_data['AOSVersion'] = resp[0]["properties"]["AOSVersion"]
-        else:
-            json_data['AOSVersion'] = "AOS_10X" if aos10 else "AOS_8X"
-
-        if monitor_only_switch is not None:
-            json_data['MonitorOnlySwitch'] = monitor_only_switch
-
-        return await self.patch(url, json_data=json_data)
 
     async def get_vc_firmware(
         self,
@@ -2369,6 +2400,95 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def add_devices(
+        self,
+        mac_address: str = None,
+        serial_num: str = None,
+        group: str = None,
+        part_num: str = None,
+        device_list: List[Dict[str, str]] = None
+    ) -> Response:
+        """Add device(s) using Mac and Serial number (part_num also required for CoP)
+
+        Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
+
+        Args:
+            mac_address (str, optional): MAC address of device to be added
+            serial_num (str, optional): Serial number of device to be added
+            group (str, optional): Add device to pre-provisioned group (additional API call is made)
+            part_num (str, optional): Part Number is required for Central On Prem.
+            device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices"
+
+        if serial_num and mac_address:
+            if group:
+                to_group = {group: [serial_num]}
+
+            mac = utils.Mac(mac_address)
+            if not mac:
+                raise ValueError(f"mac_address {mac_address} appears to be invalid.")
+
+            json_data = [
+                {
+                    "mac": mac.cols,
+                    "serial": serial_num
+                }
+            ]
+            if part_num:
+                json_data[0]["partNumber"] = part_num
+        elif device_list:
+            if not isinstance(device_list, list) and not all(isinstance(d, dict) for d in device_list):
+                raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
+
+            _keys = {
+                "mac_address": "mac",
+                "serial_num": "serial",
+                "part_num": "partNumber"
+            }
+
+            json_data = [{_keys.get(k, k): v for k, v in d.items() if k != "group"} for d in device_list]
+
+            to_group = {d["group"]: [] for d in device_list}
+            _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
+
+        else:
+            raise ValueError("mac_address and serial_num or device_list is required")
+
+        if to_group:
+            br = self.BatchRequest
+            reqs = [
+                br(self.post, url, json_data=json_data),
+                *[br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
+            ]
+
+            return self._batch_request(reqs)
+        else:
+            return await self.post(url, json_data=json_data)
+
+    async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
+        """Assign devices to pre-provisioned group.
+
+        Args:
+            group (str): Group name
+            serials (List[str]|str): Device serial number or list of device serial numbers.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/device_management/v1/group/assign"
+        serial_nums = utils.listify(serial_nums)
+
+        json_data = {
+            'serials': serial_nums,
+            'group': group
+        }
+
+        return await self.post(url, json_data=json_data)
 
 
 if __name__ == "__main__":
