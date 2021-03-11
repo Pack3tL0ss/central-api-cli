@@ -59,18 +59,39 @@ def move(
         metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=cli.cache.completion,
-        # cache=["site", "group"],
+        autocompletion=lambda incomplete: [
+            c for c in ["group", "site", *[m for m in cli.cache.dev_completion(incomplete)]] if c.lower().startswith(incomplete)
+        ],
     ),
-    kw1_val: str = typer.Argument(None, metavar="[site <SITE>]", show_default=False),
+    kw1_val: str = typer.Argument(
+        None,
+        metavar="[site <SITE>]",
+        show_default=False,
+        autocompletion=lambda incomplete: [
+            c for c in [
+                *cli.cache.group_names, *cli.cache.sites, *[m for m in cli.cache.dev_completion(incomplete)]
+            ] if c.lower().startswith(incomplete)
+        ],
+    ),
     kw2: str = typer.Argument(
         None, metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=cli.cache.completion,
-        # cache=["site", "group"],
+        autocompletion=lambda incomplete: [
+            c for c in ["group", "site", *[m for m in cli.cache.dev_completion(incomplete)]] if c.lower().startswith(incomplete)
+        ],
     ),
-    kw2_val: str = typer.Argument(None, metavar="[group <GROUP>]", show_default=False, help="[site and/or group required]"),
+    kw2_val: str = typer.Argument(
+        None,
+        metavar="[group <GROUP>]",
+        show_default=False,
+        help="[site and/or group required]",
+        autocompletion=lambda incomplete: [
+            c for c in [
+                *cli.cache.group_names, *cli.cache.sites, *[m for m in cli.cache.dev_completion(incomplete)]
+            ] if c.lower().startswith(incomplete)
+        ],
+    ),
     _group: str = typer.Option(
         None,
         "--group",
