@@ -23,6 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.central import CentralApi  # noqa
 from centralcli.constants import RefreshWhat, IdenMetaVars, arg_to_what  # noqa
+
 iden = IdenMetaVars()
 
 CONTEXT_SETTINGS = {
@@ -257,6 +258,8 @@ def method_test(method: str = typer.Argument(...),
     for k, v in kwargs.items():
         if v.startswith("[") and v.endswith("]"):
             kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
+        if v.lower() in ["true", "false"]:
+            kwargs[k] = True if v.lower() == "true" else False
 
     typer.secho(f"session.{method}({', '.join(str(a) for a in args)}, "
                 f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})", fg="cyan")
@@ -280,7 +283,7 @@ def method_test(method: str = typer.Argument(...),
 
 def all_commands_callback(ctx: typer.Context, debug: bool):
     if not ctx.resilient_parsing:
-        account, debug, default = None, None, None
+        account, debug, default, update_cache = None, None, None, None
         for idx, arg in enumerate(sys.argv):
             if arg == "--debug":
                 debug = True
@@ -288,6 +291,13 @@ def all_commands_callback(ctx: typer.Context, debug: bool):
                 default = True
             elif arg == "--account" and "-d" not in sys.argv:
                 account = sys.argv[idx + 1]
+            elif arg == "-U":
+                update_cache = True
+            elif arg.startswith("-") and not arg.startswith("--"):
+                if "d" in arg:
+                    default = True
+                if "U" in arg:
+                    update_cache = True
 
         account = account or os.environ.get("ARUBACLI_ACCOUNT", False)
         debug = debug or os.environ.get("ARUBACLI_DEBUG", False)
@@ -298,6 +308,10 @@ def all_commands_callback(ctx: typer.Context, debug: bool):
             cli.account_name_callback(ctx, account=account)
         if debug:
             cli.debug_callback(ctx, debug=debug)
+        if update_cache:
+            # cli.cache(refresh=True)
+            # TODO can do cache update here once update is removed from all commands
+            pass
 
 
 @app.callback()
@@ -315,7 +329,6 @@ def callback(
     """
     Aruba Central API CLI
     """
-    cli.cache(refresh=update_cache)
     pass
 
 
