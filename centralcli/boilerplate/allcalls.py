@@ -1,7 +1,7 @@
 import sys
 import asyncio
 from pathlib import Path
-from typing import Union, List
+from typing import Dict, Tuple, Union, List
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -4163,7 +4163,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def platform_add_device(self, NoName: list = None) -> Response:
+    async def platform_add_device(self, mac_address: str = None, serial_num: str = None, part_num: str = None, device_list: List[Dict[str, str]] = None) -> Response:
         """Add device using Mac and Serial number.
 
         Args:
@@ -4173,6 +4173,30 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
+
+        if serial_num:
+            if not mac_address:
+                raise ValueError("mac_address is required")
+            else:
+                json_data = [
+                    {
+                        "mac": "<string>",
+                        "serial": "<string>",
+                    }
+                ]
+                if part_num:
+                    json_data[0]["partNumber"] = part_num
+        elif device_list:
+            if not isinstance(device_list, list) and not all(isinstance(d, dict) for d in device_list):
+                raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
+
+            _keys = {
+                "mac_address": "mac",
+                "serial_num": "serial",
+                "part_num": "partNumber"
+            }
+
+            json_data = [{_keys.get(k, k): v for k, v in d.items()} for d in device_list]
 
         return await self.post(url)
 
