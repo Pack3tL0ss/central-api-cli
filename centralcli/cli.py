@@ -53,59 +53,41 @@ class MoveArgs(str, Enum):
     help="Move device(s) to a defined group and/or site.",
 )
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_completion,),
+    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_kwarg_completion,),
     kw1: str = typer.Argument(
         None,
         metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=lambda incomplete: [
-            c for c in ["group", "site", *[m for m in cli.cache.dev_completion(incomplete)]] if c.lower().startswith(incomplete)
-        ],
     ),
     kw1_val: str = typer.Argument(
         None,
         metavar="[site <SITE>]",
         show_default=False,
-        autocompletion=lambda incomplete: [
-            c for c in [
-                *cli.cache.group_names, *cli.cache.sites, *[m for m in cli.cache.dev_completion(incomplete)]
-            ] if c.lower().startswith(incomplete)
-        ],
     ),
     kw2: str = typer.Argument(
         None, metavar="",
         show_default=False,
         hidden=True,
-        autocompletion=lambda incomplete: [
-            c for c in ["group", "site", *[m for m in cli.cache.dev_completion(incomplete)]] if c.lower().startswith(incomplete)
-        ],
     ),
     kw2_val: str = typer.Argument(
         None,
         metavar="[group <GROUP>]",
         show_default=False,
         help="[site and/or group required]",
-        autocompletion=lambda incomplete: [
-            c for c in [
-                *cli.cache.group_names, *cli.cache.sites, *[m for m in cli.cache.dev_completion(incomplete)]
-            ] if c.lower().startswith(incomplete)
-        ],
     ),
     _group: str = typer.Option(
         None,
         "--group",
         help="Group to Move device(s) to",
         hidden=True,
-        autocompletion=cli.cache.completion,
-        # cache="group",
+        autocompletion=cli.cache.group_completion,
     ),
     _site: str = typer.Option(
         None, "--site",
         help="Site to move device(s) to",
         hidden=True,
-        autocompletion=cli.cache.completion,
-        # cache="site",
+        autocompletion=cli.cache.site_completion,
     ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
@@ -117,7 +99,6 @@ def move(
     # yes_: bool = typer.Option(False, "-y", hidden=True),
 ) -> None:
     central = cli.central
-    # yes = yes_ if yes_ else yes
 
     group, site, = None, None
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):

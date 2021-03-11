@@ -50,14 +50,11 @@ def group(
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage IAP configurations via templates"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     if not group_password:
@@ -105,19 +102,14 @@ def wlan(
         ("portal_profile", ""),
         metavar="portal-profile [PORTAL PROFILE]",
     ),
-    # psk: str = typer.Option(None, "--psk"),
-    # _type: str = typer.Option(None, "--type"),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
