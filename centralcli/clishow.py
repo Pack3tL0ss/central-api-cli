@@ -312,7 +312,7 @@ def devices(
         hidden=False,
         autocompletion=lambda incomplete: [
             m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete)]]
-            if m[0].lower().startwith(incomplete.lower())
+            if m[0].lower().startswith(incomplete.lower())
         ],
         help="Show details for a specific device [Default: show summary for all devices]"
     ),
