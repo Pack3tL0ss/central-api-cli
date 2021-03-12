@@ -93,10 +93,13 @@ def show_devices(
 
     # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
+    title_sfx = [
+        f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details"] and v
+    ]
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title=what_to_pretty(dev_type),
+        title=f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}",
         pager=not no_pager,
         outfile=outfile,
         sort_by=sort_by,

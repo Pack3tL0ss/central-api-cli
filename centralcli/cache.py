@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Any, Literal, Dict, Union, List
+from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from centralcli import log, utils, config, CentralApi
@@ -55,7 +55,8 @@ class CentralObject:
         return bool(self.data)
 
     def __repr__(self):
-        return f"<{self.__module__}.{type(self).__name__} ({self.get('name', bool(self))}) object at {hex(id(self))}>"
+        _ = f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
+        return _
 
     def __str__(self):
         if isinstance(self.data, dict):
@@ -604,12 +605,32 @@ class Cache:
     def get_identifier(
         self,
         qry_str: str,
-        qry_funcs: tuple,
+        qry_funcs: Sequence[str],
         device_type: str = None,
         group: str = None,
         multi_ok: bool = False,
         completion: bool = False,
     ) -> CentralObject:
+        """Get Identifier when iden type could be one of multiple types.  i.e. device or group
+
+        Args:
+            qry_str (str): The query string provided by user.
+            qry_funcs (Sequence[str]): Sequence of strings "dev", "group", "site", "template"
+            device_type (str, optional): str indicating what devices types are valid for dev idens.
+                Defaults to None.
+            group (str, optional): applies to get_template_identifier, Only match if template is in this group.
+                Defaults to None.
+            multi_ok (bool, optional): DEPRECATED, NO LONGER USED
+            completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
+                When called for completion it will fail silently and will return multiple when multiple matches are found.
+
+        Raises:
+            typer.Exit: If not ran for completion, and there is no match, exit with code 1.
+
+        Returns:
+            CentralObject
+        """
+        # TODO remove multi_ok once verified refs are removed
         match = None
         default_kwargs = {"retry": False, "completion": completion}
         for _ in range(0, 2):
@@ -713,7 +734,7 @@ class Cache:
             elif len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, multi_ok=multi_ok)
 
-            return utils.unlistify(match)
+            return match[0]
         elif retry:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
             if all_match:
@@ -757,7 +778,7 @@ class Cache:
                     | self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
                 )
 
-            # retry name match swapping - for _ and _ for -
+            # swap _ and - and case insensitive
             if not match:
                 if "-" in query_str:
                     match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
@@ -782,7 +803,7 @@ class Cache:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="site", multi_ok=multi_ok)
 
-                return match[0]
+            return match[0]
 
         elif retry:
             log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=True)
@@ -808,13 +829,25 @@ class Cache:
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
-            # swap _ and - and case insensitive
+            # case insensitive ignore -_
             if not match:
-                match = self.GroupDB.search(
-                    self.Q.name.test(
-                        lambda v: v.lower() == query_str.lower().replace("_", "-")
+                if "_" in query_str or "-" in query_str:
+                    match = self.GroupDB.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                        )
                     )
-                )
+                #     match = self.GroupDB.search(
+                #         self.Q.name.test(
+                #             lambda v: v.lower() == query_str.lower().replace("_", "-")
+                #         )
+                #     )
+                # elif "-" in query_str:
+                #     match = self.GroupDB.search(
+                #         self.Q.name.test(
+                #             lambda v: v.lower() == query_str.lower().replace("-", "_")
+                #         )
+                #     )
 
             # case insensitive startswith
             if not match:
@@ -822,15 +855,15 @@ class Cache:
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
-            # case insensitive startswith swap _ and -
+            # case insensitive startswith ignore - _
             if not match:
                 match = self.GroupDB.search(
                     self.Q.name.test(
-                        lambda v: v.lower().startswith(query_str.lower().replace("_", "-"))
+                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
                     )
                 )
 
-            if retry and not match and self.central.get_all_groups not in self.updated:
+            if not match and retry and self.central.get_all_groups not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
                 self.check_fresh(refresh=True, group_db=True)
                 _ += 1
@@ -845,7 +878,7 @@ class Cache:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="group", multi_ok=multi_ok)
 
-                return match[0]
+            return match[0]
 
         elif retry:
             log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
@@ -872,13 +905,25 @@ class Cache:
         retry = False if completion else retry
         match = None
         for _ in range(0, 2 if retry else 1):
+            # exact
             match = self.TemplateDB.search(
-                (self.Q.name == query_str) | self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                (self.Q.name == query_str)
             )
 
+            # case insensitive
             if not match:
-                match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+                match = self.TemplateDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
 
+            # case insensitive with -/_ swap
+            if not match:
+                if "_" in query_str:
+                    match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+                elif "-" in query_str:
+                    match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+
+            # startswith
             if not match:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
@@ -895,7 +940,7 @@ class Cache:
 
             if len(match) > 1:
                 if group:
-                    match = [{k: d[k] for k in d.data} for d in match if d["group"].lower() == group.lower()]
+                    match = [d for d in match if d.group.lower() == group.lower()]
 
             if len(match) > 1:
                 match = self.handle_multi_match(
@@ -905,7 +950,7 @@ class Cache:
                     multi_ok=multi_ok,
                 )
 
-                return match[0]
+            return match[0]
 
         elif retry:
             log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
