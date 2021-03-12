@@ -18,40 +18,10 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, KickArgs, RenameArgs) # noqa
+from centralcli.constants import (BlinkArgs, IdenMetaVars, KickArgs, RenameArgs) # noqa
 iden = IdenMetaVars()
 
 app = typer.Typer()
-
-
-@app.command(short_help="Bounce Interface or PoE on Interface")
-def bounce(
-    what: BounceArgs = typer.Argument(...),
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
-    port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    yes = yes_ if yes_ else yes
-    dev = cli.cache.get_dev_identifier(device)
-    command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
-    if yes or typer.confirm(typer.style(f"Please Confirm bounce {what} on {dev.name} port {port}", fg="cyan")):
-        resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
-        typer.secho(str(resp), fg="green" if resp else "red")
-        # !! removing this for now Central ALWAYS returns:
-        # !!   reason: Sending command to device. state: QUEUED, even after command execution.
-        # if resp and resp.get('task_id'):
-        #     resp = cli.central.request(session.get_task_status, resp.task_id)
-        #     typer.secho(str(resp), fg="green" if resp else "red")
-
-    else:
-        raise typer.Abort()
 
 
 @app.command(short_help="Reboot a device")
