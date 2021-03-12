@@ -15,6 +15,11 @@ try:
 except Exception:
     pass
 
+try:
+    import better_exceptions # noqa
+except Exception:
+    pass
+
 TinyDB.default_table_name = "devices"
 
 DBType = Literal["dev", "site", "template", "group"]
@@ -767,16 +772,17 @@ class Cache:
                 typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
                 self.check_fresh(refresh=True, site_db=True)
             if match:
+                match = [CentralObject("site", s) for s in match]
                 break
 
         if match:
             if completion:
-                return [CentralObject("site", s) for s in match]
+                return match
 
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="site", multi_ok=multi_ok)
 
-            return CentralObject("site", match)
+                return match[0]
 
         elif retry:
             log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=True)
@@ -793,10 +799,14 @@ class Cache:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
-            match = self.GroupDB.search(
-                (self.Q.name == query_str)
-                | self.Q.name.test(lambda v: v.lower() == query_str.lower())
-            )
+            # Exact match
+            match = self.GroupDB.search((self.Q.name == query_str))
+
+            # case insensitive
+            if not match:
+                match = self.GroupDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
 
             # swap _ and - and case insensitive
             if not match:
@@ -806,11 +816,18 @@ class Cache:
                     )
                 )
 
-            # startswith
+            # case insensitive startswith
             if not match:
                 match = self.GroupDB.search(
-                    (self.Q.name == query_str)
-                    | self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive startswith swap _ and -
+            if not match:
+                match = self.GroupDB.search(
+                    self.Q.name.test(
+                        lambda v: v.lower().startswith(query_str.lower().replace("_", "-"))
+                    )
                 )
 
             if retry and not match and self.central.get_all_groups not in self.updated:
@@ -818,25 +835,29 @@ class Cache:
                 self.check_fresh(refresh=True, group_db=True)
                 _ += 1
             if match:
+                match = [CentralObject("group", g) for g in match]
                 break
 
         if match:
             if completion:
-                return [CentralObject("group", g) for g in match]
+                return match
 
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="group", multi_ok=multi_ok)
 
-            return CentralObject("group", match)
+                return match[0]
+
         elif retry:
-            log.error(f"Unable to gather group {ret_field} from provided identifier {query_str}", show=True)
+            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
             valid_groups = "\n".join(self.group_names)
             typer.secho(f"{query_str} appears to be invalid", fg="red")
             typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
             raise typer.Exit(1)
         else:
             if not completion:
-                log.error(f"Unable to gather group {ret_field} from provided identifier {query_str}", show=True)
+                log.error(
+                    f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True
+                )
 
     def get_template_identifier(
         self,
@@ -865,15 +886,16 @@ class Cache:
                 typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
                 self.check_fresh(refresh=True, template_db=True)
             if match:
+                match = [CentralObject("template", tmplt) for tmplt in match]
                 break
 
         if match:
             if completion:
-                return [CentralObject("template", tmplt) for tmplt in match]
+                return match
 
             if len(match) > 1:
                 if group:
-                    match = [{k: d[k] for k in d} for d in match if d["group"].lower() == group.lower()]
+                    match = [{k: d[k] for k in d.data} for d in match if d["group"].lower() == group.lower()]
 
             if len(match) > 1:
                 match = self.handle_multi_match(
@@ -883,7 +905,7 @@ class Cache:
                     multi_ok=multi_ok,
                 )
 
-            return CentralObject("template", match)
+                return match[0]
 
         elif retry:
             log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
