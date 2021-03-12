@@ -202,7 +202,7 @@ class Cache:
                     out += [tuple([m.serial, m.help_text])]
                 elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
                     out += [tuple([m.mac, m.help_text])]
-                elif m.ip.address.startswith(incomplete):
+                elif m.ip.startswith(incomplete):
                     out += [tuple([m.ip, m.help_text])]
                 else:
                     # failsafe, shouldn't hit
