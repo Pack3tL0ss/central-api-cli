@@ -14,7 +14,7 @@ if test_dev_file.is_file():
 
 
 def test_do_bounce_interface():
-    result = runner.invoke(app, ["do", "bounce",  "interface", TEST_DEVICES["switch"]["name"].lower(),
+    result = runner.invoke(app, ["bounce",  "interface", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
@@ -22,7 +22,7 @@ def test_do_bounce_interface():
 
 
 def test_do_bounce_poe():
-    result = runner.invoke(app, ["do", "bounce", "poe", TEST_DEVICES["switch"]["name"].lower(),
+    result = runner.invoke(app, ["bounce", "poe", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
