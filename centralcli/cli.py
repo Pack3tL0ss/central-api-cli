@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import RefreshWhat, IdenMetaVars, arg_to_what  # noqa
+from centralcli.constants import RefreshWhat, IdenMetaVars, BounceArgs
 
 iden = IdenMetaVars()
 
@@ -123,7 +123,9 @@ def move(
     dev = [cli.cache.get_dev_identifier(d) for d in device]
     devs_by_type = {
     }
-    dev_all_names, dev_all_serials = [], []
+    devs_by_site = {
+    }
+    dev_all_names, dev_all_serials, = [], []
     for d in dev:
         if d.generic_type not in devs_by_type:
             devs_by_type[d.generic_type] = [d]
@@ -132,9 +134,16 @@ def move(
         dev_all_names += [d.name]
         dev_all_serials += [d.serial]
 
+        if site and d.site:
+            if f"{d.site}~|~{d.generic_type}" not in devs_by_site:
+                devs_by_site[f"{d.site}~|~{d.generic_type}"] = [d]
+            else:
+                devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
+
     _s = "," if len(dev_all_names) > 2 else " &"
     _s = typer.style(_s, fg="bright_green")
     _msg_devs = f'{_s} '.join(typer.style(n, fg="reset") for n in dev_all_names)
+    _msg_in_site = "" if not devs_by_site else typer.style(" (devices will be removed from current sites.)", fg="red")
     _msg_end = typer.style("?", fg="bright_green")
     _msg = None
 
@@ -156,25 +165,49 @@ def move(
                 typer.style("to site", fg="bright_green"),
                 typer.style((_site.name), fg='reset'),
             ]
-            _msg = f"{' '.join(_msg)}{_msg_end}"
+            _msg = f"{' '.join(_msg)}{_msg_in_site}{_msg_end}"
         else:
             _msg_site = typer.style((_site.name), fg=typer.colors.RESET)
-            _msg = f'{_msg.replace("?", "")} {typer.style(f"and site", fg="bright_green")} {_msg_site}{_msg_end}'
+            _msg = f'{_msg.replace("?", "")} {typer.style(f"and site", fg="bright_green")} {_msg_site}{_msg_in_site}{_msg_end}'
 
-    resp = None
+    resp, site_rm_resp = None, None
     confirmed = True if yes or typer.confirm(_msg, abort=True) else False
+
+    # If devices are associated with a site currently remove them from that site first
+    if confirmed and _site and devs_by_site:
+        site_remove_reqs = []
+        for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
+            site_remove_reqs += [
+                central.BatchRequest(
+                    central.remove_devices_from_site,
+                    cli.cache.get_site_identifier(site_name).id,
+                    serial_nums=[d.serial for d in devs],
+                    device_type=dev_type,
+                )
+            ]
+        site_rm_resp = central.batch_request(site_remove_reqs)
+        if not all(r.ok for r in site_rm_resp):
+            cli.display_results(site_rm_resp, tablefmt="action", exit_on_fail=True)
+
+    # run both group and site move in parallel
     if confirmed and _group and _site:
         reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)]
+        site_remove_reqs = []
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
             reqs += [
                 central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
             ]
+
         resp = central.batch_request(reqs)
 
+    # only moving group via single API call
     elif confirmed and _group:
-        resp = cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)
+        resp = [
+            cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)
+        ]
 
+    # only moving site, potentially multiple calls (for each device_type)
     elif confirmed and _site:
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
@@ -184,7 +217,87 @@ def move(
 
         resp = central.batch_request(reqs)
 
-    cli.display_results(resp, tablefmt="action")
+    if site_rm_resp:
+        resp = [*site_rm_resp, *resp]
+
+    cli.display_results(resp, tablefmt="action", ok_status=500)
+
+
+@app.command(short_help="Bounce Interface or PoE on Interface")
+def bounce(
+    what: BounceArgs = typer.Argument(...),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    yes = yes_ if yes_ else yes
+    dev = cli.cache.get_dev_identifier(device)
+    command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
+    if yes or typer.confirm(typer.style(f"Please Confirm bounce {what} on {dev.name} port {port}", fg="cyan")):
+        resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
+        typer.secho(str(resp), fg="green" if resp else "red")
+        # !! removing this for now Central ALWAYS returns:
+        # !!   reason: Sending command to device. state: QUEUED, even after command execution.
+        # if resp and resp.get('task_id'):
+        #     resp = cli.central.request(session.get_task_status, resp.task_id)
+        #     typer.secho(str(resp), fg="green" if resp else "red")
+
+    else:
+        raise typer.Abort()
+
+
+@app.command(short_help="Remove a device from a site.")
+def remove(
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
+    # _device: List[str] = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.completion),
+    # _site_kw: RemoveArgs = typer.Argument(None),
+    site: str = typer.Argument(
+        ...,
+        metavar="[site <SITE>]",
+        show_default=False,
+        autocompletion=cli.cache.remove_completion
+    ),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    yes = yes_ if yes_ else yes
+    devices = (d for d in devices if d != "site")
+    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    site = cli.cache.get_site_identifier(site)
+
+    # TODO add confirmation method builder to output class
+    if yes or typer.confirm(
+        typer.style(f"Please Confirm remove {', '.join([dev.name for dev in devices])} from site {site.name}", fg="cyan")
+    ):
+        devs_by_type = {
+        }
+        for d in devices:
+            if d.generic_type not in devs_by_type:
+                devs_by_type[d.generic_type] = [d.serial]
+            else:
+                devs_by_type[d.generic_type] += [d.serial]
+        reqs = [
+            cli.central.BatchRequest(
+                cli.central.remove_devices_from_site,
+                site.id,
+                serial_nums=serials,
+                device_type=dev_type) for dev_type, serials in devs_by_type.items()
+        ]
+        resp = cli.central.batch_request(reqs)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)
