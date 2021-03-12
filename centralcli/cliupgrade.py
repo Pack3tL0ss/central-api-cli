@@ -35,7 +35,12 @@ def device(
         None,
         help="Version to upgrade to [Default: recommended version]",
         show_default=False,
-        autocompletion=lambda incomplete: [],
+        autocompletion=lambda incomplete: [
+            m for m in [
+                ("<firmware version>", "The version of firmware to upgrade to."),
+                *[m for m in cli.cache.null_completion(incomplete)]
+            ]
+        ],
     ),
     at: datetime = typer.Option(
         None,
@@ -79,7 +84,17 @@ def group(
         help="Upgrade devices by group",
         autocompletion=cli.cache.group_completion,
     ),
-    version: str = typer.Argument(None, help="Version to upgrade to",),
+    version: str = typer.Argument(
+        None,
+        help="Version to upgrade to [Default: recommended version]",
+        show_default=False,
+        autocompletion=lambda incomplete: [
+            m for m in [
+                ("<firmware version>", "The version of firmware to upgrade to."),
+                *[m for m in cli.cache.null_completion(incomplete)]
+            ]
+        ],
+    ),
     at: datetime = typer.Option(
         None,
         help="When to schedule upgrade. format: 'mm/dd/yyyy hh:mm' or 'dd hh:mm' (implies current month) [Default: Now]",
@@ -135,6 +150,7 @@ def group(
             scheduled_at=at,
             group=group.name,
             device_type=dev_type,
+            firmware_version=version,
             model=model,
             reboot=reboot
         )
