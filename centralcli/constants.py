@@ -248,7 +248,8 @@ class LibToAPI:
             "ap": "IAP",
             "switch": "SWITCH",
             "cx": "SWITCH",
-            "sw": "SWITCH"
+            "sw": "SWITCH",
+            "gateway": "CONTROLLER"  # TODO remove once cache is re-factored to use ['ap', 'cx', 'sw', 'gw']
         }
         self.template_to_api = {
             "gw": "MobilityController",
@@ -327,6 +328,7 @@ class ShowArg2(str, Enum):
     certs = "certs"
 
 
+# TODO remove once all refs removed
 class SortOptions(str, Enum):
     name_asc = "+name"
     name_des = "-name"
@@ -334,6 +336,65 @@ class SortOptions(str, Enum):
     mac_des = "-mac"
     serial_asc = "+serial"
     serial_des = "-serial"
+
+
+class SortDevOptions(str, Enum):
+    name = "name"
+    model = "model"
+    ip = "ip"
+    mac = "mac"
+    serial = "serial"
+    group = "group"
+    site = "site"
+    status = "status"
+    type = "type"
+    labels = "labels"
+    version = "version"
+
+
+class SortTemplateOptions(str, Enum):
+    device_type = "device_type"
+    group = "group"
+    model = "model"
+    name = "name"
+    template_hash = "template_hash"
+    version = "version"
+
+
+class SortCertOptions(str, Enum):
+    name = "name"
+    type = "type"
+    expiration = "expiration"
+    expired = "expired"
+    md5_checksum = "md5_checksum"
+    sha1_checksum = "sha1_checksum"
+
+
+class SortVlanOptions(str, Enum):
+    name = "name"
+    pvid = "pvid"
+    untagged = "untagged"
+    tagged = "tagged"
+    status = "status"
+    mgmt = "mgmt"
+    jumbo = "jumbo"
+    voice = "voice"
+    igmp = "igmp"
+    oper_state_reason = "oper_state_reason"
+
+
+class SortClientOptions(str, Enum):
+    name = "name"
+    mac = "mac"
+    vlan = "vlan"
+    ip = "ip"
+    role = "role"
+    network = "network"
+    dot11 = "dot11"
+    connected_device = "connected_device"
+    site = "site"
+    group = "group"
+    last_connected = "last_connected"
 
 
 class StatusOptions(str, Enum):
@@ -351,6 +412,10 @@ class UpgradeArgs(str, Enum):
     gateway = "gateway"
 
 
+class RemoveArgs(str, Enum):
+    site = "site"
+
+
 class LogAppArgs(str, Enum):
     account_setting = "account_setting"
     nms = "nms"
@@ -366,6 +431,7 @@ MESSAGES = {
 class IdenMetaVars:
     def __init__(self):
         self.dev = "[name|ip|mac-address|serial]"
+        self.dev_many = "[name|ip|mac-address|serial] ... (multiple allowed)"
         self.site = "[name|site_id|address|city|state|zip]"
         self.client = "[username|ip|mac]"
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
