@@ -2299,7 +2299,15 @@ class CentralApi(Session):
             'serials': serial_nums
         }
 
-        return await self.post(url, json_data=json_data)
+        resp = await self.post(url, json_data=json_data)
+
+        # This method returns status 500 with msg that move is initiated on success.
+        if not resp and resp.status == 500:
+            match_str = "group move has been initiated, please check audit trail for details"
+            if match_str in resp.output.get("description", ""):
+                resp.ok = True
+
+        return resp
 
     async def move_devices_to_site(
         self,
@@ -2370,6 +2378,7 @@ class CentralApi(Session):
             'device_type': device_type
         }
 
+        # NOTE: This method returns 200 when failures occur.
         return await self.delete(url, json_data=json_data)
 
     async def get_device_ip_routes(
