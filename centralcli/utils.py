@@ -9,7 +9,7 @@ import string
 import sys
 import urllib.parse
 from pprint import pprint
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 import typer
 import logging
 
@@ -367,6 +367,7 @@ class Utils:
         caption: str = None,
         account: str = None,
         config=None,
+        ok_status: Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]] = None,
     ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
         def _do_subtables(data: list, tablefmt: str = "rich"):

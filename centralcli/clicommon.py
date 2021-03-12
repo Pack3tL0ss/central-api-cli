@@ -4,7 +4,7 @@
 import typer
 import sys
 import time
-from typing import List, Literal, Union
+from typing import Dict, List, Literal, Union
 from pathlib import Path
 
 
@@ -226,7 +226,8 @@ class CLICommon:
 
             if sort_by and all(isinstance(d, dict) for d in data):
                 if not all([True if sort_by in d else False for d in data]):
-                    typer.secho(f"Invalid dataset for {sort_by} not all entries contain a {sort_by} key")
+                    typer.echo(f"Invalid dataset for {sort_by} not all entries contain a {sort_by} key")
+                    typer.secho("sort by is not implemented for all commands yet", fg="red")
                 else:
                     data = sorted(data, key=lambda d: d[sort_by])
 
@@ -239,7 +240,7 @@ class CLICommon:
                 title=title,
                 caption=caption,
                 account=None if config.account in ["central_info", "account"] else config.account,
-                config=config
+                config=config,
             )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
@@ -270,8 +271,9 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = None,
         pad: int = None,
-        cleaner: callable = None,
         exit_on_fail: bool = False,
+        ok_status: Union[int, List[int], Dict[int, str]] = None,
+        cleaner: callable = None,
         **cleaner_kwargs,
     ) -> None:
         """Output Formatted API Response to display and optionally to file
@@ -290,8 +292,15 @@ class CLICommon:
             outfile (Path, optional): path/file of output file. Defaults to None.
             sort_by (Union[str, List[str], None] optional): column or columns to sort output on.
             reverse (bool, optional): reverse the output.
+            ok_status (Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]], optional): By default
+                responses with status_code 2xx are considered OK and are rendered as green by
+                Output class.  provide int or list of int to override additional status_codes that
+                should also be rendered as success/green.  provide a dict with {int: str, ...}
+                where string can be any color supported by Output class or "neutral" "success" "fail"
+                where neutral is no formatting, and success / fail will use the default green / red respectively.
             cleaner (callable, optional): The Cleaner function to use.
         """
+        # TODO remove ok_status, and handle in CentralAPI method (set resp.ok = True)
         if pad:
             log.warning("Depricated pad parameter referenced in display_results")
 
@@ -300,19 +309,35 @@ class CLICommon:
         if resp is not None:
             resp = utils.listify(resp)
 
-            data = []
+            # data = []
             for idx, r in enumerate(resp):
                 if len(resp) > 1:
                     typer.secho(f"Request {idx + 1} [{r.method}: {r.url.path}] Response:", fg="cyan")
                 if not r or tablefmt == "action":
-                    typer.secho(str(r), fg="green" if r else "red")
+                    fg = "green" if r else "red"
+                    if ok_status:
+
+                        ok_status = [ok_status] if isinstance(ok_status, int) else ok_status
+                        if isinstance(ok_status, list) and all(isinstance(s, int) for s in ok_status):
+                            fg = "green" if r or r.status in ok_status else "red"
+                        elif isinstance(ok_status, dict):
+                            default_status = {
+                                "success": "green",
+                                "fail": "red",
+                                "neutral": "reset"
+                            }
+
+                            if r.status in ok_status:
+                                fg = default_status.get(ok_status[r.status], ok_status[r.status])
+                            elif r:
+                                fg = "green"
+                            else:
+                                fg = "red"
+
+                    typer.secho(str(r), fg=fg)
                     if not r and exit_on_fail:
                         raise typer.Exit(1)
                 else:
-                    # TODO add sort and reverse funcs (as available methods in Response object)
-                    if sort_by is not None:
-                        typer.secho("sort by is not implemented for all commands yet", fg="red")
-
                     self._display_results(
                         r.output,
                         tablefmt=tablefmt,

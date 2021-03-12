@@ -18,7 +18,7 @@ except Exception:
 TinyDB.default_table_name = "devices"
 
 DBType = Literal["dev", "site", "template", "group"]
-DEV_COMPLETION = ["move", "device"]
+DEV_COMPLETION = ["move", "device", ""]
 SITE_COMPLETION = ["site"]
 GROUP_COMPLETION = ["group", "wlan"]
 TEMPLATE_COMPLETION = []
@@ -178,7 +178,7 @@ class Cache:
             if a.lower().startswith(incomplete.lower()):
                 yield a
 
-    def null_completeion(self, incomplete: str):
+    def null_completion(self, incomplete: str):
         incomplete = "NULL_COMPLETION"
         _ = incomplete
         for m in ["|", "<cr>"]:
@@ -233,7 +233,6 @@ class Cache:
                 yield m
 
         elif args[-1].lower() == "site":
-            out = [m for m in self.site_completion(incomplete)]
             out = [m for m in self.site_completion(incomplete)]
             for m in out:
                 yield m
@@ -350,6 +349,29 @@ class Cache:
 
         for m in out:
             yield m
+
+    def remove_completion(
+        self,
+        incomplete: str,
+        args: List[str],
+    ):
+        if args[-1].lower() == "site":
+            out = [m for m in self.site_completion(incomplete)]
+            for m in out:
+                yield m
+        else:
+            out = []
+            if len(args) > 1:
+                if "site" not in args and "site".startswith(incomplete.lower()):
+                    out += ("site", )
+
+            if "site" not in args:
+                out += [m for m in self.dev_completion(incomplete)]
+            else:
+                out += [m for m in self.null_completion(incomplete)]
+
+            for m in out:
+                yield m
 
     def completion(
         self,
