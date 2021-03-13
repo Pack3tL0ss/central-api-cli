@@ -311,7 +311,7 @@ class WhatToPretty:
         self.site = self.sites = "Sites"
         self.template = self.templates = "Templates"
         self.variable = self.variables = "Variables"
-        self.all = "All Device Types"
+        self.all = "All Device"
         self.device = self.devices = "Devices"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
@@ -325,14 +325,15 @@ what_to_pretty = WhatToPretty()
 
 class LibToGenericPlural:
     def __init__(self):
-        self.gw = "Gateways"
-        self.ap = "Acess Points"
-        self.switch = self.cx = self.sw = "Switches"
+        self.gw = "gateways"
+        self.ap = "acess points"
+        self.switch = self.cx = self.sw = "switches"
 
-    def __call__(self, key: Literal["ap", "cx", "sw", "switch", "gw"], default: str = None) -> str:
+    def __call__(self, key: Literal["ap", "cx", "sw", "switch", "gw"], default: str = None, format_func=str.title) -> str:
         if isinstance(key, Enum):
             key = key.value
-        return getattr(self, key, default or key)
+
+        return format_func(getattr(self, key, default or key))
 
 
 lib_to_gen_plural = LibToGenericPlural()
