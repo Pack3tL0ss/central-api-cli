@@ -80,8 +80,12 @@ class Response:
 
     @staticmethod
     def _split_inner(val):
-        if isinstance(val, list) and len(val) == 1:
-            val = val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
+        if isinstance(val, list):
+            if len(val) == 1:
+                val = val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
+            elif all(isinstance(d, dict) for d in val):
+                val = utils.output(outdata=val, tablefmt="yaml")
+                val = "\n".join([f"    {line}" for line in val.file.splitlines()])
 
         if isinstance(val, dict):
             val = "".join([f"\n    {k}: {val[k]}" for k in val if val[k]])
@@ -103,7 +107,7 @@ class Response:
 
         if isinstance(self.output, dict):
             r = "\n".join(
-                [f"  {k}: {self._split_inner(v)}" for k, v in self.output.items() if v is not False and v]
+                [f"  {k}:\n{self._split_inner(v)}" for k, v in self.output.items() if v or v is False]
             )
 
         if config.sanitize and config.sanatize_file.is_file():
@@ -151,8 +155,12 @@ class Response:
         raise AttributeError(f"'Response' object has no attribute '{name}'")
 
     def __iter__(self):
-        for _dict in self.output:
-            for k, v in _dict.items():
+        try:
+            for _dict in self.output:
+                for k, v in _dict.items():
+                    yield k, v
+        except Exception:
+            for k, v in self.output.items():
                 yield k, v
 
     def get(self, key: Any, default: Any = None):
