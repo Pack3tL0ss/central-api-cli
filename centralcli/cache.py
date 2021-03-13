@@ -195,8 +195,17 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
+        dev_type = None
+        if args[-1].lower() == "gateways":
+            dev_type = "gateway"
+        if args[-1].lower().startswith("switch"):
+            dev_type = "switch"
+        if args[-1].lower() in ["aps", "ap"]:
+            dev_type = "ap"
+
         match = self.get_dev_identifier(
             incomplete,
+            dev_type=dev_type,
             completion=True,
         )
         out = []
