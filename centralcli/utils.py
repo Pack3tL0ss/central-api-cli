@@ -557,7 +557,7 @@ class Utils:
             else:
                 raw_data = table_data = '\n'.join(outdata)
                 # Not sure what hit's this, but it was created so something must
-                log.debugv("List[str] else hit")
+                log.debug("List[str] else hit")
 
         if _lexer and raw_data:
             table_data = highlight(bytes(raw_data, 'UTF-8'),
