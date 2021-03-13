@@ -1691,6 +1691,25 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
+        # TODO report flawed API method
+        # This works for renaming 8x groups
+        # if you try to rename a 10x group inappropriate error:
+        # [
+        #     {
+        #         "description": "group already has AOS_10X version set",
+        #         "error_code": "0001",
+        #         "service_name": "Configuration"
+        #     }
+        # ]
+        # I did try w/ full payload similar to get_group props resp
+        # i.e.
+        # {
+        #     "group": "new_name",
+        #     "properties": {
+        #         "AOSVersion": "AOS_10X",  <- tried specifying group is already 10x
+        #         "MonitorOnlySwitch": False
+        #     }
+        # }
         url = f"/configuration/v1/groups/{group}/name"
 
         json_data = {
@@ -2291,6 +2310,15 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
+        # TODO report flawed API method
+        # Returns 500 status code when result is essentially success
+        # Please Confirm: move Aruba9004_81_E8_FA & PommoreGW1 to group WLNET? [y/N]: y
+        # ✖ Sending Data [configuration/v1/devices/move]
+        # status code: 500 <-- 500 on success.  At least for gw would need to double check others.
+        # description:
+        # Controller/Gateway group move has been initiated, please check audit trail for details
+        # error_code: 0001
+        # service_name: Configuration
         url = "/configuration/v1/devices/move"
         serial_nums = utils.listify(serial_nums)
 

@@ -737,21 +737,22 @@ def lldp(
 
     # We take last arg [-1] from list so they can type "neighbor" if they want.
     dev = cli.cache.get_dev_identifier(device[-1], dev_type="ap")
-    if dev.type == "ap":
-        resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=f"{dev.name} lldp neighbor",
-            pager=not no_pager,
-            outfile=outfile,
-            cleaner=cleaner.get_lldp_neighbor,
-        )
-    else:
+    if dev.type != "ap":
         typer.secho(f"This command is currently only valid for APs.  {dev.name} is type: {dev.type}", fg="red")
         raise typer.Exit(1)
+
+    resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{dev.name} lldp neighbor",
+        pager=not no_pager,
+        outfile=outfile,
+        cleaner=cleaner.get_lldp_neighbor,
+    )
 
 
 @app.command(short_help="Show certificates/details")

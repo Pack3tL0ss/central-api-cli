@@ -462,7 +462,8 @@ def rename(
 
         resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
     else:
-        typer.secho("import file Argument is required if --lldp flag not provided", fg="red")
+        typer.echo("Error: Missing required parameter [IMPORT_FILE|'lldp']")
+        raise typer.Exit(1)
 
     cli.display_results(resp, exit_on_fail=True)
 

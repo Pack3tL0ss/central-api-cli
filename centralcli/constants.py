@@ -9,6 +9,14 @@ lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
 
 
+class GenericDevIdens(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+    switch = "switch"
+
+
 class TemplateDevIdens(str, Enum):
     ap = "ap"
     sw = "sw"
@@ -258,10 +266,17 @@ class LibToAPI:
             "cx": "CX",
             "sw": "ArubaSwitch"
         }
+        self.upgrade_to_api = {
+            "gw": "CONTROLLER",
+            "ap": "IAP",
+            "switch": "HP",
+            "cx": "HP",
+            "sw": "HP"
+        }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
         if isinstance(key, Enum):
-            key = key._value_
+            key = key.value
 
         if hasattr(self, f"{method}_to_api"):
             self.method_iden = method
@@ -306,6 +321,21 @@ class WhatToPretty:
 
 
 what_to_pretty = WhatToPretty()
+
+
+class LibToGenericPlural:
+    def __init__(self):
+        self.gw = "Gateways"
+        self.ap = "Acess Points"
+        self.switch = self.cx = self.sw = "Switches"
+
+    def __call__(self, key: Literal["ap", "cx", "sw", "switch", "gw"], default: str = None) -> str:
+        if isinstance(key, Enum):
+            key = key.value
+        return getattr(self, key, default or key)
+
+
+lib_to_gen_plural = LibToGenericPlural()
 
 
 class ShowArg2(str, Enum):
