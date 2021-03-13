@@ -49,7 +49,7 @@ class Convert:
         self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
         self.dots = '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
         self.dec = int(self.clean, 16) if self.ok else 0
-        self.url = urllib.parse.quote(mac)
+        self.url = urllib.parse.quote_plus(mac)
 
     def __len__(self):
         return len(self.clean)
