@@ -19,7 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import UpgradeArgs, lib_to_api # noqa
+from centralcli.constants import GenericDevIdens, lib_to_api, lib_to_gen_plural # noqa
 
 app = typer.Typer()
 
@@ -101,7 +101,7 @@ def group(
         show_default=False,
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
-    dev_type: UpgradeArgs = typer.Option(None, help="Upgrade a specific device type",),
+    dev_type: GenericDevIdens = typer.Option(None, help="Upgrade a specific device type",),
     model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -119,13 +119,9 @@ def group(
 
     ver_msg = [typer.style("Upgrade", fg="cyan")]
     if dev_type:
-        _dev_type = {
-            "switch": "HP",
-            "ap": "IAP",
-            "gateway": "CONTROLLER",
-        }
-        dev_type = _dev_type.get(dev_type, dev_type)
-        ver_msg += [f"{dev_type}s"] if dev_type != "switch" else ["switches"]
+        ver_msg += [lib_to_gen_plural(dev_type)]
+        dev_type = lib_to_api("upgrade", dev_type)
+
     if model:
         ver_msg += [f"model {typer.style(f'{model}', fg='bright_green')}"]
 
