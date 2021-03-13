@@ -312,7 +312,8 @@ class CLICommon:
             # data = []
             for idx, r in enumerate(resp):
                 if len(resp) > 1:
-                    typer.secho(f"Request {idx + 1} [{r.method}: {r.url.path}] Response:", fg="cyan")
+                    _url = r.url if not hasattr(r.url, "path") else r.url.path
+                    typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
                 if not r or tablefmt == "action":
                     fg = "green" if r else "red"
 
