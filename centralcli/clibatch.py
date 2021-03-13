@@ -101,6 +101,7 @@ def _lldp_rename_get_fstr():
 
 
 def do_lldp_rename(fstr: str, **kwargs) -> Response:
+    br = cli.central.BatchRequest
     resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
 
     if not resp:
@@ -121,22 +122,40 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
         "h": "neighborHostName",
         "m": "mac",
         "p": "remotePort",
-        "M": "model"
+        "M": "model",
+        "S": "site",
     }
     req_list, name_list, shown_promt = [], [], False
     if ap_dict:
+        lldp_reqs = [br(cli.central.get_ap_lldp_neighbor, ap) for ap in ap_dict]
+        lldp_resp = cli.central.batch_request(lldp_reqs)
+
+        if not all(r.ok for r in lldp_resp):
+            log.error("Error occured while gathering lldp neighbor info", show=True)
+            cli.display_results(lldp_resp, exit_on_fail=True)
+
+        lldp_dict = {d.output[-1]["serial"]: {k: v for k, v in d.output[-1].items()} for d in lldp_resp}
+        ap_dict = {
+            ser: {
+                **val,
+                "neighborHostName": lldp_dict[ser]["neighborHostName"],
+                "remotePort": lldp_dict[ser]["remotePort"],
+                "site": None if "%S" not in fstr else cli.cache.get_dev_identifier(lldp_dict[ser]["neighborSerial"])
+            }
+            for ser, val in ap_dict.items()
+        }
+
         for ap in ap_dict:
             ap_dict[ap]["mac"] = utils.Mac(ap_dict[ap]["mac"]).clean
-            _lldp = cli.central.request(cli.central.get_ap_lldp_neighbor, ap)
-            if _lldp:
-                ap_dict[ap]["neighborHostName"] = _lldp.output[-1]["neighborHostName"]
-                ap_dict[ap]["remotePort"] = _lldp.output[-1]["remotePort"]
+            # _lldp = cli.central.request(cli.central.get_ap_lldp_neighbor, ap)
+            # if _lldp:
+            #     ap_dict[ap]["neighborHostName"] = _lldp.output[-1]["neighborHostName"]
+            #     ap_dict[ap]["remotePort"] = _lldp.output[-1]["remotePort"]
 
             while True:
                 st = 0
                 x = ''
                 try:
-                    # TODO all int values assume 1 digit int.
                     for idx, c in enumerate(fstr):
                         if not idx >= st:
                             continue
@@ -157,6 +176,26 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
                                 if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
                                     x = f'{x}{_src}'
                                     st = idx + 2
+                                elif fstr[idx + 2:idx + 4] == "((":
+                                    # +3 should also be (
+                                    _from = fstr[idx + 4]
+                                    _to = fstr[idx + 6]
+
+                                    if not fstr[idx + 5] == ",":
+                                        typer.secho(
+                                            f"expected a comma at character {idx + 1 + 5} but found {fstr[idx + 5]}\n"
+                                            "will try to proceed.", fg="bright_Red"
+                                        )
+
+                                    if not fstr[idx + 7:idx + 9] == "))":
+                                        typer.secho(
+                                            f"expected a )) at characters {idx + 1 + 7}-{idx + 1 + 8} "
+                                            f"but found {fstr[idx + 7]}{fstr[idx + 8]}\n"
+                                            "will try to proceed.", fg="bright_Red"
+                                        )
+
+                                    x = f'{x}{_src.replace(_from, _to)}'
+                                    st = idx + 9
                                 else:
                                     try:
                                         fi = _get_full_int(fstr[idx + 3:])
@@ -386,7 +425,7 @@ def delete(
 @app.command()
 def rename(
     what: BatchArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),  # TODO completion
     lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
     ap: str = typer.Option(None, metavar=iden_meta_vars.dev, help="[LLDP rename] Perform on specified AP",),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label",),
@@ -412,6 +451,10 @@ def rename(
         lldp = True
         import_file = None
 
+    if not import_file and not lldp:
+        typer.echo("Error: Missing required parameter [IMPORT_FILE|'lldp']")
+        raise typer.Exit(1)
+
     central = cli.central
     if import_file:
         if not import_file.exists():
@@ -422,7 +465,7 @@ def rename(
 
         resp = None
         if what == "aps":
-            # transform flat csv struct to dict with dict with AP serials as keys
+            # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
             if import_file.suffix in [".csv", ".tsv", ".dbf", ".xls", ".xlsx"]:
                 if data and len(data.headers) < 3:
                     if "name" in data.headers:
@@ -461,11 +504,8 @@ def rename(
             kwargs["label"] = label
 
         resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
-    else:
-        typer.echo("Error: Missing required parameter [IMPORT_FILE|'lldp']")
-        raise typer.Exit(1)
 
-    cli.display_results(resp, exit_on_fail=True)
+        cli.display_results(resp, exit_on_fail=True)
 
 
 @app.callback()
