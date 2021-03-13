@@ -315,24 +315,6 @@ class CLICommon:
                     typer.secho(f"Request {idx + 1} [{r.method}: {r.url.path}] Response:", fg="cyan")
                 if not r or tablefmt == "action":
                     fg = "green" if r else "red"
-                    if ok_status:
-
-                        ok_status = [ok_status] if isinstance(ok_status, int) else ok_status
-                        if isinstance(ok_status, list) and all(isinstance(s, int) for s in ok_status):
-                            fg = "green" if r or r.status in ok_status else "red"
-                        elif isinstance(ok_status, dict):
-                            default_status = {
-                                "success": "green",
-                                "fail": "red",
-                                "neutral": "reset"
-                            }
-
-                            if r.status in ok_status:
-                                fg = default_status.get(ok_status[r.status], ok_status[r.status])
-                            elif r:
-                                fg = "green"
-                            else:
-                                fg = "red"
 
                     typer.secho(str(r), fg=fg)
                     if not r and exit_on_fail:
