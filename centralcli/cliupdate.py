@@ -63,17 +63,21 @@ def template(
 ) -> None:
     cli.cache(refresh=update_cache)
 
-    obj = cli.cache.get_template_identifier(name)
-    if not obj:
-        obj = cli.cache.get_dev_identifier(name, dev_type=device_type)
+    if group:
+        group = cli.cache.get_group_identifier(group).name
+
+    obj = cli.cache.get_identifier(
+        name, ("template", "dev"), device_type=device_type, group=group
+    )
 
     kwargs = {
-        "group": obj.group,
+        "group": group or obj.group,
         "name": obj.name,
         "device_type": device_type,
         "version": version,
         "model": model
     }
+
     do_prompt = False
     if template:
         if not template.is_file() or not template.stat().st_size > 0:
