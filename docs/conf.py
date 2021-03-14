@@ -13,7 +13,9 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
-
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
 
@@ -29,7 +31,7 @@ author = 'Wade Wells ~ Pack3tL0ss'
 # ones.
 extensions = [
     'sphinx_rtd_theme', 'sphinx.ext.autodoc', 'sphinx.ext.coverage',
-    'sphinx.ext.autosummary', 'recommonmark'
+    'sphinx.ext.autosummary', 'recommonmark', 'sphinx_click'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
