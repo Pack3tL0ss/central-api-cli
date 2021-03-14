@@ -1027,7 +1027,8 @@ def logs(
     ip: str = typer.Option(None, help="Filter logs by device IP address",),
     description: str = typer.Option(None, help="Filter logs by description (fuzzy match)",),
     _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)",),
-    count: int = typer.Option(None, "-n", is_flag=False, help="Collect Last n logs",),
+    count: int = typer.Option(None, "-n", help="Collect Last n logs",),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -1060,6 +1061,15 @@ def logs(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
+    if cencli:
+        from centralcli import log
+        log.print_file()
+        # cli.display_results(
+        #     data=log.log_file.read_text().split("\n"),
+        #     tablefmt="rich",
+        #     reverse=True,
+        # )
+        raise typer.Exit(0)
 
     if args:
         log_id = cli.cache.get_log_identifier(args[-1])
@@ -1123,7 +1133,7 @@ def logs(
             reverse=reverse,
             cleaner=cleaner.get_audit_logs if not verbose else None,
             cache_update_func=cli.cache.update_log_db if not verbose else None,
-            caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details",
+            caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details.",
         )
 
 
