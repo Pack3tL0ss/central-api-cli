@@ -454,6 +454,7 @@ class Cache:
 
         return len(ret) == len(data)
 
+    # TODO have update methods return Response
     async def update_dev_db(self):
         resp = await self.central.get_all_devicesv2()
         if resp.ok:

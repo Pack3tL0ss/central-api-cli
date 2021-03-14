@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Union
+from logging.handlers import RotatingFileHandler
+from rich.console import Console
 
 import logging
 import typer
@@ -12,6 +14,10 @@ log_colors = {
     "fatal": typer.colors.RED,
     "warning": typer.colors.YELLOW,
 }
+console = Console()
+to_debug = [
+    "Loaded token from storage from file"
+]
 
 
 class MyLogger:
@@ -37,11 +43,19 @@ class MyLogger:
         '''Return custom log object.'''
         fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
         dateStr = "%m/%d/%Y %I:%M:%S %p"
-        logging.basicConfig(filename=self.log_file.absolute(),
-                            level=logging.DEBUG if self.DEBUG else logging.INFO,
-                            format=fmtStr,
-                            datefmt=dateStr)
+        logging.basicConfig(
+            # filename=self.log_file.absolute(),
+            level=logging.DEBUG if self.DEBUG else logging.INFO,
+            format=fmtStr,
+            datefmt=dateStr,
+            handlers=[
+                RotatingFileHandler(self.log_file.absolute(),  maxBytes=250000, backupCount=5,),
+            ],
+        )
         return logging.getLogger(self.log_file.stem)
+
+    def print_file(self):
+        console.print(self.log_file.read_text(),)
 
     def log_print(self, msgs, log: bool = False, show: bool = False, level: str = 'info', *args, **kwargs):
         # TODO can prob remove log_msgs, used by another project I re-used this object from (ConsolePi)
@@ -50,6 +64,9 @@ class MyLogger:
         _logged = []
         for i in msgs:
             i = str(i)
+            if not self.DEBUG and [i for d in to_debug if d in i]:
+                continue
+
             if log and i not in _logged:
                 getattr(self._log, level)(i, *args, **kwargs)
                 _logged.append(i)

@@ -61,8 +61,6 @@ def template(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    cli.cache(refresh=update_cache)
-
     if group:
         group = cli.cache.get_group_identifier(group).name
 

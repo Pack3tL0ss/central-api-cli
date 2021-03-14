@@ -23,6 +23,20 @@ DEFAULT_HEADERS = {
 }
 
 
+class RateLimit:
+    def __init__(self, resp: aiohttp.ClientResponse = None):
+        self.total, self.remain = 0, 0
+        if resp and hasattr(resp, "headers"):
+            rh = resp.headers
+            self.total = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
+            self.remain = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
+        self.used = self.total - self.remain
+        self.ok = True if sum([self.total, self.used]) > 0 else False
+
+    def __str__(self):
+        return f"API Rate Limit: {self.remain} of {self.total} remaining." if self.ok else ""
+
+
 class Response:
     '''wrapper aiohttp.ClientResponse object
 
@@ -43,6 +57,7 @@ class Response:
     '''
     def __init__(self, response: aiohttp.ClientResponse = None, url: str = None, ok: bool = None,
                  error: str = None, output: Any = {}, raw: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
+        self.rl = RateLimit(response)
         self._response = response
         self.output = output
         self.raw = raw
