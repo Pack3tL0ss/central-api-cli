@@ -3,19 +3,22 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to cencli Aruba Central API CLI's documentation!
+Aruba Central API CLI (cencli)
 ========================================================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+.. click:: module:parser
+   :prog: cencli
+   :nested: full
 
+Readme File
+===========
 
-Indices and tables
-==================
+.. mdinclude:: ../../README.md
 
-Placeholder: Refer to GitHub for current documentation.
 
 * :ref:`genindex`
 * :ref:`modindex`
