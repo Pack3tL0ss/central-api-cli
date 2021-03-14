@@ -16,3 +16,4 @@ aiohttp
 asyncio
 tablib
 rich
+sphinx_click
