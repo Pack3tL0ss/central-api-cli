@@ -4,6 +4,7 @@
 from enum import Enum
 import os
 import sys
+import importlib
 from pathlib import Path
 from typing import List
 
@@ -320,13 +321,13 @@ def refresh(what: RefreshWhat = typer.Argument(...),
         cli.cache(refresh=True)
 
 
-@app.command(hidden=True)
+@app.command(hidden=True, epilog="Output is displayed in yaml by default.")
 def method_test(method: str = typer.Argument(...),
                 kwargs: List[str] = typer.Argument(None),
-                do_json: bool = typer.Option(True, "--json", is_flag=True, help="Output in JSON"),
-                do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-                do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-                do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table"),
+                do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+                do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
+                do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
+                do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
                 outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
                 no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
                 update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
@@ -354,11 +355,15 @@ def method_test(method: str = typer.Argument(...),
     cli.cache(refresh=update_cache)
     central = CentralApi(account)
     if not hasattr(central, method):
-        try:
-            from centralcli.boilerplate.allcalls import AllCalls
-            central = AllCalls()
-        except (ModuleNotFoundError, ImportError):
-            log.error("method-test was ubale to import allcalls", show=True)
+        bpdir = Path(__file__).parent / "boilerplate"
+        all_calls = [
+            importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
+            if not f.name.startswith("_") and f.suffix == ".py"
+        ]
+        for m in all_calls:
+            if hasattr(m.AllCalls(), method):
+                central = m.AllCalls()
+                break
 
     if not hasattr(central, method):
         typer.secho(f"{method} does not exist", fg="red")
@@ -376,24 +381,37 @@ def method_test(method: str = typer.Argument(...),
         if v.lower() in ["true", "false"]:
             kwargs[k] = True if v.lower() == "true" else False
 
-    typer.secho(f"session.{method}({', '.join(str(a) for a in args)}, "
-                f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})", fg="cyan")
+    from rich.console import Console
+    c = Console(file=outfile)
 
-    resp = central.request(getattr(central, method), *args, **kwargs)
-
-    for k, v in resp.__dict__.items():
-        if k != "output":
-            if debug or not k.startswith("_"):
-                typer.echo(f"  {typer.style(k, fg='cyan')}: {v}")
-
-    tablefmt = cli.get_format(
-        do_json, do_yaml, do_csv, do_table
+    req = (
+        f"central.{method}({', '.join(str(a) for a in args)}, "
+        f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
     )
 
-    typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='cyan')}:")
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
-    typer.echo(f"\n{typer.style('Raw Response Output', fg='cyan')}:")
-    cli.display_results(data=resp.raw, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    resp = central.request(getattr(central, method), *args, **kwargs)
+    if "should be str" in resp.output and "bool" in resp.output:
+        c.log(f"{resp.output}.  LAME!  Converting to str!")
+        args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
+        kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
+    resp = central.request(getattr(central, method), *args, **kwargs)
+
+    attrs = {
+        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
+    }
+
+    c.print(req)
+    c.print("\n".join([f"  {k}: {v}" for k, v in attrs.items()]))
+
+    tablefmt = cli.get_format(
+        do_json, do_yaml, do_csv, do_table, default="yaml"
+    )
+
+    typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
+    cli.display_results(data=resp.output, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    if resp.raw:
+        typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
+        cli.display_results(data=resp.raw, tablefmt="json", pager=not no_pager, outfile=outfile)
 
 
 def all_commands_callback(ctx: typer.Context, debug: bool):
