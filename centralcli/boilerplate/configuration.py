@@ -779,14 +779,14 @@ class AllCalls(CentralApi):
         return await self.get(url, params=params)
 
     async def configuration_get_all_devices_template_variables(self, format: str = 'JSON',
-                                                               offset: int = 0, limit: int = 100) -> Response:
+                                                               offset: int = 0, limit: int = 20) -> Response:
         """Get template variables for all devices, Response is sorted by device serial.
 
         Args:
             format (str, optional): Format in which output is desired.  Valid Values: JSON
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+            limit (int, optional): Maximum number of records to be returned. Max 20, Defaults to 20.
 
         Returns:
             Response: CentralAPI Response object
@@ -2826,7 +2826,7 @@ class AllCalls(CentralApi):
         return await self.post(url, json_data=json_data)
 
     async def configuration_get_dirty_diff(self, group_name_or_guid: str, offset: int = 0,
-                                           limit: int = 100) -> Response:
+                                           limit: int = 20) -> Response:
         """Get dirty diff.
 
         Args:
@@ -2835,7 +2835,7 @@ class AllCalls(CentralApi):
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
             limit (int, optional): Maximum number of group config_mode records to be returned.
-                Defaults to 100.
+                Max 20, Defaults to 20.
 
         Returns:
             Response: CentralAPI Response object
