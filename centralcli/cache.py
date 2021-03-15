@@ -243,12 +243,12 @@ class Cache:
             tuple: matching completion string, help text
         """
         if args[-1].lower() == "group":
-            out = [m for m in self.group_completion(incomplete)]
+            out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
                 yield m
 
         elif args[-1].lower() == "site":
-            out = [m for m in self.site_completion(incomplete)]
+            out = [m for m in self.site_completion(incomplete, args)]
             for m in out:
                 yield m
 
@@ -261,7 +261,7 @@ class Cache:
                     out += ("group", )
 
             if "site" not in args and "group" not in args:
-                out += [m for m in self.dev_completion(incomplete)]
+                out += [m for m in self.dev_completion(incomplete, args)]
             elif "site" in args and "group" in args:
                 incomplete = "NULL_COMPLETION"
                 out += ["|", "<cr>"]
