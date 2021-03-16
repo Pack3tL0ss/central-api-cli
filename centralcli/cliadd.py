@@ -5,7 +5,7 @@ import asyncio
 from enum import Enum
 from pathlib import Path
 import sys
-from typing import Tuple
+from typing import List, Tuple
 import typer
 
 
@@ -35,6 +35,70 @@ class AddWlanArgs(str, Enum):
     bw_limit_user_up = "bw_limit_user_up"
     bw_limit_user_down = "bw_limit_user_down"
     portal_profile = "portal_profile"
+
+
+class AddGroupArgs(str, Enum):
+    serial = "serial"
+    group = "group"
+    mac = "mac"
+
+
+# TODO update completion with mac oui, serial prefix
+@app.command(short_help="Add a group")
+def device(
+    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
+    val1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
+    val2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    kw3: str = typer.Argument(None, hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
+    val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
+                               autocompletion=cli.cache.smg_kw_completion),
+    _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
+    _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
+    license: List[str] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    kwd_vars = [kw1, kw2, kw3]
+    vals = [val1, val2, val3]
+    kwargs = {
+        "mac": None,
+        "serial": None,
+        "group": None,
+        "license": license  # TODO cache valid license types
+    }
+
+    for name, value in zip(kwd_vars, vals):
+        if name and name not in kwargs:
+            typer.echo(f"Error: {name} in invalid")
+            raise typer.Exit(1)
+        else:
+            kwargs[name] = value
+
+    kwargs["group"] = kwargs["group"] or _group
+
+    api_kwd = {"serial": "serial_num", "mac": "mac_address"}
+    kwargs = {api_kwd.get(k, k): v for k, v in kwargs.items() if v}
+    if len(kwargs) == 2 and "group" in kwargs:
+        typer.echo("Error: both serial number and mac address are required.")
+        raise typer.Exit(1)
+
+    _msg = [f'{typer.style(f"Add device", fg="cyan")}']
+    _msg += [typer.style(f"{kwargs['serial_num']}|{kwargs['mac_address']}", fg="bright_green")]
+    if kwargs["group"]:
+        _msg += [f'{typer.style(f"and pre-assign to group", fg="cyan")}']
+        _msg += [typer.style(kwargs["group"], fg="bright_green")]
+    _msg = f'{" ".join(_msg)}{typer.style("?", fg="cyan")}'
+
+    if yes or typer.confirm(_msg, abort=True):
+        resp = cli.central.request(cli.central.add_devices, **kwargs)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Add a group")
@@ -82,9 +146,10 @@ def group(
             )
 
 
+# TODO autocompletion
 @app.command(short_help="Add WLAN (SSID)")
 def wlan(
-    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=lambda incomplete: []),
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion),
     name: str = typer.Argument(..., ),
     kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]",),
     kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']",),
