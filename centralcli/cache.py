@@ -184,7 +184,36 @@ class Cache:
             if a.lower().startswith(incomplete.lower()):
                 yield a
 
-    def null_completion(self, incomplete: str):
+    def smg_kw_completion(self, incomplete: str, args: List[str] = []):
+        kwds = ["group", "mac", "serial"]
+        out = []
+        if args[-1].lower() == "group":
+            out = [m for m in self.group_completion(incomplete, args)]
+            for m in out:
+                yield m
+        elif args[-1].lower() == "serial":
+            # out = [m for m in self.serial_pfx_completion(incomplete, args)]
+            out = ["|", "<SERIAL NUMBER>"]
+            if incomplete:
+                out.append(incomplete)
+            for m in out:
+                yield m
+        elif args[-1].lower() == "mac":
+            # out = [m for m in self.mac_oui_completion(incomplete, args)]
+            out = ["|", "<MAC ADDRESS>"]
+            for m in out:
+                yield m
+
+        else:
+            # print(args[-2], incomplete)
+            # if args[-2].lower() == "mac":
+            #     # TODO not sure why but colons in prev arg breaks completion for next kw
+            #     args[-1] = args[-1].strip(":-.")
+            for kw in kwds:
+                if kw not in args and kw.lower().startswith(incomplete):
+                    yield kw
+
+    def null_completion(self, incomplete: str, args: List[str] = None):
         incomplete = "NULL_COMPLETION"
         _ = incomplete
         for m in ["|", "<cr>"]:
