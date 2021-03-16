@@ -205,6 +205,7 @@ class ArgToWhat:
     def _init_add(self):
         self.group = self.groups = "group"
         self.wlan = self.wlans = "wlan"
+        self.device = self.devices = self.dev = "device"
 
     def _init_clone(self):
         self.group = self.groups = "group"
