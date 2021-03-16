@@ -1339,19 +1339,6 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def add_dev(self, mac: str, serial_num: str):
-        url = "/platform/device_inventory/v1/devices"
-        payload = [{"mac": mac, "serial": serial_num}]
-
-        return await self.post(url, payload=payload)
-
-    async def verify_add_dev(self, mac: str, serial_num: str):
-        url = "/platform/device_inventory/v1/devices/verify"
-        payload = [{"mac": mac, "serial": serial_num}]
-
-        return await self.post(url, payload=payload)
-        # pprint.pprint(resp.json())
-
     async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
         url = "/troubleshooting/v1/commands"
         params = {"device_type": dev_type}
@@ -2444,6 +2431,7 @@ class CentralApi(Session):
         serial_num: str = None,
         group: str = None,
         part_num: str = None,
+        license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Response:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
@@ -2455,6 +2443,7 @@ class CentralApi(Session):
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
             part_num (str, optional): Part Number is required for Central On Prem.
+            license (str, optional): The subscription license to assign to device.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
 
         Returns:
@@ -2462,6 +2451,8 @@ class CentralApi(Session):
         """
         url = "/platform/device_inventory/v1/devices"
 
+        if license:
+            license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
         if serial_num and mac_address:
             if group:
                 to_group = {group: [serial_num]}
@@ -2478,6 +2469,7 @@ class CentralApi(Session):
             ]
             if part_num:
                 json_data[0]["partNumber"] = part_num
+
         elif device_list:
             if not isinstance(device_list, list) and not all(isinstance(d, dict) for d in device_list):
                 raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
@@ -2493,17 +2485,28 @@ class CentralApi(Session):
             to_group = {d["group"]: [] for d in device_list}
             _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
 
+            # license_args = [[], []]
+            # by_ser = {d["serial_num"]: utils.listify(d.get("license")) for d in device_list if d.get("license")}
+            # TODO most efficient pairing of possible lic/dev for fewest call
+            # TODO license via list not implemented yet.
+
         else:
             raise ValueError("mac_address and serial_num or device_list is required")
 
-        if to_group:
+        if to_group or license_kwargs:
             br = self.BatchRequest
             reqs = [
                 br(self.post, url, json_data=json_data),
-                *[br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
             ]
+            if to_group:
+                group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
+                reqs = [*reqs, *group_reqs]
 
-            return self._batch_request(reqs)
+            if license_kwargs:
+                lic_reqs = [br(self.assign_licenses, **kwargs) for kwargs in license_kwargs]
+                reqs = [*reqs, *lic_reqs]
+
+            return await self._batch_request(reqs)
         else:
             return await self.post(url, json_data=json_data)
 
@@ -2523,6 +2526,184 @@ class CentralApi(Session):
         json_data = {
             'serials': serial_nums,
             'group': group
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    # TODO verify type-hint for device_list is the right way to do that.
+    async def verify_device_addition(
+        self,
+        serial_num: str = None,
+        mac_address: str = None,
+        device_list: List[Dict[Literal["mac_address", "serial_num"], str]] = []
+    ) -> Response:
+        """Verify Device Addition
+
+        Args:
+            serial_num (str, optional): Serial Number of device to verify. Defaults to None.
+            mac_address (str, optional): Mac Address of device to verify. Defaults to None.
+            device_list (List[Dict[Literal[, optional): device_list list of dicts with
+                "serial_num" and "mac_address" for each device to verify. Defaults to None.
+
+        Must provide serial_num and mac_address for each device either via keyword argument or list.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices/verify"
+        if serial_num and mac_address:
+            device_list += {
+                "serial_num": serial_num,
+                "mac_address": mac_address,
+            }
+
+        if not device_list:
+            raise ValueError(
+                "Invalid parameters expecting serial_num and mac_address for each device "
+                "either via keyword argument or List[dict]."
+            )
+
+        return await self.post(url, json_data=device_list)
+
+    async def upload_certificate(
+        self,
+        passphrase: str,
+        cert_file: Union[str, Path] = None,
+        cert_name: str = None,
+        cert_format: Literal["PEM", "DER", "PKCS12"] = None,
+        cert_data: str = None,
+        server_cert: bool = False,
+        ca_cert: bool = False,
+        crl: bool = False,
+        int_ca_cert: bool = False,
+        ocsp_resp_cert: bool = False,
+        ocsp_signer_cert: bool = False,
+        ssh_pub_key: bool = False,
+    ) -> Response:
+        """Upload a certificate.
+
+        Args:
+            passphrase (str): passphrase
+            cert_file (Path|str, optional): Cert file to upload, if file is provided cert_name
+                and cert_format will be derived from file name / extension, unless those params
+                are also provided.
+            cert_name (str, optional): The name of the certificate.
+            cert_format (Literal["PEM", "DER", "PKCS12"], optional): cert_format  Valid Values: PEM, DER, PKCS12
+            cert_data (str, optional): Certificate content encoded in base64 for all format certificates.
+            server_cert (bool, optional): Set to True if cert is a server certificate. Defaults to False.
+            ca_cert (bool, optional): Set to True if cert is a CA Certificate. Defaults to False.
+            crl (bool, optional): Set to True if data is a certificate revocation list. Defaults to False.
+            int_ca_cert (bool, optional): Set to True if certificate is an intermediate CA cert. Defaults to False.
+            ocsp_resp_cert (bool, optional): Set to True if certificate is an OCSP responder cert. Defaults to False.
+            ocsp_signer_cert (bool, optional): Set to True if certificate is an OCSP signer cert. Defaults to False.
+            ssh_pub_key (bool, optional): Set to True if certificate is an SSH Pub key. Defaults to False.
+                ssh_pub_key needs to be in PEM format, ssh-rsa is not supported.
+
+        Raises:
+            ValueError: Raised if invalid combination of arguments is provided.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # TODO flawed API method, PUBLIC_CERT is not accepted
+        url = "/configuration/v1/certificates"
+        valid_types = [
+            "SERVER_CERT",
+            "CA_CERT",
+            "CRL",
+            "INTERMEDIATE_CA",
+            "OCSP_RESPONDER_CERT",
+            "OCSP_SIGNER_CERT",
+            "PUBLIC_CERT"
+        ]
+        type_vars = [server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]
+        if type_vars.count(True) > 1:
+            raise ValueError("Provided conflicting certificate types, only 1 should be set to True.")
+        elif all([not bool(var) for var in type_vars]):
+            raise ValueError("No cert_type provided, one of the cert_types should be set to True")
+
+        if cert_format and cert_format.upper() not in ["PEM", "DER", "PKCS12"]:
+            raise ValueError(f"Invalid cert_format {cert_format}, valid values are 'PEM', 'DER', 'PKCS12'")
+        elif not cert_file:
+            raise ValueError("cert_format is required when not providing certificate via file.")
+
+        if not cert_data and not cert_file:
+            raise ValueError("One of cert_file or cert_data should be provided")
+        elif cert_data and cert_file:
+            raise ValueError("Only one of cert_file and cert_data should be provided")
+
+        for cert_type, var in zip(valid_types, type_vars):
+            if var:
+                break
+
+        if cert_file:
+            cert_file = Path(cert_file) if not isinstance(cert_file, Path) else cert_file
+            cert_name = cert_name or cert_file.stem
+            if not cert_format:
+                if cert_file.suffix.lower() in [".pfx", ".p12"]:
+                    cert_format = "PKCS12"
+                elif cert_file.suffix.lower() in [".pem", ".cer"]:
+                    cert_format = "PEM"
+                else:
+                    # TODO determine format using cryptography lib
+                    cert_format = "DER"
+            else:
+                cert_format = cert_format.upper()
+
+            # TODO converting from other formats to Base64 not implemented yet
+            cert_data = cert_file.read_text()
+
+        json_data = {
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def get_services_config(
+        self,
+        service_category: str = None,
+        device_type: str = None
+    ) -> Response:
+        """Get services licensing config.
+
+        Args:
+            service_category (str, optional): Service category - dm/network
+            device_type (str, optional): Device Type - iap/cap/switch/boc/controller
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/services/config"
+
+        params = {
+            'service_category': service_category,
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
+    async def assign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
+        """Assign subscription to a device.
+
+        Args:
+            serials (List[str]): List of serial number of device.
+            services (List[str]): List of service names. Call services/config API to get the list of
+                valid service names.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/subscriptions/assign"
+        serials = utils.listify(serials)
+        services = utils.listify(services)
+
+        json_data = {
+            'serials': serials,
+            'services': services
         }
 
         return await self.post(url, json_data=json_data)
