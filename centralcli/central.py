@@ -784,7 +784,7 @@ class CentralApi(Session):
         if _failures:
             return res[_failures[0]]
 
-        resp = res[0]
+        resp = res[-1]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
