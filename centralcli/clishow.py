@@ -81,6 +81,7 @@ def show_devices(
                 asyncio.run(cli.cache.update_dev_db())
 
             resp = Response(output=cli.cache.devices)
+            resp.rl = cli.cache.rl  # TODO temporary hack until cache update chgd to return resp
         else:  # will only run if user specifies params (filters)
             resp = central.request(central.get_all_devicesv2, **params)
 
