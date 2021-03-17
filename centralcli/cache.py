@@ -125,7 +125,8 @@ class Cache:
         ] = None,
         refresh: bool = False,
     ) -> None:
-        self.updated: list = []
+        self.rl: str = ""  # TODO temp might refactor cache updates to return resp
+        self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.DevDB = TinyDB(config.cache_file)
         self.SiteDB = self.DevDB.table("sites")
@@ -487,6 +488,7 @@ class Cache:
     async def update_dev_db(self):
         resp = await self.central.get_all_devicesv2()
         if resp.ok:
+            self.rl = str(resp.rl)
             resp.output = utils.listify(resp.output)
             self.updated.append(self.central.get_all_devicesv2)
             self.DevDB.truncate()
