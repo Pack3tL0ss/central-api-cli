@@ -321,8 +321,9 @@ class CLICommon:
                     if not r and exit_on_fail:
                         raise typer.Exit(1)
                 else:
-                    if str(r.rl) != "None":
-                        caption = f"{caption} [italic dark_olive_green2]{r.rl}".lstrip()
+                    if r.rl:
+                        rl_str = f"[italic dark_olive_green2]{r.rl}".lstrip()
+                        caption = f"{caption} {rl_str}" if caption else rl_str
                     self._display_results(
                         r.output,
                         tablefmt=tablefmt,

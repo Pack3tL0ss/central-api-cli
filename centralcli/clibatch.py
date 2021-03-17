@@ -184,14 +184,14 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
                                     if not fstr[idx + 5] == ",":
                                         typer.secho(
                                             f"expected a comma at character {idx + 1 + 5} but found {fstr[idx + 5]}\n"
-                                            "will try to proceed.", fg="bright_Red"
+                                            "will try to proceed.", fg="bright_red"
                                         )
 
                                     if not fstr[idx + 7:idx + 9] == "))":
                                         typer.secho(
                                             f"expected a )) at characters {idx + 1 + 7}-{idx + 1 + 8} "
                                             f"but found {fstr[idx + 7]}{fstr[idx + 8]}\n"
-                                            "will try to proceed.", fg="bright_Red"
+                                            "will try to proceed.", fg="bright_red"
                                         )
 
                                     x = f'{x}{_src.replace(_from, _to)}'
@@ -481,7 +481,7 @@ def rename(
             calls, conf_msg = [], [typer.style("Names Gathered from import:", fg="bright_green")]
             for ap in data:  # serial num
                 conf_msg += [f"  {ap}: {data[ap]['hostname']}"]
-                calls.append(central.BatchRequest(central.update_ap_settings, (ap,), data[ap]))
+                calls.append(central.BatchRequest(central.update_ap_settings, ap, **data[ap]))
 
             if len(conf_msg) > 6:
                 conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
@@ -489,6 +489,7 @@ def rename(
 
             if yes or typer.confirm("Proceed with AP rename?", abort=True):
                 resp = central.batch_request(calls)
+                cli.display_results(resp)
 
     elif lldp:
         kwargs = {}
@@ -505,7 +506,7 @@ def rename(
 
         resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
 
-        cli.display_results(resp, exit_on_fail=True)
+        cli.display_results(resp)
 
 
 @app.callback()
