@@ -282,14 +282,62 @@ class CentralApi(Session):
         url = "/monitoring/v1/aps"
         return await self.get(url)
 
-    async def get_swarms_by_group(self, group: str) -> Response:
+    async def get_swarms(self, group: str = None, status: str = None,
+                         public_ip_address: str = None, fields: str = None,
+                         calculate_total: bool = None,
+                         swarm_name: str = None, offset: int = 0, limit: int = 100) -> Response:
+        """List Swarms.
+
+        Args:
+            group (str, optional): Filter by group name
+            status (str, optional): Filter by Swarm status
+            public_ip_address (str, optional): Filter by public ip address
+            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
+                status, ip_address, public_ip_address, firmware_version
+            calculate_total (bool, optional): Whether to calculate total Swarms
+            swarm_name (str, optional): Filter by swarm name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/monitoring/v1/swarms"
-        params = {"group": group}
+
+        params = {
+            'group': group,
+            'status': status,
+            'public_ip_address': public_ip_address,
+            'fields': fields,
+            'calculate_total': calculate_total,
+            'swarm_name': swarm_name,
+            'offset': offset,
+            'limit': limit,
+        }
+
         return await self.get(url, params=params)
 
     async def get_swarm_details(self, swarm_id: str) -> Response:
+        """Swarm Details.
+
+        Args:
+            swarm_id (str): Swarm ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/monitoring/v1/swarms/{swarm_id}"
+
         return await self.get(url)
+
+    # async def get_swarms_by_group(self, group: str) -> Response:
+    #     url = "/monitoring/v1/swarms"
+    #     params = {"group": group}
+    #     return await self.get(url, params=params)
+
+    # async def get_swarm_details(self, swarm_id: str) -> Response:
+    #     url = f"/monitoring/v1/swarms/{swarm_id}"
+    #     return await self.get(url)
 
     async def get_clients(
         self,
@@ -2454,8 +2502,7 @@ class CentralApi(Session):
         if license:
             license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
         if serial_num and mac_address:
-            if group:
-                to_group = {group: [serial_num]}
+            to_group = None if not group else {group: [serial_num]}
 
             mac = utils.Mac(mac_address)
             if not mac:
@@ -2482,7 +2529,7 @@ class CentralApi(Session):
 
             json_data = [{_keys.get(k, k): v for k, v in d.items() if k != "group"} for d in device_list]
 
-            to_group = {d["group"]: [] for d in device_list}
+            to_group = {d["group"]: [] for d in device_list if "group" in d}
             _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
 
             # license_args = [[], []]
@@ -2707,6 +2754,216 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    # async def wids_get_all(self):
+
+    async def wids_get_rogue_aps(
+        self,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """List Rogue APs.
+
+        Args:
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/rapids/v1/rogue_aps"
+
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def wids_get_interfering_aps(
+        self,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """List Interfering APs.
+
+        Args:
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/rapids/v1/interfering_aps"
+
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def wids_get_suspect_aps(
+        self,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """List suspect APs.
+
+        Args:
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/rapids/v1/suspect_aps"
+
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def wids_get_neighbor_aps(
+        self,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """List neighbor APs.
+
+        Args:
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/rapids/v1/neighbor_aps"
+
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
 
 if __name__ == "__main__":

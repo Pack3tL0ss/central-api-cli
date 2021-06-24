@@ -489,7 +489,6 @@ def rename(
 
             if yes or typer.confirm("Proceed with AP rename?", abort=True):
                 resp = central.batch_request(calls)
-                cli.display_results(resp)
 
     elif lldp:
         kwargs = {}
@@ -506,7 +505,7 @@ def rename(
 
         resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
 
-        cli.display_results(resp)
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

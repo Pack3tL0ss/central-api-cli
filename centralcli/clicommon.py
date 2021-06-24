@@ -6,6 +6,7 @@ import sys
 import time
 from typing import Dict, List, Literal, Union
 from pathlib import Path
+from rich.console import Console
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -27,6 +28,7 @@ tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
+console = Console()
 
 
 class CLICommon:
@@ -309,21 +311,28 @@ class CLICommon:
         if resp is not None:
             resp = utils.listify(resp)
 
-            # data = []
+            # update caption with rate limit
+            if resp[-1].rl:
+                rl_str = f"[italic dark_olive_green2]{resp[-1].rl}".lstrip()
+                caption = f"{caption} {rl_str}" if caption else rl_str
+
             for idx, r in enumerate(resp):
+                # Multi request resuest url line
                 if len(resp) > 1:
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
+
                 if not r or tablefmt == "action":
                     fg = "green" if r else "red"
 
                     typer.secho(str(r), fg=fg)
+
+                    if idx + 1 == len(resp):
+                        console.print(f"\n{rl_str}")
+
                     if not r and exit_on_fail:
                         raise typer.Exit(1)
                 else:
-                    if r.rl:
-                        rl_str = f"[italic dark_olive_green2]{r.rl}".lstrip()
-                        caption = f"{caption} {rl_str}" if caption else rl_str
                     self._display_results(
                         r.output,
                         tablefmt=tablefmt,
