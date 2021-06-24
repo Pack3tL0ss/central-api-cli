@@ -542,3 +542,20 @@ def routes(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [
         {"destination": f'{r["prefix"]}/{r["length"]}', "next hop": r["nexthop"]} for r in rv
     ]
+
+
+def wids(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    all_keys = set([k for d in data for k in d])
+    strip_keys = ["cust_id"]
+    data = [
+        dict(
+            short_value(
+                k,
+                d.get(k),
+            )
+            for k in all_keys
+            if k not in strip_keys
+        )
+        for d in data
+    ]
+    return data
