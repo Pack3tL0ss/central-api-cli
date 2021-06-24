@@ -91,7 +91,7 @@ def device(
 
     _msg = [f'{typer.style(f"Add device", fg="cyan")}']
     _msg += [typer.style(f"{kwargs['serial_num']}|{kwargs['mac_address']}", fg="bright_green")]
-    if kwargs["group"]:
+    if "group" in kwargs and kwargs["group"]:
         _msg += [f'{typer.style(f"and pre-assign to group", fg="cyan")}']
         _msg += [typer.style(kwargs["group"], fg="bright_green")]
     _msg = f'{" ".join(_msg)}{typer.style("?", fg="cyan")}'
