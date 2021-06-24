@@ -167,9 +167,9 @@ def import_vlan(
 
 @app.command("batch", short_help="Run Supported caas commands providing parameters via stored-tasks file")
 def caas_batch(
-    command: str = typer.Argument(None,),
     key: str = typer.Argument(None,),
     file: Path = typer.Option(config.stored_tasks_file, exists=True,),
+    command: str = typer.Option(None,),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
                                  callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
