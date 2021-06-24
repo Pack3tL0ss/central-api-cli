@@ -130,8 +130,6 @@ class Response:
 
         return f"{status_code}{r}"
 
-        # return str(self.output) if self.output else self.error
-
     def __setitem__(self, name: str, value: Any) -> None:
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
             self.output[name] = value
