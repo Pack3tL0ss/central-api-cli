@@ -42,6 +42,10 @@ STRIP_KEYS = [
     "result",
     "networks",
     "ports",
+    "rogue_aps",
+    "suspect_aps",
+    "interfering_aps",
+    "neighbor_aps",
 ]
 
 
@@ -124,7 +128,8 @@ class DeleteArgs(str, Enum):
 class BounceArgs(str, Enum):
     poe = "poe"  # Switches Only
     interface = "interface"  # Switches only
-    port = "port"  # IAP/Controllers/Switches
+    # port = "port"  # IAP/Controllers/Switches
+    # TODO handle conversion from "interface" to port for gw/iap
 
 
 class TemplateLevel1(str, Enum):
@@ -209,6 +214,9 @@ class ArgToWhat:
 
     def _init_clone(self):
         self.group = self.groups = "group"
+
+    def _init_bounce(self):
+        self.interface = self.port = self.ports = self.interfaces = "interface"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
@@ -312,7 +320,7 @@ class WhatToPretty:
         self.site = self.sites = "Sites"
         self.template = self.templates = "Templates"
         self.variable = self.variables = "Variables"
-        self.all = "All Device"
+        self.all = "All Devices"
         self.device = self.devices = "Devices"
 
     def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
