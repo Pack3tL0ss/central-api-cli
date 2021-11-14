@@ -6,7 +6,7 @@ colorlog
 colorama
 halo
 pendulum
-pycentral
+pycentral>=0.0.3
 pygments
 shellingham
 tabulate
