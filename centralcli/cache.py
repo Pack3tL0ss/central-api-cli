@@ -386,7 +386,7 @@ class Cache:
         match += self.get_site_identifier(
             incomplete,
             completion=True,
-        )
+        ) or []
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
