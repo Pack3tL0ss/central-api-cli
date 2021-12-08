@@ -93,6 +93,10 @@ _short_value = {
     "uptime": _duration_words,
     "updated_at": _time_diff_words,
     "last_modified": _convert_epoch,
+    "lease_start_ts": _log_timestamp,
+    "lease_end_ts": _log_timestamp,
+    "lease_time": _duration_words,
+    "lease_time_left": _duration_words,
     "ts": _log_timestamp,
     "Unknown": "?",
     "HPPC": "SW",
@@ -102,6 +106,8 @@ _short_value = {
     "DOT1X": ".1X",
     "target": _serial_to_name,
     "0.0.0.0": "-",
+    "free_ip_addr_percent": lambda x: f"{x}%",
+    "cpu_utilization": lambda x: f"{x}%",
 }
 
 _short_key = {
@@ -128,6 +134,11 @@ _short_key = {
     "last_connection_time": "last connected",
     "connection": "802.11",
     "user_role": "role",
+    "lease_start_ts": "lease start",
+    "lease_end_ts": "lease end",
+    "lease_time_left": "lease remaining",
+    "vlan_id": "pvid",
+    "free_ip_addr_percent": "free ip %",
 }
 
 
@@ -575,4 +586,50 @@ def wids(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         )
         for d in data
     ]
+    return data
+
+
+def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    data = _unlist(data)
+    if "servers" in data:
+        data = data["servers"]
+        field_order = [
+            "pool_name",
+            "pool_size",
+            "vlan_id",
+            "subnet",
+            "lease_time",
+            "free_ip_addr_percent",
+        ]
+    else:
+        field_order = [
+            "client_name",
+            "mac",
+            "ip",
+            "reservation",
+            # "mask",
+            "pool_name",
+            "vlan_id",
+            "subnet",
+            "lease_start_ts",
+            "lease_end_ts",
+            "lease_time",
+            "lease_time_left",
+            # "infra_type",
+            "client_type",
+        ]
+
+    data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
+    data = strip_no_value(data)
+    # all_keys = set([k for d in data for k in d])
+    # data = [
+    #     dict(
+    #         short_value(
+    #             k,
+    #             d.get(k),
+    #         )
+    #         for k in all_keys
+    #     )
+    #     for d in data
+    # ]
     return data
