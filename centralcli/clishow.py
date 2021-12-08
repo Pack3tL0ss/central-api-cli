@@ -8,6 +8,7 @@ import asyncio
 import sys
 from typing import List, Union
 from pathlib import Path
+from rich import print
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -24,7 +25,8 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import (
     ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy,
-    TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, what_to_pretty  # noqa
+    TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
+    DhcpArgs, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -178,9 +180,10 @@ def interfaces(
     device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
     slot: str = typer.Argument(None, help="Slot name of the ports to query (chassis only)",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
-    sort_by: SortOptions = typer.Option(None, "--sort"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
@@ -195,10 +198,13 @@ def interfaces(
 ):
 
     dev = cli.cache.get_dev_identifier(device, ret_field="type-serial")
+    if dev.generic_type == "gw":
+        resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
+    else:
+        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "CX")
 
-    resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "CX")
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -246,11 +252,13 @@ def vlans(
         if obj.is_site:
             resp = central.request(central.get_site_vlans, obj.id)
         elif obj.is_dev:
-            if obj.type.lower() in ['cx', 'sw']:
+            # if obj.type.lower() in ['cx', 'sw']:
+            if obj.generic_type == "switch":
                 resp = central.request(central.get_switch_vlans, obj.serial, cx=obj.type == "CX")
-            elif obj.type.lower() == 'gateway':
+            elif obj.type.lower() == 'gw':
                 resp = central.request(central.get_gateway_vlans, obj.serial)
             elif obj.type.lower() == 'mobility_controllers':
+                # TODO double check should never hit this the 2 API methods should be same
                 resp = central.request(central.get_controller_vlans, obj.serial)
         else:
             typer.secho(f"show vlans not implemented for {dev_site}", fg="red")
@@ -269,6 +277,65 @@ def vlans(
         reverse=reverse,
         cleaner=cleaner.get_vlans
     )
+
+
+@app.command(short_help="Show DHCP pool or lease details (gateways only)")
+def dhcp(
+    what: DhcpArgs = typer.Argument(..., help=["server", "clients"]),
+    dev: str = typer.Argument(
+        ...,
+        metavar=f"{iden_meta.dev} (Valid for Gateways Only) ",
+        autocompletion=cli.cache.dev_completion,
+    ),
+    no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
+    reverse: bool = typer.Option(False, "-r", help="Reverse sort order", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+    # verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False,),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting) (vertically)",
+        show_default=False,
+    ),
+) -> None:
+    central = cli.central
+    dev = cli.cache.get_dev_identifier(dev, dev_type="gw")
+
+    # if dev.generic_type != "gw":
+    #     typer.secho(f"show dhcp ... only valid for gateways not {dev.generic_type}", fg="red")
+    if what == "server":
+        resp = central.request(central.get_dhcp_server, dev.serial)
+    else:
+        resp = central.request(central.get_dhcp_clients, dev.serial, reservation=not no_res)
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    if verbose2:
+        print(resp.raw)
+    else:
+        cli.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=f"{dev.name} DHCP {what.rstrip('s')} details",
+            pager=not no_pager,
+            outfile=outfile,
+            sort_by=sort_by,
+            reverse=reverse,
+            cleaner=cleaner.get_dhcp,  # TODO CHANGE.. placeholder
+        )
 
 
 @app.command(short_help="Show All Devices")
@@ -683,9 +750,9 @@ def variables(
         None,
         metavar=iden_meta.dev,
         autocompletion=lambda incomplete: [
-            m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete)]]
-            if m[0].lower().startwith(incomplete.lower())
-        ],
+            m for m in [m for m in cli.cache.dev_completion(incomplete)]
+            if m[0].lower().startswith(incomplete.lower())
+        ] or [],
     ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),

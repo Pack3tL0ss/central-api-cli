@@ -99,7 +99,7 @@ def template(
 
 @app.command(short_help="Update existing or add new Variables for a device/template")
 def variables(
-    device: str = typer.Argument(..., metavar="Device: [serial #|name|ip address|mac address]"),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
     var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),

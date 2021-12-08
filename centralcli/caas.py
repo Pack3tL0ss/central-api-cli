@@ -136,7 +136,7 @@ class BuildCLI:
                 if common["group"] != self.dev_info["group"]:
                     # print(" it is *Not*", end="\n")
                     typer.echo(f"Moving {_pretty_name} to Group {common['group']}")
-                    res = self.central.move_dev_to_group(common["group"], self.dev_info["serial"])
+                    res = self.central.move_devices_to_group(common["group"], self.dev_info["serial"])
                     if not res:
                         typer.secho(
                             f"Error Returned Moving {common['hostname']} to Group {common['group']}", fg="red"
