@@ -812,7 +812,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/config_details"
 
-        params = {"details": details}
+        params = {"details": str(details)}
 
         return await self.get(url, params=params)
 
@@ -1030,7 +1030,7 @@ class AllCalls(CentralApi):
         self,
         q: str = None,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 20,
     ) -> Response:
         """Get Certificates details uploaded.
 
@@ -1039,7 +1039,7 @@ class AllCalls(CentralApi):
                 sha1_hash
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 20.
 
         Returns:
             Response: CentralAPI Response object
@@ -1056,7 +1056,7 @@ class AllCalls(CentralApi):
         cert_type: str,
         cert_format: str,
         passphrase: str,
-        cert_data: str,
+        cert_data: str = None,
     ) -> Response:
         """Upload a certificate.
 
@@ -1071,11 +1071,14 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
+        # TODO need to take file as input and prevent stripping special chars
         url = "/configuration/v1/certificates"
+        for line in cert_data.split("\n"):
+            print(line)
 
         json_data = {
             "cert_name": cert_name,
-            "cert_type": cert_type,
+            "cert_type": cert_type.upper(),
             "cert_format": cert_format,
             "passphrase": passphrase,
             "cert_data": cert_data,
@@ -3236,7 +3239,7 @@ class AllCalls(CentralApi):
         self,
         group_name_or_guid: str,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 20,
     ) -> Response:
         """Get dirty diff.
 
@@ -3246,7 +3249,7 @@ class AllCalls(CentralApi):
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
             limit (int, optional): Maximum number of group config_mode records to be returned.
-                Defaults to 100.
+                Defaults to 20.
 
         Returns:
             Response: CentralAPI Response object
@@ -3319,46 +3322,6 @@ class AllCalls(CentralApi):
             "dot11g_radio_disable": dot11g_radio_disable,
             "usb_port_disable": usb_port_disable,
         }
-
-        return await self.post(url, json_data=json_data)
-
-    async def configuration_get_swarm_config(
-        self,
-        guid: str,
-    ) -> Response:
-        """(Deprecated) Get an existing swarm config.
-
-        Args:
-            guid (str): GUID of SWARM selected.
-                Example:6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/swarm_config/{guid}"
-
-        return await self.get(url)
-
-    async def configuration_update_swarm_config(
-        self,
-        guid: str,
-        name: str,
-        ip_address: str,
-    ) -> Response:
-        """(Deprecated) Update an existing swarm config.
-
-        Args:
-            guid (str): guid of Swarm selected.
-                Example:6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            name (str): name
-            ip_address (str): ip_address
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/swarm_config/{guid}"
-
-        json_data = {"name": name, "ip_address": ip_address}
 
         return await self.post(url, json_data=json_data)
 
