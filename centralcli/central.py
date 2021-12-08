@@ -859,7 +859,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO remove once confirmed the cx_ urls have been depricated in favor of the logical route of having the
+        # TODO remove once confirmed the cx_ urls have been deprecated in favor of the logical route of having the
         # one url work for both.
         # sw_url = "cx_switches" if cx else "switches"
         # url = f"/monitoring/v1/{sw_url}/{serial}/ports"
