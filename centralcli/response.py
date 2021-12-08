@@ -45,7 +45,7 @@ class Response:
     The following attributes will always be available:
         ok: (bool) indicates success/failure of aiohttp.ClientSession.request()
         output: (Any) The content returned from the response (outer keys removed)
-        raw_output: (Any) The orginal un-cleaned response from the API request
+        raw_output: (Any) The original un-cleaned response from the API request
         error: (str) Error message indicating the nature of a failed response
         status: (int) http status code returned from response
 
@@ -332,7 +332,7 @@ class Session:
 
         # Debugging flag to lower paging limit to test paging with smaller chunks.
         if params and params.get("limit") and config.limit:
-            log.info(f'paging limit being overriden by config: {params.get("limit")} --> {config.limit}')
+            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
             params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.

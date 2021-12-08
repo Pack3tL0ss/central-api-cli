@@ -3,7 +3,7 @@
 """
 Generated from Aruba Central 2.5.4 Schemas
 
-Code programatically generated.  May need tweeks
+Code programatically generated.  May need tweaks
 """
 import sys
 from pathlib import Path

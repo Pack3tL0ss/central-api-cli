@@ -1,7 +1,7 @@
 import sys
 import asyncio
 from pathlib import Path
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Union, List
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
