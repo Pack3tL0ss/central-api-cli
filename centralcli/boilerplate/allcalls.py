@@ -2091,7 +2091,7 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/mobility_controllers/{serial}/dhcp_clients"
 
         params = {
-            'reservation': reservation
+            'reservation': str(reservation)
         }
 
         return await self.get(url, params=params)
