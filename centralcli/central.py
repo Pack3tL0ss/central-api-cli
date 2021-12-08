@@ -184,6 +184,7 @@ class CentralApi(Session):
         Returns:
             centralcli.response.Response object
         """
+        log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
         return asyncio.run(self._request(func, *args, **kwargs))
 
     async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
@@ -868,6 +869,19 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_gateway_ports(self, serial: str) -> Response:
+        """Gateway Ports Details.
+
+        Args:
+            serial (str): Serial number of Gateway to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/ports"
+
+        return await self.get(url)
+
     async def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
         # iap, switch, gateway|boc
@@ -917,21 +931,23 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
-        headers = {"Content-Type": "multipart/form-data"}
+        # headers = {"Content-Type": "multipart/form-data"}
 
-        json_data = {device_serial: var_dict}
-        #     **{
-        #         'total': len(var_dict),
-        #         '_sys_serial': device_serial,
-        #         '_sys_lan_mac': device_mac,
-        #     },
-        #     **var_dict
-        # }
+        json_data = {
+            'total': len(var_dict) + 2,
+            "variables": {
+                **{
+                    '_sys_serial': device_serial,
+                    '_sys_lan_mac': device_mac,
+                },
+                **var_dict
+            }
+        }
         # data = self._make_form_data(json_data)
-        data = multipartify(json_data)
-        # TODO this doesn't work yet. Trying to figure out what API expects
+        # data = multipartify(json_data)
 
-        return await self.patch(url, headers=headers, payload=data)
+        # return await self.patch(url, headers=headers, data=data)
+        return await self.patch(url, json_data=json_data)
 
     async def get_device_configuration(self, device_serial: str) -> Response:
         """Get last known running configuration for a device.
@@ -1096,6 +1112,41 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_dhcp_clients(self, serial_num: str, reservation: bool = True,
+                               offset: int = 0, limit: int = 100) -> Response:
+        """Mobility Controllers DHCP Client information.
+
+        Args:
+            serial_num (str): Serial number of mobility controller to be queried
+            reservation (bool, optional): Flag to turn on/off listing DHCP reservations(if any).
+                Defaults to True
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
+
+        params = {
+            'reservation': str(reservation)
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_dhcp_server(self, serial_num: str) -> Response:
+        """Mobility Controllers DHCP Server details.
+
+        Args:
+            serial_num (str): Serial number of mobility controller to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_servers"
+
+        return await self.get(url)
+
     async def get_gateways_by_group(self, group):
         url = "/monitoring/v1/mobility_controllers"
         params = {"group": group}
@@ -1104,10 +1155,10 @@ class CentralApi(Session):
     async def get_group_for_dev_by_serial(self, serial_num):
         return await self.get(f"/configuration/v1/devices/{serial_num}/group")
 
-    async def get_dhcp_client_info_by_gw(self, serial_num):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
-        params = {"reservation": False}
-        return await self.get(url, params=params)
+    # async def get_dhcp_client_info_by_gw(self, serial_num):
+    #     url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
+    #     params = {"reservation": False}
+    #     return await self.get(url, params=params)
 
     async def get_vlan_info_by_gw(self, serial_num):
         return await self.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
