@@ -312,7 +312,7 @@ def dhcp(
     ),
 ) -> None:
     central = cli.central
-    dev = cli.cache.get_dev_identifier(dev)
+    dev = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
     # if dev.generic_type != "gw":
     #     typer.secho(f"show dhcp ... only valid for gateways not {dev.generic_type}", fg="red")

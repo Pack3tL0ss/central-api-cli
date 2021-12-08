@@ -246,6 +246,7 @@ class Cache:
         args: List[str] = None,
     ):
         dev_type = None
+
         if args:
             if args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
@@ -733,9 +734,9 @@ class Cache:
         self,
         query_str: Union[str, List[str], tuple],
         dev_type: str = None,
-        ret_field: str = "serial",
+        ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
         retry: bool = True,
-        multi_ok: bool = True,
+        multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
         completion: bool = False,
     ) -> CentralObject:
 
@@ -806,9 +807,10 @@ class Cache:
         elif retry:
             log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
             if all_match:
-                all_match = all_match[-1]
+                # all_match = all_match[-1]
+                all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
                 log.error(
-                    f"The Following device matched {all_match.name} excluded as {all_match.type} != {dev_type}",
+                    f"The Following devices matched {all_match_msg} excluded as device type != {dev_type}",
                     show=True,
                 )
             raise typer.Exit(1)
