@@ -20,7 +20,9 @@
     ],
     "cSpell.words": [
         "cencli",
-        "centralcli"
+        "centralcli",
+        "HPPC",
+        "listify"
     ],
     "restructuredtext.confPath": "${workspaceFolder}/docs",
 }
