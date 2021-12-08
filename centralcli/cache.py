@@ -15,10 +15,13 @@ try:
 except Exception:
     pass
 
-try:
-    import better_exceptions # noqa
-except Exception:
-    pass
+# try:
+#     import better_exceptions # noqa
+# except Exception:
+#     pass
+from rich.traceback import install
+install(show_locals=True)
+
 
 TinyDB.default_table_name = "devices"
 
@@ -30,6 +33,23 @@ TEMPLATE_COMPLETION = []
 EXTRA_COMPLETION = {
     "move": ["site", "group"]
 }
+LIB_DEV_TYPE = {
+    "AOS-CX": "cx",
+    "AOS-S": "sw",
+    "gateway": "gw"
+}
+
+
+def get_cencli_devtype(dev_type: str) -> str:
+    """Convert device type returned by API to consistent cencli types
+
+    Args:
+        dev_type(str): device type provided by API response
+
+    Returns:
+        str: One of ["ap", "sw", "cx", "gw"]
+    """
+    return LIB_DEV_TYPE.get(dev_type, dev_type)
 
 
 class CentralObject:
@@ -226,12 +246,13 @@ class Cache:
         args: List[str] = None,
     ):
         dev_type = None
-        if args[-1].lower() == "gateways":
-            dev_type = "gateway"
-        if args[-1].lower().startswith("switch"):
-            dev_type = "switch"
-        if args[-1].lower() in ["aps", "ap"]:
-            dev_type = "ap"
+        if args:
+            if args[-1].lower() in ["gateways", "clients", "server"]:
+                dev_type = "gw"
+            elif args[-1].lower().startswith("switch"):
+                dev_type = "switch"
+            elif args[-1].lower() in ["aps", "ap"]:
+                dev_type = "ap"
 
         match = self.get_dev_identifier(
             incomplete,
@@ -261,7 +282,7 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
-        """Completion for commands that allow a list of devices followed by grouop/site.
+        """Completion for commands that allow a list of devices followed by group/site.
 
         i.e. cencli move dev1 dev2 dev3 site site_name group group_name
 
@@ -490,6 +511,12 @@ class Cache:
         if resp.ok:
             self.rl = str(resp.rl)
             resp.output = utils.listify(resp.output)
+            resp.output = [
+                {
+                    k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
+                } for r in resp.output
+            ]
+            # TODO change updated from  list of funcs to class with bool attributes or something
             self.updated.append(self.central.get_all_devicesv2)
             self.DevDB.truncate()
             return self.DevDB.insert_multiple(resp.output)
