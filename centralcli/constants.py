@@ -161,6 +161,11 @@ class RenameArgs(str, Enum):
     # ap = "ap"
 
 
+class DhcpArgs(str, Enum):
+    clients = "clients"
+    server = "server"
+
+
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
