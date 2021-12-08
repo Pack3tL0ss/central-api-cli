@@ -68,6 +68,21 @@ def _short_connection(value: str) -> str:
     return value.replace("802.11", "")
 
 
+def _serial_to_name(sernum: str) -> str:
+    # TODO circular import if placed at top review import logic
+    from centralcli import cache
+    if not (
+        len(sernum) == 10 and all([s.isalpha() for s in sernum[0:2]]) and all([s.isupper() for s in sernum.split()])
+    ):
+        return sernum
+
+    match = cache.get_dev_identifier(sernum)
+    if not match:
+        return sernum
+
+    return match.name
+
+
 _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
 
@@ -84,7 +99,9 @@ _short_value = {
     "vc_disconnected": "vc disc.",
     "MAC Authentication": "MAC",
     "connection": _short_connection,
-    "DOT1X": ".1X"
+    "DOT1X": ".1X",
+    "target": _serial_to_name,
+    "0.0.0.0": "-",
 }
 
 _short_key = {
