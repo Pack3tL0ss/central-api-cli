@@ -537,7 +537,8 @@ class Utils:
 
                 table_data = tabulate(outdata, headers="keys", tablefmt=tablefmt)
                 td = table_data.splitlines(keepends=True)
-                table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
+                if td:
+                    table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n" \
                               f"{'Customer Name:':15} {customer_name}\n--\n"
