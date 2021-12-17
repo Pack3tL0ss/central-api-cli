@@ -1108,7 +1108,147 @@ def logs(
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
-    verbose: bool = typer.Option(False, "-v", help="Show raw unformatted logs (vertically)"),
+    verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
+    verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    if cencli:
+        from centralcli import log
+        log.print_file()
+        # cli.display_results(
+        #     data=log.log_file.read_text().split("\n"),
+        #     tablefmt="rich",
+        #     reverse=True,
+        # )
+        raise typer.Exit(0)
+
+    if args:
+        log_id = cli.cache.get_log_identifier(args[-1])
+    else:
+        log_id = None
+        if device:
+            device = cli.cache.get_dev_identifier(device)
+
+        if start:
+            # TODO add common dt function allow HH:mm and assumer current day
+            try:
+                dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+                start = (dt.int_timestamp)
+            except Exception:
+                typer.secho(f"start appears to be invalid {start}", fg="red")
+                raise typer.Exit(1)
+        if end:
+            try:
+                dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+                end = (dt.int_timestamp)
+            except Exception:
+                typer.secho(f"end appears to be invalid {start}", fg="red")
+                raise typer.Exit(1)
+        if past:
+            now = int(time.time())
+            past = past.lower().replace(" ", "")
+            if past.endswith("d"):
+                start = now - (int(past.rstrip("d")) * 86400)
+            if past.endswith("h"):
+                start = now - (int(past.rstrip("h")) * 3600)
+            if past.endswith("m"):
+                start = now - (int(past.rstrip("m")) * 60)
+
+    kwargs = {
+        "log_id": log_id,
+        "username": user,
+        "start_time": start or int(time.time() - 172800),
+        "end_time": end,
+        "description": description,
+        "target": None if not device else device.serial,
+        "classification": _class,
+        "ip_address": ip,
+        "app_id": app,
+        "count": count
+    }
+
+    central = cli.central
+    resp = central.request(central.get_audit_logs, **kwargs)
+
+    if kwargs.get("log_id"):
+        typer.secho(str(resp), fg="green" if resp else "red")
+    else:
+        if verbose2:
+            tablefmt = "raw"
+        else:
+            tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        _cmd_txt = typer.style('show logs <id>', fg='bright_green')
+        cli.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title="Audit Logs",
+            pager=not no_pager,
+            outfile=outfile,
+            # TODO move sort_by underscore removal to display_results
+            sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
+            reverse=reverse,
+            cleaner=cleaner.get_audit_logs if not verbose else None,
+            cache_update_func=cli.cache.update_log_db if not verbose else None,
+            caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details.",
+        )
+
+
+# TODO added to compare results of show logs of above
+@app.command(short_help="Show Event Logs (2 days by default)")
+def events(
+    args: List[str] = typer.Argument(
+        None,
+        metavar='[LOG_ID]',
+        help="Show details for a specific log_id",
+        autocompletion=lambda incomplete: cli.cache.get_log_identifier(incomplete)
+    ),
+    user: str = typer.Option(None, help="Filter logs by user"),
+    start: str = typer.Option(None, help="Start time of range to collect logs, format: yyyy-mm-ddThh:mm (24 hour notation)",),
+    end: str = typer.Option(None, help="End time of range to collect logs, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
+    past: str = typer.Option(None, help="Collect Logs for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    device: str = typer.Option(
+        None,
+        metavar=iden_meta.dev,
+        help="Filter logs by device",
+        autocompletion=cli.cache.dev_completion,
+    ),
+    app: LogAppArgs = typer.Option(None, help="Filter logs by app_id", hidden=True),
+    ip: str = typer.Option(None, help="Filter logs by device IP address",),
+    description: str = typer.Option(None, help="Filter logs by description (fuzzy match)",),
+    _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)",),
+    count: int = typer.Option(None, "-n", help="Collect Last n logs",),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
+    sort_by: LogSortBy = typer.Option(None, "--sort",),  # Uses post formatting field headers
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
+    verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
+    verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
@@ -1172,32 +1312,37 @@ def logs(
                 start = now - (int(past.rstrip("m")) * 60)
 
     kwargs = {
-        "log_id": log_id,
-        "username": user,
+        # "log_id": log_id,
+        # "username": user,
         "start_time": start or int(time.time() - 172800),
         "end_time": end,
-        "description": description,
-        "target": None if not device else device.serial,
+        # "description": description,
+        # "target": None if not device else device.serial,
         "classification": _class,
-        "ip_address": ip,
-        "app_id": app,
-        "count": count
+        # "ip_address": ip,
+        # "app_id": app,
+        # "count": count
     }
 
     central = cli.central
-    resp = central.request(central.get_audit_logs, **kwargs)
+    resp = central.request(central.get_audit_logs_events, **kwargs)
 
     if kwargs.get("log_id"):
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-        _cmd_txt = typer.style('show logs <id>', fg='bright_green')
+        if verbose2:
+            tablefmt = "raw"
+        else:
+            tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
+        _cmd_txt = typer.style('show events <id>', fg='bright_green')
         cli.display_results(
             resp,
             tablefmt=tablefmt,
             title="Audit Logs",
             pager=not no_pager,
             outfile=outfile,
+            # TODO move sort_by underscore removal to display_results
             sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
             reverse=reverse,
             cleaner=cleaner.get_audit_logs if not verbose else None,
