@@ -48,8 +48,8 @@ def _convert_epoch(epoch: float) -> str:
 
 
 @epoch_convert
-def _duration_words(secs: int) -> str:
-    return pendulum.duration(seconds=secs).in_words()
+def _duration_words(secs: Union[int, str]) -> str:
+    return pendulum.duration(seconds=int(secs)).in_words()
 
 
 @epoch_convert
@@ -83,6 +83,18 @@ def _serial_to_name(sernum: str) -> str:
     return match.name
 
 
+def _extract_names_from_id_name_dict(id_name: dict) -> str:
+    names = [x.get("name", "Error") for x in id_name]
+    return ", ".join(names)
+
+
+def _extract_event_details(details: List[dict]) -> dict:
+    data = {
+        k: v for k, v in [tuple(short_value(k, v)) for d in details for k, v in d.items()]
+    }
+    return "\n".join([f"{k}: {v}" for k, v in data.items()])
+
+
 _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
 
@@ -98,8 +110,13 @@ _short_value = {
     "lease_time": _duration_words,
     "lease_time_left": _duration_words,
     "ts": _log_timestamp,
+    "timestamp": _log_timestamp,
     "Unknown": "?",
     "HPPC": "SW",
+    "labels": _extract_names_from_id_name_dict,
+    "sites": _extract_names_from_id_name_dict,
+    "ACCESS POINT": "AP",
+    # "events_details": _extract_event_details,
     "vc_disconnected": "vc disc.",
     "MAC Authentication": "MAC",
     "connection": _short_connection,
@@ -129,6 +146,7 @@ _short_key = {
     "device_type": "type",
     "classification": "class",
     "ts": "time",
+    "timestamp": "time",
     "ap_deployment_mode": "mode",
     "authentication_type": "auth",
     "last_connection_time": "last connected",
@@ -139,6 +157,7 @@ _short_key = {
     "lease_time_left": "lease remaining",
     "vlan_id": "pvid",
     "free_ip_addr_percent": "free ip %",
+    "events_details": "details",
 }
 
 
@@ -205,8 +224,13 @@ def short_value(key: str, value: Any):
             short_key(key),
             _short_value.get(value, value) if key not in _short_value or not value else _short_value[key](value),
         )
-    else:
-        return short_key(key), _unlist(value)
+    elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
+        if key in ["sites", "labels"]:
+            value = _extract_names_from_id_name_dict(value)
+        elif key in ["events_details"]:
+            value = _extract_event_details(value)
+
+    return short_key(key), _unlist(value)
 
 
 def _get_group_names(
@@ -464,6 +488,34 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
             del d["has details"]
         if cache_list:
             cache_update_func(cache_list)
+
+    return data
+
+
+def get_event_logs(data: List[dict],) -> List[dict]:
+
+    field_order = [
+        "timestamp",
+        "level",
+        "event_type",
+        "description",
+        "events_details",
+        "device_type",
+        "client_mac",
+        "device",
+        "hostname",
+        "device_serial",
+        "device_mac",
+        "group_name",
+        "labels",
+        "sites",
+    ]
+    for d in data:
+        d["device"] = f"{d.get('hostname', '')}\n{d.get('device_serial', '')}\n{d.get('device_mac', '')}"
+        for key in ["hostname", "device_serial", "device_mac"]:
+            del d[key]
+    data = [dict(short_value(k, d[k]) for k in field_order if k in d) for d in data]
+    data = strip_no_value(data)
 
     return data
 

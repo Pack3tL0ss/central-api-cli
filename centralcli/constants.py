@@ -127,6 +127,13 @@ class DeleteArgs(str, Enum):
     site = "site"
 
 
+class EventDevTypeArgs(str, Enum):
+    ap = "ap"
+    switch = "switch"
+    gw = "gw"
+    client = "client"
+
+
 class BounceArgs(str, Enum):
     poe = "poe"  # Switches Only
     interface = "interface"  # Switches only
@@ -265,7 +272,7 @@ class LibToAPI:
         self.switches = self.switch = "switch"
         self.SW = self.sw = self.HPPC = self.HP = "sw"
         self.CX = self.cx = "cx"
-        self.method_iden = None
+        self.method_iden = None,
 
         # from CentralApi consistent value to Random API value.
         self.site_to_api = {
@@ -289,6 +296,16 @@ class LibToAPI:
             "switch": "HP",
             "cx": "HP",
             "sw": "HP"
+        }
+        # Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
+        self.event_to_api = {
+            "gw": "GATEWAY",
+            "ap": "ACCESS POINT",
+            "switch": "SWITCH",
+            "cx": "SWITCH",
+            "sw": "SWITCH",
+            "client": "CLIENT",
+            "clients": "CLIENT",
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
@@ -343,7 +360,7 @@ what_to_pretty = WhatToPretty()
 class LibToGenericPlural:
     def __init__(self):
         self.gw = "gateways"
-        self.ap = "acess points"
+        self.ap = "access points"
         self.switch = self.cx = self.sw = "switches"
 
     def __call__(self, key: Literal["ap", "cx", "sw", "switch", "gw"], default: str = None, format_func=str.title) -> str:

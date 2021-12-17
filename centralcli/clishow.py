@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy,
     TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
-    DhcpArgs, what_to_pretty  # noqa
+    DhcpArgs, EventDevTypeArgs, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -785,9 +785,13 @@ def variables(
     )
 
 
-@app.command(short_help="Show AP lldp neighbors")
+@app.command(short_help="Show AP lldp neighbor", help="Show AP lldp neighbor.  Command only applies to APs at this time.")
 def lldp(
-    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
+    device: List[str] = typer.Argument(
+        ...,
+        metavar=iden_meta.dev,
+        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete, args=["ap"])
+    ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
@@ -868,6 +872,28 @@ def run(
     dev = cli.cache.get_dev_identifier(device)
 
     resp = central.request(central.get_device_configuration, dev.serial)
+    cli.display_results(resp, pager=not no_pager, outfile=outfile)
+
+
+@app.command(short_help="Show AP Group Level Config (UI-Group)")
+def ap_config(
+    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion),  # TODO also takes swarm_id
+    version: str = typer.Option(None, "--ver", help="Version of AP"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+
+    central = cli.central
+    group = cli.cache.get_group_identifier(group)
+
+    resp = central.request(central.get_ap_config, group.name)
     cli.display_results(resp, pager=not no_pager, outfile=outfile)
 
 
@@ -1212,41 +1238,43 @@ def logs(
         )
 
 
-# TODO added to compare results of show logs of above
+# TODO cache and create completion for labels
 @app.command(short_help="Show Event Logs (2 days by default)")
 def events(
-    args: List[str] = typer.Argument(
-        None,
-        metavar='[LOG_ID]',
-        help="Show details for a specific log_id",
-        autocompletion=lambda incomplete: cli.cache.get_log_identifier(incomplete)
-    ),
-    user: str = typer.Option(None, help="Filter logs by user"),
-    start: str = typer.Option(None, help="Start time of range to collect logs, format: yyyy-mm-ddThh:mm (24 hour notation)",),
-    end: str = typer.Option(None, help="End time of range to collect logs, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
-    past: str = typer.Option(None, help="Collect Logs for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
+    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion,),
+    start: str = typer.Option(None, help="Start time of range to collect events, format: yyyy-mm-ddThh:mm (24 hour notation)",),
+    end: str = typer.Option(None, help="End time of range to collect events, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
+    past: str = typer.Option(None, help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
-        help="Filter logs by device",
+        help="Filter events by device",
         autocompletion=cli.cache.dev_completion,
     ),
-    app: LogAppArgs = typer.Option(None, help="Filter logs by app_id", hidden=True),
-    ip: str = typer.Option(None, help="Filter logs by device IP address",),
-    description: str = typer.Option(None, help="Filter logs by description (fuzzy match)",),
-    _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)",),
-    count: int = typer.Option(None, "-n", help="Collect Last n logs",),
-    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs"),
+    client_mac: str = typer.Option(None, "--client-mac", help="Filter events by client MAC address"),
+    bssid: str = typer.Option(None, help="Filter events by bssid",),
+    hostname: str = typer.Option(None, help="Filter events by hostname (fuzzy match)",),
+    dev_type: EventDevTypeArgs = typer.Option(
+        None,
+        "--dev-type",
+        metavar="[ap|switch|gw|client]",
+        help="Filter events by device type",
+    ),
+    description: str = typer.Option(None, help="Filter events by description (fuzzy match)",),
+    event_type: str = typer.Option(None, "--event-type", help="Filter events by type (fuzzy match)",),  # TODO completion enum
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: LogSortBy = typer.Option(None, "--sort",),  # Uses post formatting field headers
+    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
     reverse: bool = typer.Option(
         True, "-r",
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
+    # count: int = typer.Option(None, "-n", help="Collect Last n logs",),
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
     verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
@@ -1270,85 +1298,75 @@ def events(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    if cencli:
-        from centralcli import log
-        log.print_file()
-        # cli.display_results(
-        #     data=log.log_file.read_text().split("\n"),
-        #     tablefmt="rich",
-        #     reverse=True,
-        # )
-        raise typer.Exit(0)
+    '''Show event logs
+    '''
+    if device:
+        device = cli.cache.get_dev_identifier(device)
 
-    if args:
-        log_id = cli.cache.get_log_identifier(args[-1])
-    else:
-        log_id = None
-        if device:
-            device = cli.cache.get_dev_identifier(device)
-
-        if start:
-            try:
-                dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
-                start = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"start appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if end:
-            try:
-                dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
-                end = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"end appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if past:
-            now = int(time.time())
-            past = past.lower().replace(" ", "")
-            if past.endswith("d"):
-                start = now - (int(past.rstrip("d")) * 86400)
-            if past.endswith("h"):
-                start = now - (int(past.rstrip("h")) * 3600)
-            if past.endswith("m"):
-                start = now - (int(past.rstrip("m")) * 60)
+    # TODO move to common func for use be show logs and show events
+    if start:
+        try:
+            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+            start = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"start appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if end:
+        try:
+            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+            end = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"end appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if past:
+        now = int(time.time())
+        past = past.lower().replace(" ", "")
+        if past.endswith("d"):
+            start = now - (int(past.rstrip("d")) * 86400)
+        if past.endswith("h"):
+            start = now - (int(past.rstrip("h")) * 3600)
+        if past.endswith("m"):
+            start = now - (int(past.rstrip("m")) * 60)
 
     kwargs = {
-        # "log_id": log_id,
-        # "username": user,
-        "start_time": start or int(time.time() - 172800),
-        "end_time": end,
-        # "description": description,
-        # "target": None if not device else device.serial,
-        "classification": _class,
-        # "ip_address": ip,
-        # "app_id": app,
-        # "count": count
+        "group": group,
+        # "swarm_id": swarm_id,
+        "label": label,
+        "from_ts": start or int(time.time() - 172800),
+        "to_ts": end,
+        "macaddr": client_mac,
+        "bssid": bssid,
+        # "device_mac": None if not device else device.mac,
+        "hostname": hostname,
+        "device_type": dev_type,
+        "site": site,
+        "serial": None if not device else device.serial,
+        # "level": level,
+        "event_description": description,
+        "event_type": event_type,
+        # "fields": fields,
+        # "calculate_total": None,
     }
 
     central = cli.central
-    resp = central.request(central.get_audit_logs_events, **kwargs)
+    resp = central.request(central.get_events, **kwargs)
 
-    if kwargs.get("log_id"):
-        typer.secho(str(resp), fg="green" if resp else "red")
+    if verbose2:
+        tablefmt = "raw"
     else:
-        if verbose2:
-            tablefmt = "raw"
-        else:
-            tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-        _cmd_txt = typer.style('show events <id>', fg='bright_green')
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title="Audit Logs",
-            pager=not no_pager,
-            outfile=outfile,
-            # TODO move sort_by underscore removal to display_results
-            sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
-            reverse=reverse,
-            cleaner=cleaner.get_audit_logs if not verbose else None,
-            cache_update_func=cli.cache.update_log_db if not verbose else None,
-            caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details.",
-        )
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Event Logs",
+        pager=not no_pager,
+        outfile=outfile,
+        # TODO move sort_by underscore removal to display_results
+        sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
+        reverse=reverse,
+        cleaner=cleaner.get_event_logs if not verbose else None,
+    )
 
 
 @app.command(short_help="Show config", hidden=True)
