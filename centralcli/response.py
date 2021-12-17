@@ -25,13 +25,17 @@ DEFAULT_HEADERS = {
 
 class RateLimit:
     def __init__(self, resp: aiohttp.ClientResponse = None):
-        self.total, self.remain = 0, 0
+        self.total, self.remain, self.total_per_sec, self.remain_per_sec = 0, 0, 0, 0
         if resp and hasattr(resp, "headers"):
             rh = resp.headers
             self.total = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
             self.remain = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
+            self.total_per_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
+            self.remain_per_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
         self.used = self.total - self.remain
-        self.ok = True if sum([self.total, self.used]) > 0 else False
+        self.used_per_sec = self.total_per_sec - self.remain_per_sec
+        # self.ok = True if sum([self.total, self.used]) > 0 else False
+        self.ok = True if all([self.remain != 0, self.remain_per_sec > 1]) else False
 
     def __str__(self):
         return f"API Rate Limit: {self.remain} of {self.total} remaining." if self.ok else ""
@@ -125,6 +129,7 @@ class Response:
                 [f"  {k}:\n{self._split_inner(v)}" for k, v in self.output.items() if v or v is False]
             )
 
+        # sanitize sensitive data for demos
         if config.sanitize and config.sanatize_file.is_file():
             r = utils.Output(config=config).sanitize_strings(r)
 
@@ -353,6 +358,11 @@ class Session:
             # -- // Attempt API Call \\ --
             r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
                                          params=params, **kwargs)
+
+            if r.status == 429:
+                log.warning(f"Rate Limit hit on call to {r.url} slowing down", show=True)
+                time.sleep(1)
+                continue
 
             if not r.ok:
                 break
