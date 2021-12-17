@@ -24,7 +24,12 @@ class AllCalls(CentralApi):
     def __init__(self):
         super().__init__()
 
-    async def guest_get_portals(self, sort: str = '+name', offset: int = 0, limit: int = 100) -> Response:
+    async def guest_get_portals(
+        self,
+        sort: str = '+name',
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """Get all portals with limited data.
 
         Args:
@@ -46,33 +51,68 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def guest_create_portal(self, name: str, auth_type: str,
-                                  username_password_enabled: bool, registration_enabled: bool,
-                                  verify_registration: bool, bypass_cna_policy: bool,
-                                  cna_policy: str, register_accept_email: bool,
-                                  register_accept_phone: bool, free_wifi_duration: int,
-                                  self_reg_account_unlimited: bool,
-                                  self_reg_account_expire_days: int,
-                                  self_reg_account_expire_hours: int,
-                                  self_reg_account_expire_minutes: int, login_button_title: str,
-                                  whitelist_urls: List[str], custom_username_label: str,
-                                  custom_password_label: str, custom_sender_message: str,
-                                  custom_verification_message: str,
-                                  custom_registration_message: str, custom_pwd_reset_message: str,
-                                  auth_sources: list, facebook_wifi_configure_url: str,
-                                  facebook_wifi_gateway_id: str, redirect_url: str,
-                                  auth_failure_message: str, days: int, hours: int, minutes: int,
-                                  mac_caching_enabled: bool, is_shared: bool,
-                                  simultaneous_login_limit: int, daily_usage_limit: str,
-                                  by_hours: int, by_minutes: int, data_type: str, data: int,
-                                  background_color: str, button_color: str,
-                                  header_fill_color: str, page_font_color: str, logo_name: str,
-                                  logo: str, background_image_name: str, background_image: str,
-                                  max_columns: int, page_title: str, welcome_text: str,
-                                  terms_condition: str, display_terms_checkbox: bool,
-                                  display_term_options: str, ad_url: str, login_image_name: str,
-                                  ad_image: str, is_config_associated: bool, capture_url: str,
-                                  override_common_name: str, override_common_name_enabled: bool) -> Response:
+    async def guest_create_portal(
+        self,
+        name: str,
+        auth_type: str,
+        username_password_enabled: bool,
+        registration_enabled: bool,
+        verify_registration: bool,
+        bypass_cna_policy: bool,
+        cna_policy: str,
+        register_accept_email: bool,
+        register_accept_phone: bool,
+        free_wifi_duration: int,
+        self_reg_account_unlimited: bool,
+        self_reg_account_expire_days: int,
+        self_reg_account_expire_hours: int,
+        self_reg_account_expire_minutes: int,
+        login_button_title: str,
+        whitelist_urls: List[str],
+        custom_username_label: str,
+        custom_password_label: str,
+        custom_sender_message: str,
+        custom_verification_message: str,
+        custom_registration_message: str,
+        custom_pwd_reset_message: str,
+        auth_sources: list,
+        facebook_wifi_configure_url: str,
+        facebook_wifi_gateway_id: str,
+        redirect_url: str,
+        auth_failure_message: str,
+        days: int,
+        hours: int,
+        minutes: int,
+        mac_caching_enabled: bool,
+        is_shared: bool,
+        simultaneous_login_limit: int,
+        daily_usage_limit: str,
+        by_hours: int,
+        by_minutes: int,
+        data_type: str,
+        data: int,
+        background_color: str,
+        button_color: str,
+        header_fill_color: str,
+        page_font_color: str,
+        logo_name: str,
+        logo: str,
+        background_image_name: str,
+        background_image: str,
+        max_columns: int,
+        page_title: str,
+        welcome_text: str,
+        terms_condition: str,
+        display_terms_checkbox: bool,
+        display_term_options: str,
+        ad_url: str,
+        login_image_name: str,
+        ad_image: str,
+        is_config_associated: bool,
+        capture_url: str,
+        override_common_name: str,
+        override_common_name_enabled: bool,
+    ) -> Response:
         """Create a new guest portal profile.
 
         Args:
@@ -230,7 +270,10 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def guest_preview_portal(self, portal_id: str) -> Response:
+    async def guest_preview_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
         """Get preview url of guest portal profile.
 
         Args:
@@ -243,7 +286,10 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def guest_get_portal(self, portal_id: str) -> Response:
+    async def guest_get_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
         """Get guest portal profile.
 
         Args:
@@ -256,33 +302,69 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def guest_update_portal(self, portal_id: str, name: str, auth_type: str,
-                                  username_password_enabled: bool, registration_enabled: bool,
-                                  verify_registration: bool, bypass_cna_policy: bool,
-                                  cna_policy: str, register_accept_email: bool,
-                                  register_accept_phone: bool, free_wifi_duration: int,
-                                  self_reg_account_unlimited: bool,
-                                  self_reg_account_expire_days: int,
-                                  self_reg_account_expire_hours: int,
-                                  self_reg_account_expire_minutes: int, login_button_title: str,
-                                  whitelist_urls: List[str], custom_username_label: str,
-                                  custom_password_label: str, custom_sender_message: str,
-                                  custom_verification_message: str,
-                                  custom_registration_message: str, custom_pwd_reset_message: str,
-                                  auth_sources: list, facebook_wifi_configure_url: str,
-                                  facebook_wifi_gateway_id: str, redirect_url: str,
-                                  auth_failure_message: str, days: int, hours: int, minutes: int,
-                                  mac_caching_enabled: bool, is_shared: bool,
-                                  simultaneous_login_limit: int, daily_usage_limit: str,
-                                  by_hours: int, by_minutes: int, data_type: str, data: int,
-                                  background_color: str, button_color: str,
-                                  header_fill_color: str, page_font_color: str, logo_name: str,
-                                  logo: str, background_image_name: str, background_image: str,
-                                  max_columns: int, page_title: str, welcome_text: str,
-                                  terms_condition: str, display_terms_checkbox: bool,
-                                  display_term_options: str, ad_url: str, login_image_name: str,
-                                  ad_image: str, is_config_associated: bool, capture_url: str,
-                                  override_common_name: str, override_common_name_enabled: bool) -> Response:
+    async def guest_update_portal(
+        self,
+        portal_id: str,
+        name: str,
+        auth_type: str,
+        username_password_enabled: bool,
+        registration_enabled: bool,
+        verify_registration: bool,
+        bypass_cna_policy: bool,
+        cna_policy: str,
+        register_accept_email: bool,
+        register_accept_phone: bool,
+        free_wifi_duration: int,
+        self_reg_account_unlimited: bool,
+        self_reg_account_expire_days: int,
+        self_reg_account_expire_hours: int,
+        self_reg_account_expire_minutes: int,
+        login_button_title: str,
+        whitelist_urls: List[str],
+        custom_username_label: str,
+        custom_password_label: str,
+        custom_sender_message: str,
+        custom_verification_message: str,
+        custom_registration_message: str,
+        custom_pwd_reset_message: str,
+        auth_sources: list,
+        facebook_wifi_configure_url: str,
+        facebook_wifi_gateway_id: str,
+        redirect_url: str,
+        auth_failure_message: str,
+        days: int,
+        hours: int,
+        minutes: int,
+        mac_caching_enabled: bool,
+        is_shared: bool,
+        simultaneous_login_limit: int,
+        daily_usage_limit: str,
+        by_hours: int,
+        by_minutes: int,
+        data_type: str,
+        data: int,
+        background_color: str,
+        button_color: str,
+        header_fill_color: str,
+        page_font_color: str,
+        logo_name: str,
+        logo: str,
+        background_image_name: str,
+        background_image: str,
+        max_columns: int,
+        page_title: str,
+        welcome_text: str,
+        terms_condition: str,
+        display_terms_checkbox: bool,
+        display_term_options: str,
+        ad_url: str,
+        login_image_name: str,
+        ad_image: str,
+        is_config_associated: bool,
+        capture_url: str,
+        override_common_name: str,
+        override_common_name_enabled: bool,
+    ) -> Response:
         """Update guest portal profile.
 
         Args:
@@ -441,7 +523,10 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def guest_delete_portal(self, portal_id: str) -> Response:
+    async def guest_delete_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
         """Delete guest portal profile.
 
         Args:
@@ -454,8 +539,15 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def guest_get_visitors(self, portal_id: str, sort: str = '+name', filter_by: str = None,
-                                 filter_value: str = None, offset: int = 0, limit: int = 100) -> Response:
+    async def guest_get_visitors(
+        self,
+        portal_id: str,
+        sort: str = '+name',
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """Get all visitors created against a portal.
 
         Args:
@@ -480,12 +572,26 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def guest_create_visitor(self, portal_id: str, name: str, id: str, company_name: str,
-                                   phone: str, email: str, is_enabled: bool,
-                                   valid_till_no_limit: bool, valid_till_days: int,
-                                   valid_till_hours: int, valid_till_minutes: int, notify: bool,
-                                   notify_to: str, password: str, status: bool, created_at: str,
-                                   expire_at: str) -> Response:
+    async def guest_create_visitor(
+        self,
+        portal_id: str,
+        name: str,
+        id: str,
+        company_name: str,
+        phone: str,
+        email: str,
+        is_enabled: bool,
+        valid_till_no_limit: bool,
+        valid_till_days: int,
+        valid_till_hours: int,
+        valid_till_minutes: int,
+        notify: bool,
+        notify_to: str,
+        password: str,
+        status: bool,
+        created_at: str,
+        expire_at: str,
+    ) -> Response:
         """Create a new guest visitor of a portal.
 
         Args:
@@ -538,7 +644,11 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def guest_get_visitor(self, portal_id: str, visitor_id: str) -> Response:
+    async def guest_get_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+    ) -> Response:
         """Get guest visitor account.
 
         Args:
@@ -552,12 +662,27 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def guest_update_visitor(self, portal_id: str, visitor_id: str, name: str, id: str,
-                                   company_name: str, phone: str, email: str, is_enabled: bool,
-                                   valid_till_no_limit: bool, valid_till_days: int,
-                                   valid_till_hours: int, valid_till_minutes: int, notify: bool,
-                                   notify_to: str, password: str, status: bool, created_at: str,
-                                   expire_at: str) -> Response:
+    async def guest_update_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+        name: str,
+        id: str,
+        company_name: str,
+        phone: str,
+        email: str,
+        is_enabled: bool,
+        valid_till_no_limit: bool,
+        valid_till_days: int,
+        valid_till_hours: int,
+        valid_till_minutes: int,
+        notify: bool,
+        notify_to: str,
+        password: str,
+        status: bool,
+        created_at: str,
+        expire_at: str,
+    ) -> Response:
         """Update guest visitor account.
 
         Args:
@@ -611,7 +736,11 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def guest_delete_visitor(self, portal_id: str, visitor_id: str) -> Response:
+    async def guest_delete_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+    ) -> Response:
         """Delete guest visitor account.
 
         Args:
@@ -625,10 +754,17 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def guest_get_sessions(self, essid_name: str, portal_id: str,
-                                 sort: str = '+account_name', ssid_name: str = None,
-                                 filter_by: str = None, filter_value: str = None, offset: int = 0,
-                                 limit: int = 100) -> Response:
+    async def guest_get_sessions(
+        self,
+        essid_name: str,
+        portal_id: str,
+        sort: str = '+account_name',
+        ssid_name: str = None,
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """Get all sessions of a ssid.
 
         Args:
@@ -658,7 +794,9 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def guest_get_wlans(self) -> Response:
+    async def guest_get_wlans(
+        self,
+    ) -> Response:
         """Get all guest wlans.
 
         Returns:
@@ -668,7 +806,9 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def guest_get_enabled(self) -> Response:
+    async def guest_get_enabled(
+        self,
+    ) -> Response:
         """Check if guest is enabled for current user.
 
         Returns:
@@ -678,7 +818,9 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def guest_get_re_provision(self) -> Response:
+    async def guest_get_re_provision(
+        self,
+    ) -> Response:
         """Provision cloud guest for current customer.
 
         Returns:
@@ -688,7 +830,11 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
-    async def guest_wifi4eu_status(self, network_id: str, lang_code: str) -> Response:
+    async def guest_wifi4eu_status(
+        self,
+        network_id: str,
+        lang_code: str,
+    ) -> Response:
         """WiFi4EU Status.
 
         Args:
@@ -705,3 +851,26 @@ class AllCalls(CentralApi):
         }
 
         return await self.post(url, params=params)
+
+    async def guest_get_statistics(
+        self,
+        days: int,
+        ssid: str,
+    ) -> Response:
+        """Get summary statistics.
+
+        Args:
+            days (int): Num of days for which session data is required  Valid Values: 1, 7, 28
+            ssid (str): A comma separated list of SSIDs for which session data is required
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/summary"
+
+        params = {
+            'days': days,
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)

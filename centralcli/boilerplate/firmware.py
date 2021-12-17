@@ -24,8 +24,12 @@ class AllCalls(CentralApi):
     def __init__(self):
         super().__init__()
 
-    async def firmware_get_swarms_details(self, group: str = None, offset: int = 0,
-                                          limit: int = 100) -> Response:
+    async def firmware_get_swarms_details(
+        self,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """List Firmware Details of Swarms.
 
         Args:
@@ -46,7 +50,10 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_get_swarm_details(self, swarm_id: str) -> Response:
+    async def firmware_get_swarm_details(
+        self,
+        swarm_id: str,
+    ) -> Response:
         """Firmware Details of Swarm.
 
         Args:
@@ -59,8 +66,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def firmware_get_devices_details(self, device_type: str, group: str = None,
-                                           offset: int = 0, limit: int = 100) -> Response:
+    async def firmware_get_devices_details(
+        self,
+        device_type: str,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """List Firmware Details of Devices.
 
         Args:
@@ -80,7 +92,10 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_get_device_details(self, serial: str) -> Response:
+    async def firmware_get_device_details(
+        self,
+        serial: str,
+    ) -> Response:
         """Firmware Details of Device.
 
         Args:
@@ -93,11 +108,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def firmware_get_version_list(self, device_type: str = None, swarm_id: str = None,
-                                        serial: str = None) -> Response:
+    async def firmware_get_version_list(
+        self,
+        device_type: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+    ) -> Response:
         """List Firmware Version.
-
-        One of device_type, swarm_id, or serial is required.
 
         Args:
             device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
@@ -117,7 +134,11 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_is_image_available(self, device_type: str, firmware_version: str) -> Response:
+    async def firmware_is_image_available(
+        self,
+        device_type: str,
+        firmware_version: str,
+    ) -> Response:
         """Firmware Version.
 
         Args:
@@ -135,7 +156,11 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_get_status(self, swarm_id: str = None, serial: str = None) -> Response:
+    async def firmware_get_status(
+        self,
+        swarm_id: str = None,
+        serial: str = None,
+    ) -> Response:
         """Firmware Status.
 
         Args:
@@ -150,27 +175,34 @@ class AllCalls(CentralApi):
         return await self.get(url)
 
     async def firmware_upgrade_firmware(
-        self, scheduled_at: int = None,
+        self,
+        firmware_scheduled_at: int = None,
         swarm_id: str = None,
         serial: str = None,
         group: str = None,
-        device_type: Literal["IAP", "MAS", "HP", "CONTROLLER"] = None,
+        device_type: str = None,
         firmware_version: str = None,
         reboot: bool = False,
-        model: str = None
+        model: str = None,
     ) -> Response:
-        """Initiate firmware upgrade on device(s).
+        """Firmware Upgrade.
 
         Args:
-            scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
-            swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
-            serial (str, optional): Upgrade a specific device by serial. Defaults to None.
-            group (str, optional): Upgrade devices belonging to group. Defaults to None.
-            device_type (str["IAP"|"MAS"|"HP"|"CONTROLLER"]): Type of device to upgrade. Defaults to None.
-            firmware_version (str, optional): Version to upgrade to. Defaults to None(recommended version).
-            reboot (bool, optional): Automatically reboot device after firmware download. Defaults to False.
-            model (str, optional): To initiate upgrade at group level for specific model family. Applicable
-                only for Aruba switches. Defaults to None.
+            firmware_scheduled_at (int): Firmware upgrade will be scheduled at,
+                firmware_scheduled_at - current time. firmware_scheduled_at is epoch in seconds and
+                default value is current time
+            swarm_id (str): Swarm ID
+            serial (str): Serial of device
+            group (str): Specify Group Name to initiate upgrade  for whole group.
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): Specify firmware version to which you want device to upgrade. If
+                you do not specify this field then firmware upgrade initiated with recommended
+                firmware version
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            model (str): To initiate upgrade at group level for specific model family. Applicable
+                only for Aruba switches.
 
         Returns:
             Response: CentralAPI Response object
@@ -178,7 +210,7 @@ class AllCalls(CentralApi):
         url = "/firmware/v1/upgrade"
 
         json_data = {
-            'firmware_scheduled_at': scheduled_at,
+            'firmware_scheduled_at': firmware_scheduled_at,
             'swarm_id': swarm_id,
             'serial': serial,
             'group': group,
@@ -190,8 +222,13 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_cancel_upgrade(self, swarm_id: str, serial: str, device_type: str,
-                                      group: str) -> Response:
+    async def firmware_cancel_upgrade(
+        self,
+        swarm_id: str,
+        serial: str,
+        device_type: str,
+        group: str,
+    ) -> Response:
         """Cancel Scheduled Upgrade.
 
         Args:
@@ -214,10 +251,15 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_set_compliance_customer(self, device_type: str, group: str,
-                                               firmware_compliance_version: str, reboot: bool,
-                                               allow_unsupported_version: bool,
-                                               compliance_scheduled_at: int) -> Response:
+    async def firmware_set_compliance_customer(
+        self,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+    ) -> Response:
         """Set Firmware Compliance Version Customer.
 
         Args:
@@ -249,9 +291,14 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_set_compliance(self, device_type: str, group: str,
-                                      firmware_compliance_version: str, reboot: bool,
-                                      allow_unsupported_version: bool) -> Response:
+    async def firmware_set_compliance(
+        self,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+    ) -> Response:
         """Set Firmware Compliance Version.
 
         Args:
@@ -279,7 +326,11 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_get_compliance(self, device_type: str, group: str = None) -> Response:
+    async def firmware_get_compliance(
+        self,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
         """Get Firmware Compliance Version.
 
         Args:
@@ -297,7 +348,11 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_delete_compliance(self, device_type: str, group: str = None) -> Response:
+    async def firmware_delete_compliance(
+        self,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
         """Clear Firmware Compliance Version.
 
         Args:
@@ -315,9 +370,15 @@ class AllCalls(CentralApi):
 
         return await self.delete(url, params=params)
 
-    async def firmware_upgrade_msp(self, firmware_scheduled_at: int, device_type: str,
-                                   firmware_version: str, reboot: bool, exclude_groups: str,
-                                   exclude_customers: str) -> Response:
+    async def firmware_upgrade_msp(
+        self,
+        firmware_scheduled_at: int,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        exclude_groups: str,
+        exclude_customers: str,
+    ) -> Response:
         """Firmware Upgrade at MSP Level.
 
         Args:
@@ -352,9 +413,15 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_upgrade_customer(self, customer_id: str, firmware_scheduled_at: int,
-                                        device_type: str, firmware_version: str, reboot: bool,
-                                        exclude_groups: str) -> Response:
+    async def firmware_upgrade_customer(
+        self,
+        customer_id: str,
+        firmware_scheduled_at: int,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        exclude_groups: str,
+    ) -> Response:
         """Firmware Upgrade at Customer Level.
 
         Args:
@@ -387,53 +454,11 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_cancel_upgrade_msp(self, device_type: str, exclude_groups: str,
-                                          exclude_customers: str) -> Response:
-        """Cancel Scheduled Upgrade at MSP Level.
-
-        Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            exclude_groups (str): List of groups to be excluded while canceling scheduled upgrade,
-                e.g. ["TestGroup1", "TestGroup2"]
-            exclude_customers (str): List of customer IDs to be excluded while canceling scheduled
-                upgrade, e.g. ["111111", "111112"]
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/firmware/v1/msp/upgrade/cancel"
-
-        json_data = {
-            'device_type': device_type,
-            'exclude_groups': exclude_groups,
-            'exclude_customers': exclude_customers
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def firmware_cancel_upgrade_customer(self, customer_id: str, device_type: str,
-                                               exclude_groups: str) -> Response:
-        """Cancel Scheduled Upgrade at Customer Level.
-
-        Args:
-            customer_id (str): Customer id of the customer
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            exclude_groups (str): List of groups to be excluded while canceling scheduled upgrade,
-                e.g. ["TestGroup1", "TestGroup2"]
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/firmware/v1/msp/upgrade/customers/{customer_id}/cancel"
-
-        json_data = {
-            'device_type': device_type,
-            'exclude_groups': exclude_groups
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def firmware_cancel_upgrade_msp_v2(self, device_type: str, exclude_customers: str) -> Response:
+    async def firmware_cancel_upgrade_msp_v2(
+        self,
+        device_type: str,
+        exclude_customers: str,
+    ) -> Response:
         """Cancel Scheduled Upgrade at MSP Level.
 
         Args:
@@ -453,7 +478,11 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_cancel_upgrade_customer_v2(self, customer_id: str, device_type: str) -> Response:
+    async def firmware_cancel_upgrade_customer_v2(
+        self,
+        customer_id: str,
+        device_type: str,
+    ) -> Response:
         """Cancel Scheduled Upgrade at Customer Level.
 
         Args:
@@ -471,12 +500,16 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_get_model_families_list(self, serial: str = None, device_type: str = None) -> Response:
-        """List Model Family. API is applicable only for Aruba Switches.
+    async def firmware_get_model_families_list(
+        self,
+        serial: str = None,
+        device_type: str = None,
+    ) -> Response:
+        """List Model Family.
 
         Args:
             serial (str, optional): Serial of device
-            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER" # TODO only HP worked (ArubaOS-SW)
+            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
 
         Returns:
             Response: CentralAPI Response object
@@ -484,16 +517,20 @@ class AllCalls(CentralApi):
         url = "/firmware/v1/models"
 
         params = {
-            'serial': serial,
             'device_type': device_type
         }
 
         return await self.get(url, params=params)
 
-    async def firmware_set_compliance_msp(self, device_type: str,
-                                          firmware_compliance_version: str, reboot: bool,
-                                          allow_unsupported_version: bool,
-                                          compliance_scheduled_at: int, tenants: str) -> Response:
+    async def firmware_set_compliance_msp(
+        self,
+        device_type: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+        tenants: str,
+    ) -> Response:
         """Set Firmware Compliance Version for MSP customer.
 
         Args:
@@ -525,7 +562,10 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_get_compliance_msp(self, device_type: str) -> Response:
+    async def firmware_get_compliance_msp(
+        self,
+        device_type: str,
+    ) -> Response:
         """Get Firmware Compliance Version for MSP Customer.
 
         Args:
@@ -538,7 +578,11 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def firmware_delete_compliance_msp(self, device_type: str, tenants: str) -> Response:
+    async def firmware_delete_compliance_msp(
+        self,
+        device_type: str,
+        tenants: str,
+    ) -> Response:
         """Clear Firmware Compliance Version for MSP Customer.
 
         Args:
@@ -558,10 +602,16 @@ class AllCalls(CentralApi):
 
         return await self.delete(url, json_data=json_data)
 
-    async def firmware_set_compliance_msp_tenant(self, customer_id: str, device_type: str,
-                                                 group: str, firmware_compliance_version: str,
-                                                 reboot: bool, allow_unsupported_version: bool,
-                                                 compliance_scheduled_at: int) -> Response:
+    async def firmware_set_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+    ) -> Response:
         """Set Firmware Compliance Version for Tenant.
 
         Args:
@@ -594,8 +644,12 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def firmware_get_compliance_msp_tenant(self, customer_id: str, device_type: str,
-                                                 group: str = None) -> Response:
+    async def firmware_get_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
         """Get Firmware Compliance Version for Tenant.
 
         Args:
@@ -614,8 +668,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def firmware_delete_compliance_msp_tenant(self, customer_id: str, device_type: str,
-                                                    group: str = None) -> Response:
+    async def firmware_delete_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
         """Clear Firmware Compliance Version for Tenant.
 
         Args:
@@ -634,7 +692,11 @@ class AllCalls(CentralApi):
 
         return await self.delete(url, params=params)
 
-    async def firmware_get_tenants_details(self, device_type: str, tenant_id: str) -> Response:
+    async def firmware_get_tenants_details(
+        self,
+        device_type: str,
+        tenant_id: str,
+    ) -> Response:
         """List Tenants of an MSP customer.
 
         Args:
@@ -651,19 +713,3 @@ class AllCalls(CentralApi):
         }
 
         return await self.get(url, params=params)
-
-
-if __name__ == "__main__":
-    central = AllCalls()
-    # r = asyncio.run(central.firmware_get_version_list(device_type="HP"))  # works
-    # r = asyncio.run(central.firmware_get_version_list(device_type="CX"))  # invalid value for device type
-    # r = asyncio.run(central.firmware_get_version_list(device_type="SWITCH"))  # invalid value for device type
-    # r = asyncio.run(central.firmware_get_version_list(device_type="HPCX"))  # invalid value for device type
-    # r = asyncio.run(central.firmware_get_device_details(serial="SG03KW806T"))  # works and it's CX dunno what device_type
-    r = asyncio.run(central.firmware_get_version_list(serial="SG03KW806T"))  # works and it's CX dunno what device_type
-    print(r.status)
-    try:
-        print((asyncio.run(r._response.text())))
-    except Exception as e:
-        print(e)
-        print(r.output)
