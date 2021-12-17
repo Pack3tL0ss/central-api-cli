@@ -1186,9 +1186,87 @@ class CentralApi(Session):
     async def get_site_details(self, site_id):
         return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
 
-    async def get_events_by_group(self, group: str) -> Response:  # VERIFIED
-        url = "/monitoring/v1/events"
-        params = {"group": group}
+    # TODO make command this shows events from devices (User ack rec from DHCP server, EAP response for client...)
+    async def get_events(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        from_ts: int = None,
+        to_ts: int = None,
+        macaddr: str = None,
+        bssid: str = None,
+        device_mac: str = None,
+        hostname: str = None,
+        device_type: str = None,
+        sort: str = '-timestamp',
+        site: str = None,
+        serial: str = None,
+        level: str = None,
+        event_description: str = None,
+        event_type: str = None,
+        fields: str = None,
+        calculate_total: bool = None,
+        offset: int = 0,
+        limit: int = 1000,
+    ) -> Response:
+        """List Events. v2
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            from_ts (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_ts (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            macaddr (str, optional): Filter by client MAC address
+            bssid (str, optional): Filter by bssid
+            device_mac (str, optional): Filter by device_mac
+            hostname (str, optional): Filter by hostname
+            device_type (str, optional): Filter by device type.
+                Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
+            sort (str, optional): Sort by desc/asc using -timestamp/+timestamp. Default is
+                '-timestamp'  Valid Values: -timestamp, +timestamp
+            site (str, optional): Filter by site name
+            serial (str, optional): Filter by switch serial number
+            level (str, optional): Filter by event level
+            event_description (str, optional): Filter by event description
+            event_type (str, optional): Filter by event type
+            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
+                number, level
+            calculate_total (bool, optional): Whether to calculate total events
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/events"
+
+        params = {
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "from_tinmestamp": from_ts,
+            "to_tinmestamp": to_ts,
+            'macaddr': macaddr,
+            'bssid': bssid,
+            'device_mac': device_mac,
+            'hostname': hostname,
+            'device_type': device_type,
+            'sort': sort,
+            'site': site,
+            'serial': serial,
+            'level': level,
+            'event_description': event_description,
+            'event_type': event_type,
+            'fields': fields,
+            'calculate_total': calculate_total,
+            "offset": offset,
+            "limit": limit,
+        }
+
         return await self.get(url, params=params)
 
     async def get_all_webhooks(self) -> Response:
@@ -3151,6 +3229,29 @@ class CentralApi(Session):
         url = "/central/v1/notifications"
 
         return await self.post(url)
+
+    async def get_ap_config(
+        self,
+        group_swarmid: str,
+        version: str = None,
+    ) -> Response:
+        """Get AP configuration.
+
+        Args:
+            group_swarmid (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            version (str, optional): Version of AP.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_cli/{group_swarmid}"
+
+        params = {
+            'version': version
+        }
+
+        return await self.get(url, params=params)
 
     async def replace_ap_config(
         self,
