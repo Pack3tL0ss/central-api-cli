@@ -536,22 +536,23 @@ def method_test(method: str = typer.Argument(...),
         raise typer.Exit(1)
 
     kwargs = (
-        "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", ",").split("~")
+        "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
     )
-    args = [k if not k.isdigit() else int(k) for k in kwargs if "=" not in k]
+    args = [k if not k.isdigit() else int(k) for k in kwargs if k and "=" not in k]
     kwargs = [k.split("=") for k in kwargs if "=" in k]
     kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
     for k, v in kwargs.items():
-        if v.startswith("[") and v.endswith("]"):
-            kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
-        if v.lower() in ["true", "false"]:
-            kwargs[k] = True if v.lower() == "true" else False
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
+            if v.lower() in ["true", "false"]:
+                kwargs[k] = True if v.lower() == "true" else False
 
     from rich.console import Console
     c = Console(file=outfile)
 
     req = (
-        f"central.{method}({', '.join(str(a) for a in args)}, "
+        f"central.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
         f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
     )
 
@@ -560,7 +561,7 @@ def method_test(method: str = typer.Argument(...),
         c.log(f"{resp.output}.  LAME!  Converting to str!")
         args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
         kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
-    resp = central.request(getattr(central, method), *args, **kwargs)
+        resp = central.request(getattr(central, method), *args, **kwargs)
 
     attrs = {
         k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
