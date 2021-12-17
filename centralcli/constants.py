@@ -46,6 +46,8 @@ STRIP_KEYS = [
     "suspect_aps",
     "interfering_aps",
     "neighbor_aps",
+    "events",
+    "notifications",
 ]
 
 
@@ -171,7 +173,7 @@ class ArgToWhat:
         """Mapping object to map supported variations of input for 'what' argument
 
         Central uses different variations depending on the method (age of method)
-        This CLI uses this standard set (whatever is newer of more prevelent) in
+        This CLI uses this standard set (whatever is newer of more prevalent) in
         central.  If the API method uses a different one, we'll convert from our
         std set in the method invoking the API call.
         """
@@ -189,7 +191,8 @@ class ArgToWhat:
         self.devices = self.device = "devices"
         self.controllers = self.controller = "controllers"
         self.clients = self.client = "clients"
-        self.logs = self.log = self.event = self.events = "logs"
+        # self.logs = self.log = self.event = self.events = "logs"
+        self.logs = self.log = "logs"
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
         self.vlans = self.vlan = "vlans"
         self.wlans = self.wlan = self.ssids = self.ssid = "wlans"

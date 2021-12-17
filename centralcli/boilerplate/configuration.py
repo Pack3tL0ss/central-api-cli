@@ -46,7 +46,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v2/groups"
 
-        params = {"offset": offset, "limit": limit}
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -70,7 +73,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v2/groups"
 
-        json_data = {"group": group, "Wired": Wired, "Wireless": Wireless}
+        json_data = {
+            'group': group,
+            'Wired': Wired,
+            'Wireless': Wireless
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -94,7 +101,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v3/groups"
 
-        json_data = {"group": group, "Wired": Wired, "Wireless": Wireless}
+        json_data = {
+            'group': group,
+            'Wired': Wired,
+            'Wireless': Wireless
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -116,7 +127,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v2/groups/clone"
 
-        json_data = {"group": group, "clone_group": clone_group, "upgrade_architecture": upgrade_architecture}
+        json_data = {
+            'group': group,
+            'clone_group': clone_group,
+            'upgrade_architecture': upgrade_architecture
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -135,7 +150,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v2/groups/template_info"
 
-        params = {"groups": groups}
+        params = {
+            'groups': groups
+        }
 
         return await self.get(url, params=params)
 
@@ -154,7 +171,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/groups/properties"
 
-        params = {"groups": groups}
+        params = {
+            'groups': groups
+        }
 
         return await self.get(url, params=params)
 
@@ -210,14 +229,14 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/groups/{group}/properties"
 
         json_data = {
-            "AllowedDevTypes": AllowedDevTypes,
-            "Architecture": Architecture,
-            "ApNetworkRole": ApNetworkRole,
-            "GwNetworkRole": GwNetworkRole,
-            "AllowedSwitchTypes": AllowedSwitchTypes,
-            "MonitorOnly": MonitorOnly,
-            "Wired": Wired,
-            "Wireless": Wireless,
+            'AllowedDevTypes': AllowedDevTypes,
+            'Architecture': Architecture,
+            'ApNetworkRole': ApNetworkRole,
+            'GwNetworkRole': GwNetworkRole,
+            'AllowedSwitchTypes': AllowedSwitchTypes,
+            'MonitorOnly': MonitorOnly,
+            'Wired': Wired,
+            'Wireless': Wireless
         }
 
         return await self.patch(url, json_data=json_data)
@@ -238,7 +257,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/name"
 
-        json_data = {"new_group": new_group}
+        json_data = {
+            'new_group': new_group
+        }
 
         return await self.patch(url, json_data=json_data)
 
@@ -268,7 +289,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/groups/default_group"
 
-        json_data = {"group": group}
+        json_data = {
+            'group': group
+        }
 
         return await self.patch(url, json_data=json_data)
 
@@ -325,13 +348,13 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/groups/{group}/templates"
 
         params = {
-            "template": template,
-            "device_type": device_type,
-            "version": version,
-            "model": model,
-            "q": q,
-            "offset": offset,
-            "limit": limit,
+            'template': template,
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'q': q,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -370,7 +393,12 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/groups/{group}/templates"
         template = template if isinstance(template, Path) else Path(str(template))
 
-        params = {"name": name, "device_type": device_type, "version": version, "model": model}
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
 
         return await self.post(url, params=params)
 
@@ -408,7 +436,12 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/groups/{group}/templates"
         template = template if isinstance(template, Path) else Path(str(template))
 
-        params = {"name": name, "device_type": device_type, "version": version, "model": model}
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
 
         return await self.patch(url, params=params)
 
@@ -467,7 +500,10 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/snapshot/{group}"
 
-        json_data = {"name": name, "do_not_delete": do_not_delete}
+        json_data = {
+            'name': name,
+            'do_not_delete': do_not_delete
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -499,10 +535,10 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/groups/snapshot/backups"
 
         json_data = {
-            "backup_name": backup_name,
-            "do_not_delete": do_not_delete,
-            "include_groups": include_groups,
-            "exclude_groups": exclude_groups,
+            'backup_name': backup_name,
+            'do_not_delete': do_not_delete,
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups
         }
 
         return await self.post(url, json_data=json_data)
@@ -539,7 +575,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots"
 
-        json_data = {"data": data}
+        json_data = {
+            'data': data
+        }
 
         return await self.patch(url, json_data=json_data)
 
@@ -632,7 +670,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/restore"
 
-        params = {"device_type": device_type}
+        params = {
+            'device_type': device_type
+        }
 
         return await self.post(url, params=params)
 
@@ -652,7 +692,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/devices/move"
 
-        json_data = {"group": group, "serials": serials}
+        json_data = {
+            'group': group,
+            'serials': serials
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -692,7 +735,11 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
 
-        json_data = {"total": total, "_sys_serial": _sys_serial, "_sys_lan_mac": _sys_lan_mac}
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -716,7 +763,11 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
 
-        json_data = {"total": total, "_sys_serial": _sys_serial, "_sys_lan_mac": _sys_lan_mac}
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
 
         return await self.patch(url, json_data=json_data)
 
@@ -740,7 +791,11 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
 
-        json_data = {"total": total, "_sys_serial": _sys_serial, "_sys_lan_mac": _sys_lan_mac}
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
 
         return await self.put(url, json_data=json_data)
 
@@ -812,7 +867,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/config_details"
 
-        params = {"details": str(details)}
+        params = {
+            'details': details
+        }
 
         return await self.get(url, params=params)
 
@@ -830,7 +887,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/devices/template"
 
-        params = {"device_serials": device_serials}
+        params = {
+            'device_serials': device_serials
+        }
 
         return await self.get(url, params=params)
 
@@ -863,12 +922,12 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/devices/groups/template"
 
         params = {
-            "device_type": device_type,
-            "include_groups": include_groups,
-            "exclude_groups": exclude_groups,
-            "all_groups": all_groups,
-            "offset": offset,
-            "limit": limit,
+            'device_type': device_type,
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups,
+            'all_groups': all_groups,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -899,13 +958,18 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{template_hash}/template"
 
-        params = {"exclude_hash": exclude_hash, "device_type": device_type, "offset": offset, "limit": limit}
+        params = {
+            'exclude_hash': exclude_hash,
+            'device_type': device_type,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
     async def configuration_get_all_devices_template_variables(
         self,
-        format: str = "JSON",
+        format: str = 'JSON',
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
@@ -922,14 +986,18 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/devices/template_variables"
 
-        params = {"format": format, "offset": offset, "limit": limit}
+        params = {
+            'format': format,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
     async def configuration_create_all_devices_template_variables(
         self,
         variables: Union[Path, str],
-        format: str = "JSON",
+        format: str = 'JSON',
     ) -> Response:
         """Create template variables for all devices.
 
@@ -946,14 +1014,16 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/devices/template_variables"
         variables = variables if isinstance(variables, Path) else Path(str(variables))
 
-        params = {"format": format}
+        params = {
+            'format': format
+        }
 
         return await self.post(url, params=params)
 
     async def configuration_replace_all_devices_template_variables(
         self,
         variables: Union[Path, str],
-        format: str = "JSON",
+        format: str = 'JSON',
     ) -> Response:
         """Replace all or delete some of the template variables for all devices.
 
@@ -970,7 +1040,9 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/devices/template_variables"
         variables = variables if isinstance(variables, Path) else Path(str(variables))
 
-        params = {"format": format}
+        params = {
+            'format': format
+        }
 
         return await self.put(url, params=params)
 
@@ -1030,7 +1102,7 @@ class AllCalls(CentralApi):
         self,
         q: str = None,
         offset: int = 0,
-        limit: int = 20,
+        limit: int = 100,
     ) -> Response:
         """Get Certificates details uploaded.
 
@@ -1039,14 +1111,18 @@ class AllCalls(CentralApi):
                 sha1_hash
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 20.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/configuration/v1/certificates"
 
-        params = {"q": q, "offset": offset, "limit": limit}
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1056,7 +1132,7 @@ class AllCalls(CentralApi):
         cert_type: str,
         cert_format: str,
         passphrase: str,
-        cert_data: str = None,
+        cert_data: str,
     ) -> Response:
         """Upload a certificate.
 
@@ -1071,17 +1147,14 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO need to take file as input and prevent stripping special chars
         url = "/configuration/v1/certificates"
-        for line in cert_data.split("\n"):
-            print(line)
 
         json_data = {
-            "cert_name": cert_name,
-            "cert_type": cert_type.upper(),
-            "cert_format": cert_format,
-            "passphrase": passphrase,
-            "cert_data": cert_data,
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
         }
 
         return await self.post(url, json_data=json_data)
@@ -1126,11 +1199,11 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/msp/certificate"
 
         json_data = {
-            "cert_name": cert_name,
-            "cert_type": cert_type,
-            "cert_format": cert_format,
-            "passphrase": passphrase,
-            "cert_data": cert_data,
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
         }
 
         return await self.put(url, json_data=json_data)
@@ -1152,7 +1225,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/cplogo"
 
-        params = {"offset": offset, "limit": limit}
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1172,7 +1248,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/cplogo"
 
-        json_data = {"cp_logo_filename": cp_logo_filename, "cp_logo_data": cp_logo_data}
+        json_data = {
+            'cp_logo_filename': cp_logo_filename,
+            'cp_logo_data': cp_logo_data
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1210,7 +1289,10 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
 
-        json_data = {"username": username, "password": password}
+        json_data = {
+            'username': username,
+            'password': password
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1243,7 +1325,13 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/msp/templates"
 
-        params = {"device_type": device_type, "version": version, "model": model, "offset": offset, "limit": limit}
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1326,7 +1414,11 @@ class AllCalls(CentralApi):
         url = "/configuration/v2/msp/templates"
         template = template if isinstance(template, Path) else Path(str(template))
 
-        params = {"device_type": device_type, "version": version, "model": model}
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
 
         return await self.put(url, params=params)
 
@@ -1361,7 +1453,13 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/customer/{cid}"
 
-        params = {"device_type": device_type, "version": version, "model": model, "offset": offset, "limit": limit}
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1450,7 +1548,11 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/msp/templates/customer/{cid}"
         template = template if isinstance(template, Path) else Path(str(template))
 
-        params = {"device_type": device_type, "version": version, "model": model}
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
 
         return await self.put(url, params=params)
 
@@ -1485,7 +1587,10 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/differences/{device_type}/{version}/{model}"
 
-        params = {"offset": offset, "limit": limit}
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1551,7 +1656,10 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v2/msp/templates/end_customers/{device_type}/{version}/{model}"
 
-        json_data = {"include_customers": include_customers, "exclude_customers": exclude_customers}
+        json_data = {
+            'include_customers': include_customers,
+            'exclude_customers': exclude_customers
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1590,7 +1698,10 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v2/msp/templates/end_customers/{cid}/{device_type}/{version}/{model}/groups"
 
-        json_data = {"include_groups": include_groups, "exclude_groups": exclude_groups}
+        json_data = {
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1620,7 +1731,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode"
 
-        json_data = {"config_mode": config_mode}
+        json_data = {
+            'config_mode': config_mode
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1644,7 +1757,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode/group"
 
-        params = {"q": q, "offset": offset, "limit": limit}
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1664,7 +1781,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode/group"
 
-        json_data = {"groups": groups, "config_mode": config_mode}
+        json_data = {
+            'groups': groups,
+            'config_mode': config_mode
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1688,7 +1808,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode/device"
 
-        params = {"group": group, "offset": offset, "limit": limit}
+        params = {
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1708,7 +1832,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode/device"
 
-        json_data = {"serials": serials, "config_mode": config_mode}
+        json_data = {
+            'serials': serials,
+            'config_mode': config_mode
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1727,7 +1854,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode/devices"
 
-        params = {"device_serials": device_serials}
+        params = {
+            'device_serials': device_serials
+        }
 
         return await self.get(url, params=params)
 
@@ -1757,7 +1886,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/variables_firewall/groups"
 
-        json_data = {"groups": groups}
+        json_data = {
+            'groups': groups
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1803,7 +1934,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/variables_firewall/variables"
 
-        json_data = {"variables": variables}
+        json_data = {
+            'variables': variables
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1840,7 +1973,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/country"
 
-        json_data = {"groups": groups, "country": country}
+        json_data = {
+            'groups': groups,
+            'country': country
+        }
 
         return await self.put(url, json_data=json_data)
 
@@ -1879,7 +2015,11 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/auto_commit_state/groups"
 
-        params = {"q": q, "offset": offset, "limit": limit}
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1899,7 +2039,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/auto_commit_state/groups"
 
-        json_data = {"groups": groups, "auto_commit_state": auto_commit_state}
+        json_data = {
+            'groups': groups,
+            'auto_commit_state': auto_commit_state
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1918,7 +2061,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/auto_commit_state/devices"
 
-        params = {"device_serials": device_serials}
+        params = {
+            'device_serials': device_serials
+        }
 
         return await self.get(url, params=params)
 
@@ -1938,7 +2083,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/auto_commit_state/devices"
 
-        json_data = {"serials": serials, "auto_commit_state": auto_commit_state}
+        json_data = {
+            'serials': serials,
+            'auto_commit_state': auto_commit_state
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1956,7 +2104,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/commit/groups"
 
-        json_data = {"groups": groups}
+        json_data = {
+            'groups': groups
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -1974,7 +2124,9 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/commit/devices"
 
-        json_data = {"serials": serials}
+        json_data = {
+            'serials': serials
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -2012,7 +2164,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/swarm/{device_id}/blacklisting"
 
-        json_data = {"blacklist": blacklist}
+        json_data = {
+            'blacklist': blacklist
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -2033,7 +2187,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/swarm/{device_id}/blacklisting"
 
-        json_data = {"blacklist": blacklist}
+        json_data = {
+            'blacklist': blacklist
+        }
 
         return await self.delete(url, json_data=json_data)
 
@@ -2104,190 +2260,6 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/wlan/{group_name_or_guid}/access_rule_services"
 
         return await self.get(url)
-
-    async def configuration_get_wlan(
-        self,
-        group_name_or_guid: str,
-        wlan_name: str,
-    ) -> Response:
-        """(Deprecated) Get the information of an existing WLAN.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/wlan/{group_name_or_guid}/{wlan_name}"
-
-        return await self.get(url)
-
-    async def configuration_create_wlan(
-        self,
-        group_name_or_guid: str,
-        wlan_name: str,
-        essid: str,
-        type: str,
-        wpa_passphrase: str,
-        wpa_passphrase_changed: bool,
-        is_locked: bool,
-        captive_profile_name: str,
-        bandwidth_limit_up: str,
-        bandwidth_limit_down: str,
-        bandwidth_limit_peruser_up: str,
-        bandwidth_limit_peruser_down: str,
-        access_rules: list,
-    ) -> Response:
-        """(Deprecated) Create a new WLAN.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN to create.                              Example:wlan_1.
-            essid (str): essid
-            type (str): type  Valid Values: employee, guest
-            wpa_passphrase (str): wpa_passphrase
-            wpa_passphrase_changed (bool): wpa_passphrase_changed
-            is_locked (bool): is_locked
-            captive_profile_name (str): captive_profile_name
-            bandwidth_limit_up (str): bandwidth_limit_up
-            bandwidth_limit_down (str): bandwidth_limit_down
-            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
-            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
-            access_rules (list): access_rules
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/wlan/{group_name_or_guid}/{wlan_name}"
-
-        json_data = {
-            "essid": essid,
-            "type": type,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def configuration_clean_up_and_update_wlan(
-        self,
-        group_name_or_guid: str,
-        wlan_name: str,
-        essid: str,
-        type: str,
-        wpa_passphrase: str,
-        wpa_passphrase_changed: bool,
-        is_locked: bool,
-        captive_profile_name: str,
-        bandwidth_limit_up: str,
-        bandwidth_limit_down: str,
-        bandwidth_limit_peruser_up: str,
-        bandwidth_limit_peruser_down: str,
-        access_rules: list,
-    ) -> Response:
-        """(Deprecated) Update an existing WLAN and clean up unsupported fields.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
-            essid (str): essid
-            type (str): type  Valid Values: employee, guest
-            wpa_passphrase (str): wpa_passphrase
-            wpa_passphrase_changed (bool): wpa_passphrase_changed
-            is_locked (bool): is_locked
-            captive_profile_name (str): captive_profile_name
-            bandwidth_limit_up (str): bandwidth_limit_up
-            bandwidth_limit_down (str): bandwidth_limit_down
-            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
-            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
-            access_rules (list): access_rules
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/wlan/{group_name_or_guid}/{wlan_name}"
-
-        json_data = {
-            "essid": essid,
-            "type": type,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
-        }
-
-        return await self.patch(url, json_data=json_data)
-
-    async def configuration_update_wlan(
-        self,
-        group_name_or_guid: str,
-        wlan_name: str,
-        essid: str,
-        type: str,
-        wpa_passphrase: str,
-        wpa_passphrase_changed: bool,
-        is_locked: bool,
-        captive_profile_name: str,
-        bandwidth_limit_up: str,
-        bandwidth_limit_down: str,
-        bandwidth_limit_peruser_up: str,
-        bandwidth_limit_peruser_down: str,
-        access_rules: list,
-    ) -> Response:
-        """(Deprecated) Update an existing WLAN.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
-            essid (str): essid
-            type (str): type  Valid Values: employee, guest
-            wpa_passphrase (str): wpa_passphrase
-            wpa_passphrase_changed (bool): wpa_passphrase_changed
-            is_locked (bool): is_locked
-            captive_profile_name (str): captive_profile_name
-            bandwidth_limit_up (str): bandwidth_limit_up
-            bandwidth_limit_down (str): bandwidth_limit_down
-            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
-            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
-            access_rules (list): access_rules
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/wlan/{group_name_or_guid}/{wlan_name}"
-
-        json_data = {
-            "essid": essid,
-            "type": type,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
-        }
-
-        return await self.put(url, json_data=json_data)
 
     async def configuration_delete_wlan(
         self,
@@ -2374,20 +2346,20 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
 
         json_data = {
-            "essid": essid,
-            "type": type,
-            "hide_ssid": hide_ssid,
-            "vlan": vlan,
-            "zone": zone,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
         }
 
         return await self.post(url, json_data=json_data)
@@ -2438,20 +2410,20 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
 
         json_data = {
-            "essid": essid,
-            "type": type,
-            "hide_ssid": hide_ssid,
-            "vlan": vlan,
-            "zone": zone,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
         }
 
         return await self.patch(url, json_data=json_data)
@@ -2502,25 +2474,25 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
 
         json_data = {
-            "essid": essid,
-            "type": type,
-            "hide_ssid": hide_ssid,
-            "vlan": vlan,
-            "zone": zone,
-            "wpa_passphrase": wpa_passphrase,
-            "wpa_passphrase_changed": wpa_passphrase_changed,
-            "is_locked": is_locked,
-            "captive_profile_name": captive_profile_name,
-            "bandwidth_limit_up": bandwidth_limit_up,
-            "bandwidth_limit_down": bandwidth_limit_down,
-            "bandwidth_limit_peruser_up": bandwidth_limit_peruser_up,
-            "bandwidth_limit_peruser_down": bandwidth_limit_peruser_down,
-            "access_rules": access_rules,
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def configuration_get_wlan_list_full(
+    async def configuration_get_full_wlan_list(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2537,7 +2509,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_wlan_template_full(
+    async def configuration_get_full_wlan_template(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2554,7 +2526,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_protocol_map_full(
+    async def configuration_get_full_wlan_protocol_map(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2571,7 +2543,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_access_rule_services_full(
+    async def configuration_get_full_wlan_access_rule_services(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2588,7 +2560,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_wlan_full(
+    async def configuration_get_wlan(
         self,
         group_name_or_guid: str,
         wlan_name: str,
@@ -2607,7 +2579,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_create_wlan_full(
+    async def configuration_create_wlan(
         self,
         group_name_or_guid: str,
         wlan_name: str,
@@ -2701,11 +2673,13 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid}/{wlan_name}"
 
-        json_data = {"value": value}
+        json_data = {
+            'value': value
+        }
 
         return await self.post(url, json_data=json_data)
 
-    async def configuration_update_wlan_full(
+    async def configuration_update_wlan(
         self,
         group_name_or_guid: str,
         wlan_name: str,
@@ -2844,11 +2818,13 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid}/{wlan_name}"
 
-        json_data = {"value": value}
+        json_data = {
+            'value': value
+        }
 
         return await self.put(url, json_data=json_data)
 
-    async def configuration_delete_wlan_full(
+    async def configuration_delete_full_wlan(
         self,
         group_name_or_guid: str,
         wlan_name: str,
@@ -2986,7 +2962,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid}/{hotspot_name}/{mode_name}"
 
-        json_data = {"value": value}
+        json_data = {
+            'value': value
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -3004,16 +2982,14 @@ class AllCalls(CentralApi):
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
             hotspot_name (str): Name of Hotspot selected.
                 Example:hotspot_1.
-            mode_name (str): Hotspot mode name. Example:HS2.
-            value (str): "hotspot": {
-                "name": "aruba-passpoint",
-                "mode": "HS2",
-                "enable": false,
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+            value (str): "hotspot": {                                                     "name":
+                "aruba-passpoint",                                                     "mode":
+                "HS2",                                                     "enable": false,
                 "comeback_mode": false,
                 "gas_comeback_delay": 0,
-                "release_number": 0,
-                "asra": false,
-                "internet": false,
+                "release_number": 0,                                                     "asra":
+                false,                                                     "internet": false,
                 "osen": false,
                 "query_response_length_limit": 127,
                 "access_network_type": "private",
@@ -3030,8 +3006,7 @@ class AllCalls(CentralApi):
                 "group_frame_block": false,
                 "p2p_dev_mgmt": false,
                 "p2p_cross_connect": false,
-                "osu_nai": "",
-                "osu_ssid": "",
+                "osu_nai": "",                                                     "osu_ssid": "",
                 "qos_map_range": "",
                 "qos_map_excp": "",
                 "anqp_nai_realm": "",
@@ -3045,15 +3020,16 @@ class AllCalls(CentralApi):
                 "h2qp_wan_metrics": "",
                 "h2qp_conn_cap": "",
                 "h2qp_oper_class": "",
-                "h2qp_osu_provider": ""
-            }
+                "h2qp_osu_provider": ""                                                   }
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid}/{hotspot_name}/{mode_name}"
 
-        json_data = {"value": value}
+        json_data = {
+            'value': value
+        }
 
         return await self.put(url, json_data=json_data)
 
@@ -3079,45 +3055,6 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def configuration_get_ap_settings(
-        self,
-        serial_number: str,
-    ) -> Response:
-        """(Deprecated) Get an existing ap settings.
-
-        Args:
-            serial_number (str): Serial number of AP selected.
-                Example:CNBRHMV3HG.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/ap_settings/{serial_number}"
-
-        return await self.get(url)
-
-    async def configuration_update_ap_settings(
-        self,
-        serial_number: str,
-        hostname: str,
-        ip_address: str,
-    ) -> Response:
-        """(Deprecated) Update an existing ap settings.
-
-        Args:
-            serial_number (str): Hotspot mode name. Example:HS2.
-            hostname (str): hostname
-            ip_address (str): ip_address
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/ap_settings/{serial_number}"
-
-        json_data = {"hostname": hostname, "ip_address": ip_address}
-
-        return await self.post(url, json_data=json_data)
-
     async def configuration_get_clis(
         self,
         group_name_or_guid: str,
@@ -3136,7 +3073,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/ap_cli/{group_name_or_guid}"
 
-        params = {"version": version}
+        params = {
+            'version': version
+        }
 
         return await self.get(url, params=params)
 
@@ -3150,14 +3089,16 @@ class AllCalls(CentralApi):
         Args:
             group_name_or_guid (str): Group name of the group or guid of the swarm.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            clis (List[str]): Whole configuration List in CLI format
+            clis (List[str]): Whole configuration List in CLI format.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/ap_cli/{group_name_or_guid}"
 
-        json_data = {"clis": clis}
+        json_data = {
+            'clis': clis
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -3193,7 +3134,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/ap_settings_cli/{serial_number}"
 
-        json_data = {"clis": clis}
+        json_data = {
+            'clis': clis
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -3231,7 +3174,9 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/iap_variables/{group_name_or_guid}"
 
-        json_data = {"variables": variables}
+        json_data = {
+            'variables': variables
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -3239,7 +3184,7 @@ class AllCalls(CentralApi):
         self,
         group_name_or_guid: str,
         offset: int = 0,
-        limit: int = 20,
+        limit: int = 100,
     ) -> Response:
         """Get dirty diff.
 
@@ -3249,14 +3194,17 @@ class AllCalls(CentralApi):
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
             limit (int, optional): Maximum number of group config_mode records to be returned.
-                Defaults to 20.
+                Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/dirty_diff/{group_name_or_guid}"
 
-        params = {"offset": offset, "limit": limit}
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -3311,16 +3259,16 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/ap_settings/{serial_number}"
 
         json_data = {
-            "hostname": hostname,
-            "ip_address": ip_address,
-            "zonename": zonename,
-            "achannel": achannel,
-            "atxpower": atxpower,
-            "gchannel": gchannel,
-            "gtxpower": gtxpower,
-            "dot11a_radio_disable": dot11a_radio_disable,
-            "dot11g_radio_disable": dot11g_radio_disable,
-            "usb_port_disable": usb_port_disable,
+            'hostname': hostname,
+            'ip_address': ip_address,
+            'zonename': zonename,
+            'achannel': achannel,
+            'atxpower': atxpower,
+            'gchannel': gchannel,
+            'gtxpower': gtxpower,
+            'dot11a_radio_disable': dot11a_radio_disable,
+            'dot11g_radio_disable': dot11g_radio_disable,
+            'usb_port_disable': usb_port_disable
         }
 
         return await self.post(url, json_data=json_data)
@@ -3398,11 +3346,11 @@ class AllCalls(CentralApi):
         url = f"/configuration/v2/swarm_config/{guid}"
 
         json_data = {
-            "name": name,
-            "ip_address": ip_address,
-            "timezone_name": timezone_name,
-            "timezone_hr": timezone_hr,
-            "timezone_min": timezone_min,
+            'name': name,
+            'ip_address': ip_address,
+            'timezone_name': timezone_name,
+            'timezone_hr': timezone_hr,
+            'timezone_min': timezone_min
         }
 
         return await self.post(url, json_data=json_data)
@@ -3425,7 +3373,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/interfaces"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3482,21 +3433,24 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/interfaces"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         json_data = {
-            "name": name,
-            "description": description,
-            "admin_status": admin_status,
-            "speed_duplex": speed_duplex,
-            "routing": routing,
-            "lag_name": lag_name,
-            "vlan_mode": vlan_mode,
-            "native_vlan_id": native_vlan_id,
-            "access_vlan_id": access_vlan_id,
-            "allowed_vlan_list": allowed_vlan_list,
-            "ip_address_assignment": ip_address_assignment,
-            "ip_address": ip_address,
+            'name': name,
+            'description': description,
+            'admin_status': admin_status,
+            'speed_duplex': speed_duplex,
+            'routing': routing,
+            'lag_name': lag_name,
+            'vlan_mode': vlan_mode,
+            'native_vlan_id': native_vlan_id,
+            'access_vlan_id': access_vlan_id,
+            'allowed_vlan_list': allowed_vlan_list,
+            'ip_address_assignment': ip_address_assignment,
+            'ip_address': ip_address
         }
 
         return await self.post(url, params=params, json_data=json_data)
@@ -3519,7 +3473,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/lags"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3533,11 +3490,11 @@ class AllCalls(CentralApi):
         admin_status: bool = False,
         port_members: List[str] = None,
         speed_duplex: str = None,
-        aggregation_mode: str = "None",
+        aggregation_mode: str = 'None',
         routing: bool = False,
         ip_address: List[str] = None,
         loop_protect_enabled: bool = False,
-        vlan_mode: str = "access",
+        vlan_mode: str = 'access',
         native_vlan_id: int = None,
         access_vlan_id: int = None,
         allowed_vlan_list: List[str] = None,
@@ -3582,24 +3539,27 @@ class AllCalls(CentralApi):
         """  # noqa
         url = "/configuration/v1/switch/cx/lags"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         json_data = {
-            "delete": delete,
-            "name": name,
-            "description": description,
-            "admin_status": admin_status,
-            "port_members": port_members,
-            "speed_duplex": speed_duplex,
-            "aggregation_mode": aggregation_mode,
-            "routing": routing,
-            "ip_address": ip_address,
-            "loop_protect_enabled": loop_protect_enabled,
-            "vlan_mode": vlan_mode,
-            "native_vlan_id": native_vlan_id,
-            "access_vlan_id": access_vlan_id,
-            "allowed_vlan_list": allowed_vlan_list,
-            "dhcpv4_snooping": dhcpv4_snooping,
+            'delete': delete,
+            'name': name,
+            'description': description,
+            'admin_status': admin_status,
+            'port_members': port_members,
+            'speed_duplex': speed_duplex,
+            'aggregation_mode': aggregation_mode,
+            'routing': routing,
+            'ip_address': ip_address,
+            'loop_protect_enabled': loop_protect_enabled,
+            'vlan_mode': vlan_mode,
+            'native_vlan_id': native_vlan_id,
+            'access_vlan_id': access_vlan_id,
+            'allowed_vlan_list': allowed_vlan_list,
+            'dhcpv4_snooping': dhcpv4_snooping
         }
 
         return await self.post(url, json_data=json_data, params=params)
@@ -3622,7 +3582,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/loop-prevention"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3667,18 +3630,21 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/loop-prevention"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         json_data = {
-            "name": name,
-            "lag_members": lag_members,
-            "port_priority": port_priority,
-            "admin_edge_enabled": admin_edge_enabled,
-            "bpdu_guard_enabled": bpdu_guard_enabled,
-            "bpdu_filter_enabled": bpdu_filter_enabled,
-            "root_guard_enabled": root_guard_enabled,
-            "loop_protect_enabled": loop_protect_enabled,
-            "description": description,
+            'name': name,
+            'lag_members': lag_members,
+            'port_priority': port_priority,
+            'admin_edge_enabled': admin_edge_enabled,
+            'bpdu_guard_enabled': bpdu_guard_enabled,
+            'bpdu_filter_enabled': bpdu_filter_enabled,
+            'root_guard_enabled': root_guard_enabled,
+            'loop_protect_enabled': loop_protect_enabled,
+            'description': description
         }
 
         return await self.post(url, params=params, json_data=json_data)
@@ -3701,7 +3667,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/properties"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3876,18 +3845,21 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/properties"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         json_data = {
-            "name": name,
-            "contact": contact,
-            "location": location,
-            "timezone": timezone,
-            "vrf": vrf,
-            "dns_servers": dns_servers,
-            "ntp_servers": ntp_servers,
-            "admin_username": admin_username,
-            "admin_password": admin_password,
+            'name': name,
+            'contact': contact,
+            'location': location,
+            'timezone': timezone,
+            'vrf': vrf,
+            'dns_servers': dns_servers,
+            'ntp_servers': ntp_servers,
+            'admin_username': admin_username,
+            'admin_password': admin_password
         }
 
         return await self.post(url, json_data=json_data, params=params)
@@ -3910,7 +3882,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/syslog"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3920,8 +3895,8 @@ class AllCalls(CentralApi):
         global_severity: str,
         device_serial: str = None,
         group_name: str = None,
-        severity: str = "info",
-        vrf: str = "default",
+        severity: str = 'info',
+        vrf: str = 'default',
     ) -> Response:
         """Create/Update/Delete Syslog.
 
@@ -3942,9 +3917,17 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/syslog"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
-        json_data = {"delete": delete, "global_severity": global_severity, "severity": severity, "vrf": vrf}
+        json_data = {
+            'delete': delete,
+            'global_severity': global_severity,
+            'severity': severity,
+            'vrf': vrf
+        }
 
         return await self.post(url, json_data=json_data, params=params)
 
@@ -3966,7 +3949,10 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/vlans"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         return await self.get(url, params=params)
 
@@ -3979,7 +3965,7 @@ class AllCalls(CentralApi):
         name: str = None,
         admin_status: bool = True,
         description: str = None,
-        ip_address_assignment: str = "DHCP",
+        ip_address_assignment: str = 'DHCP',
         ip_address: List[str] = None,
         dhcp_relay: List[str] = None,
         voice: bool = False,
@@ -4011,18 +3997,21 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/switch/cx/vlans"
 
-        params = {"device_serial": device_serial, "group_name": group_name}
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
 
         json_data = {
-            "delete": delete,
-            "vlan_id": vlan_id,
-            "name": name,
-            "admin_status": admin_status,
-            "description": description,
-            "ip_address_assignment": ip_address_assignment,
-            "ip_address": ip_address,
-            "dhcp_relay": dhcp_relay,
-            "voice": voice,
+            'delete': delete,
+            'vlan_id': vlan_id,
+            'name': name,
+            'admin_status': admin_status,
+            'description': description,
+            'ip_address_assignment': ip_address_assignment,
+            'ip_address': ip_address,
+            'dhcp_relay': dhcp_relay,
+            'voice': voice
         }
 
         return await self.post(url, json_data=json_data, params=params)
@@ -4069,7 +4058,12 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/system_config/{group_name_or_guid}"
 
-        json_data = {"dns_server": dns_server, "ntp_server": ntp_server, "username": username, "password": password}
+        json_data = {
+            'dns_server': dns_server,
+            'ntp_server': ntp_server,
+            'username': username,
+            'password': password
+        }
 
         return await self.post(url, json_data=json_data)
 
@@ -4128,7 +4122,7 @@ class AllCalls(CentralApi):
         Args:
             group_name_or_guid (str): Group name of the group or guid of the swarm. Example:Group_1
                 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            eighty_mhz_support (bool): 80mhz_support
+            eighty_mhz_support (bool): eighty_mhz_support
             a_channels (str): a_channels
             air_time_fairness_mode (str): air_time_fairness_mode
             backoff_time (int): backoff_time
@@ -4164,35 +4158,35 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/arm/{group_name_or_guid}"
 
         json_data = {
-            "80mhz_support": eighty_mhz_support,
-            "a_channels": a_channels,
-            "air_time_fairness_mode": air_time_fairness_mode,
-            "backoff_time": backoff_time,
-            "band_steering_mode": band_steering_mode,
-            "client_aware": client_aware,
-            "client_match": client_match,
-            "cm_calc_interval": cm_calc_interval,
-            "cm_calc_threshold": cm_calc_threshold,
-            "cm_holdtime": cm_holdtime,
-            "cm_key": cm_key,
-            "cm_match_debug": cm_match_debug,
-            "cm_max_adaption": cm_max_adaption,
-            "cm_max_request": cm_max_request,
-            "cm_nb_matching": cm_nb_matching,
-            "cm_slb_mode": cm_slb_mode,
-            "error_rate_threshold": error_rate_threshold,
-            "error_rate_wait_time": error_rate_wait_time,
-            "g_channels": g_channels,
-            "max_tx_power": max_tx_power,
-            "min_tx_power": min_tx_power,
-            "rf_channel_quality_aware_arm_disable": rf_channel_quality_aware_arm_disable,
-            "rf_channel_quality_threshold": rf_channel_quality_threshold,
-            "rf_channel_quality_wait_time": rf_channel_quality_wait_time,
-            "rf_free_channel_index": rf_free_channel_index,
-            "rf_ideal_coverage_index": rf_ideal_coverage_index,
-            "scanning": scanning,
-            "spectrum_lb": spectrum_lb,
-            "wide_bands": wide_bands,
+            '80mhz_support': eighty_mhz_support,
+            'a_channels': a_channels,
+            'air_time_fairness_mode': air_time_fairness_mode,
+            'backoff_time': backoff_time,
+            'band_steering_mode': band_steering_mode,
+            'client_aware': client_aware,
+            'client_match': client_match,
+            'cm_calc_interval': cm_calc_interval,
+            'cm_calc_threshold': cm_calc_threshold,
+            'cm_holdtime': cm_holdtime,
+            'cm_key': cm_key,
+            'cm_match_debug': cm_match_debug,
+            'cm_max_adaption': cm_max_adaption,
+            'cm_max_request': cm_max_request,
+            'cm_nb_matching': cm_nb_matching,
+            'cm_slb_mode': cm_slb_mode,
+            'error_rate_threshold': error_rate_threshold,
+            'error_rate_wait_time': error_rate_wait_time,
+            'g_channels': g_channels,
+            'max_tx_power': max_tx_power,
+            'min_tx_power': min_tx_power,
+            'rf_channel_quality_aware_arm_disable': rf_channel_quality_aware_arm_disable,
+            'rf_channel_quality_threshold': rf_channel_quality_threshold,
+            'rf_channel_quality_wait_time': rf_channel_quality_wait_time,
+            'rf_free_channel_index': rf_free_channel_index,
+            'rf_ideal_coverage_index': rf_ideal_coverage_index,
+            'scanning': scanning,
+            'spectrum_lb': spectrum_lb,
+            'wide_bands': wide_bands
         }
 
         return await self.post(url, json_data=json_data)
@@ -4287,24 +4281,24 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid}/{name}"
 
         json_data = {
-            "allowed_channels": allowed_channels,
-            "beacon_interval": beacon_interval,
-            "ch_bw_range": ch_bw_range,
-            "csa_count": csa_count,
-            "disable_arm_wids_functions": disable_arm_wids_functions,
-            "dot11h": dot11h,
-            "high_noise_backoff_time": high_noise_backoff_time,
-            "interference_immunity": interference_immunity,
-            "legacy_mode": legacy_mode,
-            "max_tx_power": max_tx_power,
-            "max_tx_power_ai": max_tx_power_ai,
-            "min_tx_power": min_tx_power,
-            "min_tx_power_ai": min_tx_power_ai,
-            "new_name": new_name,
-            "scanning_disable": scanning_disable,
-            "smart_antenna": smart_antenna,
-            "spectrum_monitor": spectrum_monitor,
-            "zone": zone,
+            'allowed_channels': allowed_channels,
+            'beacon_interval': beacon_interval,
+            'ch_bw_range': ch_bw_range,
+            'csa_count': csa_count,
+            'disable_arm_wids_functions': disable_arm_wids_functions,
+            'dot11h': dot11h,
+            'high_noise_backoff_time': high_noise_backoff_time,
+            'interference_immunity': interference_immunity,
+            'legacy_mode': legacy_mode,
+            'max_tx_power': max_tx_power,
+            'max_tx_power_ai': max_tx_power_ai,
+            'min_tx_power': min_tx_power,
+            'min_tx_power_ai': min_tx_power_ai,
+            'new_name': new_name,
+            'scanning_disable': scanning_disable,
+            'smart_antenna': smart_antenna,
+            'spectrum_monitor': spectrum_monitor,
+            'zone': zone
         }
 
         return await self.post(url, json_data=json_data)
@@ -4418,24 +4412,24 @@ class AllCalls(CentralApi):
         url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid}/{name}"
 
         json_data = {
-            "allowed_channels": allowed_channels,
-            "beacon_interval": beacon_interval,
-            "ch_bw_range": ch_bw_range,
-            "csa_count": csa_count,
-            "disable_arm_wids_functions": disable_arm_wids_functions,
-            "dot11h": dot11h,
-            "high_noise_backoff_time": high_noise_backoff_time,
-            "interference_immunity": interference_immunity,
-            "legacy_mode": legacy_mode,
-            "max_tx_power": max_tx_power,
-            "max_tx_power_ai": max_tx_power_ai,
-            "min_tx_power": min_tx_power,
-            "min_tx_power_ai": min_tx_power_ai,
-            "new_name": new_name,
-            "scanning_disable": scanning_disable,
-            "smart_antenna": smart_antenna,
-            "spectrum_monitor": spectrum_monitor,
-            "zone": zone,
+            'allowed_channels': allowed_channels,
+            'beacon_interval': beacon_interval,
+            'ch_bw_range': ch_bw_range,
+            'csa_count': csa_count,
+            'disable_arm_wids_functions': disable_arm_wids_functions,
+            'dot11h': dot11h,
+            'high_noise_backoff_time': high_noise_backoff_time,
+            'interference_immunity': interference_immunity,
+            'legacy_mode': legacy_mode,
+            'max_tx_power': max_tx_power,
+            'max_tx_power_ai': max_tx_power_ai,
+            'min_tx_power': min_tx_power,
+            'min_tx_power_ai': min_tx_power_ai,
+            'new_name': new_name,
+            'scanning_disable': scanning_disable,
+            'smart_antenna': smart_antenna,
+            'spectrum_monitor': spectrum_monitor,
+            'zone': zone
         }
 
         return await self.post(url, json_data=json_data)

@@ -72,7 +72,7 @@ def _serial_to_name(sernum: str) -> str:
     # TODO circular import if placed at top review import logic
     from centralcli import cache
     if not (
-        len(sernum) == 10 and all([s.isalpha() for s in sernum[0:2]]) and all([s.isupper() for s in sernum.split()])
+        len(sernum) in (9, 10) and all([s.isalpha() for s in sernum[0:2]]) and all([s.isupper() for s in sernum.split()])
     ):
         return sernum
 

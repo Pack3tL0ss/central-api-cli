@@ -9,6 +9,7 @@ from asyncio.proactor_events import _ProactorBasePipeTransport
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Tuple, Union
+from datetime import datetime, timedelta
 
 from aiohttp import ClientSession
 import aiohttp
@@ -202,6 +203,8 @@ class CentralApi(Session):
                 *[call.func(*call.args, **call.kwargs) for call in api_calls[1:]]
             )
             self.silent = False
+
+            log.debug(f"{[r.rl.remain_per_sec for r in [resp, *m_resp]]}")
 
             return [resp, *m_resp]
 
@@ -1591,6 +1594,50 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, count=count)
 
+    async def get_audit_logs_events(
+        self,
+        group_name: str = None,
+        device_id: str = None,
+        classification: str = None,
+        start_time: int = None,
+        end_time: int = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all audit events for all groups.
+
+        Currently not used for any commands added to compare output to .../platform/... path (get_audit_logs)
+
+        Args:
+            group_name (str, optional): Filter audit events by Group Name
+            device_id (str, optional): Filter audit events by Target / Device ID. Device ID for AP
+                is VC Name and Serial Number for Switches
+            classification (str, optional): Filter audit events by classification
+            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
+                logs should be provided in epoch seconds
+            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
+                should be provided in epoch seconds
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination Defaults to 0.
+            limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/auditlogs/v1/events"
+
+        params = {
+            'group_name': group_name,
+            'device_id': device_id,
+            'classification': classification,
+            'start_time': start_time,
+            'end_time': end_time,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
     async def create_site(
         self,
         site_name: str = None,
@@ -2806,6 +2853,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # TODO build aggregator to run report showing rogues/interfering/neighbors
     # async def wids_get_all(self):
 
     async def wids_get_rogue_aps(
@@ -3015,6 +3063,120 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_alerts(
+        self,
+        customer_id: str = None,
+        group: str = None,
+        label: str = None,
+        serial: str = None,
+        site: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        severity: str = None,
+        type: str = None,
+        search: str = None,
+        # calculate_total: bool = False,  # Doesn't appear to impact always returns total
+        ack: bool = None,
+        fields: str = None,
+        offset: int = 0,
+        limit: int = 500,
+    ) -> Response:
+        """[central] List Notifications/Alerts.
+
+        Args:
+            customer_id (str, optional): MSP user can filter notifications based on customer id
+            group (str, optional): Used to filter the notification types based on group name
+            label (str, optional): Used to filter the notification types based on Label name
+            serial (str, optional): Used to filter the result based on serial number of the device
+            site (str, optional): Used to filter the notification types based on Site name
+            from_timestamp (int, optional): 1)start of duration within which alerts are raised
+                2)described using Unix Epoch time in seconds  Default 30 days (max 90)
+            to_timestamp (int, optional): 1)end of duration within which alerts are raised
+                2)described using Unix Epoch time in seconds
+            severity (str, optional): Used to filter the notification types based on severity
+            type (str, optional): Used to filter the notification types based on notification type
+                name
+            search (str, optional): term used to search in name, category of the alert
+            calculate_total (bool, optional): Whether to count total items in the response
+            ack (bool, optional): Filter acknowledged or unacknowledged notifications. When query
+                parameter is not specified, both acknowledged and unacknowledged notifications are
+                included
+            fields (str, optional): Comma separated list of fields to be returned
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/notifications"
+
+        if not from_timestamp:
+            from_timestamp = int(datetime.timestamp(datetime.today() - timedelta(days=30)))
+        if ack in [True, False]:
+            ack = str(ack).lower()
+
+        params = {
+            'customer_id': customer_id,
+            'group': group,
+            'label': label,
+            'serial': serial,
+            'site': site,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'severity': severity,
+            'search': search,
+            # 'calculate_total': str(calculate_total),
+            'type': type,
+            'ack': ack,
+            'fields': fields,
+            'offset': offset,
+            'limit': limit,
+        }
+
+        return await self.get(url, params=params)
+
+    async def central_acknowledge_notifications(
+        self,
+        NoName: List[str] = None,
+    ) -> Response:
+        """Acknowledge Notifications by ID List / All.
+
+        Args:
+            NoName (List[str], optional): Acknowledge notifications
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/notifications"
+
+        return await self.post(url)
+
+    async def replace_ap_config(
+        self,
+        group_name_or_guid: str,
+        clis: List[str],
+    ) -> Response:
+        """Replace AP configuration.
+
+        Send AP configuration in CLI format as a list of strings where each item in the list is
+        a line from the config.  Requires all lines of the config, not a partial update.
+
+        Args:
+            group_name_or_guid (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            clis (List[str]): Whole configuration List in CLI format.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_cli/{group_name_or_guid}"
+
+        json_data = {
+            'clis': clis
+        }
+
+        return await self.post(url, json_data=json_data)
 
 
 if __name__ == "__main__":

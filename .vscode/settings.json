@@ -16,13 +16,17 @@
     "python.testing.pytestEnabled": true,
     "pytest.command": "pytest",
     "cSpell.ignoreWords": [
-        "secho"
-    ],
-    "cSpell.words": [
+        "DDTHH",
+        "HPPC",
         "cencli",
         "centralcli",
-        "HPPC",
-        "listify"
+        "clis",
+        "funcs",
+        "listify",
+        "secho",
+        "tablefmt"
+    ],
+    "cSpell.words": [
     ],
     "restructuredtext.confPath": "${workspaceFolder}/docs",
 }
