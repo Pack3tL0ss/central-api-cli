@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, Literal, Union
 from pathlib import Path
 from rich.console import Console
+from rich import print
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -304,7 +305,7 @@ class CLICommon:
         """
         # TODO remove ok_status, and handle in CentralAPI method (set resp.ok = True)
         if pad:
-            log.warning("Depricated pad parameter referenced in display_results")
+            log.error("Deprecated pad parameter referenced in display_results", show=True)
 
         pager = False if config.no_pager else pager
 
@@ -317,15 +318,26 @@ class CLICommon:
                 caption = f"{caption} {rl_str}" if caption else rl_str
 
             for idx, r in enumerate(resp):
-                # Multi request resuest url line
+                # Multi request request url line
                 if len(resp) > 1:
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
 
-                if not r or tablefmt == "action":
+                if not r or tablefmt in ["action", "raw"]:
                     fg = "green" if r else "red"
 
-                    typer.secho(str(r), fg=fg)
+                    if tablefmt == "raw":
+                        # dots = f"[{fg}]{'.' * 16}[/{fg}]"
+                        status_code = f"[{fg}]status code: {r.status}[/{fg}]"
+                        print(r.url)
+                        print(status_code)
+                        if not r.ok:
+                            print(r.error)
+                        # print(f"{dots}\n{status_code}\n{dots}")
+                        print("Unformatted response from Aruba Central API GW")
+                        print(r.raw)
+                    else:
+                        typer.secho(str(r), fg=fg)
 
                     if idx + 1 == len(resp):
                         console.print(f"\n{rl_str}")
