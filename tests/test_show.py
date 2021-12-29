@@ -252,6 +252,20 @@ def test_show_switch_vlans_by_name():
     assert "pvid" in result.stdout
 
 
+def test_show_events_past():
+    result = runner.invoke(app, ["show", "events", "--past", "30m", "--no-pager"],)
+    assert result.exit_code == 0
+    assert "Event Logs" in result.stdout
+    assert "description" in result.stdout
+
+
+def test_show_clients():
+    result = runner.invoke(app, ["show", "clients", "--no-pager"],)
+    assert result.exit_code == 0
+    assert "All Clients" in result.stdout
+    assert "role" in result.stdout
+
+
 # def test_show_snapshots_by_group():
 #     result = runner.invoke(app, ["show", "snapshots", TEST_DEVICES["switch"]["group"]])
 #     assert result.exit_code == 0
