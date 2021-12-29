@@ -4,27 +4,32 @@
 from pathlib import Path
 import sys
 import typer
+from rich import print
+import asyncio
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
+# TODO should be able to do this in __init__
 try:
-    from centralcli import cli
+    from centralcli import cli, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
+        from centralcli import cli, utils
     else:
         print(pkg_dir.parts)
         raise e
 
 app = typer.Typer()
+color = utils.color
 
 
 @app.command(short_help="Clone a group")
 def group(
     clone_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CLONE]", autocompletion=cli.cache.group_completion),
     new_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CREATE]"),
+    aos10: bool = typer.Option(None, "--aos10", help="Upgrade new cloned group to AOS10"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -38,15 +43,27 @@ def group(
 ) -> None:
     yes = yes_ if yes_ else yes
 
-    _msg = f'{typer.style(f"Clone group", fg="cyan")}'
-    _msg = f'{_msg} {typer.style(clone_group, fg="bright_green")}'
-    _msg = f'{_msg} {typer.style("to new group", fg="cyan")}'
-    _msg = f'{_msg} {typer.style(new_group, fg="bright_green")}'
-    _msg = f'{_msg}{typer.style("?", fg="cyan")}'
+    print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
+    if aos10:
+        print(f"    Upgrade cloned group to AOS10: {color(True)}")
+        print(
+            "\n    [dark_orange]WARNING[/dark_orange]: [italic]Upgrade doesn't always work despite "
+            f"returning {color('success')},\n    Group is cloned if {color('success')} is returned "
+            "but upgrade to AOS10 may not occur.\n    API method appears to have some caveats."
+        )
 
-    if yes or typer.confirm(_msg):
+    if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.clone_group, clone_group, new_group)
-        cli.display_results(resp)
+        if resp:
+            groups = cli.cache.groups
+            if groups:
+                groups = {g["name"]: {"template group": g["template group"]} for g in groups}
+                # TODO put non async it async wrapper in cache.py
+                asyncio.run(
+                    cli.cache.update_group_db({"name": new_group,  **groups[clone_group]})
+                )
+
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()
