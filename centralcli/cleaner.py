@@ -116,6 +116,7 @@ _short_value = {
     "labels": _extract_names_from_id_name_dict,
     "sites": _extract_names_from_id_name_dict,
     "ACCESS POINT": "AP",
+    "GATEWAY": "GW",
     # "events_details": _extract_event_details,
     "vc_disconnected": "vc disc.",
     "MAC Authentication": "MAC",
@@ -257,6 +258,9 @@ def _client_concat_associated_dev(
     verbose: bool = False,
     cache=None,
 ) -> Dict[str, Any]:
+    # FIXME
+    if cache is None:
+        from centralcli import cache
     strip_keys = [
         "associated device",
         "associated device mac",
@@ -298,7 +302,13 @@ def _client_concat_associated_dev(
     return data
 
 
-def get_clients(data: List[dict], verbose: bool = False, cache: callable = None, **kwargs) -> list:
+def get_clients(
+    data: List[dict],
+    verbose: bool = False,
+    cache: callable = None,
+    filters: List[str] = None,
+    **kwargs
+) -> list:
     """Remove all columns that are NA for all clients in the list"""
     data = utils.listify(data)
 
@@ -339,13 +349,16 @@ def get_clients(data: List[dict], verbose: bool = False, cache: callable = None,
                 dict(
                     short_value(
                         k,
-                        d.get(k),
+                        f"wired ({data[idx].get('interface_port', '?')})" if d.get(k) == "NA" and k == "network" else d.get(k),
                     )
                     for k in _sort_keys
                 )
-                for d in data
+                for idx, d in enumerate(data)
             ]
 
+    if filters:
+        _filter = "~|~".join(filters)
+        data = [d for d in data if d["connected device"].lower() in _filter.lower()]
     # data = [_client_concat_associated_dev(d, verbose=verbose, cache=cache, **kwargs) for d in data]
     data = strip_no_value(data)
 
@@ -492,28 +505,52 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
     return data
 
 
-def get_event_logs(data: List[dict],) -> List[dict]:
+def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List[dict]:
+    # TODO accept verbose option and provide additional details with verbose. (currently just bypasses cleaner and displays yaml)
 
     field_order = [
+        "id",
         "timestamp",
-        "level",
-        "event_type",
+        # "level",
+        # "event_type",
         "description",
-        "events_details",
-        "device_type",
-        "client_mac",
-        "device",
-        "hostname",
-        "device_serial",
-        "device_mac",
-        "group_name",
-        "labels",
-        "sites",
+        # "events_details",
+        # "device_type",
+        # "client_mac",
+        "device info",
+        # "device",
+        # "hostname",
+        # "device_serial",
+        # "device_mac",
+        # "group_name",
+        # "labels",
+        # "sites",
     ]
     for d in data:
-        d["device"] = f"{d.get('hostname', '')}\n{d.get('device_serial', '')}\n{d.get('device_mac', '')}"
-        for key in ["hostname", "device_serial", "device_mac"]:
-            del d[key]
+        _dev_type = short_value('device_type', d.get('device_type', ''))
+        if _dev_type:
+            _dev_str = f"[{_dev_type[-1]}]" if _dev_type[-1] != "CLIENT" else ""
+        d["device info"] = f"{_dev_str}{d.get('hostname', '')}|" \
+            f"{d.get('device_serial', '')} Group: {d.get('group_name', '')}"
+        # for key in ["device_type", "hostname", "device_serial", "device_mac"]:
+        #     del d[key]
+
+    if len(data) > 1 and cache_update_func:
+        idx, cache_list = 1, []
+        for d in data:
+            if d.get("has_rowdetail") is True:
+                _details = {
+                    k: v for inner in d["events_details"] for k, v in inner.items()
+                }
+                cache_list += [{"id": idx, "details": _details}]
+                d["id"] = idx
+                idx += 1
+            else:
+                d["id"] = "-"
+            # del d["has_rowdetail"]
+        if cache_list:
+            cache_update_func(cache_list)
+
     data = [dict(short_value(k, d[k]) for k in field_order if k in d) for d in data]
     data = strip_no_value(data)
 

@@ -14,18 +14,24 @@ runner = CliRunner()
 
 
 def test_add_group1():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group1", "abcD1234", "-Y"])
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group1", "-Y"])
     assert result.exit_code == 0
     assert "Created" in result.stdout
 
 
 def test_add_group2_wired_tg():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group2", "abcD1234", "--wired-tg", "-Y"])
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group2", "--sw", "--wired-tg", "-Y"])
     assert result.exit_code == 0
     assert "Created" in result.stdout
 
 
 def test_add_group3_wlan_tg():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group3", "abcD1234", "--wlan-tg", "-Y"])
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group3", "--ap", "--wlan-tg", "-Y"])
+    assert result.exit_code == 0
+    assert "Created" in result.stdout
+
+
+def test_add_group4_aos10_gw_wlan():
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "-Y"])
     assert result.exit_code == 0
     assert "Created" in result.stdout

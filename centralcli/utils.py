@@ -8,7 +8,7 @@ import socket
 import string
 import sys
 import urllib.parse
-from pprint import pprint
+# from pprint import pprint
 from typing import Any, Dict, List, Tuple, Union
 import typer
 import logging
@@ -18,6 +18,8 @@ from halo import Halo
 import threading
 from pygments import formatters, highlight, lexers
 from tabulate import tabulate
+from rich import print_json
+from rich.pretty import pprint
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -49,7 +51,7 @@ class Convert:
         self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
         self.dots = '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
         self.dec = int(self.clean, 16) if self.ok else 0
-        self.url = urllib.parse.quote_plus(mac)
+        self.url = urllib.parse.quote_plus(cols)
 
     def __len__(self):
         return len(self.clean)
@@ -75,7 +77,7 @@ class Utils:
     def user_input_bool(self, question):
         """Ask User Y/N Question require Y/N answer
 
-        Error and reprompt if user's response is not valid
+        Error and re-prompt if user's response is not valid
         Appends '? (y/n): ' to question/prompt provided
 
         Params:
@@ -102,11 +104,9 @@ class Utils:
 
     def json_print(self, obj):
         try:
-            ret = json.dumps(obj, indent=4, sort_keys=True)
+            print_json(data=obj)
         except Exception:
-            ret = pprint(obj, indent=4, sort_dicts=True)
-        finally:
-            print(ret)
+            pprint(obj)
 
     class TTY:
         def __init__(self):
@@ -274,12 +274,25 @@ class Utils:
         return contents
 
     @staticmethod
-    def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
-        """strip all keys from a dict where value is NoneType"""
+    def strip_none(_dict: Union[dict, None], strip_empty_obj: bool = False) -> Any:
+        """strip all keys from a dict where value is NoneType
+
+        args:
+            _dict: The dictionary object to have all keys removed that have None as value
+            strip_empty_obj (bool): If True will strip keys that have empty objects as
+                well as NoneType for value.
+
+        returns:
+            (Any) Return same type that is provided to method as first argument.
+            If dict is provided it returns modified dict.
+        """
         if not isinstance(_dict, dict):
             return _dict
 
-        return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
+        if not strip_empty_obj:
+            return {k: v if not callable(v) else v.__name__ for k, v in _dict.items() if v is not None}
+        else:
+            return {k: v for k, v in _dict.items() if not isinstance(v, bool) and v}
 
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
@@ -367,6 +380,8 @@ class Utils:
         caption: str = None,
         account: str = None,
         config=None,
+        set_width_cols: dict = None,
+        full_cols: Union[List[str], str] = [],
         ok_status: Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]] = None,
     ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
@@ -458,6 +473,7 @@ class Utils:
             from rich.table import Table
             from rich.box import HORIZONTALS, SIMPLE
             from rich.text import Text
+            # from rich.progress import Progress
             from centralcli import constants
             console = Console(record=True)
 
@@ -482,8 +498,10 @@ class Utils:
 
                 fold_cols = ['description']
                 _min_max = {'min': 10, 'max': 30}
-                set_width_cols = {'name': _min_max, 'model': _min_max}
-                full_cols = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio', 'id']
+                set_width_cols = set_width_cols or {'name': _min_max, 'model': _min_max}
+                # default full cols #TODO clean this up
+                _full_cols = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio', 'id']
+                full_cols = [*full_cols, *_full_cols]
 
                 for k in outdata[0].keys():
                     if k in fold_cols:
@@ -567,3 +585,42 @@ class Utils:
                                    )
 
         return self.Output(rawdata=raw_data, prettydata=table_data, config=config)
+
+    @staticmethod
+    def color(
+        text: Union[str, bool, List[str]],
+        color_str: str = "bright_green",
+        italic: bool = None,
+        bold: bool = None,
+        blink: bool = None,
+    ) -> str:
+        """Helper method to wrap text in rich formatting tags
+
+        Applies standard default formatting.
+
+        args:
+            text (str|bool|list): The text to be formmated.  If a bool is provided
+                it is converted to string and italics applied.  If list of strings
+                is provided it is converted to str and formatted.
+            color_str (str optional): Text is formatted with this color.
+                Default: bright_green
+            italic (bool): Wheather to apply italic to text.
+                Default False if str is provided for text True if bool is provided.
+            bold (bool): Wheather to apply bold to text. Default None/False
+            blink (bool): Wheather to blink the text. Default None/False
+        """
+        if isinstance(text, bool):
+            italic = True if italic is None else italic
+            text = str(text)
+
+        color_str = color_str if not italic else f"italic {color_str}"
+        color_str = color_str if not bold else f"bold {color_str}"
+        color_str = color_str if not blink else f"blink {color_str}"
+
+        if isinstance(text, str):
+            return f"[{color_str}]{text}[/{color_str}]"
+        elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
+            text = [f"[{color_str}]{t}[/{color_str}]" for t in text]
+            return ", ".join(text)
+        else:
+            raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")

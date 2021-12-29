@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Union
 from pathlib import Path
 from rich.console import Console
 from rich import print
+import json
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -27,16 +28,17 @@ from centralcli.central import CentralApi
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
-FormatType = Literal["json", "yaml", "csv", "rich", "simple"]
+TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 console = Console()
 
 
 class CLICommon:
-    def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None):
+    def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
         self.account = account
         self.cache = cache
         self.central = central
+        self.raw_out = raw_out
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -146,7 +148,7 @@ class CLICommon:
                 if "central_info" not in config.data and "default" not in config.data:
                     typer.echo(
                         f"{typer.style('WARNING:', fg='yellow')} "
-                        f"'central_info' is not defined in the config.  This is the default when not overriden by\n"
+                        f"'central_info' is not defined in the config.  This is the default when not overridden by\n"
                         f"--account parameter or ARUBACLI_ACCOUNT environment variable."
                     )
 
@@ -171,6 +173,15 @@ class CLICommon:
             log.DEBUG = config.debug = debug
             return debug
 
+    @staticmethod
+    def verbose_debug_callback(ctx: typer.Context, debugv: bool):
+        if ctx.resilient_parsing:  # tab completion, return without validating
+            return False
+
+        if debugv:
+            log.DEBUG = log.verbose = config.debug = config.debugv = debugv
+            return debugv
+
     # not used at the moment but could be used to allow unambiguous partial tokens
     @staticmethod
     def normalize_tokens(token: str) -> str:
@@ -194,7 +205,7 @@ class CLICommon:
     @staticmethod
     def get_format(
         do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_table: bool = False, default: str = "rich"
-    ) -> FormatType:
+    ) -> TableFormat:
         """Simple helper method to return the selected output format type (str)"""
         if do_json:
             return "json"
@@ -208,8 +219,42 @@ class CLICommon:
             return default
 
     @staticmethod
+    def write_file(outfile: Path, outdata: str) -> None:
+        """Output data to file
+
+        Args:
+            outfile (Path): The file to write to.
+            outdata (str): The text to write.
+        """
+        if outfile and outdata:
+            if Path().cwd() != Path.joinpath(config.outdir / outfile):
+                if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
+                    typer.secho(
+                        "It looks like you are in the root of a git repo dir.\n"
+                        "Exporting to out subdir."
+                        )
+                config.outdir.mkdir(exist_ok=True)
+                outfile = config.outdir / outfile
+
+            print(f"\n[cyan]Writing output to {outfile}... ", end="")
+
+            out_msg = None
+            try:
+                if isinstance(outdata, (dict, list)):
+                    outdata = json.dumps(outdata, indent=4)
+                outfile.write_text(outdata)  # typer.unstyle(outdata) also works
+            except Exception as e:
+                outfile.write_text(f"{outdata}")
+                out_msg = f"Error ({e.__class__.__name__}) occurred during attempt to output to file.  " \
+                    "Used simple string conversion"
+
+            print("[italic green]Done")
+            if out_msg:
+                log.warning(out_msg, show=True)
+
     def _display_results(
-        data: Union[List[dict], List[str], None] = None,
+        self,
+        data: Union[List[dict], List[str], dict, None] = None,
         tablefmt: str = "rich",
         title: str = None,
         caption: str = None,
@@ -218,24 +263,35 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         pad: int = None,
+        set_width_cols: dict = None,
+        full_cols: Union[List[str], str] = [],
         cleaner: callable = None,
         **cleaner_kwargs,
     ):
         if data:
             data = utils.listify(data)
 
-            if cleaner:
+            if cleaner and not self.raw_out:
                 data = cleaner(data, **cleaner_kwargs)
 
             if sort_by and all(isinstance(d, dict) for d in data):
                 if not all([True if sort_by in d else False for d in data]):
-                    typer.echo(f"Invalid dataset for {sort_by} not all entries contain a {sort_by} key")
-                    typer.secho("sort by is not implemented for all commands yet", fg="red")
+                    print(f"[dark_orange3]Warning: [cyan]{sort_by}[reset] does not appear to be a valid field")
+                    print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
                 else:
-                    data = sorted(data, key=lambda d: d[sort_by])
+                    try:
+                        data = sorted(data, key=lambda d: d[sort_by])
+                    except TypeError as e:
+                        print(
+                            f"[dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}. "
+                            f"[dark_orange3]TypeError:[reset] {e}"
+                        )
 
             if reverse:
                 data = data[::-1]
+
+            if self.raw_out and tablefmt in ["simple", "rich"]:
+                tablefmt = "json"
 
             outdata = utils.output(
                 data,
@@ -244,29 +300,19 @@ class CLICommon:
                 caption=caption,
                 account=None if config.account in ["central_info", "account"] else config.account,
                 config=config,
+                set_width_cols=set_width_cols,
+                full_cols=full_cols,
             )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-            # -- // Output to file \\ --
             if outfile and outdata:
-                if Path().cwd() != Path.joinpath(config.outdir / outfile):
-                    if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
-                        typer.secho(
-                            "It looks like you are in the root of a git repo dir.\n"
-                            "Exporting to out subdir."
-                            )
-                    config.outdir.mkdir(exist_ok=True)
-                    outfile = config.outdir / outfile
-
-                print(typer.style(f"\nWriting output to {outfile}... ", fg="cyan"), end="")
-                outfile.write_text(outdata.file)  # typer.unstyle(outdata) also works
-                typer.secho("Done", fg="green")
+                self.write_file(outfile, outdata.file)
 
     def display_results(
         self,
         resp: Union[Response, List[Response]] = None,
-        data: Union[List[dict], List[str], None] = None,
-        tablefmt: str = "rich",
+        data: Union[List[dict], List[str], dict, None] = None,
+        tablefmt: TableFormat = "rich",
         title: str = None,
         caption: str = None,
         pager: bool = True,
@@ -276,6 +322,8 @@ class CLICommon:
         pad: int = None,
         exit_on_fail: bool = False,
         ok_status: Union[int, List[int], Dict[int, str]] = None,
+        set_width_cols: dict = None,
+        full_cols: Union[List[str], str] = [],
         cleaner: callable = None,
         **cleaner_kwargs,
     ) -> None:
@@ -287,6 +335,9 @@ class CLICommon:
             resp (Union[Response, List[Response], None], optional): API Response objects.
             data (Union[List[dict], List[str], None], optional): API Response output data.
             tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
+                Valid Values: "json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"
+                Where "raw" is unformatted raw response and "action" is formatted for POST|PATCH etc.
+                where the result is a simple success/error.
             title: (str, optional): Title of output table.
                 Only applies to "rich" tablefmt. Defaults to None.
             caption: (str, optional): Caption displayed at bottome of table.
@@ -301,6 +352,9 @@ class CLICommon:
                 should also be rendered as success/green.  provide a dict with {int: str, ...}
                 where string can be any color supported by Output class or "neutral" "success" "fail"
                 where neutral is no formatting, and success / fail will use the default green / red respectively.
+            set_width_cols (Dict[str: Dict[str, int]]): Passed to output function defines cols with min/max width
+                example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}
+            full_cols (list): columns to ensure are displayed at full length (no wrap no truncate)
             cleaner (callable, optional): The Cleaner function to use.
         """
         # TODO remove ok_status, and handle in CentralAPI method (set resp.ok = True)
@@ -318,10 +372,16 @@ class CLICommon:
                 caption = f"{caption} {rl_str}" if caption else rl_str
 
             for idx, r in enumerate(resp):
-                # Multi request request url line
+                # Multi request url line
                 if len(resp) > 1:
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
-                    typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
+                    # typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
+                    print(
+                        f"Request [bright_green]{idx + 1}[/bright_green]. [[bright_green]{r.method}[/bright_green]: "
+                        f"[bright_green]{_url}[/bright_green]] Response:"
+                    )
+                if self.raw_out:
+                    tablefmt = "raw"
 
                 if not r or tablefmt in ["action", "raw"]:
                     fg = "green" if r else "red"
@@ -334,10 +394,15 @@ class CLICommon:
                         if not r.ok:
                             print(r.error)
                         # print(f"{dots}\n{status_code}\n{dots}")
-                        print("Unformatted response from Aruba Central API GW")
+                        print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         print(r.raw)
+
+                        if outfile:
+                            self.write_file(outfile, r.raw)
+
                     else:
-                        typer.secho(str(r), fg=fg)
+                        # typer.secho(str(r), fg=fg)
+                        print(f"[{fg}]{r}")
 
                     if idx + 1 == len(resp):
                         console.print(f"\n{rl_str}")
@@ -355,6 +420,8 @@ class CLICommon:
                         sort_by=sort_by,
                         reverse=reverse,
                         pad=pad,
+                        set_width_cols=set_width_cols,
+                        full_cols=full_cols,
                         cleaner=cleaner,
                         **cleaner_kwargs
                     )
@@ -370,6 +437,8 @@ class CLICommon:
                 sort_by=sort_by,
                 reverse=reverse,
                 pad=pad,
+                set_width_cols=set_width_cols,
+                full_cols=full_cols,
                 cleaner=cleaner,
                 **cleaner_kwargs
             )

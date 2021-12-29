@@ -155,7 +155,7 @@ dmypy.json
 
 ### VisualStudioCode ###
 .vscode/*
-!.vscode/settings.json
+# !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/requirements-dev.txt
 # !.vscode/launch.json  # I change this all the time
@@ -171,6 +171,10 @@ dmypy.json
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 # .vscode/
 scratch.py
+
+# ignore cspell vscode extension config
+cspell.json
+cspell.config.json
 
 # App ignores
 # ignoring directory where tokens are stored.

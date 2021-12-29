@@ -156,6 +156,7 @@ class Cache:
         # vs the actual log id in form 'audit_trail_2021_2,AXfQAu2hkwsSs1O3R7kv'
         # it is updated anytime show logs is ran.
         self.LogDB = self.DevDB.table("logs")
+        self.EventDB = self.DevDB.table("events")
         self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
         self.Q = Query()
         if data:
@@ -186,6 +187,10 @@ class Cache:
     @property
     def logs(self) -> list:
         return self.LogDB.all()
+
+    @property
+    def events(self) -> list:
+        return self.EventDB.all()
 
     @property
     def group_names(self) -> list:
@@ -301,6 +306,11 @@ class Cache:
 
         elif args[-1].lower() == "site":
             out = [m for m in self.site_completion(incomplete, args)]
+            for m in out:
+                yield m
+
+        elif args[-1].lower() == "ap":
+            out = [m for m in self.dev_completion(incomplete, args)]
             for m in out:
                 yield m
 
@@ -588,6 +598,10 @@ class Cache:
         self.LogDB.truncate()
         return self.LogDB.insert_multiple(log_data)
 
+    def update_event_db(self, log_data: List[Dict[str, Any]]) -> bool:
+        self.EventDB.truncate()
+        return self.EventDB.insert_multiple(log_data)
+
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs = []
         if dev_db:
@@ -641,17 +655,22 @@ class Cache:
         query_type: str = "device",
         multi_ok: bool = False,
     ) -> List[Dict[str, Any]]:
-        # typer.secho(f" -- Ambiguos identifier provided.  Please select desired {query_type}. --\n", color="cyan")
+        # typer.secho(f" -- Ambiguous identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         typer.echo()
+        set_width_cols = {}
         if query_type == "site":
             fields = ("name", "city", "state", "type")
         elif query_type == "template":
             fields = ("name", "group", "model", "device_type", "version")
+        elif query_type == "group":
+            fields = ("name",)
+            set_width_cols = {"name": {"min": 20, "max": None}}
         else:  # device
             fields = ("name", "serial", "mac", "type")
         out = utils.output(
             [{k: d[k] for k in d.data if k in fields} for d in match],
-            title=f"Ambiguos identifier. Select desired {query_type}."
+            title=f"Ambiguous identifier. Select desired {query_type}.",
+            set_width_cols=set_width_cols,
         )
         menu = out.menu(data_len=len(match))
 
@@ -701,7 +720,7 @@ class Cache:
         """
         # TODO remove multi_ok once verified refs are removed
         match = None
-        default_kwargs = {"retry": False, "completion": completion}
+        default_kwargs = {"retry": False, "completion": completion, "silent": True}
         for _ in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()
@@ -738,6 +757,7 @@ class Cache:
         retry: bool = True,
         multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
         completion: bool = False,
+        silent: bool = False,
     ) -> CentralObject:
 
         retry = False if completion else retry
@@ -805,7 +825,7 @@ class Cache:
 
             return match[0]
         elif retry:
-            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=not silent)
             if all_match:
                 # all_match = all_match[-1]
                 all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
@@ -824,6 +844,7 @@ class Cache:
         retry: bool = True,
         multi_ok: bool = False,
         completion: bool = False,
+        silent: bool = False,
     ) -> CentralObject:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
@@ -875,8 +896,9 @@ class Cache:
 
             return match[0]
 
+        # FIXME check this ... would think if not retry also doesn't match other get_*_identifier func logic
         elif retry:
-            log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=not silent)
             raise typer.Exit(1)
 
     def get_group_identifier(
@@ -886,6 +908,7 @@ class Cache:
         retry: bool = True,
         multi_ok: bool = False,
         completion: bool = False,
+        silent: bool = False,
     ) -> CentralObject:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
@@ -959,7 +982,7 @@ class Cache:
         else:
             if not completion:
                 log.error(
-                    f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True
+                    f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent
                 )
 
     def get_template_identifier(
@@ -970,6 +993,7 @@ class Cache:
         retry: bool = True,
         multi_ok: bool = False,
         completion: bool = False,
+        silent: bool = False,
     ) -> CentralObject:
         """Allows case insensitive template match by template name"""
         retry = False if completion else retry
@@ -1026,7 +1050,7 @@ class Cache:
             log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
             raise typer.Exit(1)
         else:
-            if not completion:
+            if not completion and not silent:
                 log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
 
     def get_log_identifier(self, query: str) -> str:
@@ -1050,4 +1074,25 @@ class Cache:
         except ValueError as e:
             log.exception(f"Exception in get_log_identifier {e.__class__.__name__}\n{e}")
             typer.secho(f"Exception in get_log_identifier {e.__class__.__name__}", fg="red")
+            raise typer.Exit(1)
+
+    def get_event_identifier(self, query: str) -> str:
+        if query == "":  # tab completion
+            return [x["id"] for x in self.events]
+
+        try:
+
+            match = self.EventDB.search(self.Q.id == int(query))
+            if not match:
+                log.warning(f"Unable to gather event details from short index query {query}", show=True)
+                typer.echo("Short event_id aliases are built each time 'show events' is ran.")
+                typer.echo("  You can verify the cache by running (hidden command) 'show cache events'")
+                typer.echo("  run 'show events [OPTIONS]' then use the short index for details")
+                raise typer.Exit(1)
+            else:
+                return match[-1]["details"]
+
+        except ValueError as e:
+            log.exception(f"Exception in get_event_identifier {e.__class__.__name__}\n{e}")
+            typer.secho(f"Exception in get_event_identifier {e.__class__.__name__}", fg="red")
             raise typer.Exit(1)

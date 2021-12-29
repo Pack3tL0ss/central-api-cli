@@ -20,6 +20,10 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+from centralcli.constants import IdenMetaVars
+
+iden = IdenMetaVars()
+
 app = typer.Typer()
 
 
@@ -76,7 +80,7 @@ def site(
     if yes or typer.confirm(_msg, abort=True):
         del_list = [s.id for s in sites]
         resp = cli.central.request(cli.central.delete_site, del_list)
-        cli.display_results(resp)
+        cli.display_results(resp, tablefmt="action")
         if resp:
             cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
             if len(cache_del_res) != len(del_list):
@@ -114,7 +118,7 @@ def group(
 
     if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3} {confirm_4}", abort=True):
         resp = cli.central.batch_request(reqs)
-        cli.display_results(resp)
+        cli.display_results(resp, tablefmt="action")
         if resp:
             asyncio.run(cli.cache.update_group_db(data=[{"name": g.name} for g in groups], remove=True))
 
@@ -138,7 +142,7 @@ def wlan(
     confirm_3 = typer.style(f"Group {group.name}, WLAN {name}", fg="cyan")
     if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}", abort=True):
         resp = cli.central.request(cli.central.delete_wlan, group.name, name)
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 class DelFirmwareArgs(str, Enum):
@@ -151,14 +155,14 @@ class FirmwareDevType(str, Enum):
     switch = "switch"
 
 
-class ShowFirmwareKwags(str, Enum):
-    group = "group"
-
-
 @app.command(short_help="Delete/Clear firmware compliance")
 def firmware(
     what: DelFirmwareArgs = typer.Argument(...),
-    device_type: FirmwareDevType = typer.Argument(..., metavar="[AP|GATEWAY|SWITCH]",),
+    device_type: FirmwareDevType = typer.Argument(
+        ...,
+        metavar=iden.generic_dev_types,
+        autocompletion=lambda incomplete: [x for x in ["ap", "gw", "switch"] if x.startswith(incomplete.lower())]
+    ),
     _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
     group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -170,9 +174,9 @@ def firmware(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     _type_to_name = {
-        "AP": "IAP",
-        "GATEWAY": "CONTROLLER",
-        "SWITCH": "HP"
+        "ap": "IAP",
+        "gateway": "CONTROLLER",
+        "switch": "HP"
     }
     yes = yes_ if yes_ else yes
 

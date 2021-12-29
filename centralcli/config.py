@@ -81,7 +81,7 @@ class Config:
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
         self.sticky_account_file = self.cache_dir / "last_account"
-        self.sanatize_file = self.dir / "redact.yaml"
+        self.sanitize_file = self.dir / "redact.yaml"
 
         self.data = self.get_file_data(self.file) or {}
         self.forget: Union[int, None] = self.data.get("forget_account_after")

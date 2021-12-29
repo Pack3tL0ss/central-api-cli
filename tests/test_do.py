@@ -13,7 +13,7 @@ if test_dev_file.is_file():
     TEST_DEVICES = json.loads(test_dev_file.read_text())
 
 
-def test_do_bounce_interface():
+def test_bounce_interface():
     result = runner.invoke(app, ["bounce",  "interface", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0
@@ -21,7 +21,7 @@ def test_do_bounce_interface():
     assert "task_id:" in result.stdout
 
 
-def test_do_bounce_poe():
+def test_bounce_poe():
     result = runner.invoke(app, ["bounce", "poe", TEST_DEVICES["switch"]["name"].lower(),
                            TEST_DEVICES["switch"]["test_port"], "-Y", "--debug"])
     assert result.exit_code == 0

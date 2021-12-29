@@ -18,6 +18,8 @@ from pycentral.base_utils import tokenLocalStoreUtil
 from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils, constants
 from .response import Response, Session
 
+color = utils.color
+
 
 # https://github.com/aio-libs/aiohttp/issues/4324
 def silence_event_loop_closed(func):
@@ -135,7 +137,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
 class BatchRequest:
     def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
-        """Contructor object for for api requests.
+        """Constructor object for for api requests.
 
         Used to pass multiple requests into CentralApi batch_request method for parallel
         execution.
@@ -172,7 +174,25 @@ class CentralApi(Session):
 
         return form
 
-    async def _request(self, func, *args, **kwargs):
+    @staticmethod
+    def _sorted(resp: Response, sort_by: str) -> Response:
+        if not resp:
+            return resp
+
+        type_error = True
+        if isinstance(resp, list):
+            if all([isinstance(d, dict) for d in resp.output]):
+                type_error = False
+                if sort_by in resp.output[-1].keys():
+                    resp.output = sorted(resp.output, key=lambda i: i[sort_by])
+                else:
+                    log.error(f"{sort_by} field not found in output.  No sort performed", show=True)
+        if type_error:
+            log.error("Unexpected response type no sort performed.", show=True)
+
+        return resp
+
+    async def _request(self, func: callable, *args, **kwargs):
         async with ClientSession() as self.aio_session:
             return await func(*args, **kwargs)
 
@@ -275,7 +295,7 @@ class CentralApi(Session):
         if not isinstance(_dict, dict):
             return _dict
 
-        return _dict if _dict is None else {k: v for k, v in _dict.items() if v is not None}
+        return {k: v for k, v in _dict.items() if v is not None}
 
     # doesn't appear to work. referenced in swagger to get listing of types (New Device Inventory: Get Devices...)
     async def get_dev_types(self):
@@ -357,12 +377,33 @@ class CentralApi(Session):
         cluster_id: str = None,
         band: str = None,
         mac: str = None,
-        sort_by: str = None,
+        # sort_by: str = None,
         offset: int = 0,
         limit: int = 500,
         # **kwargs,
     ) -> Response:
-        """Get client details."""
+        """Get Clients details.
+
+        :: Used by show clients ... ::
+
+        Args:
+            group (str, optional): Filter by Group. Defaults to None.
+            swarm_id (str, optional): Filter by swarm. Defaults to None.
+            label (str, optional): Filter by label. Defaults to None.
+            network (str, optional): Filter by WLAN SSID. Defaults to None.
+            site (str, optional): Filter by site. Defaults to None.
+            serial (str, optional): Filter by connected device serial. Defaults to None.
+            os_type (str, optional): Filter by client OS type. Defaults to None.
+            stack_id (str, optional): Filter by Stack ID. Defaults to None.
+            cluster_id (str, optional): Filter by Cluster ID. Defaults to None.
+            band (str, optional): Filter by band. Defaults to None.
+            mac (str, optional): Filter by client MAC. Defaults to None.
+            offset (int, optional): API Paging offset. Defaults to 0.
+            limit (int, optional): API record limit per request. Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response Object
+        """
         params = {
             "group": group,
             "swarm_id": swarm_id,
@@ -385,11 +426,17 @@ class CentralApi(Session):
         if stack_id and "wired" not in args:
             args = ("wired", *args)
 
-        if "mac" in args and args.index("mac") < len(args):
-            _mac = utils.Mac(
-                args[args.index("mac") + 1],
-                fuzzy=True,
-            )
+        if mac or ("mac" in args and args.index("mac") < len(args)):
+            if mac:
+                _mac = utils.Mac(
+                    mac,
+                    fuzzy=True,
+                )
+            else:
+                _mac = utils.Mac(
+                    args[args.index("mac") + 1],
+                    fuzzy=True,
+                )
             if _mac.ok:
                 mac = _mac
             else:
@@ -398,19 +445,19 @@ class CentralApi(Session):
         # if not args.count(str) > 0 or "all" in args:
         if not args or "all" in args:
             if mac:
-                return await self.get_client_details(mac.cols,)  # **kwargs)
+                return await self.get_client_details(mac,)
             else:
-                return await self.get_all_clients(**all_params,)  # **kwargs)
+                return await self.get_all_clients(**all_params,)
         elif "wired" in args:
             if mac:
-                return await self.get_client_details(mac.cols, dev_type="wired",)  # **kwargs)
+                return await self.get_client_details(mac, dev_type="wired",)
             else:
-                return await self.get_wired_clients(**wired_params,)  # **kwargs)
+                return await self.get_wired_clients(**wired_params,)
         elif "wireless" in args:
             if mac:
-                return await self.get_client_details(mac.cols, dev_type="wireless",)  # **kwargs)
+                return await self.get_client_details(mac, dev_type="wireless",)
             else:
-                return await self.get_wireless_clients(**wlan_params,)  # **kwargs)
+                return await self.get_wireless_clients(**wlan_params,)
         else:
             return Response(
                 error="INVALID ARGUMENT",
@@ -429,11 +476,34 @@ class CentralApi(Session):
         stack_id: str = None,
         cluster_id: str = None,
         band: str = None,
-        sort_by: str = None,
+        # sort_by: str = None,
         offset: int = 0,
         limit: int = 500,
         # **kwargs,
     ) -> Response:
+        """Get All clients
+
+        :: Used indirectly by show clients ::
+
+        Args:
+            group (str, optional): Return clients connected to devices in a given group. Defaults to None.
+            swarm_id (str, optional): Return clients connected to swarm by swarm_id. Defaults to None.
+            label (str, optional): Return clients connected to device with provided label.
+                Defaults to None.
+            network (str, optional): Return clients for given network (SSID). Defaults to None.
+            site (str, optional): Return clients in a particular site. Defaults to None.
+            serial (str, optional): Return clients connected to the device with given serial. Defaults to None.
+            os_type (str, optional): Return clients with provided os_type. Defaults to None.
+            stack_id (str, optional): Return clients connected to stack with provided id. Defaults to None.
+            cluster_id (str, optional): Return clients connected to cluster with provided id. Defaults to None.
+            band (str, optional): Return (WLAN) clients connected to provided band. Defaults to None.
+            FIXME sort_by (str, optional): Sort Output on provided key field. Defaults to None.
+            offset (int, optional): API offset. Defaults to 0.
+            limit (int, optional): API record limit. Defaults to 500.
+
+        Returns:
+            Response: CentralCli.Response object
+        """
         params = {
             "group": group,
             "swarm_id": swarm_id,
@@ -449,15 +519,28 @@ class CentralApi(Session):
         wlan_only_params = {"network": network, "os_type": os_type, "band": band}
         wired_only_params = {"stack_id": stack_id}
 
-        resp = await self.get_wireless_clients(**{**params, **wlan_only_params},)  # **kwargs)
-        if resp.ok:
-            wlan_resp = resp
-            wired_resp = await self.get_wired_clients(**{**params, **wired_only_params},)  # **kwargs)
-            if wired_resp.ok:
-                resp.output = wlan_resp.output + wired_resp.output
-                # resp.output = cleaner.get_clients(resp.output)
-                if sort_by:  # TODO
-                    print("sort_by not implemented yet.")
+        # resp = await self.get_wireless_clients(**{**params, **wlan_only_params},)  # **kwargs)
+        # if resp.ok:
+        #     wlan_resp = resp
+        #     wired_resp = await self.get_wired_clients(**{**params, **wired_only_params})  # **kwargs)
+        #     if wired_resp.ok:
+        #         resp.output = wlan_resp.output + wired_resp.output
+
+        reqs = [
+            BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
+            BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
+        ]
+        resp = await self._batch_request(reqs)
+        if len(resp) == 2 and all(x.ok for x in resp):
+            out = [*resp[0].output, *resp[1].output]
+            raw = [
+                {"raw_wireless_response": resp[0].raw},
+                {"raw_wired_response": resp[1].raw}
+            ]
+            resp = resp[1]
+            resp.output = out
+            resp.raw = raw
+
         return resp
 
     async def get_wireless_clients(
@@ -473,7 +556,7 @@ class CentralApi(Session):
         band: str = None,
         fields: str = None,
         calculate_total: bool = None,
-        sort_by: str = None,
+        # sort_by: str = None,
         offset: int = 0,
         limit: int = 500,
         # **kwargs,
@@ -522,7 +605,11 @@ class CentralApi(Session):
             "limit": limit,
         }
 
-        return await self.get(url, params=params,)  # callback=cleaner.get_clients, **kwargs)
+        return await self.get(url, params=params,)
+        # if sort_by is None:
+        #     return resp
+        # else:
+        #     return self._sorted(resp, sort_by)
 
     async def get_wired_clients(
         self,
@@ -535,7 +622,7 @@ class CentralApi(Session):
         stack_id: str = None,
         fields: str = None,
         calculate_total: bool = None,
-        sort_by: str = None,
+        # sort_by: str = None,
         offset: int = 0,
         limit: int = 500,
         # **kwargs,
@@ -553,8 +640,7 @@ class CentralApi(Session):
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 name, ip_address, username, associated_device, group_name, interface_mac, vlan
             calculate_total (bool, optional): Whether to calculate total wired Clients
-            # sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
-            #     '+macaddr'
+            FIXME sort (str, optional): Field to sort on.  Defaults to mac
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
 
@@ -578,13 +664,23 @@ class CentralApi(Session):
             "limit": limit,
         }
 
-        return await self.get(url, params=params,)  # callback=cleaner.get_clients, **kwargs)
+        return await self.get(url, params=params,)
+        # if sort_by is None:
+        #     return resp
+        # else:
+        #     return self._sorted(resp, sort_by)
 
-    async def get_client_details(self, macaddr: str, dev_type: str = None, **kwargs) -> Response:
+    async def get_client_details(
+        self,
+        mac: utils.Mac,
+        dev_type: str = None,
+        # sort_by: str = None,
+        **kwargs
+    ) -> Response:
         """Get Wired/Wireless Client Details.
 
         Args:
-            macaddr (str): MAC address of the Wireless Client to be queried
+            mac (utils.Mac): MAC address of the Wireless Client to be queried
                 API will return results matching a partial Mac
 
         Returns:
@@ -596,7 +692,7 @@ class CentralApi(Session):
         # Mac match logic is jacked in central
         # given a client with a MAC of ac:37:43:4a:8e:fa
         #
-        # Make MAC invlalid (changed last octet):
+        # Make MAC invalid (changed last octet):
         #   ac:37:43:4a:8e:ff No Match
         #   ac37434a8eff No Match
         #   ac:37:43:4a:8e-ff  Returns MATCH
@@ -606,16 +702,22 @@ class CentralApi(Session):
         #   ac-37-43-4a-8e-ff Return MATCH
         #   ac37.434a.8eff Returns MATCH
         if not dev_type:
-            for _dev_type in ["wired", "wireless"]:
-                url = f"/monitoring/v1/clients/{_dev_type}/{macaddr}"
-                resp = await self.get(url, callback=cleaner.get_clients, **kwargs)
+            for _dev_type in ["wireless", "wired"]:
+                url = f"/monitoring/v1/clients/{_dev_type}/{mac.url}"
+                resp = await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
                 if resp:
+                    # resp.output = [{**{"client_type": _dev_type.upper()}, **d} for d in resp.output]
                     break
 
             return resp
         else:
-            url = f"/monitoring/v1/clients/{dev_type}/{macaddr}"
-            return await self.get(url, callback=cleaner.get_clients, **kwargs)
+            url = f"/monitoring/v1/clients/{dev_type}/{mac.url}"
+            return await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
+
+        # if sort_by is None:
+        #     return resp
+        # else:
+        #     return self._sorted(resp, sort_by)
 
     async def get_certificates(
         self, q: str = None, offset: int = 0, limit: int = 20, callback: callable = None, callback_kwargs: dict = None
@@ -770,12 +872,14 @@ class CentralApi(Session):
         resp = await self.get(url, params=params, callback=cleaner._get_group_names)
         return resp
 
+    # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:
         url = "/configuration/v2/groups/template_info"
         resp = await self._get_group_names()
         if not resp.ok:
             return resp
         else:
+            # return await self.get_groups_properties(resp.output)
             all_groups = ",".join(resp.output)
             params = {"groups": all_groups}
         return await self.get(url, params=params, callback=cleaner.get_all_groups)
@@ -968,7 +1072,7 @@ class CentralApi(Session):
 
     async def get_devices(
         self,
-        dev_type: Literal["switches", "aps", "gateways", "mobility_controllers"],
+        dev_type: Literal["switches", "aps", "gateways"],
         group: str = None,
         label: str = None,
         stack_id: str = None,
@@ -986,9 +1090,37 @@ class CentralApi(Session):
         site: str = None,
         limit: int = 500,  # max allowed 1000
         offset: int = 0,
-        sort: str = None,
+        # sort: str = None,
     ) -> Response:
+        """Get Devices from Aruba Central API Gateway
 
+        :: Used by show <"aps"|"gateways"|"switches"> ::
+
+        Args:
+            dev_type (Literal["switches", "aps", "gateways"): Type of devices to get.
+            group (str, optional): Filter on specific group. Defaults to None.
+            label (str, optional): Filter by label. Defaults to None.
+            stack_id (str, optional): Return switch with specific stack_id. Defaults to None.
+            swarm_id (str, optional): Return APs with a specific swarm_id. Defaults to None.
+            serial (str, optional): Return the device with serial number. Defaults to None.
+            status (str, optional): Filter by status. Defaults to None.
+            fields (list, optional): Return specific fields for device. Defaults to None.
+            show_resource_details (bool, optional): Show resource utilization. Defaults to False.
+            cluster_id (str, optional): Return gateways with a specific cluster_id. Defaults to None.
+            model (str, optional): Filter by device model. Defaults to None.
+            calculate_client_count (bool, optional): Calculate client count for each device. Defaults to False.
+            calculate_ssid_count (bool, optional): Calculate SSID count for each AP. Defaults to False.
+            macaddr (str, optional): Return device with specific MAC (fuzzy match). Defaults to None.
+            public_ip_address (str, optional): Filter devices by Public IP. Defaults to None.
+            site (str, optional): Filter by site. Defaults to None.
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Max is 1000 Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+
+        # TODO seperate params based on dev type they apply to
         params = {
             "group": group,
             "label": label,
@@ -1009,16 +1141,31 @@ class CentralApi(Session):
             "offset": offset,
         }
 
-        url = f"/monitoring/v1/{dev_type}"  # (inside brackets = same response) switches, aps, [mobility_controllers, gateways]
-        if dev_type == "aps" and "internal" in self.auth.central_info["base_url"]:
+        url = f"/monitoring/v1/{dev_type}"
+        if dev_type == "aps":
             url = url.replace("v1", "v2")
-        # TODO move cleaner into cli ... make this sep library dependency
-        # TODO sort not implemented yet
-        return await self.get(url, params=params, callback=cleaner.get_devices, callback_kwargs={"sort": sort})
 
-    async def get_dev_details(self, dev_type: str, serial: str) -> Response:
+        return await self.get(url, params=params)
+
+    async def get_dev_details(
+        self,
+        dev_type: Literal["switches", "aps", "gateways"],
+        serial: str
+    ) -> Response:
+        """Return Details for a given device
+
+        :: Used by show device[s] <device iden> ::
+
+        Args:
+            dev_type (str): Device Type
+                Valid Values: "gateways", "aps", "switches"
+            serial (str): Serial number of Device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/monitoring/v1/{dev_type}/{serial}"
-        return await self.get(url, callback=cleaner.get_devices)
+        return await self.get(url)
 
     async def monitoring_get_mcs(
         self,
@@ -1770,7 +1917,7 @@ class CentralApi(Session):
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
 
-    async def create_group(
+    async def create_group_v2(
         self,
         group: str,
         group_password: str,
@@ -1778,6 +1925,8 @@ class CentralApi(Session):
         wlan_tg: bool = False
     ) -> Response:
         """Create new group.
+
+        Deprecated formerly used by cli add group
 
         Args:
             group (str): Group Name
@@ -1805,25 +1954,185 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def clone_group(self, clone_group: str, new_group: str) -> Response:
+    async def update_ap_system_config(
+        self,
+        group_swarmid: str,
+        dns_server: str = None,
+        ntp_server: List[str] = None,
+        username: str = None,
+        password: str = None,
+    ) -> Response:
+        """Update system config.
+
+        Args:
+            group_swarmid (str): Group name of the group or guid of the swarm. Example:Group_1
+                or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            dns_server (str): DNS server IPs or domain name
+            ntp_server (List[str]): List of ntp server,
+                Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
+                IPs or domain name.
+            username (str): username
+            password (str): password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/system_config/{group_swarmid}"
+
+        json_data = utils.strip_none(
+            {
+                'dns_server': dns_server,
+                'ntp_server': ntp_server,
+                'username': username,
+                'password': password
+            }
+        )
+
+        return await self.post(url, json_data=json_data)
+
+    async def create_group(
+        self,
+        group: str,
+        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = ["ap", "gw", "cx", "sw"],
+        wired_tg: bool = False,
+        wlan_tg: bool = False,
+        aos10: bool = False,
+        microbranch: bool = False,
+        gw_role: constants.GatewayRole = "branch",
+        monitor_only_sw: bool = False,
+        # monitor_only_cx: bool = False,  # Not supported by central yet
+    ) -> Response:
+        """Create new group with specified properties. v3
+
+        :: Used by add group ::
+
+        Args:
+            group (str): Group Name
+            allowed_types (str, List[str]): Allowed Device Types in the group. Tabs for devices not allowed
+                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch"
+                ("switch" is generic, will enable both cx and sw)
+            wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+            aos10: (bool): if True use AOS10 architecture for the access points and gateways in the group.
+                default False (Instant)
+            microbranch (bool): True to enable Microbranch network role for APs is applicable only for AOS10 architecture.
+            gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
+                Default: "branch"
+            monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
+            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only (Future capability)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v3/groups"
+
+        gw_role_dict = {
+            "branch": "BranchGateway",
+            "vpnc": "VPNConcentrator",
+            "wlan": "WLANGateway",
+        }
+        dev_type_dict = {
+            "ap": "AccessPoints",
+            "gw": "Gateways",
+            "switch": "Switches",
+            "cx": "Switches",
+            "sw": "Switches",
+        }
+
+        gw_role = gw_role_dict.get(gw_role, "BranchGateway")
+
+        allowed_types = utils.listify(allowed_types)
+        allowed_switch_types = []
+        if "switch" in allowed_types or ("cx" in allowed_types and "sw" in allowed_types):
+            allowed_switch_types += ["AOS_CX", "AOS_S"]
+        elif "sw" in allowed_types:
+            allowed_switch_types += ["AOS_S"]
+        elif "cx" in allowed_types:
+            allowed_switch_types += ["AOS_CX", "AOS_S"]
+
+        mon_only_switches = []
+        if monitor_only_sw:
+            mon_only_switches += ["AOS_S"]
+        # if monitor_only_cx:
+        #     mon_only_switches += ["AOS_CX"]
+
+        allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
+
+        if mon_only_switches and "Switches" not in allowed_types:
+            log.warning("ignoring monitor only switch setting as no switches were specified as being allowed in group", show=True)
+
+        if None in allowed_types:
+            raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"')
+        if microbranch and not aos10:
+            raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
+        # if wired_tg and monitor_only_sw or monitor_only_cx:
+        if wired_tg and monitor_only_sw:
+            raise ValueError("Invalid combination, Monitor Only is not valid for Template Group")
+
+        json_data = {
+            "group": group,
+            "group_attributes": {
+                "template_info": {
+                    "Wired": wired_tg,
+                    "Wireless": wlan_tg
+                },
+                "group_properties": {
+                    "AllowedDevTypes": allowed_types,
+                }
+            }
+        }
+        if gw_role and "Gateways" in allowed_types:
+            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
+            json_data["group_attributes"]["group_properties"]["Architecture"] = \
+                "Instant" if not aos10 else "AOS10"
+        if "AccessPoints" in allowed_types:
+            json_data["group_attributes"]["group_properties"]["ApNetworkRole"] = \
+                "Standard" if not microbranch else "Microbranch"
+            json_data["group_attributes"]["group_properties"]["Architecture"] = \
+                "Instant" if not aos10 else "AOS10"
+        if "Switches" in allowed_types:
+            json_data["group_attributes"]["group_properties"]["AllowedSwitchTypes"] = \
+                allowed_switch_types
+            if mon_only_switches:
+                json_data["group_attributes"]["group_properties"]["MonitorOnly"] = \
+                    mon_only_switches
+
+        return await self.post(url, json_data=json_data)
+
+    async def clone_group(
+        self,
+        clone_group: str,
+        new_group: str,
+        upgrade_aos10: bool = False,
+    ) -> Response:
         """Clone and create new group.
 
         Args:
             clone_group (str): Group to be cloned.
             new_group (str): Name of group to be created based on clone.
+            upgrade_aos10 (bool): Set True to Update the new cloned group to AOS10.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/configuration/v2/groups/clone"
 
+        if upgrade_aos10:
+            log.warning(
+                "Group may not be upgraded to AOS10, API method appears to have some caveats... Doesn't always work."
+            )
+
         json_data = {
             'group': new_group,
-            'clone_group': clone_group
+            'clone_group': clone_group,
+            'upgrade_architecture': upgrade_aos10,
         }
 
         return await self.post(url, json_data=json_data)
 
+    # TODO Deprecated verify not used by any commands
     async def update_group(
         self,
         group: str,
@@ -1855,7 +2164,8 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    async def update_group_properties(
+    # TODO REMOVE DEPRECATED REPLACED WITH V2
+    async def update_group_properties_v1(
         self,
         group: str,
         aos10: bool = None,
@@ -1891,6 +2201,194 @@ class CentralApi(Session):
             json_data['MonitorOnlySwitch'] = monitor_only_switch
 
         return await self.patch(url, json_data=json_data)
+
+    # FIXME It appears this update only works if all properties provided although is will send a 200 SUCCESS with partial
+    # Need to get_group_properties along with template groups (see get_all_groups) then update changes
+    # set defaults for everything to None
+    async def update_group_properties(
+        self,
+        group: str,
+        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = None,
+        wired_tg: bool = None,
+        wlan_tg: bool = None,
+        aos10: bool = None,
+        microbranch: bool = None,
+        gw_role: constants.GatewayRole = None,
+        monitor_only_sw: bool = None,
+        monitor_only_cx: bool = None,  # Not supported by central yet
+    ) -> Response:
+        """Update properties for the given group.
+
+        :: Used by update group ::
+
+        - The update of persona and configuration mode set for existing device types is not permitted.
+        - Can update from standard AP to MicroBranch, but can't go back
+        - Can update to AOS10, but can't go back
+        - Can Add Allowed Device Types, but can't remove.
+        - Can Add Allowed Switch Types, but can't remove.
+        - Can only change mon_only_sw and wired_tg when adding switches (cx, sw) to allowed_device_types
+
+
+        Args:
+            group (str): Group Name
+            allowed_types (str, List[str]): Allowed Device Types in the group. Tabs for devices not allowed
+                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch"
+                ("switch" is generic, will enable both cx and sw)
+            wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+            aos10: (bool): if True use AOS10 architecture for the access points and gateways in the group.
+                default False (Instant)
+            microbranch (bool): True to enable Microbranch network role for APs is applicable only for AOS10 architecture.
+            gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
+            monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
+            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only (Future capability)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/groups/{group}/properties"
+
+        resp = await self.get_groups_properties(group)
+        if resp:
+            if not isinstance(resp.output, list):
+                raise ValueError(f"Expected list of dicts from get_groups_properties got {type(resp.output)}")
+            cur_group_props = resp.output[-1]["properties"]
+        else:
+            log.error(f"Unable to perform call to update group {group} properties.  Call to get current properties failed.")
+            return resp
+
+        if cur_group_props["AOSVersion"] == "AOS_10X" and aos10 is False:
+            return Response(
+                error=f"{group} is currently an AOS10 group.  Upgrading to AOS10 is supported, reverting back is not.",
+                rl_str=resp.rl,
+            )
+        if "AccessPoints" in cur_group_props["AllowedDevTypes"]:
+            if microbranch is not None:
+                return Response(
+                    error=f"{group} already allows APs.  Microbranch/Standard AP can only be set "
+                          "when initially adding APs to allowed_types of group",
+                    rl_str=resp.rl,
+                )
+
+        allowed_types = allowed_types or []
+        allowed_switch_types = []
+        if allowed_types:
+            allowed_types = utils.listify(allowed_types)
+            if "switch" in allowed_types or ("cx" in allowed_types and "sw" in allowed_types):
+                allowed_switch_types += ["AOS_CX", "AOS_S"]
+            elif "sw" in allowed_types:
+                allowed_switch_types += ["AOS_S"]
+            elif "cx" in allowed_types:
+                allowed_switch_types += ["AOS_CX", "AOS_S"]
+
+        # print("[DEBUG] ---- Current Properties of group")
+        # utils.json_print(cur_group_props)
+        # print("[DEBUG] ----")
+        # TODO copy paste from create group ... common func to build payload
+        gw_role_dict = {
+            "branch": "BranchGateway",
+            "vpnc": "VPNConcentrator",
+            "wlan": "WLANGateway",
+        }
+        dev_type_dict = {
+            "ap": "AccessPoints",
+            "gw": "Gateways",
+            "switch": "Switches",
+            "cx": "Switches",
+            "sw": "Switches",
+        }
+        gw_role = gw_role_dict.get(gw_role)
+
+        mon_only_switches = []
+        if monitor_only_sw:
+            mon_only_switches += ["AOS_S"]
+        # if monitor_only_cx:
+        #     mon_only_switches += ["AOS_CX"]
+
+        arch = None
+        if microbranch is not None:
+            if aos10 is not None:
+                arch = "Instant" if not aos10 else "AOS10"
+
+        allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
+        combined_allowed = [*allowed_types, *cur_group_props["AllowedDevTypes"]]
+
+        if None in allowed_types:
+            return Response(
+                error='Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"',
+                rl_str=resp.rl,
+            )
+        if microbranch and not aos10:
+            return Response(
+                error="Invalid combination, Group must be configured as AOS10 group to support Microbranch",
+                rl_str=resp.rl,
+            )
+        if microbranch and "AccessPoints" not in combined_allowed:
+            return Response(
+                error=f"Invalid combination, {color('Microbranch')} "
+                      f"can not be enabled in group {color(group)}.  "
+                      "APs must be added to allowed devices.\n"
+                      f"[reset]Current Allowed Devices: {color(combined_allowed)}",
+                rl_str=resp.rl,
+            )
+        if "Gateways" in combined_allowed or "AccessPoints" in combined_allowed:
+            if aos10 is not None:
+                return Response(
+                    error=f"{color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
+                          f"\n{color(group)} can be cloned with option to upgrade during clone.",
+                    rl_str=resp.rl,
+                )
+        # if wired_tg and monitor_only_sw or monitor_only_cx:
+        if wired_tg and monitor_only_sw:
+            return Response(
+                error="Invalid combination, Monitor Only is not valid for Template Group",
+                rl_str=resp.rl,
+            )
+
+        grp_props = {
+            "AllowedDevTypes": allowed_types,
+            "Architecture": arch,
+            "AllowedSwitchTypes": allowed_switch_types,
+            "MonitorOnly": mon_only_switches
+        }
+        grp_props = {k: v for k, v in grp_props.items() if v}
+
+        if gw_role and "Gateways" in allowed_types:
+            grp_props["GwNetworkRole"] = gw_role
+        if "AccessPoints" in allowed_types or "AccessPoints" in cur_group_props["AllowedDevTypes"]:
+            if microbranch is not None:
+                grp_props["ApNetworkRole"] = \
+                    "Standard" if not microbranch else "Microbranch"
+
+        tmplt_info = {
+            "Wired": wired_tg,
+            "Wireless": wlan_tg
+        }
+        tmplt_info = utils.strip_none(tmplt_info)
+
+        grp_attrs = {}
+        if tmplt_info:
+            grp_attrs["template_info"] = tmplt_info
+        if grp_props:
+            grp_attrs["group_properties"] = grp_props
+
+        json_data = {"group": group}
+        if grp_attrs:
+            json_data["group_attributes"] = grp_attrs
+
+        if len(json_data) == 1:
+            raise ValueError("No Changes Detected")
+        else:
+            print(f"[DEBUG] ---- Sending the following to {url}")
+            utils.json_print(json_data)
+            print("[DEBUG] ----")
+            return await self.patch(url, json_data=json_data)
+            # # FIXME remove debug prints
+            # print(url)
+            # from rich import print_json
+            # print_json(data=json_data)
 
     async def update_group_name(self, group: str, new_group: str) -> Response:
         """Update group name for the given group.
@@ -1932,6 +2430,8 @@ class CentralApi(Session):
     async def get_ap_settings(self, serial_number: str) -> Response:
         """Get an existing ap settings.
 
+        :: Used indirectly (update_ap_settings) by batch rename AP ::
+
         Args:
             serial_number (str): AP serial number.
 
@@ -1957,6 +2457,8 @@ class CentralApi(Session):
         usb_port_disable: bool = None,
     ) -> Response:
         """Update an existing ap settings.
+
+        :: Used by batch rename aps ::
 
         Args:
             serial_number (str, optional): AP Serial Number
@@ -1998,13 +2500,15 @@ class CentralApi(Session):
             if not sorted(_json_data.keys()) == sorted(json_data.keys()):
                 missing = ", ".join([f"'{k}'" for k in json_data.keys() if k not in _json_data.keys()])
                 return Response(
+                    ok=False,
                     error=f"Update payload is missing required attributes: {missing}",
                     reason="INVALID"
                 )
 
         return await self.post(url, json_data=json_data)
 
-    # TODO NotUsed Yet
+    # TODO NotUsed Yet.  Shows any updates not yet pushed to the device (device offline, etc)
+    # May only be valid for APs not sure.
     async def get_dirty_diff(
         self,
         group: str,
@@ -2162,6 +2666,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
+    # TODO accept List of str and batch delete
     async def delete_group(self, group: str) -> Response:
         """Delete existing group.
 
@@ -2418,6 +2923,8 @@ class CentralApi(Session):
 
         You can only specify one of device_type, swarm_id or serial parameters
 
+        :: Used by upgrade [device|group|swarm] ::
+
         Args:
             scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
             swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
@@ -2450,6 +2957,8 @@ class CentralApi(Session):
     async def get_upgrade_status(self, swarm_id: str = None, serial: str = None) -> Response:
         """Get firmware upgrade status.
 
+        :: Used by show upgrade [device-iden] ::
+
         Args:
             swarm_id (str, optional): Swarm ID
             serial (str, optional): Serial of device
@@ -2471,6 +2980,8 @@ class CentralApi(Session):
     async def get_firmware_compliance(self, device_type: DevType, group: str = None) -> Response:
         """Get Firmware Compliance Version.
 
+        :: Used by show firmware compliance [ap|gw|sw] [group-name] ::
+
         Args:
             device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
             group (str, optional): Group name. Defaults to None (Global Compliance)
@@ -2490,6 +3001,8 @@ class CentralApi(Session):
 
     async def delete_firmware_compliance(self, device_type: str, group: str = None) -> Response:
         """Clear Firmware Compliance Version.
+
+        :: Used by delete firmware compliance [ap|gw|switch] [group] ::
 
         Args:
             device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
@@ -2521,7 +3034,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO report flawed API method
+        # API-FLAW report flawed API method
         # Returns 500 status code when result is essentially success
         # Please Confirm: move Aruba9004_81_E8_FA & PommoreGW1 to group WLNET? [y/N]: y
         # ✖ Sending Data [configuration/v1/devices/move]
@@ -2590,7 +3103,7 @@ class CentralApi(Session):
         serial_nums: List[str],
         device_type: Literal["ap", "cx", "sw", "switch", "gw"],
     ) -> Response:
-        """Unassociate a site from a list of devices.
+        """Remove a list of devices from a site.
 
         Args:
             site_id (int): Site ID
@@ -2661,14 +3174,16 @@ class CentralApi(Session):
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
+        :: Used by add device ::
 
         Args:
             mac_address (str, optional): MAC address of device to be added
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
             part_num (str, optional): Part Number is required for Central On Prem.
-            license (str, optional): The subscription license to assign to device.
+            license (str|List(str), optional): The subscription license(s) to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
+                and optionally group, part_num, license,
 
         Returns:
             Response: CentralAPI Response object
@@ -2679,6 +3194,8 @@ class CentralApi(Session):
             license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
         if serial_num and mac_address:
             to_group = None if not group else {group: [serial_num]}
+            if device_list:
+                raise ValueError("serial_num and mac_address are not expected when device_list is being provided.")
 
             mac = utils.Mac(mac_address)
             if not mac:
@@ -2708,6 +3225,27 @@ class CentralApi(Session):
             to_group = {d["group"]: [] for d in device_list if "group" in d}
             _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
 
+            # Gather all serials for each license combination from device_list
+            # TODO this needs to be tested
+            _lic_kwargs = {}
+            for d in device_list:
+                if "license" not in d:
+                    continue
+
+                d["license"] = utils.listify(d["license"])
+                _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
+                if _key in _lic_kwargs:
+                    _serial = d.get("serial_num", d.get("serial"))
+                    if not _serial:
+                        raise ValueError(f"No serial found for device: {d}")
+                    _lic_kwargs[_key]["serials"] += utils.listify(_serial)
+                else:
+                    _lic_kwargs[_key] = {
+                        "services": utils.listify(d["license"]),
+                        "serials": utils.listify(_serial)
+                    }
+            license_kwargs = list(_lic_kwargs.values())
+
             # license_args = [[], []]
             # by_ser = {d["serial_num"]: utils.listify(d.get("license")) for d in device_list if d.get("license")}
             # TODO most efficient pairing of possible lic/dev for fewest call
@@ -2716,15 +3254,20 @@ class CentralApi(Session):
         else:
             raise ValueError("mac_address and serial_num or device_list is required")
 
+        # Perform API call(s) to Central API GW
         if to_group or license_kwargs:
+            # Add devices to central.  1 API call for 1 or many devices.
             br = self.BatchRequest
             reqs = [
                 br(self.post, url, json_data=json_data),
             ]
+            # Assign devices to pre-provisioned group.  1 API call per group
+            # TODO test that this is 1 API call per group.
             if to_group:
                 group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
 
+            # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
                 lic_reqs = [br(self.assign_licenses, **kwargs) for kwargs in license_kwargs]
                 reqs = [*reqs, *lic_reqs]
@@ -2735,6 +3278,8 @@ class CentralApi(Session):
 
     async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
         """Assign devices to pre-provisioned group.
+
+        :: Used indirectly by add device (when group option provided) ::
 
         Args:
             group (str): Group name
@@ -2886,6 +3431,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # API-NOTE: grabs All valid license types, display names...
     async def get_services_config(
         self,
         service_category: str = None,
@@ -2911,6 +3457,8 @@ class CentralApi(Session):
 
     async def assign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
         """Assign subscription to a device.
+
+        :: Used indirectly by add device when --license <license> is provided. ::
 
         Args:
             serials (List[str]): List of serial number of device.
@@ -3235,7 +3783,9 @@ class CentralApi(Session):
         group_swarmid: str,
         version: str = None,
     ) -> Response:
-        """Get AP configuration.
+        """Get AP Group Level configuration for UI group.
+
+        :: Used by show config <AP MAC for AOS10 AP> ::
 
         Args:
             group_swarmid (str): Group name of the group or guid of the swarm.
@@ -3258,7 +3808,7 @@ class CentralApi(Session):
         group_name_or_guid: str,
         clis: List[str],
     ) -> Response:
-        """Replace AP configuration.
+        """Replace AP Group Level configuration for UI group.
 
         Send AP configuration in CLI format as a list of strings where each item in the list is
         a line from the config.  Requires all lines of the config, not a partial update.
@@ -3272,6 +3822,44 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/ap_cli/{group_name_or_guid}"
+
+        json_data = {
+            'clis': clis
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def get_per_ap_config(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get per AP setting.
+
+        Args:
+            serial (str): Serial Number of AP
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_settings_cli/{serial}"
+
+        return await self.get(url)
+
+    async def replace_per_ap_config(
+        self,
+        serial: str,
+        clis: List[str],
+    ) -> Response:
+        """Replace per AP setting.
+
+        Args:
+            serial (str): Serial Number of AP
+            clis (List[str]): Whole per AP setting List in CLI format
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_settings_cli/{serial}"
 
         json_data = {
             'clis': clis

@@ -15,5 +15,5 @@ typer
 aiohttp
 asyncio
 tablib
-rich
+rich>=10.0
 sphinx_click
