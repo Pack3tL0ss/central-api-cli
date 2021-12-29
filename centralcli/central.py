@@ -934,7 +934,7 @@ class CentralApi(Session):
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
         _output = {}
 
-        reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
+        reqs = [BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failures = [idx for idx, r in enumerate(res) if not (r)]
         if _failures:
@@ -1119,31 +1119,60 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-
-        # TODO seperate params based on dev type they apply to
-        params = {
+        dev_params = {
+            "aps": {
+                'serial': serial,
+                'macaddr': macaddr,
+                "swarm_id": swarm_id,
+                'model': model,
+                'cluster_id': cluster_id,
+                'fields': fields,
+                'calculate_client_count': str(calculate_client_count).lower(),
+                'calculate_ssid_count': str(calculate_ssid_count).lower(),
+                'show_resource_details': str(show_resource_details).lower(),
+            },
+            "switches": {
+                'stack_id': stack_id,
+                'show_resource_details': str(show_resource_details).lower(),
+                'calculate_client_count': str(calculate_client_count).lower(),
+                'public_ip_address': public_ip_address,
+            },
+            "gateways": {
+                'macaddr': macaddr,
+                'model': model,
+                'fields': fields,
+            }
+        }
+        common_params = {
             "group": group,
             "label": label,
-            "swarm_id": swarm_id,
-            "site": site,
-            "serial": serial,
-            "macaddr": macaddr,
-            "model": model,
-            "cluster_id": cluster_id,
-            "stack_id": stack_id,
-            "status": None if not status else status.title(),
-            "fields": fields,
-            "show_resource_details": str(show_resource_details).lower(),
-            "calculate_client_count": str(calculate_client_count).lower(),
-            "calculate_ssid_count": str(calculate_ssid_count).lower(),
-            "public_ip_address": public_ip_address,
-            "limit": limit,
-            "offset": offset,
+            'site': site,
+            'status': None if not status else status.title(),
+            'offset': offset,
+            'limit': limit
         }
+        # params = {
+        #     "swarm_id": swarm_id,
+        #     "site": site,
+        #     "serial": serial,
+        #     "macaddr": macaddr,
+        #     "model": model,
+        #     "cluster_id": cluster_id,
+        #     "stack_id": stack_id,
+        #     "status": None if not status else status.title(),
+        #     "fields": fields,
+        #     "show_resource_details": str(show_resource_details).lower(),
+        #     "calculate_client_count": str(calculate_client_count).lower(),
+        #     "calculate_ssid_count": str(calculate_ssid_count).lower(),
+        #     "public_ip_address": public_ip_address,
+        #     "limit": limit,
+        #     "offset": offset,
+        # }
 
         url = f"/monitoring/v1/{dev_type}"
         if dev_type == "aps":
             url = url.replace("v1", "v2")
+        params = {**common_params, **dev_params[dev_type]}
 
         return await self.get(url, params=params)
 
