@@ -7,17 +7,18 @@ import sys
 import importlib
 from pathlib import Path
 from typing import List
+from rich import print
 
 import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
+    from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import clibatch, clicaas, clido, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
+        from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -34,7 +35,7 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
-app.add_typer(clido.app, name="do",)
+# app.add_typer(clido.app, name="do",)
 app.add_typer(clidel.app, name="delete")
 app.add_typer(cliadd.app, name="add",)
 app.add_typer(cliclone.app, name="clone",)
@@ -91,14 +92,15 @@ def move(
         autocompletion=cli.cache.site_completion,
     ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
-    # yes_: bool = typer.Option(False, "-y", hidden=True),
 ) -> None:
+    yes = yes_ if yes_ else yes
     central = cli.central
 
     group, site, = None, None
@@ -110,15 +112,16 @@ def move(
         else:
             device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site"]])
 
+    # Don't think it's possible to hit this (typer or cache lookup will fail first)
     if not device:
-        typer.echo("Error: Missing argument '[[name|ip|mac-address|serial] ...]'.")
+        print("Missing Required argument '[[name|ip|mac|serial] ...]'.")
         raise typer.Exit(1)
 
     group = group or _group
     site = site or _site
 
     if not group and not site:
-        typer.secho("Missing Required Argument, group and/or site is required.")
+        print("Missing Required Argument, group and/or site is required.")
         raise typer.Exit(1)
 
     dev = [cli.cache.get_dev_identifier(d) for d in device]
@@ -141,39 +144,22 @@ def move(
             else:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
 
-    _s = "," if len(dev_all_names) > 2 else " &"
-    _s = typer.style(_s, fg="bright_green")
-    _msg_devs = f'{_s} '.join(typer.style(n, fg="reset") for n in dev_all_names)
-    _msg_in_site = "" if not devs_by_site else typer.style(" (devices will be removed from current sites.)", fg="red")
-    _msg_end = typer.style("?", fg="bright_green")
-    _msg = None
+    _msg_devs = ", " if len(dev_all_names) > 2 else " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+    print(f"Move {_msg_devs}")
 
     if group:
         _group = cli.cache.get_group_identifier(group)
-        _msg = [
-            typer.style("Please Confirm: move", fg="bright_green"),
-            _msg_devs,
-            typer.style("to group", fg="bright_green"),
-            typer.style((_group.name), fg='reset'),
-        ]
-        _msg = f"{' '.join(_msg)}{_msg_end}"
+        print(f"  To Group: [bright_green]{_group.name}[/bright_green]")
     if site:
         _site = cli.cache.get_site_identifier(site)
-        if not _msg:
-            _msg = [
-                typer.style("Please Confirm: move", fg="bright_green"),
-                _msg_devs,
-                typer.style("to site", fg="bright_green"),
-                typer.style((_site.name), fg='reset'),
-            ]
-            _msg = f"{' '.join(_msg)}{_msg_in_site}{_msg_end}"
-        else:
-            _msg_site = typer.style((_site.name), fg=typer.colors.RESET)
-            _msg = f'{_msg.replace("?", "")} {typer.style(f"and site", fg="bright_green")} {_msg_site}{_msg_in_site}{_msg_end}'
+        print(f"  To Site: [bright_green]{_site.name}[/bright_green]")
+        if devs_by_site:
+            print("  [italic bright_red](devices will be removed from current sites.)[/bright_red]")
 
     resp, site_rm_resp = None, None
-    confirmed = True if yes or typer.confirm(_msg, abort=True) else False
+    confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
 
+    # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
     # If devices are associated with a site currently remove them from that site first
     if confirmed and _site and devs_by_site:
         site_remove_reqs = []
@@ -254,7 +240,7 @@ def bounce(
         raise typer.Abort()
 
 
-@app.command(short_help="Remove a device from a site.")
+@app.command(short_help="Remove a device from a site.", help="Remove a device from a site.")
 def remove(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
     # _device: List[str] = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.completion),
@@ -280,9 +266,10 @@ def remove(
     site = cli.cache.get_site_identifier(site)
 
     # TODO add confirmation method builder to output class
-    if yes or typer.confirm(
-        typer.style(f"Please Confirm remove {', '.join([dev.name for dev in devices])} from site {site.name}", fg="cyan")
-    ):
+    print(
+        f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
+    )
+    if yes or typer.confirm("\nProceed?"):
         devs_by_type = {
         }
         for d in devices:
@@ -392,14 +379,17 @@ def sync(
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
-    typer.secho(str(resp), fg="green" if resp else "red")
+    # typer.secho(str(resp), fg="green" if resp else "red")
+    cli.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Rename a Group")
+# XXX Doesn't actually appear to be valid for any group rename
+# TODO non batch rename AP
+@app.command(short_help="Rename an Access Point.", help="Rename an Access Point", hidden=False)
 def rename(
     what: RenameArgs = typer.Argument(...,),
-    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
-    new_name: str = typer.Argument(..., autocompletion=lambda incomplete: None),
+    group_ap: str = typer.Argument(..., metavar=f"AP{iden.dev}", autocompletion=cli.cache.dev_kwarg_completion),
+    new_name: str = typer.Argument(...),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -410,21 +400,35 @@ def rename(
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
-    group = cli.cache.get_group_identifier(group)
-    if yes or typer.confirm(typer.style(f"Please Confirm: rename group {group.name} -> {new_name}", fg="cyan"), abort=True):
-        resp = cli.central.request(cli.central.update_group_name, group.name, new_name)
+    if what == "group":
+        group_ap = cli.cache.get_group_identifier(group_ap)
+        print(f"Please Confirm: rename group [red]{group_ap.name}[/red] -> [bright_green]{new_name}[/bright_green]")
+        if yes or typer.confirm("proceed?", abort=True):
+            resp = cli.central.request(cli.central.update_group_name, group_ap.name, new_name)
 
-        if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
-            resp.output["description"] = f"{group.name} is an AOS_10X group, rename only supported on AOS_8X groups. Use clone."
+            # XXX Doesn't actually appear to be valid for any group type
+            if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
+                resp.output["description"] = f"{group_ap.name} is an AOS_10X group, " \
+                    "rename only supported on AOS_8X groups. Use clone."
 
-        cli.display_results(resp)
+            cli.display_results(resp, tablefmt="action")
+
+    elif what == "ap":
+        group_ap = cli.cache.get_dev_identifier(group_ap, dev_type="ap")
+        print(f"Please Confirm: rename ap [red]{group_ap.name}[/red] -> [bright_green]{new_name}[/bright_green]")
+        print("    [italic]Will result in 2 API calls[/italic]\n")
+        if yes or typer.confirm("Proceed?", abort=True):
+            resp = cli.central.request(cli.central.update_ap_settings, group_ap.serial, new_name)
+            cli.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="kick a client (disconnect)",)
+# TODO cache show clients get details for client make this easier
+# currently requires the serial of the device the client is connected to
+@app.command(short_help="Disconnect a client",)
 def kick(
     device: str = typer.Argument(
         ...,
-        metavar=iden.dev,
+        metavar=f"CONNECTED_DEVICE{iden.dev}",
         autocompletion=lambda incomplete: ["all", *[m for m in cli.cache.dev_completion(incomplete)]]
     ),
     what: KickArgs = typer.Argument(...,),
@@ -438,6 +442,7 @@ def kick(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Disconnect a client."""
     yes = yes_ if yes_ else yes
     if device in ["all", "mac", "wlan"]:
         typer.secho(f"Missing device parameter required before keyword {device}", fg="red")
@@ -454,7 +459,7 @@ def kick(
             raise typer.Exit(1)
 
     _who = f" {who}" if who else " "
-    if yes or typer.confirm(typer.style(f"Please Confirm: kick {what}{_who} on {dev.name}", fg="cyan")):
+    if yes or typer.confirm(typer.style(f"Please Confirm: kick {what}{_who} on {dev.name}", fg="cyan"), abort=True):
         resp = cli.central.request(
             cli.central.kick_users,
             dev.serial,
@@ -462,9 +467,8 @@ def kick(
             mac=None if what != "mac" else mac.cols,
             ssid=None if what != "wlan" else who,
             )
-        typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
+        cli.display_results(resp, tablefmt="action")
+        # typer.secho(str(resp), fg="green" if resp else "red")
 
 
 @app.command(hidden=True)
@@ -488,25 +492,33 @@ def refresh(what: RefreshWhat = typer.Argument(...),
 
 
 @app.command(hidden=True, epilog="Output is displayed in yaml by default.")
-def method_test(method: str = typer.Argument(...),
-                kwargs: List[str] = typer.Argument(None),
-                do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-                do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-                do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-                do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
-                outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-                no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
-                update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
-                default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                             callback=cli.default_callback),
-                debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                                           callback=cli.debug_callback),
-                account: str = typer.Option("central_info",
-                                            envvar="ARUBACLI_ACCOUNT",
-                                            help="The Aruba Central Account to use (must be defined in the config)",
-                                            autocompletion=cli.cache.account_completion,
-                                            ),
-                ) -> None:
+def method_test(
+    method: str = typer.Argument(...),
+    kwargs: List[str] = typer.Argument(None),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
+    no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
+                                 callback=cli.default_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
+                               callback=cli.debug_callback),
+    debugv: bool = typer.Option(
+        False, "--debugv",
+        envvar="ARUBACLI_VERBOSE_DEBUG",
+        help="Enable verbose Debug Logging",
+        hidden=True,
+        callback=cli.verbose_debug_callback,
+    ),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion,
+                                ),
+) -> None:
     """dev testing commands to run CentralApi methods from command line
 
     Args:
@@ -574,8 +586,9 @@ def method_test(method: str = typer.Argument(...),
         do_json, do_yaml, do_csv, do_table, default="yaml"
     )
 
-    typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
-    cli.display_results(data=resp.output, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+    if resp.raw and resp.output != resp.raw:
+        typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
+        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
     if resp.raw:
         typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
         cli.display_results(data=resp.raw, tablefmt="json", pager=not no_pager, outfile=outfile)
