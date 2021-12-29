@@ -4,7 +4,7 @@
 from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
-from centralcli import log, utils, config, CentralApi
+from centralcli import log, utils, config, CentralApi, cleaner
 
 import asyncio
 import time
@@ -522,6 +522,7 @@ class Cache:
         if resp.ok:
             self.rl = str(resp.rl)
             resp.output = utils.listify(resp.output)
+            resp.output = cleaner.get_devices(resp.output)
             resp.output = [
                 {
                     k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
