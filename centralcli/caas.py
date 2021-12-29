@@ -1,7 +1,7 @@
 from pathlib import Path
 import typer
 import csv
-from centralcli import config
+from centralcli import config, Response, utils, log
 
 
 def eval_caas_response(resp) -> None:
@@ -46,7 +46,7 @@ def eval_caas_response(resp) -> None:
 
 
 class BuildCLI:
-    """Build equivelent cli commands for caas API from bulk-edit.csv import file"""
+    """Build equivalent cli commands for caas API from bulk-edit.csv import file"""
     def __init__(self, central=None, data: dict = None, ) -> None:
         self.central = central
 
@@ -212,6 +212,19 @@ class BuildCLI:
                     print("Zscaler Configuration Not Supported by Script Yet")
 
             return self.cmds
+
+    async def show_config(self, group: str, dev_mac: str = None) -> Response:
+        show_url = "/caasapi/v1/showcommand"
+        url = f"{show_url}/object/committed?group_name={group}"
+        if dev_mac:
+            mac = utils.Mac(dev_mac)
+            if mac:
+                url = f"{url}/{mac.url}"
+            else:
+                log.error(f"{dev_mac} does not appear to be a valid MAC address.", show=True)
+                raise typer.Exit(1)
+
+        return await self.central.get(url)
 
 
 class CaasAPI(BuildCLI):
