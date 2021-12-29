@@ -24,6 +24,12 @@ class TemplateDevIdens(str, Enum):
     gw = "gw"
 
 
+class GatewayRole(str, Enum):
+    branch = "branch"
+    vpnc = "vpnc"
+    wlan = "wlan"
+
+
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = [
     "data",
@@ -153,6 +159,7 @@ class CacheArgs(str, Enum):
     templates = "templates"
     groups = "groups"
     logs = "logs"
+    events = "events"
 
 
 class KickArgs(str, Enum):
@@ -167,12 +174,39 @@ class BatchApArgs(str, Enum):
 
 class RenameArgs(str, Enum):
     group = "group"
-    # ap = "ap"
+    ap = "ap"
 
 
 class DhcpArgs(str, Enum):
     clients = "clients"
     server = "server"
+
+
+class LicenseTypes(str, Enum):
+    advance_70xx = "advance-70xx"
+    advance_72xx = "advance-72xx"
+    advance_90xx_sec = "advance-90xx-sec"
+    advance_base_7005 = "advance-base-7005"
+    advanced_ap = "advanced-ap"
+    advanced_switch_6100 = "advanced-switch-6100"
+    advanced_switch_6200 = "advanced-switch-6200"
+    advanced_switch_6300 = "advanced-switch-6300"
+    advanced_switch_6400 = "advanced-switch-6400"
+    dm = "dm"
+    foundation_70xx = "foundation-70xx"
+    foundation_72xx = "foundation-72xx"
+    foundation_90xx_sec = "foundation-90xx-sec"
+    foundation_ap = "foundation-ap"
+    foundation_base_7005 = "foundation-base-7005"
+    foundation_base_90xx_sec = "foundation-base-90xx-sec"
+    foundation_switch_6100 = "foundation-switch-6100"
+    foundation_switch_6200 = "foundation-switch-6200"
+    foundation_switch_6300 = "foundation-switch-6300"
+    foundation_switch_6400 = "foundation-switch-6400"
+    foundation_wlan_gw = "foundation-wlan-gw"
+    vgw2g = "vgw2g"
+    vgw4g = "vgw4g"
+    vgw500m = "vgw500m"
 
 
 class ArgToWhat:
@@ -198,7 +232,7 @@ class ArgToWhat:
         self.devices = self.device = "devices"
         self.controllers = self.controller = "controllers"
         self.clients = self.client = "clients"
-        # self.logs = self.log = self.event = self.events = "logs"
+        self.event = self.events = "events"
         self.logs = self.log = "logs"
         self.interfaces = self.interface = self.ports = self.port = "interfaces"
         self.vlans = self.vlan = "vlans"
@@ -210,6 +244,10 @@ class ArgToWhat:
         self.template = self.templates = "template"
         self.variables = self.variable = "variables"
         self.group = self.groups = "group"
+
+    def _init_rename(self):
+        self.group = self.groups = "group"
+        self.ap = self.aps = "ap"
 
     def _init_delete(self):
         self.site = self.sites = "site"
@@ -251,17 +289,19 @@ class ArgToWhat:
 arg_to_what = ArgToWhat()
 
 APIMethodType = Literal[
-    "site"
+    "site",
+    "monitoring",
+    "event",
 ]
 
 
 class LibToAPI:
     """Convert device type stored in Cache to type required by the different API methods
 
-    # TODO Working toward a consistent set of device_types, needs review, goal is to have
+    TODO Working toward a consistent set of device_types, needs review, goal is to have
     all API methods in CentralApi use a consistent set of device type values.  i.e.
     'ap', 'switch', 'gw' ('controller' appears to be the same as gw).  Then use this callable
-    object to convert appropriate device type to whatever random value is reqd by the API
+    object to convert appropriate device type to whatever random value is required by the API
     method.
     """
     def __init__(self):
@@ -274,7 +314,14 @@ class LibToAPI:
         self.CX = self.cx = "cx"
         self.method_iden = None,
 
-        # from CentralApi consistent value to Random API value.
+        # from CentralApi consistent value to Random API valu
+        self.monitoring_to_api = {
+             "gw": "gateways",
+             "ap": "aps",
+             "switch": "switches",
+             "cx": "switches",
+             "sw": "Switches"
+         }
         self.site_to_api = {
             "gw": "CONTROLLER",
             "ap": "IAP",
@@ -334,12 +381,12 @@ class WhatToPretty:
     def __init__(self):
         """Mapping option to get plural form of common 'what' attributes
 
-        The inverse of ArgToWhat, but always returns plural with apporpriate
+        The inverse of ArgToWhat, but always returns plural with appropriate
         case for display.  Normally title case.  i.e. switch --> Switches
 
         """
         self.gateway = self.gateways = "Gateways"
-        self.aps = self.ap = self.iap = "Acess Points"
+        self.aps = self.ap = self.iap = "Access Points"
         self.switch = self.switches = "Switches"
         self.groups = self.group = "Groups"
         self.site = self.sites = "Sites"
@@ -487,7 +534,7 @@ class LogAppArgs(str, Enum):
 
 
 MESSAGES = {
-    "SPIN_TXT_AUTH": "Initializing Arunba Central Base...",
+    "SPIN_TXT_AUTH": "Initializing Aruba Central Base...",
     "SPIN_TXT_CMDS": "Sending Commands to Aruba Central API Gateway...",
     "SPIN_TXT_DATA": "Collecting Data from Aruba Central API Gateway...",
 }
@@ -495,11 +542,14 @@ MESSAGES = {
 
 class IdenMetaVars:
     def __init__(self):
-        self.dev = "[name|ip|mac-address|serial]"
-        self.dev_many = "[name|ip|mac-address|serial] ... (multiple allowed)"
+        self.dev = "[name|ip|mac|serial]"
+        self.dev_many = "[name|ip|mac|serial] ... (multiple allowed)"
+        self.group_many = "[GROUP NAME] ... (multiple allowed)"
         self.site = "[name|site_id|address|city|state|zip]"
         self.client = "[username|ip|mac]"
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
+        self.generic_dev_types = "[ap|gw|switch]"
+        self.dev_types = "[ap|gw|cx|sw]"
 
 
 class LogSortBy(str, Enum):
