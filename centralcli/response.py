@@ -5,6 +5,7 @@ from aiohttp.client_exceptions import ContentTypeError
 from pycentral.base import ArubaCentralBase
 from . import cleaner
 from typing import Union, List, Any
+from rich import print
 
 
 from centralcli import config, utils, log
@@ -36,9 +37,13 @@ class RateLimit:
         self.used_per_sec = self.total_per_sec - self.remain_per_sec
         # self.ok = True if sum([self.total, self.used]) > 0 else False
         self.ok = True if all([self.remain != 0, self.remain_per_sec > 1]) else False
+        self.call_performed = False if resp is None else True
 
     def __str__(self):
-        return f"API Rate Limit: {self.remain} of {self.total} remaining." if self.ok else ""
+        if self.call_performed:
+            return f"API Rate Limit: {self.remain} of {self.total} remaining." if self.ok else ""
+        else:
+            return "No API call was performed."
 
 
 class Response:
@@ -49,19 +54,30 @@ class Response:
     The following attributes will always be available:
         ok: (bool) indicates success/failure of aiohttp.ClientSession.request()
         output: (Any) The content returned from the response (outer keys removed)
-        raw_output: (Any) The original un-cleaned response from the API request
+        raw: (Any) The original un-cleaned response from the API request
         error: (str) Error message indicating the nature of a failed response
         status: (int) http status code returned from response
 
     Create instance by providing at minimum one of the following parameters:
         response: (aiohttp.ClientResponse) all other paramaters ignored if providing response
         error: (str) ok, output, status set to logical default if not provided
+            OK / __bool__ is False if error is provided and ok is not.
         output: (Any) ok, error, status set to logical default if not provided
-        ** Only provide output orr
+            OK / __bool__ is True if output provided with no error or ok arg.
     '''
-    def __init__(self, response: aiohttp.ClientResponse = None, url: str = None, ok: bool = None,
-                 error: str = None, output: Any = {}, raw: Any = {}, status_code: int = None, elapsed: Union[int, float] = 0):
-        self.rl = RateLimit(response)
+    def __init__(
+        self,
+        response: aiohttp.ClientResponse = None,
+        url: str = None,
+        ok: bool = None,
+        error: str = None,
+        output: Any = {},
+        raw: Any = {},
+        status_code: int = None,
+        elapsed: Union[int, float] = 0,
+        rl_str: str = None,
+    ):
+        self.rl = rl_str or RateLimit(response)
         self._response = response
         self.output = output
         self.raw = raw
@@ -91,6 +107,10 @@ class Response:
         if self.output and "error" in self.output and "error_description" in self.output and isinstance(self.output, dict):
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
+    # @property
+    # def output(self) -> int:
+    #     return self.output
+
     def __bool__(self):
         return self.ok
 
@@ -107,12 +127,17 @@ class Response:
                 val = "\n".join([f"    {line}" for line in val.file.splitlines()])
 
         if isinstance(val, dict):
-            val = "".join([f"\n    {k}: {val[k]}" for k in val if val[k]])
+            val = utils.output(outdata=[val], tablefmt="yaml")
+            val = "\n".join([f"      {line}" for line in val.file.splitlines() if not line.endswith(": []")])
+            # val = "".join([f"\n    {k}: {val[k] if not isinstance(val[k], (dict, list) else )}" for k in val if val[k]])
 
         return val
 
     def __str__(self):
-        status_code = f"  status code: {self.status}\n"
+        if self.status != 418:
+            status_code = f"  status code: {self.status}\n"
+        else:
+            status_code = ""
         r = self.output
         # indent single line output
         if isinstance(self.output, str):
@@ -122,15 +147,23 @@ class Response:
                 try:
                     self.output = json.loads(self.output)
                 except Exception:
-                    r = self.output
+                    r = "  {}".format(
+                        self.output.replace('\n  ', '\n').replace('\n', '\n  ')
+                    )
+                    # r = self.output
 
         if isinstance(self.output, dict):
             r = "\n".join(
-                [f"  {k}:\n{self._split_inner(v)}" for k, v in self.output.items() if v or v is False]
+                [
+                    "  {}: {}".format(
+                        k,
+                        v if isinstance(v, (str, int)) else f"\n{self._split_inner(v)}",
+                    ) for k, v in self.output.items() if k != "status" and (v or v is False)
+                ]
             )
 
         # sanitize sensitive data for demos
-        if config.sanitize and config.sanatize_file.is_file():
+        if config.sanitize and config.sanitize_file.is_file():
             r = utils.Output(config=config).sanitize_strings(r)
 
         return f"{status_code}{r}"
@@ -157,12 +190,13 @@ class Response:
     def __getattr__(self, name: str) -> Any:
         if hasattr(self, "output") and self.output:
             output = self.output
-            # return the responses list / dict attr if exist
-            if hasattr(output, name):
-                return getattr(output, name)
 
             if isinstance(output, list) and len(output) == 1:
                 output = output[0]
+
+            # return the responses list / dict attr if exist
+            if hasattr(output, name):
+                return getattr(output, name)
 
             if isinstance(output, dict) and name in output:
                 return output[name]
@@ -282,6 +316,19 @@ class Session:
                       f"    access token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
                       f"    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
                       )
+            if config.debugv:
+                call_data = {
+                    "method": method,
+                    "url": url,
+                    "url_params": params,
+                    "data": data,
+                    "json_data": json_data,
+                }
+                if kwargs:
+                    call_data["Additional kwargs"] = kwargs
+                print("[bold magenta]VERBOSE DEBUG[reset]")
+                call_data = utils.strip_none(call_data, strip_empty_obj=True)
+                utils.json_print(call_data)
 
             try:
                 _start = time.time()
