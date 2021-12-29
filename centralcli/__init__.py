@@ -73,9 +73,15 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
     from .vscodeargs import vscode_arg_handler
     vscode_arg_handler()
 
+raw_out = False
+if "-vv" in sys.argv:
+    raw_out = True
+    _ = sys.argv.pop(sys.argv.index("-vv"))
+
+
 central = CentralApi(config.account)
 cache = Cache(central)
-cli = CLICommon(config.account, cache, central)
+cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
 # show switches / show switch ...
