@@ -3833,8 +3833,8 @@ class AllCalls(CentralApi):
                 documentation for more information.<br>An example for ipv6 allowed pattern is
                 provided.
             admin_username (str): Pattern: "^(admin)$"
-            admin_password (str): admin_username should be provided with this field.<br>Pattern:
-                "^[^"? ]*$"
+            admin_password (str): admin_username should be provided with this field.
+                Pattern: "^[^"? ]*$"
             device_serial (str, optional): Device serial number.
                 Mandatory for device level configuration.
             group_name (str, optional): Group name.
@@ -4016,6 +4016,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data, params=params)
 
+    # API-NOTE grabs group level sys info password is masked
     async def configuration_get_system_config(
         self,
         group_name_or_guid: str,
@@ -4028,11 +4029,23 @@ class AllCalls(CentralApi):
 
         Returns:
             Response: CentralAPI Response object
+        # [
+        #     {
+        #         "dns_server": "",
+        #         "ntp_server": [
+        #             "10.0.30.101",
+        #             "10.0.30.52"
+        #         ],
+        #         "password": "********",
+        #         "username": "admin"
+        #     }
+        # ]
         """
         url = f"/configuration/v1/system_config/{group_name_or_guid}"
 
         return await self.get(url)
 
+    # API-NOTE Update group level pass for APs??
     async def configuration_update_system_config(
         self,
         group_name_or_guid: str,

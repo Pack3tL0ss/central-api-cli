@@ -66,6 +66,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    # API-NOTE valie for switches and controllers
     async def firmware_get_devices_details(
         self,
         device_type: str,
@@ -92,6 +93,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    # API-NOTE valie for switches and controllers
     async def firmware_get_device_details(
         self,
         serial: str,

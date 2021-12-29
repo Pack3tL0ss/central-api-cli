@@ -6089,6 +6089,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    # API-NOTE returns alert/notification settings not used by any command yet
     async def central_get_settings_(
         self,
         search: str = None,
@@ -6097,6 +6098,7 @@ class AllCalls(CentralApi):
         limit: int = 100,
     ) -> Response:
         """List Settings.
+
 
         Args:
             search (str, optional): term used to search in name, category of the alert
@@ -6788,6 +6790,42 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
+        # [
+        #     {
+        #         "available": 6108,
+        #         "expiring": 0,
+        #         "license_usage_by_services": {
+        #             "advance_70xx": 0,
+        #             "advance_72xx": 0,
+        #             "advance_90xx_sec": 3,
+        #             "advance_base_7005": 0,
+        #             "advanced_ap": 11,
+        #             "advanced_switch_6100": 0,
+        #             "advanced_switch_6200": 0,
+        #             "advanced_switch_6300": 0,
+        #             "advanced_switch_6400": 0,
+        #             "dm": 0,
+        #             "foundation_70xx": 3,
+        #             "foundation_72xx": 0,
+        #             "foundation_90xx_sec": 0,
+        #             "foundation_ap": 0,
+        #             "foundation_base_7005": 0,
+        #             "foundation_base_90xx_sec": 0,
+        #             "foundation_switch_6100": 6,
+        #             "foundation_switch_6200": 2,
+        #             "foundation_switch_6300": 0,
+        #             "foundation_switch_6400": 0,
+        #             "foundation_wlan_gw": 0,
+        #             "vgw2g": 0,
+        #             "vgw4g": 0,
+        #             "vgw500m": 0
+        #         },
+        #         "non_subscribed_devices": 0,
+        #         "total": 6133,
+        #         "total_devices": 25,
+        #         "used": 25
+        #     }
+        # ]
         url = "/platform/licensing/v1/subscriptions/stats"
 
         params = {
@@ -6824,6 +6862,11 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
+        # [
+        #     {
+        #         "services": []
+        #     }
+        # ]
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
         return await self.get(url)
@@ -7002,6 +7045,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
+    # Show all available licenses [{"services": {"services": [foundation_70xx, ...]}] <-- wtf
     async def platform_gw_get_customer_enabled_services(
         self,
     ) -> Response:
@@ -7010,6 +7054,25 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
+        # [
+        #     {
+        #         "services": {
+        #             "services": [
+        #                 "foundation_70xx",
+        #                 "cloud_guest",
+        #                 "dm",
+        #                 "foundation_switch_6100",
+        #                 "advance_90xx_sec",
+        #                 "pa",
+        #                 "ucc",
+        #                 "airgroup",
+        #                 "advanced_ap",
+        #                 "clarity",
+        #                 "foundation_switch_6200"
+        #             ]
+        #         }
+        #     }
+        # ]
         url = "/platform/licensing/v1/services/enabled"
 
         return await self.get(url)
