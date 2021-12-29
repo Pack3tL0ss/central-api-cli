@@ -6,6 +6,7 @@ import sys
 from typing import List
 # from typing import List
 import typer
+from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -19,7 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, TemplateDevIdens
+from centralcli.constants import IdenMetaVars, TemplateDevIdens, GatewayRole
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -149,8 +150,126 @@ def variables(
 
 
 @app.command(
+    short_help="Update group properties.",
+    help="Update group properties.",
+    hidden=True,
+)
+def group_new(
+    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
+    # group_password: str = typer.Argument(
+    #     None,
+    #     show_default=False,
+    #     help="Group password is required. You will be prompted for password if not provided.",
+    #     autocompletion=lambda incomplete: incomplete
+    # ),
+    wired_tg: bool = typer.Option(None, help="Manage switch configurations via templates"),
+    wlan_tg: bool = typer.Option(None, help="Manage AP configurations via templates"),
+    gw_role: GatewayRole = typer.Option(None,),
+    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default Instant)", show_default=False),
+    mb: bool = typer.Option(None, is_flag=True, help="Configure Group for MicroBranch APs (AOS10 only"),
+    ap: bool = typer.Option(None, help="Allow APs in group"),
+    sw: bool = typer.Option(None, help="Allow ArubaOS-SW switches in group."),
+    cx: bool = typer.Option(None, help="Allow ArubaOS-CX switches in group."),
+    gw: bool = typer.Option(None, help=f"Allow gateways in group.\n{' ':34}If No device types specified all are allowed."),
+    mon_only_sw: bool = typer.Option(None, help="Monitor Only for ArubaOS-SW"),
+    mon_only_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX", hidden=True),
+    # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
+    # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    debugv: bool = typer.Option(
+        False, "--debugv",
+        envvar="ARUBACLI_VERBOSE_DEBUG",
+        help="Enable verbose Debug Logging",
+        callback=cli.verbose_debug_callback,
+        hidden=True,
+    ),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    # if not group_password:
+    #     group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
+
+    # else:
+    #     _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
+    group = cli.cache.get_group_identifier(group)
+
+    if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mon_only_sw, mon_only_cx]):
+        print(
+            "[bright_red]Missing required options.[/bright_red] "
+            "Use [italic bright_green]cencli update group ?[/italic bright_green] to see available options"
+        )  # TODO is there a way to trigger help text
+        raise typer.Exit(1)
+    if not aos10 and mb:
+        print("[bright_red]Error: Microbranch is only valid if group is configured as AOS10 group.")
+        raise typer.Exit(1)
+    if (mon_only_sw or mon_only_cx) and wired_tg:
+        print("[bright_red]Error: Monitor only is not valid for template group.")
+        raise typer.Exit(1)
+
+    allowed_types = []
+    if ap:
+        allowed_types += ["ap"]
+    if sw:
+        allowed_types += ["sw"]
+    if cx:
+        allowed_types += ["cx"]
+    if gw:
+        allowed_types += ["gw"]
+    if not all(x is None for x in [ap, sw, cx, gw]):
+        pass
+        # Need to get current allowed types to determine what changed
+
+    _msg = f"[cyan]Update [cyan]group [bright_green]{group.name}[/bright_green]"
+    if aos10 is not None:
+        _msg = f"{_msg}\n    [cyan]AOS10[/cyan]: [bright_green]{aos10 is True}[/bright_green]"
+    if allowed_types:
+        _msg = f"{_msg}\n    [cyan]Allowed Device Types[/cyan]: [bright_green]{allowed_types}[/bright_green]"
+    if wired_tg is not None:
+        _msg = f"{_msg}\n    [cyan]wired Template Group[/cyan]: [bright_green]{wired_tg is True}[/bright_green]"
+    if wlan_tg is not None:
+        _msg = f"{_msg}\n    [cyan]WLAN Template Group[/cyan]: [bright_green]{wlan_tg is True}[/bright_green]"
+    if gw_role is not None:
+        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role or 'branch'}[/bright_green]"
+    if mb is not None:
+        _msg = f"{_msg}\n    [cyan]MicroBranch[/cyan]: [bright_green]{mb is True}[/bright_green]"
+    if mon_only_sw is not None:
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]{mon_only_sw is True}[/bright_green]"
+    if mon_only_cx is not None:
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]{mon_only_cx is True}[/bright_green]"
+    print(f"{_msg}\n")
+
+    kwargs = {
+        "group": group.name,
+        "wired_tg": wired_tg,
+        "wlan_tg": wlan_tg,
+        "allowed_types": allowed_types,
+        "aos10": aos10,
+        "microbranch": mb,
+        "gw_role": gw_role,
+        "monitor_only_sw": mon_only_sw,
+    }
+    # kwargs = utils.strip_none(kwargs)
+
+    if yes or typer.confirm("Proceed with values?"):
+        resp = cli.central.request(
+            cli.central.update_group_properties,
+            **kwargs
+        )
+        cli.display_results(resp, tablefmt="action")
+        # if resp:  # resp:
+        #     asyncio.run(
+        #         cli.cache.update_group_db({'name': group.name, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
+        #     )
+
+
+@app.command(
     short_help="Update group properties",
-    help="Update group properties (AOS8 vs AOS10 & Monitor Only Switch enabled/disabled)"
+    help="Update group properties (AOS8 vs AOS10 & Monitor Only Switch enabled/disabled)",
 )
 def group(
     group_name: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
@@ -189,7 +308,7 @@ def group(
     _msg = f'{_msg}{typer.style("?", fg="cyan")}'
 
     if yes or typer.confirm(_msg, abort=True):
-        resp = cli.central.request(cli.central.update_group_properties, group.name, aos_version, monitor_only_switch=mos)
+        resp = cli.central.request(cli.central.update_group_properties_v1, group.name, aos_version, monitor_only_switch=mos)
         cli.display_results(resp)
 
 
