@@ -113,7 +113,7 @@ _short_value = {
     "timestamp": _log_timestamp,
     "Unknown": "?",
     "HPPC": "SW",
-    "labels": _extract_names_from_id_name_dict,
+    # "labels": _extract_names_from_id_name_dict,
     "sites": _extract_names_from_id_name_dict,
     "ACCESS POINT": "AP",
     "GATEWAY": "GW",
