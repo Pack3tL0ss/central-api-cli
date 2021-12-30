@@ -174,6 +174,7 @@ class CentralApi(Session):
 
         return form
 
+    # TODO Verify deprecated and remove.  sort method in clicommon
     @staticmethod
     def _sorted(resp: Response, sort_by: str) -> Response:
         if not resp:
@@ -932,6 +933,10 @@ class CentralApi(Session):
 
     async def get_all_devicesv2(self, **kwargs) -> Response:
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
+        lib_dev_types = {
+            "aps": "ap",
+            "gateways": "gw",
+        }
         _output = {}
 
         reqs = [BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
@@ -945,8 +950,20 @@ class CentralApi(Session):
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
         if _output:
+            # Add type key to all dicts covert "switch-type" to cencli type (cx or sw)
+            # TODO move to cleaner? set type to switch_type for switches let cleaner change value to lib vals
+            dicts = [
+                {
+                    **{
+                        "type": lib_dev_types.get(k, k) if k != "switches" else
+                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch"))
+                    },
+                    **{
+                        kk: vv for kk, vv in inner_dict.items()
+                    }
+                } for k, v in _output.items() for inner_dict in v
+            ]
             # return just the keys common across all device types
-            dicts = [{**{"type": k.rstrip("es")}, **{kk: vv for kk, vv in idx.items()}} for k, v in _output.items() for idx in v]
             common_keys = set.intersection(*map(set, dicts))
 
             _output = [{k: d[k] for k in common_keys} for d in dicts]
