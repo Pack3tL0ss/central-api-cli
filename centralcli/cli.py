@@ -472,14 +472,25 @@ def kick(
 
 
 @app.command(hidden=True)
-def refresh(what: RefreshWhat = typer.Argument(...),
-            debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-            default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-            account: str = typer.Option("central_info",
-                                        envvar="ARUBACLI_ACCOUNT",
-                                        help="The Aruba Central Account to use (must be defined in the config)",
-                                        autocompletion=cli.cache.account_completion),
-            ):
+def refresh(
+    what: RefreshWhat = typer.Argument(...),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
+                               callback=cli.debug_callback),
+    debugv: bool = typer.Option(
+        False, "--debugv",
+        envvar="ARUBACLI_VERBOSE_DEBUG",
+        help="Enable verbose Debug Logging",
+        hidden=True,
+        callback=cli.verbose_debug_callback,
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion
+    ),
+):
     """refresh <'token'|'cache'>"""
 
     central = CentralApi(account)
