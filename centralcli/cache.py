@@ -4,6 +4,7 @@
 from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
+from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner
 
 import asyncio
@@ -137,14 +138,11 @@ class Cache:
     def __init__(
         self,
         central: CentralApi = None,
-        data: Union[
-            List[
-                dict,
-            ],
-            dict,
-        ] = None,
+        data: Union[List[dict], dict] = None,
         refresh: bool = False,
     ) -> None:
+        """Central-API-CLI Cache object
+        """
         self.rl: str = ""  # TODO temp might refactor cache updates to return resp
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
@@ -523,15 +521,18 @@ class Cache:
             self.rl = str(resp.rl)
             resp.output = utils.listify(resp.output)
             resp.output = cleaner.get_devices(resp.output)
-            resp.output = [
-                {
-                    k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
-                } for r in resp.output
-            ]
+            # resp.output = [
+            #     {
+            #         k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
+            #     } for r in resp.output
+            # ]
             # TODO change updated from  list of funcs to class with bool attributes or something
             self.updated.append(self.central.get_all_devicesv2)
             self.DevDB.truncate()
-            return self.DevDB.insert_multiple(resp.output)
+            update_res = self.DevDB.insert_multiple(resp.output)
+            if False in update_res:
+                log.error("Tiny DB returned an error during dev db update")
+        return resp
 
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
         # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
@@ -563,7 +564,10 @@ class Cache:
                 self.updated.append(self.central.get_all_sites)
                 self.SiteDB.truncate()
                 # print(f" site db Done: {time.time() - start}")
-                return self.SiteDB.insert_multiple(resp.output)
+                update_res = self.SiteDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during site db update")
+            return resp
 
     async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
         if data:
@@ -584,7 +588,10 @@ class Cache:
                 resp.output = utils.listify(resp.output)
                 self.updated.append(self.central.get_all_groups)
                 self.GroupDB.truncate()
-                return self.GroupDB.insert_multiple(resp.output)
+                update_res = self.GroupDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during group db update")
+            return resp
 
     async def update_template_db(self):
         groups = self.groups if self.central.get_all_groups in self.updated else None
@@ -593,7 +600,10 @@ class Cache:
             resp.output = utils.listify(resp.output)
             self.updated.append(self.central.get_all_templates)
             self.TemplateDB.truncate()
-            return self.TemplateDB.insert_multiple(resp.output)
+            update_res = self.TemplateDB.insert_multiple(resp.output)
+            if False in update_res:
+                log.error("Tiny DB returned an error during template db update")
+        return resp
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
         self.LogDB.truncate()
@@ -604,7 +614,7 @@ class Cache:
         return self.EventDB.insert_multiple(log_data)
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
-        update_funcs = []
+        update_funcs, db_res = [], []
         if dev_db:
             update_funcs += [self.update_dev_db]
         if site_db:
@@ -615,13 +625,20 @@ class Cache:
             update_funcs += [self.update_group_db]
         async with ClientSession() as self.central.aio_session:
             if update_funcs:
-                if await update_funcs[0]():
+                db_res += [await update_funcs[0]()]
+                if db_res[-1]:
                     if len(update_funcs) > 1:
-                        await asyncio.gather(*[f() for f in update_funcs[1:]])
+                        db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
 
-            # update groups first so template update can use the result, and to trigger token_refresh if necessary
-            elif await self.update_group_db():
-                await asyncio.gather(self.update_dev_db(), self.update_site_db(), self.update_template_db())
+            # If all *_db params are false refresh cache for all
+            # TODO make more elegant
+            else:
+                db_res += [await self.update_group_db()]  # update groups first so template update can use the result
+                if db_res[-1]:
+                    db_res += [await self.update_dev_db()]  # dev_db separate as it uses asyncio.gather/central._batch_request
+                    if db_res[-1]:
+                        db_res = [*db_res, *await asyncio.gather(self.update_site_db(), self.update_template_db())]
+        return db_res
 
     def check_fresh(
         self,
@@ -635,14 +652,14 @@ class Cache:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
-            #  or time.time() - config.cache_file.stat().st_mtime > 7200:
             start = time.time()
-            print(typer.style("-- Refreshing Identifier mapping Cache --", fg="cyan"), end="")
+            print("[cyan]-- Refreshing Identifier mapping Cache --[/cyan]", end="")
             db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db))
-            if db_res and False in db_res:
+            if not all([r.ok for r in db_res]):
+                # if db_res and False in db_res:
                 res_map = ["dev_db", "site_db", "template_db", "group_db"]
                 res_map = ", ".join([db for idx, db in enumerate(res_map) if not db_res(idx)])
-                log.error(f"TinyDB returned error ({res_map}) during db update")
+                # log.error(f"TinyDB returned error ({res_map}) during db update")
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
                 self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.time() - start, 2)} sec")
@@ -654,7 +671,7 @@ class Cache:
         match: List[CentralObject],
         query_str: str = None,
         query_type: str = "device",
-        multi_ok: bool = False,
+        # multi_ok: bool = False,
     ) -> List[Dict[str, Any]]:
         # typer.secho(f" -- Ambiguous identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         typer.echo()
@@ -754,9 +771,9 @@ class Cache:
         self,
         query_str: Union[str, List[str], tuple],
         dev_type: str = None,
-        ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
+        # ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
         retry: bool = True,
-        multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
+        # multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject:
@@ -822,11 +839,11 @@ class Cache:
                 return match
 
             elif len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str,)  # multi_ok=multi_ok)
 
             return match[0]
         elif retry:
-            log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=not silent)
+            log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
                 # all_match = all_match[-1]
                 all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
