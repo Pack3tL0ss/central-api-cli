@@ -273,6 +273,7 @@ class CLICommon:
 
             if cleaner and not self.raw_out:
                 data = cleaner(data, **cleaner_kwargs)
+                data = utils.listify(data)
 
             if sort_by and all(isinstance(d, dict) for d in data):
                 if not all([True if sort_by in d else False for d in data]):

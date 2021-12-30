@@ -91,7 +91,9 @@ class Response:
             self.method = response.method
             if not self.ok:
                 self.output = self.output or self.error
-            log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
+                log.error(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
+            else:
+                log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
         else:
             if error:
                 self.ok = ok or False
@@ -369,7 +371,7 @@ class Session:
                 if "invalid_token" in resp.output:
                     self.refresh_token()
                 else:
-                    log.error(f"API [{method}] {url} Error Returned: {resp.error}")
+                    log.error(f"[{method}][{resp.error}] {url}")
                     break
             else:
                 # self.spinner.succeed()
