@@ -563,3 +563,22 @@ class LogSortBy(str, Enum):
     user = "user"
     id = "id"
     has_details = "has_details"
+
+
+LIB_DEV_TYPE = {
+    "AOS-CX": "cx",
+    "AOS-S": "sw",
+    "gateway": "gw"
+}
+
+
+def get_cencli_devtype(dev_type: str) -> str:
+    """Convert device type returned by API to consistent cencli types
+
+    Args:
+        dev_type(str): device type provided by API response
+
+    Returns:
+        str: One of ["ap", "sw", "cx", "gw"]
+    """
+    return LIB_DEV_TYPE.get(dev_type, dev_type)
