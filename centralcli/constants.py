@@ -314,7 +314,7 @@ class LibToAPI:
         self.CX = self.cx = "cx"
         self.method_iden = None,
 
-        # from CentralApi consistent value to Random API valu
+        # from CentralApi consistent value to Random API value
         self.monitoring_to_api = {
              "gw": "gateways",
              "ap": "aps",
@@ -582,3 +582,67 @@ def get_cencli_devtype(dev_type: str) -> str:
         str: One of ["ap", "sw", "cx", "gw"]
     """
     return LIB_DEV_TYPE.get(dev_type, dev_type)
+
+
+state_abbrev_to_pretty = {
+  "AL": "Alabama",
+  "AK": "Alaska",
+  "AZ": "Arizona",
+  "AR": "Arkansas",
+  "CA": "California",
+  "CO": "Colorado",
+  "CT": "Connecticut",
+  "DE": "Delaware",
+  "FL": "Florida",
+  "GA": "Georgia",
+  "HI": "Hawaii",
+  "ID": "Idaho",
+  "IL": "Illinois",
+  "IN": "Indiana",
+  "IA": "Iowa",
+  "KS": "Kansas",
+  "KY": "Kentucky",
+  "LA": "Louisiana",
+  "ME": "Maine",
+  "MD": "Maryland",
+  "MA": "Massachusetts",
+  "MI": "Michigan",
+  "MN": "Minnesota",
+  "MS": "Mississippi",
+  "MO": "Missouri",
+  "MT": "Montana",
+  "NE": "Nebraska",
+  "NV": "Nevada",
+  "NH": "New Hampshire",
+  "NJ": "New Jersey",
+  "NM": "New Mexico",
+  "NY": "New York",
+  "NC": "North Carolina",
+  "ND": "North Dakota",
+  "OH": "Ohio",
+  "OK": "Oklahoma",
+  "OR": "Oregon",
+  "PA": "Pennsylvania",
+  "RI": "Rhode Island",
+  "SC": "South Carolina",
+  "SD": "South Dakota",
+  "TN": "Tennessee",
+  "TX": "Texas",
+  "UT": "Utah",
+  "VT": "Vermont",
+  "VA": "Virginia",
+  "WA": "Washington",
+  "WV": "West Virginia",
+  "WI": "Wisconsin",
+  "WY": "Wyoming",
+  "DC": "District of Columbia",
+  "AS": "American Samoa",
+  "GU": "Guam",
+  "MP": "Northern Mariana Islands",
+  "PR": "Puerto Rico",
+  "UM": "United States Minor Outlying Islands",
+  "VI": "U.S. Virgin Islands"
+}
+
+# invert
+state_pretty_to_abbrev = dict(map(reversed, state_abbrev_to_pretty.items()))

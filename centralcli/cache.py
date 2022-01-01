@@ -5,7 +5,7 @@ from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
-from centralcli import log, utils, config, CentralApi, cleaner
+from centralcli import log, utils, config, CentralApi, cleaner, constants
 
 import asyncio
 import time
@@ -151,7 +151,7 @@ class Cache:
         self.GroupDB = self.DevDB.table("groups")
         self.TemplateDB = self.DevDB.table("templates")
         # log db is used to provide simple index to get details for logs
-        # vs the actual log id in form 'audit_trail_2021_2,AXfQAu2hkwsSs1O3R7kv'
+        # vs the actual log id in form 'audit_trail_2021_2,...'
         # it is updated anytime show logs is ran.
         self.LogDB = self.DevDB.table("logs")
         self.EventDB = self.DevDB.table("events")
@@ -346,6 +346,7 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
+    # TODO add support for zip code city state etc.
     def site_completion(
         self,
         incomplete: str,
@@ -878,6 +879,7 @@ class Cache:
                 | (self.Q.address == query_str)
                 | (self.Q.city == query_str)
                 | (self.Q.state == query_str)
+                | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), "").title() == v.title()))
             )
 
             # retry with case insensitive name & address match if no match with original query
@@ -896,7 +898,14 @@ class Cache:
 
             # Last Chance try to match name if it startswith provided value
             if not match:
-                match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
+                match = self.SiteDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.zipcode.test(lambda v: v.startswith(query_str))
+                    | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.address.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.address.test(lambda v: " ".join(v.split(" ")[1:]).lower().startswith(query_str.lower()))
+                )
 
             if retry and not match and self.central.get_all_sites not in self.updated:
                 typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
