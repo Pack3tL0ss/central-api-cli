@@ -1,3 +1,24 @@
+# cencli requirements
+cchardet
+pylibyaml
+pyYAML
+click-spinner
+colorlog
+colorama
+halo
+pendulum
+pycentral>=0.0.3
+pygments
+shellingham
+tabulate
+tinydb
+typer
+aiohttp
+asyncio
+tablib
+rich>=10.0
+
+# doc requirements
 docutils==0.17.1
 m2r2>=0.3.2
 Sphinx>=4.3.2
