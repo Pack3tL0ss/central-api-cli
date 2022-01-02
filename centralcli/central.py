@@ -106,7 +106,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     else:
         # Account name callback will kick back errors
         # falling back to default for load of central for auto completion
-        central_info = config.data["central_info"]
+        central_info = config.data["cen6tral_info"]
     token_store = config.token_store
     ssl_verify = config.data.get("ssl_verify", True)
 
@@ -156,8 +156,9 @@ class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
         self.silent = False  # toggled in _batch_request to squelch Auto logging in Response
         self.BatchRequest = BatchRequest
-        self.auth = get_conn_from_file(account_name)
-        super().__init__(auth=self.auth)
+        if config.valid and constants.do_load_pycentral():
+            self.auth = get_conn_from_file(account_name)
+            super().__init__(auth=self.auth)
 
     @staticmethod
     def _make_form_data(data: dict):

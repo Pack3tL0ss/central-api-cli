@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import sys
 from enum import Enum
 from typing import Literal, Union
 
@@ -646,3 +647,34 @@ state_abbrev_to_pretty = {
 
 # invert
 state_pretty_to_abbrev = dict(map(reversed, state_abbrev_to_pretty.items()))
+
+NO_LOAD_COMMANDS = [
+    "show config cencli",
+]
+NO_LOAD_FLAGS = [
+    "--help",
+    "--cencli",
+    "--show-completion",
+    "--install-completion",
+]
+
+
+def do_load_pycentral() -> bool:
+    """Determine if provided command requires pycentral load
+
+    Allows command to complete even if config has yet to be configured.
+    Useful for first run commands and auto docs.
+
+    Returns:
+        bool: True or False indicating if pycentral needs to be instantiated
+        for command to complete.
+    """
+    args = [arg for arg in sys.argv[1:] if "--debug" not in arg]
+    for x in NO_LOAD_FLAGS:
+        if x in args:
+            return False
+
+    if " ".join([a for a in args if not a.startswith("-")]).lower() in NO_LOAD_COMMANDS:
+        return False
+    else:
+        return True
