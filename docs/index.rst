@@ -10,16 +10,12 @@ Aruba Central API CLI (cencli)
    :maxdepth: 2
    :caption: Contents:
 
-.. click:: module:parser
-   :prog: cencli
-   :nested: full
-
-Readme File
-===========
-
-.. mdinclude:: ../../README.md
+   readme
+   cli
+   project_structure
 
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`

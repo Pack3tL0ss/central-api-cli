@@ -33,9 +33,8 @@ Requires python 3.7+ and pip
 
 ### if you don't have python
 
-- You can get it for any platform @ https://www.python.org
-- On Windows 10 it's also available in the Mirosoft store.
-
+- You can get it for any platform @ [https://www.python.org](https://www.python.org)
+- On Windows 10 it's also available in the Windows store.
 
 ## Configuration
 
@@ -72,12 +71,14 @@ VPNC2              192.168.30.202   --redacted--   A7005                 WadeLab
 Use `cencli --help` to become familiar with the command options.
 
 ### Auto Completion
+
 The CLI supports auto-completion.  To configure auto-completion run `cencli --install-completion`.  This will auto-detect the type of shell you are running in, and install the necessary completion into your profile.  You'll need to exit the shell and start a new session for it to take effect.
 > Note for OSX 11: Additional step, edit .zshrc and add "autoload -Uz compinit && compinit -i" then exit and start new session.
 
-## Usage Notes:
+## Usage Notes
 
 ### Caching & Friendly identifiers
+
 - Caching: The CLI caches information on all devices, sites, groups, and templates in Central.  It's a minimal amount per device, and is done to allow human friendly identifiers.  The API typically accepts serial #, site id, etc.  This function allows you to specify a device by name, IP, mac (any format), and serial.
 
 The lookup sequence for a device:
@@ -86,7 +87,6 @@ The lookup sequence for a device:
   2. case insensitive match
   3. case insensitive match disregarding all hyphens and underscores (in case you type 6200f_bot and the device name is 6200F-Bot)
   4. Case insensitive Fuzzy match with implied wild-card, otherwise match any devices that start with the identifier provided. `cencli show switches 6200F` will result in a match of `6200F-Bot`.
-
 
 > If there is no match found, a cache update is triggered, and the match rules are re-tried.
 
@@ -108,66 +108,7 @@ Just use `--out \<filename\>` (or \<path\\filename\>), and specify the desired f
 
 ## CLI Tree
 
-Use `--help`, which you can do at any level.  `cli --help`, `cli do --help` etc.  A Tree will be documented here once it's built out more.
+Use `?` or `--help` from the cli, which you can do at any level.  `ccenli ?`, `cencli bounce --help` etc.
 
-## Project Structure
-
-```bash
-├── centralcli
-│   ├── __init__.py
-│   ├── boilerplate                 # Boilerplate code generated via custom script from JSON schema files.
-│   │   ├── allcalls.py             # Any methods used by centralcli are pulled out and placed in central.py
-│   │   ├── configuration.py        # for now, central.py will eventually be broken out into diff modules.
-│   │   ├── firmware.py
-│   │   ├── guest.py
-│   │   └── wlan.py
-│   │   ├── 2.5.3                   # methods created from Central 2.5.3 Schema
-│   │   │   ├── _allcalls_2_5_3.py
-│   │   │   ├── _firmware_2_5_3.py
-│   │   │   ├── _guest_2_5_3.py
-│   │   │   └── _wlan_2_5_3.py
-│   ├── caas.py               # Working caas API module, `cencli caas ...` (hidden command)
-│   ├── cache.py              # Local caching module facilitates use of device name / fuzzy match
-│   ├── central.py            # Contains methods that build the API calls
-│   ├── cleaner.py            # cleaner/parser module, cleans up output.
-│   ├── cli.py                # *The centralcli __main__ script*
-│   ├── cliadd.py             # `cencli add ...` level of the cli
-│   ├── clibatch.py           # `cencli batch ...` level of the cli
-│   ├── clicaas.py            # `cencli caas ...` level of the cli (hidden)
-│   ├── cliclone.py           # `cencli clone ...` level of the cli
-│   ├── clicommon.py          # Common class used by all cli levels (callbacks and output display)
-│   ├── clidel.py             # `cencli delete ...` level of the cli
-│   ├── clido.py              # Deprecated will be removed.
-│   ├── clishow.py            # `cencli show ...` level of the cli
-│   ├── clishowfirmware.py    # `cencli show firmware ...` level of the cli
-│   ├── clishowwids.py        # `cencli show wids ...` level of the cli
-│   ├── cliupdate.py          # `cencli update ...` level of the cli
-│   ├── cliupgrade.py         # `cencli upgrade ...` level of the cli
-│   ├── config.py             # config module reads centralcli config file / and any import files.
-│   ├── constants.py          # static variables and type deffinitions
-│   ├── exceptions.py         # Not Used Currently: Custom CentralApi exceptions
-│   ├── logger.py             # centralcli log module (logging)
-│   ├── response.py           # CentralApi response module.  Wraps aiohttp response and any other data sent to
-│   │                         #    Response() object.  Provides consistent set of attributes for eval during
-│   │                         #    display.
-│   ├── setup.py              # for pytest
-│   ├── utils.py              # Utils object with convenience methods.  A class just for the sake of namespace.
-│   └── vscodeargs.py         # dev helper.  Breaks single argument (how vscode represents args) into
-│   │                         #   multiple arguments (vscode debugger)
-├── config
-│   ├── config.yaml           # pip installed version will use $HOME/.config/centralcli on POSIX or %HOME%\.centralcli on Win
-│   ├── config.yaml.example
-├── poetry.lock
-├── pyproject.toml
-├── requirements-dev.txt
-├── requirements.txt
-└── tests
-    ├── cache_test.py
-    ├── test_add.py
-    ├── test_batch.py
-    ├── test_del.py
-    ├── test_devices.json
-    ├── test_devices.json.example
-    ├── test_do.py
-    └── test_show.py
-```
+You can also see the entire supported tree via the [CLI Reference Guide](https://central-api-cli.readthedocs.io/en/latest/#cli-reference).
+*NOTE: The Reference Guide documents a few commands that are hidden in the CLI*
