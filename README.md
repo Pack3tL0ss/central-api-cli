@@ -4,7 +4,7 @@
 
 A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform / shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
 
-![centralcli Animated Demo](docs/img/cencli-demo.gif)
+![centralcli Animated Demo](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/cencli-demo.gif)
 
 ## Features
 
@@ -39,7 +39,7 @@ Requires python 3.7+ and pip
 
 ## Configuration
 
-Refer to [config.yaml.example](config/config.yaml.example) to guide in the creation of config.yaml and place in the config directory.
+Refer to [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blob/master/config/config.yaml.example) to guide in the creation of config.yaml and place in the config directory.
 
 CentralCli will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>\\.centralcli.
 i.e. on Windows `c:\Users\wade\.centralcli` or on Linux `/home/wade/.config/centralcli`
