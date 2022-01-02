@@ -54,7 +54,7 @@ def device(
     val1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
     kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
     val2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
-    kw3: str = typer.Argument(None, hidden=True, autocompletion=cli.cache.smg_kw_completion),
+    kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion),
     _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
