@@ -146,21 +146,22 @@ class Cache:
         self.rl: str = ""  # TODO temp might refactor cache updates to return resp
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
-        self.DevDB = TinyDB(config.cache_file)
-        self.SiteDB = self.DevDB.table("sites")
-        self.GroupDB = self.DevDB.table("groups")
-        self.TemplateDB = self.DevDB.table("templates")
-        # log db is used to provide simple index to get details for logs
-        # vs the actual log id in form 'audit_trail_2021_2,...'
-        # it is updated anytime show logs is ran.
-        self.LogDB = self.DevDB.table("logs")
-        self.EventDB = self.DevDB.table("events")
-        self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
-        self.Q = Query()
-        if data:
-            self.insert(data)
-        if central:
-            self.check_fresh(refresh)
+        if config.valid and config.cache_dir.exists():
+            self.DevDB = TinyDB(config.cache_file)
+            self.SiteDB = self.DevDB.table("sites")
+            self.GroupDB = self.DevDB.table("groups")
+            self.TemplateDB = self.DevDB.table("templates")
+            # log db is used to provide simple index to get details for logs
+            # vs the actual log id in form 'audit_trail_2021_2,...'
+            # it is updated anytime show logs is ran.
+            self.LogDB = self.DevDB.table("logs")
+            self.EventDB = self.DevDB.table("events")
+            self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
+            self.Q = Query()
+            if data:
+                self.insert(data)
+            if central:
+                self.check_fresh(refresh)
 
     def __call__(self, refresh=False) -> None:
         if refresh:

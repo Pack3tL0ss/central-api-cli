@@ -72,10 +72,11 @@ class Config:
                 self.outdir = self.base_dir / "out"
             self.file = self.dir / "config.yaml"
 
-        for ext in ["yml", "json"]:
-            if self.dir.joinpath(f"config.{ext}").exists():
-                self.file = self.dir / f"config.{ext}"
-                break
+            for ext in ["yml", "json"]:
+                if self.dir.joinpath(f"config.{ext}").exists():
+                    self.file = self.dir / f"config.{ext}"
+                    break
+
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
