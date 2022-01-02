@@ -7,7 +7,7 @@ authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
 maintainers = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
 readme = "README.md"
 repository = "https://github.com/Pack3tL0ss/central-api-cli"
-# documentation = "https://central-api-cli.readthedocs.org"
+documentation = "https://central-api-cli.readthedocs.org"
 keywords = [
     "cli",
     "Aruba",
