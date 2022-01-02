@@ -12,6 +12,7 @@ Aruba Central API CLI (cencli)
 
    readme
    cli
+   alternate_cli
    project_structure
 
 
