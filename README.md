@@ -1,12 +1,13 @@
 # Aruba Central API CLI
 
----
+[![Documentation Status](https://readthedocs.org/projects/central-api-cli/badge/?version=latest)](https://central-api-cli.readthedocs.io/en/latest/?badge=latest)
 
 A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform / shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
 
 ![centralcli Animated Demo](docs/img/cencli-demo.gif)
 
 ## Features
+
 - Cross Platform Support
 - Auto Completion
 - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
@@ -19,9 +20,9 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
   > If using Tokens, dedicate the token to the CLI alone, using it in swagger or on another system, will eventually lead to a refresh that invalidates the tokens on the other systems using it.
 - You can also use username/Password Auth. which will facilitate automatic retrieval of new Tokens even if they do become invalid.
 
-## CURRENT STATE OF THE PROJECT
+## Current State Of The Project
 
-***evolving***  It's a useful tool, but as commands are built out the CLI hierarchy will evolve.  More batch automation, and orchestrated tasks are being added daily.  Please submit an issue with any requests.
+***evolving***  As commands are built out the CLI hierarchy may evolve.
 
 ## Installation
 
