@@ -271,10 +271,10 @@ def _client_concat_associated_dev(
     ]
     dev, _gw, data["gateway"] = "", "", {}
     if data.get("associated_device"):
-        dev = cache.get_dev_identifier(data["associated_device"], ret_field="name")
+        dev = cache.get_dev_identifier(data["associated_device"],)
 
     if data.get("gateway_serial"):
-        _gw = cache.get_dev_identifier(data["gateway_serial"], ret_field="name")
+        _gw = cache.get_dev_identifier(data["gateway_serial"],)
         _gateway = {
             "name": _gw.name,
             "serial": data.get("gateway_serial", ""),
