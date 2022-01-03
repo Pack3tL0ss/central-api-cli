@@ -110,5 +110,5 @@ Just use `--out \<filename\>` (or \<path\\filename\>), and specify the desired f
 
 Use `?` or `--help` from the cli, which you can do at any level.  `ccenli ?`, `cencli bounce --help` etc.
 
-You can also see the entire supported tree via the [CLI Reference Guide](https://central-api-cli.readthedocs.io/en/latest/#cli-reference).
+You can also see the entire supported tree via the [CLI Reference Guide](https://central-api-cli.readthedocs.io/en/latest/cli.html).
 *NOTE: The Reference Guide documents a few commands that are hidden in the CLI*
