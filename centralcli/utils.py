@@ -75,15 +75,17 @@ class Utils:
         self.Mac = Mac
 
     def user_input_bool(self, question):
+
         """Ask User Y/N Question require Y/N answer
 
         Error and re-prompt if user's response is not valid
         Appends '? (y/n): ' to question/prompt provided
 
         Params:
-            question:str, The Question to ask
+            question (str): The Question to ask
+
         Returns:
-            answer:bool, Users Response yes=True
+            answer (bool): Users Response yes=True
         """
         valid_answer = ["yes", "y", "no", "n"]
         try:
