@@ -403,6 +403,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
         to_front = [
             "vlan_id",
             "name",
+            "type",
             "model",
             'mode',
             "vlan_desc",
@@ -420,12 +421,12 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             "group_name",
             "group",
             "site",
+            "labels",
             "addr_mode",
             "admin_mode",
             "oper_mode",
             "untagged_ports",
             "tagged_ports",
-            "status",
             "is_management_vlan",
             "is_jumbo_enabled",
             "is_voice_enabled",
@@ -436,7 +437,10 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             'mem_total',
             'mem_free',
             'firmware_version',
-            'firmware_backup_version'
+            'version',
+            'firmware_backup_version',
+            'oper_state_reason',
+            "status",
         ]
     to_front = [i for i in to_front if i in all_keys]
     _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
@@ -467,6 +471,7 @@ def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[d
         ]
     )
 
+    data = sorted(data, key=lambda i: (i.get("site") or "", i["name"]))
     # if sort and data and sort in data[-1]:
     #     return sorted(data, key=sort)
     # else:
