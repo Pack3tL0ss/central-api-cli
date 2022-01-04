@@ -11,11 +11,17 @@ Aruba Central API CLI (cencli)
    :caption: Contents:
 
    readme
-   cli
-   alternate_cli
-   centralcli
    project_structure
 
+.. toctree::
+   :caption: CLI Reference
+
+   cli
+
+.. toctree::
+   :caption: Module Documentation
+
+   modules
 
 
 .. * :ref:`genindex`
