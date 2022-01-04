@@ -407,7 +407,7 @@ def interfaces(
                                 autocompletion=cli.cache.account_completion),
 ):
 
-    dev = cli.cache.get_dev_identifier(device, ret_field="type-serial")
+    dev = cli.cache.get_dev_identifier(device,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:

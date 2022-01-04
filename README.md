@@ -2,27 +2,25 @@
 
 [![Documentation Status](https://readthedocs.org/projects/central-api-cli/badge/?version=latest)](https://central-api-cli.readthedocs.io/en/latest/?badge=latest)
 
-A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform / shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
+A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
+
+  > As commands are built out the CLI hierarchy may evolve.  Refer to the [documentation](https://central-api-cli.readthedocs.org) or help text for CLI structure/syntax.
 
 ![centralcli Animated Demo](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/cencli-demo.gif)
 
 ## Features
 
 - Cross Platform Support
-- Auto Completion
+- Auto/TAB Completion
 - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
-- multiple output formats
-- output to file
+- Multiple output formats
+- Output to file
 - Numerous import formats (csv, yaml, json, xls, etc.)
-- multiple account support (easily switch between different central accounts `--account myotheraccount`)
+- Multiple account support (easily switch between different central accounts `--account myotheraccount`)
 - Batch Operation based on data from input file.  i.e. Add sites in batch based on data from a csv.
 - Automatic Token refresh.  With prompt to paste in a new token if it becomes invalid.
   > If using Tokens, dedicate the token to the CLI alone, using it in swagger or on another system, will eventually lead to a refresh that invalidates the tokens on the other systems using it.
 - You can also use username/Password Auth. which will facilitate automatic retrieval of new Tokens even if they do become invalid.
-
-## Current State Of The Project
-
-***evolving***  As commands are built out the CLI hierarchy may evolve.
 
 ## Installation
 
@@ -31,6 +29,10 @@ Requires python 3.7+ and pip
 `pip3 install centralcli`
 
 > You can also install in a virtual environment (venv), but you'll lose auto-completion, unless you activate the venv.
+
+### Upgrading the CLI
+
+`pip3 install -U centralcli`
 
 ### if you don't have python
 
@@ -49,27 +51,45 @@ Once `config.yaml` is populated per [config.yaml.example](config/config.yaml.exa
 For Example `cencli show all`
 
 ```bash
-wade@wellswa6:~ $ cli show all
-✔ Collecting Data [monitoring/v1/switches]
-✔ Collecting Data [monitoring/v2/aps]
-✔ Collecting Data [monitoring/v1/gateways]
-name               ip               mac            model                 group          site     serial      type     labels       version                status
------------------  ---------------  -------------  --------------------  -------------  -------  ----------  -------  -----------  ---------------------  --------
-BR1_315_7c:88      10.101.6.200/24  --redacted--   315                   Branch1        Antigua  -redacted-  ap       Branch View  8.7.1.1_78245          Up
-IAP305             10.2.30.102      --redacted--   305                   TemplateGroup           -redacted-  ap                    6.5.1.0-4.3.1.2_58595  Down
-LABAP4             10.0.30.233/24   --redacted--   345                   WadeLab                 -redacted-  ap                    8.7.1.0_77203          Down
-sw-zippity                          --redacted--   J9773A                WadeLab                 -redacted-  SW                    16.10.000x             Down
-sw-ConsolePi-dev   10.0.10.154      --redacted--   Aruba2930F-(JL258A)   WadeLab        WadeLab  -redacted-  SW                    16.10.0011             Down
-2930F-Branch1      10.101.5.4       --redacted--   Aruba2930F-(JL258A)   Branch1        Antigua  -redacted-  SW       Branch View  16.10.0007             Up
-6200F-Bot          10.0.40.16       --redacted--   6200F 48G-(JL728A)    WadeLab        WadeLab  -redacted-  CX                    10.06.0010             Up
-SDBranch1:7008     192.168.240.101  --redacted--   A7008                 Branch1        Antigua  -redacted-  gateway  Branch View  8.5.0.0-2.0.0.6_76205  Up
-VPNC1              192.168.30.201   --redacted--   A7005                 WadeLab        WadeLab  -redacted-  gateway  Branch View  8.6.0.4-2.2.0.3_77966  Up
-VPNC2              192.168.30.202   --redacted--   A7005                 WadeLab        WadeLab  -redacted-  gateway  Branch View  8.6.0.4-2.2.0.3_77966  Up
-...
+wade@wellswa6:~ $ cencli show all
+                                                                                       All Devices
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  name                  type   model                            ip                mac                 serial       group          site             labels        version       status
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6100F-48-LAB          cx     6100 48G CL4 4SFP+ Swch          10.0.40.11        --redacted--   --redacted--    WadeLab8x                                     10.08.1010       Down
+                               (JL675A)
+  SDBranch1:7008        gw     A7008                            192.168.240.101   --redacted--   --redacted--    Branch1        Antigua          Branch View   10.3.0.0_82528   Up
+  br1-2930F-sw          sw     Aruba2930F-8G-PoE+-2SFP+         10.101.5.4        --redacted--   --redacted--    Branch1        Antigua          Branch View   16.11.0002       Up
+                               Switch(JL258A)
+  br1-315.0c88-ap       ap     315                              10.101.6.200      --redacted--   --redacted--    Branch1        Antigua          Branch View   10.3.0.0_82528   Up
+  MB1-505h              ap     505H                             10.10.1.101       --redacted--   --redacted--    MicroBranch1   Champions Hill                 10.3.0.0_82528   Up
+  6200F-Bot             cx     6200F 48G CL4 4SFP+740W Swch     10.0.40.16        --redacted--   --redacted--    WadeLab8x      Pommore                        10.08.1010       Down
+                               (JL728A)
+  6200F-Top             cx     6200F 48G CL4 4SFP+740W Swch     10.0.40.6         --redacted--   --redacted--    WadeLab8x      Pommore                        10.08.1010       Down
+                               (JL728A)
+  APGW1                 gw     A9004-LTE                        10.0.35.10        --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82528   Up
+  APGW2                 gw     A9004                            10.0.35.20        --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82528   Up
+  VPNC1                 gw     A7005                            172.30.0.242      --redacted--   --redacted--    VPNC           WadeLab          Branch View   10.3.0.0_82528   Up
+  VPNC2                 gw     A7005                            172.30.0.243      --redacted--   --redacted--    VPNC           WadeLab          Branch View   10.3.0.0_82528   Up
+  av-555.11b8-ap        ap     555                              10.0.31.155       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+  barn-303p.2c30-ap     ap     303P                             10.1.30.151       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82528   Up
+  barn-4100i            cx     4100i 12G CL4/6 POE 2SFP+ DIN    10.1.30.152       --redacted--   --redacted--    WadeLab        WadeLab                        10.08.1010       Up
+                               Sw (JL817A)
+  barn-518.2816-ap      ap     518                              10.1.30.101       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82528   Up
+  bsmt-515.51s9-ap      ap     515                              10.0.30.233       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+  craft-2930F           sw     Aruba2930F-8G-PoE+-2SFP+         10.0.30.5         --redacted--   --redacted--    WadeLab        WadeLab                        16.11.0002       Up
+                               Switch(JL258A)
+  garage-345.5136-ap    ap     345                              10.0.31.148       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+  ktcn-505H.206c-ap     ap     505H                             10.0.30.212       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+  lwrptio-575.0824-ap   ap     575                              10.0.30.219       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+  zrm-535.70be-ap       ap     535                              10.0.31.101       --redacted--   --redacted--    WLNET          WadeLab                        10.3.0.0_82463   Down
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Show all displays fields common to all device types. To see all columns for a given device type use show <DEVICE TYPE>
+  API Rate Limit: 925 of 1000 remaining.
 
 ```
 
-Use `cencli --help` to become familiar with the command options.
+Use `cencli ?` to become familiar with the command options.
 
 ### Auto Completion
 
@@ -111,5 +131,5 @@ Just use `--out \<filename\>` (or \<path\\filename\>), and specify the desired f
 
 Use `?` or `--help` from the cli, which you can do at any level.  `ccenli ?`, `cencli bounce --help` etc.
 
-You can also see the entire supported tree via the [CLI Reference Guide](https://central-api-cli.readthedocs.io/en/latest/#cli-reference).
+You can also see the entire supported tree via the [CLI Reference Guide](https://central-api-cli.readthedocs.io/en/latest/cli.html).
 *NOTE: The Reference Guide documents a few commands that are hidden in the CLI*

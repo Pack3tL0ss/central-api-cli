@@ -52,17 +52,17 @@ class Response:
     Assigns commonly evaluated attributes regardless of API execution result
 
     The following attributes will always be available:
-        ok: (bool) indicates success/failure of aiohttp.ClientSession.request()
-        output: (Any) The content returned from the response (outer keys removed)
-        raw: (Any) The original un-cleaned response from the API request
-        error: (str) Error message indicating the nature of a failed response
-        status: (int) http status code returned from response
+        - ok (bool): indicates success/failure of aiohttp.ClientSession.request()
+        - output (Any): The content returned from the response (outer keys removed)
+        - raw (Any): The original un-cleaned response from the API request
+        - error (str): Error message indicating the nature of a failed response
+        - status (int): http status code returned from response
 
     Create instance by providing at minimum one of the following parameters:
-        response: (aiohttp.ClientResponse) all other paramaters ignored if providing response
-        error: (str) ok, output, status set to logical default if not provided
+        - response (aiohttp.ClientResponse): all other paramaters ignored if providing response
+        - error (str): ok, output, status set to logical default if not provided
             OK / __bool__ is False if error is provided and ok is not.
-        output: (Any) ok, error, status set to logical default if not provided
+        - output (Any): ok, error, status set to logical default if not provided
             OK / __bool__ is True if output provided with no error or ok arg.
     '''
     def __init__(
