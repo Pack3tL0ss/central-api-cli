@@ -386,7 +386,7 @@ class CentralApi(Session):
     ) -> Response:
         """Get Clients details.
 
-        :: Used by show clients ... ::
+        // Used by show clients ... //
 
         Args:
             group (str, optional): Filter by Group. Defaults to None.
@@ -485,7 +485,7 @@ class CentralApi(Session):
     ) -> Response:
         """Get All clients
 
-        :: Used indirectly by show clients ::
+        // Used indirectly by show clients //
 
         Args:
             group (str, optional): Return clients connected to devices in a given group. Defaults to None.
@@ -1112,7 +1112,7 @@ class CentralApi(Session):
     ) -> Response:
         """Get Devices from Aruba Central API Gateway
 
-        :: Used by show <"aps"|"gateways"|"switches"> ::
+        // Used by show <"aps"|"gateways"|"switches"> //
 
         Args:
             dev_type (Literal["switches", "aps", "gateways"): Type of devices to get.
@@ -1201,7 +1201,7 @@ class CentralApi(Session):
     ) -> Response:
         """Return Details for a given device
 
-        :: Used by show device[s] <device iden> ::
+        // Used by show device[s] <device iden> //
 
         Args:
             dev_type (str): Device Type
@@ -1538,18 +1538,19 @@ class CentralApi(Session):
     ) -> Response:
         """Generic commands for device.
 
+        Supported Commands (str):
+            - reboot: supported by IAP/Controllers/MAS Switches/Aruba Switches
+            - blink_led_on: Use this command to enable the LED display, supported by IAP/Aruba Switches
+            - blink_led_off: Use this command to enable the LED display, supported by IAP/Aruba Switches
+            - blink_led: Use this command to blink LED display, Supported on Aruba Switches
+            - erase_configuration : Factory default the switch.  Supported on Aruba Switches
+            - save_configuration: Saves the running config. supported by IAP/Aruba Switches
+            - halt : This command performs a shutdown of the device, supported by Controllers alone.
+            - config_sync : This commands performs full refresh of the device config, supported by Controllers alone
+
         Args:
             serial (str): Serial of device
-            command (str): Command mentioned in the description that is to be executed
-                reboot: supported by IAP/Controllers/MAS Switches/Aruba Switches
-                blink_led_on: Use this command to enable the LED display, supported by IAP/Aruba Switches
-                blink_led_off: Use this command to enable the LED display, supported by IAP/Aruba Switches
-                blink_led: Use this command to blink LED display, Supported on Aruba Switches
-                erase_configuration : Factory default the switch.  Supported on Aruba Switches
-                save_configuration: Saves the running config and displays the running configuration on the screen
-                    supported by IAP/Aruba Switches
-                halt : This command performs a shutdown of the device, supported by Controllers alone.
-                config_sync : This commands performs full refresh of the device config, supported by Controllers alone
+            command (str): Command to be executed
             duration (int, Optional): Number of seconds to blink_led only applies to blink_led and blink_led_on
 
         Returns:
@@ -1756,6 +1757,8 @@ class CentralApi(Session):
     ) -> Response:
         """ "Create new configuration backup for multiple groups."
 
+        Either include_groups or exclude_groups should be provided, but not both.
+
         Args:
             backup_name (str): Name of Backup
             include_groups (Union[list, List[str]], optional): Groups to include in Backup. Defaults to None.
@@ -1763,7 +1766,6 @@ class CentralApi(Session):
             do_not_delete (bool, optional): Flag to represent if the snapshot can be deleted automatically
                 by system when creating new snapshot or not. Defaults to False.
 
-        *Either include_groups or exclude_groups should be provided, but not both.
 
         Returns:
             Response: Response Object
@@ -2051,7 +2053,7 @@ class CentralApi(Session):
     ) -> Response:
         """Create new group with specified properties. v3
 
-        :: Used by add group ::
+        // Used by add group //
 
         Args:
             group (str): Group Name
@@ -2190,13 +2192,7 @@ class CentralApi(Session):
 
         Args:
             group (str): Name of the group to be updated.
-            group_password (str): - GET API will always return empty,  This is mandatory for POST
-                and PATCH APIs.
-                - The password set in the group API is applicable for configuration that are done
-                from UI, we ignore the password for templates.
-                - To set the password for template group devices please use the following CLI in
-                template file.                                     mgmt-user admin <actual_password>
-                OR mgmt-user admin %admin_password%
+            group_password (str): password for UI group
             template_group (bool): Set to true if group is of type template.
 
         Returns:
@@ -2266,7 +2262,7 @@ class CentralApi(Session):
     ) -> Response:
         """Update properties for the given group.
 
-        :: Used by update group ::
+        // Used by update group //
 
         - The update of persona and configuration mode set for existing device types is not permitted.
         - Can update from standard AP to MicroBranch, but can't go back
@@ -2477,7 +2473,7 @@ class CentralApi(Session):
     async def get_ap_settings(self, serial_number: str) -> Response:
         """Get an existing ap settings.
 
-        :: Used indirectly (update_ap_settings) by batch rename AP ::
+        // Used indirectly (update_ap_settings) by batch rename AP //
 
         Args:
             serial_number (str): AP serial number.
@@ -2505,7 +2501,7 @@ class CentralApi(Session):
     ) -> Response:
         """Update an existing ap settings.
 
-        :: Used by batch rename aps ::
+        // Used by batch rename aps //
 
         Args:
             serial_number (str, optional): AP Serial Number
@@ -2594,19 +2590,6 @@ class CentralApi(Session):
 
         Returns:
             Response: CentralAPI Response object
-        [
-            {
-                "data": [
-                    {
-                        "group": "Branch1",
-                        "properties": {
-                            "AOSVersion": "AOS_10X",
-                            "MonitorOnlySwitch": false
-                        }
-                    }
-                ]
-            }
-        ]
         """
         url = "/configuration/v1/groups/properties"
 
@@ -2970,7 +2953,7 @@ class CentralApi(Session):
 
         You can only specify one of device_type, swarm_id or serial parameters
 
-        :: Used by upgrade [device|group|swarm] ::
+        // Used by upgrade [device|group|swarm] //
 
         Args:
             scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
@@ -3004,7 +2987,7 @@ class CentralApi(Session):
     async def get_upgrade_status(self, swarm_id: str = None, serial: str = None) -> Response:
         """Get firmware upgrade status.
 
-        :: Used by show upgrade [device-iden] ::
+        // Used by show upgrade [device-iden] //
 
         Args:
             swarm_id (str, optional): Swarm ID
@@ -3027,7 +3010,7 @@ class CentralApi(Session):
     async def get_firmware_compliance(self, device_type: DevType, group: str = None) -> Response:
         """Get Firmware Compliance Version.
 
-        :: Used by show firmware compliance [ap|gw|sw] [group-name] ::
+        // Used by show firmware compliance [ap|gw|sw] [group-name] //
 
         Args:
             device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
@@ -3049,7 +3032,7 @@ class CentralApi(Session):
     async def delete_firmware_compliance(self, device_type: str, group: str = None) -> Response:
         """Clear Firmware Compliance Version.
 
-        :: Used by delete firmware compliance [ap|gw|switch] [group] ::
+        // Used by delete firmware compliance [ap|gw|switch] [group] //
 
         Args:
             device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
@@ -3221,7 +3204,7 @@ class CentralApi(Session):
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
-        :: Used by add device ::
+        // Used by add device //
 
         Args:
             mac_address (str, optional): MAC address of device to be added
@@ -3326,7 +3309,7 @@ class CentralApi(Session):
     async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
         """Assign devices to pre-provisioned group.
 
-        :: Used indirectly by add device (when group option provided) ::
+        // Used indirectly by add device (when group option provided) //
 
         Args:
             group (str): Group name
@@ -3505,7 +3488,7 @@ class CentralApi(Session):
     async def assign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
         """Assign subscription to a device.
 
-        :: Used indirectly by add device when --license <license> is provided. ::
+        // Used indirectly by add device when --license <license> is provided. //
 
         Args:
             serials (List[str]): List of serial number of device.
@@ -3832,7 +3815,7 @@ class CentralApi(Session):
     ) -> Response:
         """Get AP Group Level configuration for UI group.
 
-        :: Used by show config <AP MAC for AOS10 AP> ::
+        // Used by show config <AP MAC for AOS10 AP> //
 
         Args:
             group_swarmid (str): Group name of the group or guid of the swarm.
