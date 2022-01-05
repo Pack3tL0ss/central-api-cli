@@ -1484,8 +1484,6 @@ def events(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    '''Show event logs
-    '''
     # TODO move to common func for use be show logs and show events
     if args:
         event_details = cli.cache.get_event_identifier(args[-1])
@@ -1702,7 +1700,7 @@ def last(
     sort_by: str = typer.Option(None, "--sort",),
     reverse: bool = typer.Option(
         True, "-r",
-        help="Reverse Output order Default order: newest on bottom.",
+        help="Reverse Output order",
         show_default=False
     ),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
