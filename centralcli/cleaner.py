@@ -84,8 +84,11 @@ def _serial_to_name(sernum: str) -> str:
 
 
 def _extract_names_from_id_name_dict(id_name: dict) -> str:
-    names = [x.get("name", "Error") for x in id_name]
-    return ", ".join(names)
+    if isinstance(id_name, dict) and "id" in id_name and "name" in id_name:
+        names = [x.get("name", "Error") for x in id_name]
+        return ", ".join(names)
+    else:
+        return id_name
 
 
 def _extract_event_details(details: List[dict]) -> dict:
@@ -107,13 +110,14 @@ _short_value = {
     "last_modified": _convert_epoch,
     "lease_start_ts": _log_timestamp,
     "lease_end_ts": _log_timestamp,
+    "acknowledged_timestamp": _log_timestamp,
     "lease_time": _duration_words,
     "lease_time_left": _duration_words,
     "ts": _log_timestamp,
     "timestamp": _log_timestamp,
     "Unknown": "?",
     "HPPC": "SW",
-    # "labels": _extract_names_from_id_name_dict,
+    "labels": _extract_names_from_id_name_dict,
     "sites": _extract_names_from_id_name_dict,
     "ACCESS POINT": "AP",
     "GATEWAY": "GW",
@@ -159,6 +163,9 @@ _short_key = {
     "vlan_id": "pvid",
     "free_ip_addr_percent": "free ip %",
     "events_details": "details",
+    # "acknowledged": "ack",
+    "acknowledged_by": "ack by",
+    "acknowledged_timestamp": "ack time",
 }
 
 
@@ -506,6 +513,35 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
             del d["has details"]
         if cache_list:
             cache_update_func(cache_list)
+
+    return data
+
+
+def get_alerts(data: List[dict],) -> List[dict]:
+
+    field_order = [
+        "timestamp",
+        "severity",
+        "type",
+        # "group_name",
+        # "device info",
+        "description",
+        # "labels",
+        "acknowledged",
+        # "acknowledged_by",
+        # "acknowledged_timestamp",
+    ]
+    for d in data:
+        # d["details"] = d.get("details") or {}
+        # d["device info"] = f"{d['details'].get('hostname', '')}|" \
+        #     f"{d.get('device_id', '')}|Group: {d.get('group_name', '')}".lstrip("|")
+        d["severity"] = d.get("severity", "INFO")
+        d["acknowledged"] = f'{"by " if d.get("acknowledged_by") else ""}' \
+            f'{d.get("acknowledged_by")}{" @ " if d.get("acknowledged_by") else ""}' \
+            f'{"" if not d.get("acknowledged_timestamp") else _log_timestamp(d["acknowledged_timestamp"])}' \
+
+    data = [dict(short_value(k, d[k]) for k in field_order if k in d) for d in data]
+    data = strip_no_value(data)
 
     return data
 

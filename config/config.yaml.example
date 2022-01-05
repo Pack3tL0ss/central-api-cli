@@ -40,8 +40,8 @@ central_info:
 #    base_url: "https://internal-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
 
 # -- Optional Global Options --
-# no-pager: true            # turns off the automatic paged output (for longer outputs).  There is also a `--no-pager` flag.
-
+# no_pager: true            # turns off the automatic paged output (for longer outputs).  There is also a `--no-pager` flag.
 # forget_account_after: 30  # The --account <account-name> flag allows you to switch between central accounts.  The setting is sticky
                             # so you don't have to keep re-entering the flag on every command.  This setting will cause it to revert
                             # back to the default account (under "central-info") 30 mins from the last command.
+# other global options (true|false): debug, debugv (both default to false) ssl_verify (defaults to true)

@@ -1485,9 +1485,6 @@ def events(
 ) -> None:
     '''Show event logs
     '''
-    if device:
-        device = cli.cache.get_dev_identifier(device)
-
     # TODO move to common func for use be show logs and show events
     if args:
         event_details = cli.cache.get_event_identifier(args[-1])
@@ -1567,6 +1564,138 @@ def events(
         cleaner=cleaner.get_event_logs if not verbose else None,
         cache_update_func=cli.cache.update_event_db if not verbose else None,
         caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
+    )
+
+
+@app.command(short_help="Show Alerts/Notifications. (Default Past 24 hours)", help="Show Alerts/Notifications.  Notification must be enabled.")
+def alerts(
+    # args: List[str] = typer.Argument(
+    #     None,
+    #     metavar='[LOG_ID]',
+    #     help="Show details for a specific log_id",
+    #     autocompletion=lambda incomplete: cli.cache.get_event_identifier(incomplete)
+    # ),
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
+    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion,),
+    start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)",),
+    end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
+    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    device: str = typer.Option(
+        None,
+        metavar=iden_meta.dev,
+        help="Filter alerts by device",
+        autocompletion=cli.cache.dev_completion,
+    ),
+    severity: str = typer.Option(None, help="Filter by alerts by severity."),  # TODO completion
+    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
+    ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts",),
+    alert_type: str = typer.Option(None, "--type", help="Filter by alert type",),  # TODO enum with alert types
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
+    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
+    verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
+    verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    if device:
+        device = cli.cache.get_dev_identifier(device)
+
+    # TODO move to common func for use be show logs and show events
+    # if args:
+    #     event_details = cli.cache.get_event_identifier(args[-1])
+    #     cli.display_results(
+    #         Response(output=event_details),
+    #         tablefmt="action",
+    #     )
+    #     print(type(event_details))
+    #     raise typer.Exit(0)
+    if start:
+        try:
+            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+            start = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"start appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if end:
+        try:
+            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+            end = (dt.int_timestamp)
+        except Exception:
+            typer.secho(f"end appears to be invalid {start}", fg="red")
+            raise typer.Exit(1)
+    if past:
+        now = int(time.time())
+        past = past.lower().replace(" ", "")
+        if past.endswith("d"):
+            start = now - (int(past.rstrip("d")) * 86400)
+        if past.endswith("h"):
+            start = now - (int(past.rstrip("h")) * 3600)
+        if past.endswith("m"):
+            start = now - (int(past.rstrip("m")) * 60)
+
+    kwargs = {
+        "group": group,
+        "label": label,
+        "from_ts": start,  # or int(time.time() - 14400),
+        "to_ts": end,
+        "serial": None if not device else device.serial,
+        "site": site,
+        'severity': severity,
+        "search": search,
+        "type": alert_type,
+        'ack': ack,
+    }
+
+    central = cli.central
+    resp = central.request(central.get_alerts, **kwargs)
+
+    if resp.ok and len(resp) == 0:
+        resp.output = "No Alerts"
+        tablefmt = "action"
+    else:
+        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Alerts/Notifications (Configured Notification Rules)",
+        pager=not no_pager,
+        outfile=outfile,
+        # TODO move sort_by underscore removal to display_results
+        sort_by=sort_by,  #  if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
+        reverse=reverse,
+        # set_width_cols={"event type": {"min": 5, "max": 12}},
+        cleaner=cleaner.get_alerts if not verbose else None,
+        # cache_update_func=cli.cache.update_event_db if not verbose else None,
+        # caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
     )
 
 
