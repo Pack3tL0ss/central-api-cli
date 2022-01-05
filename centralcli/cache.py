@@ -192,6 +192,10 @@ class Cache:
         return self.EventDB.all()
 
     @property
+    def event_ids(self) -> list:
+        return [x["id"] for x in self.EventDB.all()]
+
+    @property
     def group_names(self) -> list:
         return [g["name"] for g in self.GroupDB.all()]
 
@@ -346,6 +350,15 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
+
+    def event_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        for event_id in self.event_ids:
+            if str(event_id).startswith(incomplete):
+                yield event_id, f"Details for Event with id {event_id}"
 
     # TODO add support for zip code city state etc.
     def site_completion(
