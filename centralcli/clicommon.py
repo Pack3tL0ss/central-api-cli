@@ -30,7 +30,7 @@ tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
-console = Console()
+console = Console(emoji=False)
 
 
 class CLICommon:
@@ -262,6 +262,7 @@ class CLICommon:
         outfile: Path = None,
         sort_by: str = None,
         reverse: bool = False,
+        stash: bool = True,
         pad: int = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
@@ -284,8 +285,7 @@ class CLICommon:
                         data = sorted(data, key=lambda d: d[sort_by])
                     except TypeError as e:
                         print(
-                            f"[dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}. "
-                            f"[dark_orange3]TypeError:[reset] {e}"
+                            f"[dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}.\n{e} "
                         )
 
             if reverse:
@@ -305,7 +305,10 @@ class CLICommon:
                 "full_cols": full_cols
             }
             outdata = utils.output(**kwargs)
-            Path(config.cache_dir, "last_command").write_text(json.dumps({k: v for k, v in kwargs.items() if k != "config"}))
+            if stash:
+                Path(config.cache_dir, "last_command").write_text(
+                    json.dumps({k: v for k, v in kwargs.items() if k != "config"})
+                )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             if outfile and outdata:
@@ -321,7 +324,8 @@ class CLICommon:
         pager: bool = True,
         outfile: Path = None,
         sort_by: str = None,
-        reverse: bool = None,
+        reverse: bool = False,
+        stash: bool = True,
         pad: int = None,
         exit_on_fail: bool = False,
         ok_status: Union[int, List[int], Dict[int, str]] = None,
@@ -349,6 +353,8 @@ class CLICommon:
             outfile (Path, optional): path/file of output file. Defaults to None.
             sort_by (Union[str, List[str], None] optional): column or columns to sort output on.
             reverse (bool, optional): reverse the output.
+            stash (bool, optional): stash (cache) the output of the command.  The CLI can re-display with
+                show last.  Default: True
             ok_status (Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]], optional): By default
                 responses with status_code 2xx are considered OK and are rendered as green by
                 Output class.  provide int or list of int to override additional status_codes that

@@ -650,6 +650,7 @@ state_pretty_to_abbrev = dict(map(reversed, state_abbrev_to_pretty.items()))
 
 NO_LOAD_COMMANDS = [
     "show config cencli",
+    "show last"
 ]
 NO_LOAD_FLAGS = [
     "--help",

@@ -477,7 +477,7 @@ class Utils:
             from rich.text import Text
             # from rich.progress import Progress
             from centralcli import constants
-            console = Console(record=True)
+            console = Console(record=True, emoji=False)
 
             customer_id, customer_name = "", ""
             # outdata = self.listify(outdata)

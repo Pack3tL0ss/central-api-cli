@@ -210,6 +210,10 @@ class Config:
     def cache_file(self):
         return self.default_cache_file if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}.json"
 
+    @property
+    def last_command_file(self):
+        return self.cache_dir / "last_command" if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}_last_command"
+
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:
             return self.data.get(key, default)
