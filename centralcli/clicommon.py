@@ -294,16 +294,18 @@ class CLICommon:
             if self.raw_out and tablefmt in ["simple", "rich"]:
                 tablefmt = "json"
 
-            outdata = utils.output(
-                data,
-                tablefmt,
-                title=title,
-                caption=caption,
-                account=None if config.account in ["central_info", "account"] else config.account,
-                config=config,
-                set_width_cols=set_width_cols,
-                full_cols=full_cols,
-            )
+            kwargs = {
+                "outdata": data,
+                "tablefmt": tablefmt,
+                "title": title,
+                "caption": caption,
+                "account": None if config.account in ["central_info", "account"] else config.account,
+                "config": config,
+                "set_width_cols": set_width_cols,
+                "full_cols": full_cols
+            }
+            outdata = utils.output(**kwargs)
+            Path(config.cache_dir, "last_command").write_text(json.dumps({k: v for k, v in kwargs.items() if k != "config"}))
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
             if outfile and outdata:
