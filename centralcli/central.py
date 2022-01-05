@@ -106,7 +106,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
     else:
         # Account name callback will kick back errors
         # falling back to default for load of central for auto completion
-        central_info = config.data["cen6tral_info"]
+        central_info = config.data["central_info"]
     token_store = config.token_store
     ssl_verify = config.data.get("ssl_verify", True)
 
@@ -3727,8 +3727,8 @@ class CentralApi(Session):
         label: str = None,
         serial: str = None,
         site: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_ts: int = None,
+        to_ts: int = None,
         severity: str = None,
         type: str = None,
         search: str = None,
@@ -3746,9 +3746,9 @@ class CentralApi(Session):
             label (str, optional): Used to filter the notification types based on Label name
             serial (str, optional): Used to filter the result based on serial number of the device
             site (str, optional): Used to filter the notification types based on Site name
-            from_timestamp (int, optional): 1)start of duration within which alerts are raised
+            from_ts (int, optional): 1)start of duration within which alerts are raised
                 2)described using Unix Epoch time in seconds  Default 30 days (max 90)
-            to_timestamp (int, optional): 1)end of duration within which alerts are raised
+            to_ts (int, optional): 1)end of duration within which alerts are raised
                 2)described using Unix Epoch time in seconds
             severity (str, optional): Used to filter the notification types based on severity
             type (str, optional): Used to filter the notification types based on notification type
@@ -3767,8 +3767,8 @@ class CentralApi(Session):
         """
         url = "/central/v1/notifications"
 
-        if not from_timestamp:
-            from_timestamp = int(datetime.timestamp(datetime.today() - timedelta(days=30)))
+        if not from_ts:
+            from_ts = int(datetime.timestamp(datetime.today() - timedelta(days=1)))
         if ack in [True, False]:
             ack = str(ack).lower()
 
@@ -3778,8 +3778,8 @@ class CentralApi(Session):
             'label': label,
             'serial': serial,
             'site': site,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_ts,
+            'to_timestamp': to_ts,
             'severity': severity,
             'search': search,
             # 'calculate_total': str(calculate_total),
