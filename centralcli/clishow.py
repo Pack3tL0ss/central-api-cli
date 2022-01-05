@@ -13,12 +13,12 @@ from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, caas, cli, utils
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, caas, cli, utils, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, caas, cli, utils
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, caas, cli, utils, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -590,7 +590,7 @@ def upgrade(
 
 
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
-def _cache(
+def cache_(
     args: List[CacheArgs] = typer.Argument(None, hidden=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
@@ -942,8 +942,8 @@ def run(
 #     cli.display_results(resp, pager=not no_pager, outfile=outfile)
 
 
-@app.command(short_help="Show Effective Group/Device Config", help="Show Effective Group/Device Config (UI Group)")
-def config(
+@app.command("config", short_help="Show Effective Group/Device Config", help="Show Effective Group/Device Config (UI Group)")
+def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar=iden_meta.dev.replace("[", "[GROUP NAME|"),
@@ -1418,13 +1418,14 @@ def logs(
 
 
 # TODO cache and create completion for labels
-@app.command(short_help="Show Event Logs (last 4 hours by default)")
+@app.command(short_help="Show Event Logs", help="Show Event Logs (last 4 hours by default)")
 def events(
-    args: List[str] = typer.Argument(
+    args: str = typer.Argument(
         None,
         metavar='[LOG_ID]',
         help="Show details for a specific log_id",
-        autocompletion=lambda incomplete: cli.cache.get_event_identifier(incomplete)
+        autocompletion=cli.cache.event_completion
+        # autocompletion=lambda incomplete: cli.cache.get_event_identifier(incomplete)
     ),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
@@ -1492,7 +1493,6 @@ def events(
             Response(output=event_details),
             tablefmt="action",
         )
-        print(type(event_details))
         raise typer.Exit(0)
     else:
         if device:
@@ -1569,12 +1569,6 @@ def events(
 
 @app.command(short_help="Show Alerts/Notifications. (Default Past 24 hours)", help="Show Alerts/Notifications.  Notification must be enabled.")
 def alerts(
-    # args: List[str] = typer.Argument(
-    #     None,
-    #     metavar='[LOG_ID]',
-    #     help="Show details for a specific log_id",
-    #     autocompletion=lambda incomplete: cli.cache.get_event_identifier(incomplete)
-    # ),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
     site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion,),
@@ -1697,6 +1691,61 @@ def alerts(
         # cache_update_func=cli.cache.update_event_db if not verbose else None,
         # caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
     )
+
+
+@app.command(short_help="Re-display output from Last command.", help="Re-display output from Last command.  (No API Calls)")
+def last(
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
+    sort_by: str = typer.Option(None, "--sort",),
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    if not config.last_command_file.exists():
+        print("[red]Unable to find cache for last command.")
+        raise typer.Exit(1)
+
+    kwargs = config.last_command_file.read_text()
+    import json
+    kwargs = json.loads(kwargs)
+
+    last_format = kwargs.get("tablefmt", "rich")
+    kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
+    if "Previous Output" not in kwargs.get("title", ""):
+        kwargs["title"] = f"{kwargs.get('title', '')} Previous Output " \
+                        f"{cleaner._convert_epoch(int(config.last_command_file.stat().st_mtime))}"
+    data = kwargs["outdata"]
+    del kwargs["outdata"]
+
+    cli.display_results(
+        data=data, sort_by=sort_by, reverse=reverse, pager=not no_pager, stash=False, **kwargs
+    )
+
+
 
 
 # @app.command(short_help="Show config", hidden=True)
