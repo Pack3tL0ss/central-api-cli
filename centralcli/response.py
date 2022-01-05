@@ -239,7 +239,7 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
                         return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
     def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
         prompt = prompt or \
-            "Enter/Paste your content. Then Ctrl-D or Ctrl-Z ( windows ) to submit.\n Enter 'exit' to abort"
+            "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
         print_func(prompt, **kwargs)
         contents, line = [], ''
         while line.strip().lower() != "exit":
@@ -314,10 +314,13 @@ class Session:
             if _ > 0:
                 spin_txt_run = f"{spin_txt_run} (retry after token refresh)"
 
-            log.debug(f"Attempt API Call to:{_data_msg}Try: {_ + 1}\n"
-                      f"    access token: {auth.central_info.get('token', {}).get('access_token', {})}\n"
-                      f"    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
-                      )
+            token_msg = (
+                f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
+                f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
+            )
+            log.debug(
+                f"Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 else ''}"
+            )
             if config.debugv:
                 call_data = {
                     "method": method,
