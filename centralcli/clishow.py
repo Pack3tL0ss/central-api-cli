@@ -1423,12 +1423,11 @@ def logs(
 # TODO cache and create completion for labels
 @app.command(short_help="Show Event Logs", help="Show Event Logs (last 4 hours by default)")
 def events(
-    args: str = typer.Argument(
+    event_id: str = typer.Argument(
         None,
         metavar='[LOG_ID]',
         help="Show details for a specific log_id",
         autocompletion=cli.cache.event_completion
-        # autocompletion=lambda incomplete: cli.cache.get_event_identifier(incomplete)
     ),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
@@ -1488,8 +1487,8 @@ def events(
     ),
 ) -> None:
     # TODO move to common func for use be show logs and show events
-    if args:
-        event_details = cli.cache.get_event_identifier(args[-1])
+    if event_id:
+        event_details = cli.cache.get_event_identifier(event_id)
         cli.display_results(
             Response(output=event_details),
             tablefmt="action",
@@ -1551,7 +1550,7 @@ def events(
     else:
         tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    _cmd_txt = typer.style('show events <id>', fg='bright_green')
+    _cmd_txt = "[bright_green] show events <id>[reset]"
     cli.display_results(
         resp,
         tablefmt=tablefmt,
@@ -1702,7 +1701,7 @@ def last(
     do_table: bool = typer.Option(False, "--table", help="Output in table format"),
     sort_by: str = typer.Option(None, "--sort",),
     reverse: bool = typer.Option(
-        True, "-r",
+        False, "-r",
         help="Reverse Output order",
         show_default=False
     ),
