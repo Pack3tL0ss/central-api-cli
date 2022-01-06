@@ -478,7 +478,8 @@ def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[d
         ]
     )
 
-    data = sorted(data, key=lambda i: (i.get("site") or "", i["name"]))
+    data = utils.listify(data)
+    data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
     # if sort and data and sort in data[-1]:
     #     return sorted(data, key=sort)
     # else:
@@ -576,6 +577,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
         # for key in ["device_type", "hostname", "device_serial", "device_mac"]:
         #     del d[key]
 
+    # Stash event_details in cache indexed starting @ most recent event
     if len(data) > 1 and cache_update_func:
         idx, cache_list = 1, []
         for d in data:
@@ -583,7 +585,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
                 _details = {
                     k: v for inner in d["events_details"] for k, v in inner.items()
                 }
-                cache_list += [{"id": idx, "details": _details}]
+                cache_list += [{"id": str(idx), "device": d["device info"], "details": _details}]
                 d["id"] = idx
                 idx += 1
             else:
