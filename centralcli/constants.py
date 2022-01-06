@@ -483,6 +483,17 @@ class SortCertOptions(str, Enum):
     sha1_checksum = "sha1_checksum"
 
 
+class SortSiteOptions(str, Enum):
+    name = "name"
+    id = "id"
+    address = "address"
+    city = "city"
+    state = "state"
+    zipcode = "zipcode"
+    country = "country"
+    associated_devices = "associated_devices"
+
+
 class SortVlanOptions(str, Enum):
     name = "name"
     pvid = "pvid"

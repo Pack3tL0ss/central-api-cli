@@ -933,7 +933,7 @@ class Cache:
                 return match
 
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="site", multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str, query_type="site",)  # multi_ok=multi_ok)
 
             return match[0]
 
@@ -1010,7 +1010,7 @@ class Cache:
                 return match
 
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="group", multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str, query_type="group",)  # multi_ok=multi_ok)
 
             return match[0]
 
@@ -1082,7 +1082,7 @@ class Cache:
                     match,
                     query_str=query_str,
                     query_type="template",
-                    multi_ok=multi_ok,
+                    # multi_ok=multi_ok,
                 )
 
             return match[0]

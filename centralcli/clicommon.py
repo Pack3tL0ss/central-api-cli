@@ -233,8 +233,8 @@ class CLICommon:
                         "It looks like you are in the root of a git repo dir.\n"
                         "Exporting to out subdir."
                         )
-                config.outdir.mkdir(exist_ok=True)
-                outfile = config.outdir / outfile
+                    config.outdir.mkdir(exist_ok=True)
+                    outfile = config.outdir / outfile
 
             print(f"\n[cyan]Writing output to {outfile}... ", end="")
 
@@ -277,6 +277,9 @@ class CLICommon:
                 data = utils.listify(data)
 
             if sort_by and all(isinstance(d, dict) for d in data):
+                if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
+                    sort_by = sort_by.replace("_", " ")
+
                 if not all([True if sort_by in d else False for d in data]):
                     print(f"[dark_orange3]Warning: [cyan]{sort_by}[reset] does not appear to be a valid field")
                     print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
