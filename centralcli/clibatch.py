@@ -7,6 +7,7 @@ from enum import Enum
 import sys
 from typing import List
 import typer
+from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -274,7 +275,7 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
         return cli.central.batch_request(req_list)
 
 
-@app.command()
+@app.command(short_help="Perform Batch Add from file")
 def add(
     what: BatchArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(..., exists=True),
@@ -296,6 +297,33 @@ def add(
     yes = yes_ if yes_ else yes
     central = cli.central
     data = config.get_file_data(import_file)
+    address_fields = [
+        "address",
+        "city",
+        "state",
+        "zipcode",
+        "country"
+    ]
+    def _field_error(field: str = None):
+        valid_field_list = [
+            [
+            "site_name",
+            *address_fields
+            ],
+            [
+            "site_name",
+            "longitude",
+            "latitude"
+            ]
+        ]
+        valid_fields = ["\n".join(v) for v in valid_field_list]
+        if field:
+            print(f"[red]Error:[/red] Missing Required field {field}")
+
+        print(
+            f"\n[bright_green]Valid Fields[/bright_green]:\n--\n{valid_fields[0]}\n--OR--\n{valid_fields[1]}"
+        )
+        raise typer.Exit(1)
 
     resp = None
     if what == "sites":
@@ -317,9 +345,52 @@ def add(
                     }
                     for i in data.dict
                 ]
+        else:
+            # We allow a list of flat dicts or a list of dicts where loc info is under
+            # "site_address" or "geo_location"
+            for i in data:
+                i["site_name"] = i.get("site_name", i.get("name", i.get("site")))
+                for k in ["site", "name"]:
+                    if k in i:
+                        del i[k]
+                # TODO no validation on first 2.
+                # FIXME this function needs cleanup... pydantic? for validation
+                if "site_address" in i:
+                    i["site_address"] = {k: str(v) for k, v in i["site_address"].items()}
+                elif "geolocation" in i:
+                    i["geolocation"] = {k: str(v) for k, v in i["geolocation"].items()}
+                elif "longitude" in i:
+                    if "latitude" not in i:
+                        _field_error("latitude")
+                    i["geolocation"] = {k: str(v) for k, v in i.items() if k != "site_name"}
+                else:
+                    i["site_address"] = {k: str(v) for k, v in i.items() if k != "site_name"}
+                    if not [k for k in list(i.keys()) if k in address_fields]:
+                        print(f"[red]Error:[/red] Error parsing site [cyan]{i['site_name']}")
+                        print("Error provided address fields:")
+                        utils.json_print(i)
+                        _field_error()
+
+                for k in ["site", "name", "longitude", "latitude", *address_fields]:
+                    if k in i:
+                        del i[k]
+
+                if len(i) != 2:
+                    print(f"[red]Error:[/red] Invalid fields found in data for site {i['site_name']}")
+                    utils.json_print(i)
+                    invalid = ", ".join(f for f in i if f not in ["site_name", "site_address", "geolocation"])
+                    print(f"[italic]{invalid}[/italic] is an invalid field.")
+                    _field_error()
+
+        # Verify no name errors input can use site_name, site, or name
         site_names = [
             d.get("site_name", "ERROR") for d in data
         ]
+        if "ERROR" in site_names:
+            print(f"[red]Error:[/red] Error parsing [cyan]'site_name'")
+            utils.json_print(data[site_names.index("ERROR")])
+            _field_error()
+
         if len(site_names) > 7:
             site_names = [*site_names[0:3], "...", *site_names[-3:]]
         _msg = [
