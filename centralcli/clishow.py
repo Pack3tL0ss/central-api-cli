@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy,
+    ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
     DhcpArgs, EventDevTypeArgs, lib_to_api, what_to_pretty  # noqa
 )
@@ -662,7 +662,8 @@ def sites(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    sort_by: SortOptions = typer.Option(None, "--sort"),
+    sort_by: SortSiteOptions = typer.Option(None, "--sort"),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -694,7 +695,9 @@ def sites(
         tablefmt=tablefmt,
         title="Sites" if not args else f"{site.name} site details",
         pager=not no_pager,
-        outfile=outfile
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
     )
 
 
@@ -1733,14 +1736,14 @@ def last(
 
     last_format = kwargs.get("tablefmt", "rich")
     kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
-    if "Previous Output" not in kwargs.get("title", ""):
-        kwargs["title"] = f"{kwargs.get('title', '')} Previous Output " \
+    if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
+        kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
                         f"{cleaner._convert_epoch(int(config.last_command_file.stat().st_mtime))}"
     data = kwargs["outdata"]
     del kwargs["outdata"]
 
     cli.display_results(
-        data=data, sort_by=sort_by, reverse=reverse, pager=not no_pager, stash=False, **kwargs
+        data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=not no_pager, stash=False, **kwargs
     )
 
 
