@@ -321,7 +321,7 @@ class LibToAPI:
              "ap": "aps",
              "switch": "switches",
              "cx": "switches",
-             "sw": "Switches"
+             "sw": "switches"
          }
         self.site_to_api = {
             "gw": "CONTROLLER",
