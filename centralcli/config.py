@@ -16,7 +16,11 @@ from rich.console import Console
 
 import tablib
 import yaml
-import readline  # noqa
+
+try:
+    import readline  # noqa
+except Exception:
+    pass
 
 clear = Console().clear
 class ClusterName(str, Enum):
