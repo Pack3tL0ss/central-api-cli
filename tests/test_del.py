@@ -26,8 +26,9 @@ def test_del_group_multiple():
         "group",
         "cencli_test_group2",
         "cencli_test_group3",
+        "cencli_test_group4",
         "-Y"
         ])
     assert result.exit_code == 0
     assert "Success" in result.stdout
-    assert result.stdout.count("Success") == 2
+    assert result.stdout.count("Success") == 3
