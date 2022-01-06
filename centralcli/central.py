@@ -761,9 +761,41 @@ class CentralApi(Session):
         return await self.get(url)
 
     async def get_template_details_for_device(self, device_serial: str, details: bool = False) -> Response:
+        """Get configuration details for a device (only for template groups).
+
+        Args:
+            device_serial (str): Serial number of the device.
+            details (bool, optional): Usually pass false to get only the summary of a device's
+                configuration status.
+                Pass true only if detailed response of a device's configuration status is required.
+                Passing true might result in slower API response and performance effect
+                comparatively.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # API-NOTE returns form-data (a big str)
+        #  A cleaner has been created that parses the resp into dict
+        #  with summary(dict) and running/central_side configs (str)
+        # Need cleaner to parse and convert to dict
+        # --fd3longalphanumericstring63
+        # Content-Disposition: form-data; name="Summary"
+        # Content-Type: application/json
+
+        # {
+        #     "Device_serial": "redacted",
+        #     "Device_type": "ArubaSwitch",
+        #     "Group": "WadeLab",
+        #     "Configuration_error_status": false,
+        #     "Override_status": false,
+        #     "Template_name": "2930F-8",
+        #     "Template_hash": "46a-redacted-0d",
+        #     "Template_error_status": false
+        # }
+        # --fd3longalphanumericstring63
         url = f"/configuration/v1/devices/{device_serial}/config_details"
         headers = {"Accept": "multipart/form-data"}
-        params = {"details": details}
+        params = {"details": str(details)}
         return await self.get(url, params=params, headers=headers)
 
     async def get_all_templates_in_group(

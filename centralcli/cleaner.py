@@ -763,3 +763,36 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     #     for d in data
     # ]
     return data
+
+def get_template_details_for_device(data: str) -> dict:
+    """Convert form-data response to dict
+
+    Args:
+        data (str): string data with summary and optionally running config
+
+    Returns:
+        dict: dict with summary(dict), running config(str) and
+        central side config(str).
+    """
+    import json
+
+    summary, running_config, central_config = None, None, None
+    split_line = data.split("\n")[0].rstrip()
+    data_parts = [
+        d.lstrip().splitlines() for d in data.split(split_line)
+        if d.lstrip().startswith("Content-Disposition")
+    ]
+    for part in data_parts:
+        if 'name="Summary"' in part[0]:
+            summary = json.loads("\n".join(part[2:]))
+            summary = {k.lower(): v for k, v in summary.items()}
+        elif 'name="Device_running_config"' in part[0]:
+            running_config = "\n".join(part[2:]).rstrip()
+        elif 'name="Device_central_side_config"' in part[0]:
+            central_config = "\n".join(part[2:]).rstrip()
+
+    return {
+        "summary": summary,
+        "running_config": running_config,
+        "central_config": central_config
+    }
