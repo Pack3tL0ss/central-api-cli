@@ -313,7 +313,7 @@ def reboot(
 
 @app.command(short_help="Blink LED")
 def blink(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., ),  # metavar="Device: [on|off|<# of secs to blink>]"),
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -327,7 +327,7 @@ def blink(
 ) -> None:
     yes = yes_ if yes_ else yes
     command = f'blink_led_{action}'
-    dev = cli.cache.get_dev_identifier(device)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
     typer.secho(str(resp), fg="green" if resp else "red")
 
