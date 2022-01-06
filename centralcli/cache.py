@@ -334,6 +334,27 @@ class Cache:
             for m in out:
                 yield m
 
+    def dev_switch_ap_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Device completion for returning matches that are either switch or AP
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m[0], m[1]
+
     def group_completion(
         self,
         incomplete: str,
@@ -791,7 +812,7 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: Union[str, List[str], tuple],
-        dev_type: str = None,
+        dev_type: Union[str, List[str]] = None,
         # ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
         retry: bool = True,
         # multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
@@ -852,8 +873,11 @@ class Cache:
 
         all_match = None
         if dev_type:
-            all_match = match
-            match = [d for d in match if d.generic_type.lower() in "".join(dev_type[0:len(d.generic_type)]).lower()]
+            all_match = match.copy()
+            dev_type = utils.listify(dev_type)
+            match = []
+            for _dev_type in dev_type:
+                match += [d for d in all_match if d.generic_type.lower() in "".join(_dev_type[0:len(d.generic_type)]).lower()]
 
         if match:
             if completion:
@@ -868,8 +892,9 @@ class Cache:
             if all_match:
                 # all_match = all_match[-1]
                 all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
+                _dev_type_str = ", ".join(dev_type)
                 log.error(
-                    f"The Following devices matched {all_match_msg} excluded as device type != {dev_type}",
+                    f"The Following devices matched {all_match_msg} excluded as device type != [{_dev_type_str}]",
                     show=True,
                 )
             raise typer.Exit(1)
