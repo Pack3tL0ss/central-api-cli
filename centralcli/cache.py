@@ -193,7 +193,7 @@ class Cache:
 
     @property
     def event_ids(self) -> list:
-        return [x["id"] for x in self.EventDB.all()]
+        return [f'{x["id"]}' for x in self.EventDB.all()]
 
     @property
     def group_names(self) -> list:
@@ -356,9 +356,15 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
-        for event_id in self.event_ids:
-            if str(event_id).startswith(incomplete):
-                yield event_id, f"Details for Event with id {event_id}"
+        for event in self.events:
+            if event["id"].startswith(incomplete):
+                yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
+
+        # for match, help_txt in sorted(matches, key=lambda i: int(i[0])):
+        #     yield match, help_txt
+        # for event_id in self.event_ids:
+        #     if event_id.startswith(incomplete):
+        #         yield event_id, f"Details for Event with id {event_id}"
 
     # TODO add support for zip code city state etc.
     def site_completion(
@@ -893,7 +899,7 @@ class Cache:
                 | (self.Q.address == query_str)
                 | (self.Q.city == query_str)
                 | (self.Q.state == query_str)
-                | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), "").title() == v.title()))
+                | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
             )
 
             # retry with case insensitive name & address match if no match with original query
