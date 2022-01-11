@@ -226,6 +226,9 @@ def short_key(key: str) -> str:
 
 def short_value(key: str, value: Any):
     # _unlist(value)
+    # Run any inner dicts through cleaner funcs
+    if isinstance(value, dict):
+        value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}
 
     if isinstance(value, (str, int, float)):
         return (
@@ -798,3 +801,52 @@ def get_template_details_for_device(data: str) -> dict:
         "running_config": running_config,
         "central_config": central_config
     }
+
+def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
+    """Parses Response Object from caas API updates output attribute
+
+    """
+    data = utils.unlistify(data)
+    out = []
+    lines = f"[reset]{'-' * 22}"
+
+    if data.get("_global_result", {}).get("status", '') == 0:
+        global_res = "[bright_green]Success[/bright_green]"
+    else:
+        global_res = "[red]Failure[/red]"
+    out += [f"\n{lines}\nGlobal Result: {global_res}\n{lines}\n"]
+
+    if data.get("cli_cmds_result"):
+        out += ["\n -- [cyan bold]Command Results[/cyan bold] --"]
+        for cmd_resp in data["cli_cmds_result"]:
+            for _c, _r in cmd_resp.items():
+                _r_code = _r.get("status")
+                if _r_code == 0:
+                    _r_pretty = "[bright_green]OK[/bright_green]"
+                elif _r_code == 2:
+                    _r_pretty = "[dark_orange3]WARNING[/dark_orange3]"
+                else:
+                    _r_pretty = f"[red]ERROR[/red]" if _r_code == 1 else f"[red]ERROR ({_r_code})[/red]"
+
+                out += [f" [{_r_pretty}] {_c}"]
+                cmd_status = _r.get('status_str')
+                if cmd_status:
+                    _r_txt = f"[italic]{cmd_status}[/italic]"
+                    out += [f"{lines}\n{_r_txt}\n{lines}"]
+
+        from rich.console import Console
+        console = Console(emoji=False, record=True)
+        with console.capture():
+            console.print("\n".join(out))
+
+        out = console.export_text(styles=True)
+
+    return out
+
+def get_all_webhooks(data: list) -> list:
+    # TODO this is the default handling syntax
+    data = [
+        dict(short_value(k, d[k]) for k in d) for d in strip_no_value(data)
+    ]
+
+    return data
