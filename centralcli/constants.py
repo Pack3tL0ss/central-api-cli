@@ -31,6 +31,10 @@ class GatewayRole(str, Enum):
     wlan = "wlan"
 
 
+class StartArgs(str, Enum):
+    hook_proxy = "hook-proxy"
+
+
 # wrapping keys from return for some calls that have no value
 STRIP_KEYS = [
     "data",
@@ -55,6 +59,7 @@ STRIP_KEYS = [
     "neighbor_aps",
     "events",
     "notifications",
+    "settings",
 ]
 
 
@@ -240,11 +245,13 @@ class ArgToWhat:
         self.wlans = self.wlan = self.ssids = self.ssid = "wlans"
         self.run = self.running = "run"
         self.routes = self.route = "routes"
+        self.webhooks = self.webhook = "webhooks"
 
     def _init_update(self):
         self.template = self.templates = "template"
         self.variables = self.variable = "variables"
         self.group = self.groups = "group"
+        self.webhooks = self.webhook = "webhook"
 
     def _init_rename(self):
         self.group = self.groups = "group"
@@ -255,6 +262,7 @@ class ArgToWhat:
         self.group = self.groups = "group"
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
         self.wlan = self.wlans = "wlan"
+        self.webhooks = self.webhook = "webhook"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"
@@ -265,6 +273,10 @@ class ArgToWhat:
         self.group = self.groups = "group"
         self.wlan = self.wlans = "wlan"
         self.device = self.devices = self.dev = "device"
+        self.webhooks = self.webhook = "webhook"
+
+    def _init_test(self):
+        self.webhooks = self.webhook = "webhook"
 
     def _init_clone(self):
         self.group = self.groups = "group"
