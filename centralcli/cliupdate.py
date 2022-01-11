@@ -326,68 +326,6 @@ def group_old(
         cli.display_results(resp)
 
 
-@app.command(
-    short_help="Update Group or Device level config",
-    help="Update/Replace Group or Device level Configuration (ap or gw)",
-    hidden=True,
-)
-def ap_config(
-    group_dev: str = typer.Argument(
-        ...,
-        autocompletion=lambda incomplete: [
-            m for m in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete, args=["ap"])]
-        ],
-    ),
-    # autocompletion=lambda i: [*cli.cache.group_completion(i), cli.cach.dev_completion(i, dev_) ),
-    cli_file: Path = typer.Argument(..., help="File containing desired config in CLI format.", exists=True),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
-) -> None:
-    yes = yes_ if yes_ else yes
-    cli.cache(refresh=update_cache)
-    group_dev: cli.cache.CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type="ap")
-    if cli_file:
-        cli_list = []
-        with cli_file.open() as f:
-            for line in f:
-                cli_list += [line.rstrip()]
-                if "******" in line:
-                    typer.secho("Masked credential found in file.", fg="red")
-                    typer.secho(
-                        f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
-                        fg="red",
-                        )
-                    raise typer.Exit(1)
-    if not cli_list:
-        typer.echo("Error No cli provided. No clis.", fg="bright red")
-        raise typer.Exit(1)
-
-    _cfg_str = [
-        typer.style("\nConfiguration to be sent:", fg=None),
-        *[typer.style(line, fg="green") for line in cli_list],
-    ]
-    _cfg_str = "\n".join(_cfg_str)
-    _msg = [
-        typer.style(f"Update {'group' if group_dev.is_group else 'AP'}", fg="cyan"),
-        typer.style(group_dev.name, fg="bright_green"),
-    ]
-    _msg = " ".join(_msg)
-    _msg = f'{_cfg_str}\n{_msg}{typer.style("?", fg="cyan")}'
-
-    if yes or typer.confirm(_msg, abort=True):
-        resp = cli.central.request(
-            cli.central.replace_ap_config,
-            group_dev.name if group_dev.is_group else group_dev.serial,
-            cli_list
-        )
-        typer.secho(str(resp), fg="green" if resp else "red")
-
 
 @app.command("config",
     short_help="Update Group or Device level config",
