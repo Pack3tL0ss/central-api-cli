@@ -323,6 +323,9 @@ class Utils:
             for line in out:
                 yield line
 
+        def __contains__(self, item):
+            return item in self.file
+
         def sanitize_strings(self, strings: str, config=None) -> str:
             config = config or self.config
             if config and config.sanitize and config.sanatize_file.is_file():
@@ -384,6 +387,7 @@ class Utils:
         config=None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
+        fold_cols: Union[List[str], str] = [],
         ok_status: Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]] = None,
     ) -> str:
         # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
@@ -498,7 +502,7 @@ class Utils:
                     row_styles=['none', 'dark_sea_green']
                 )
 
-                fold_cols = ['description']
+                fold_cols = [*fold_cols, 'description']
                 _min_max = {'min': 10, 'max': 30}
                 set_width_cols = set_width_cols or {'name': _min_max, 'model': _min_max}
                 # default full cols #TODO clean this up
