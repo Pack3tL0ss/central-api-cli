@@ -17,6 +17,8 @@ aiohttp
 asyncio
 tablib
 rich>=10.0
+fastapi
+uvicorn
 
 # doc requirements
 docutils==0.17.1
