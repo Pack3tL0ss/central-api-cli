@@ -155,7 +155,7 @@ def variables(
     help="Update group properties.",
     hidden=True,
 )
-def group_new(
+def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
     # group_password: str = typer.Argument(
     #     None,
