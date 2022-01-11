@@ -6,6 +6,7 @@ from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants
+from pathlib import Path
 
 import asyncio
 import time
@@ -156,6 +157,8 @@ class Cache:
             # it is updated anytime show logs is ran.
             self.LogDB = self.DevDB.table("logs")
             self.EventDB = self.DevDB.table("events")
+            self.HookConfigDB = self.DevDB.table("wh_config")
+            self.HookDataDB = self.DevDB.table("wh_data")
             self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
             self.Q = Query()
             if data:
@@ -204,14 +207,55 @@ class Cache:
         return self.TemplateDB.all()
 
     @property
+    def hook_config(self) -> list:
+        return self.HookConfigDB.all()
+
+    @property
+    def hook_data(self) -> list:
+        return self.HookDataDB.all()
+
+    @property
+    def hook_active(self) -> list:
+        return [h for h in self.HookDataDB.all() if h["state"].lower() == "open"]
+
+    @property
     def all(self) -> dict:
         return {t.name: getattr(self, t.name) for t in self._tables}
+
+    async def get_hooks_by_serial(self, serial):
+        return self.HookDataDB.get(self.Q.device_id == serial)
 
     @staticmethod
     def account_completion(incomplete: str,):
         for a in config.defined_accounts:
             if a.lower().startswith(incomplete.lower()):
                 yield a
+
+    # TODO maybe build script to gather completion and help text and place in flat file
+    def method_test_completion(self, incomplete: str, args: List[str] = []):
+        if self.central is not None:
+            methods = [
+                d for d in self.central.__dir__()
+                if not d.startswith("__")
+            ]
+
+        import importlib
+        bpdir = Path(__file__).parent / "boilerplate"
+        all_calls = [
+            importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
+            if not f.name.startswith("_") and f.suffix == ".py"
+        ]
+        for m in all_calls:
+            methods += [
+                d for d in m.AllCalls().__dir__()
+                if not d.startswith("__")
+            ]
+
+        for m in sorted(methods):
+            if m.startswith(incomplete):
+                yield m
+
+
 
     def smg_kw_completion(self, incomplete: str, args: List[str] = []):
         kwds = ["group", "mac", "serial"]
@@ -254,7 +298,6 @@ class Cache:
         args: List[str] = None,
     ):
         dev_type = None
-
         if args:
             if args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
@@ -270,6 +313,8 @@ class Cache:
         )
         out = []
         if match:
+            # remove devices that are already on the command line
+            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
                     out += [tuple([m.name, m.help_text])]
@@ -355,6 +400,55 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
+    def dev_ap_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group or device.
+
+        use lambda function to pass dev_type
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        dev_types = ["ap", "gw"]
+        match = [m for m in self.dev_completion(incomplete) if m.generic_type in dev_types]
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m[0], m[1]
+
+    def group_dev_ap_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group or device.
+
+        use lambda function to pass dev_type
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        dev_types = ["ap", "gw"]
+        dev_match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        match = [*self.get_group_identifier(incomplete, completion=True), *dev_match]
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m[0], m[1]
+
     def group_completion(
         self,
         incomplete: str,
@@ -367,7 +461,8 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m[0], m[1]
@@ -399,6 +494,7 @@ class Cache:
         )
         out = []
         if match:
+            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
 
@@ -416,6 +512,7 @@ class Cache:
         )
         out = []
         if match:
+            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
@@ -581,6 +678,7 @@ class Cache:
         if data:
             data = utils.listify(data)
             if not remove:
+                data = [{k.replace("site_", ""): v for k, v in d.items()} for d in data]
                 return self.SiteDB.insert_multiple(data)
             else:
                 doc_ids = []
@@ -654,6 +752,33 @@ class Cache:
     def update_event_db(self, log_data: List[Dict[str, Any]]) -> bool:
         self.EventDB.truncate()
         return self.EventDB.insert_multiple(log_data)
+
+    def update_hook_config_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
+        data = utils.listify(data)
+        self.HookConfigDB.truncate()
+        return self.HookConfigDB.insert_multiple(data)
+
+    def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:
+        data = utils.listify(data)
+        doc_ids = []
+        add_data = []
+        for d in data:
+            if d.get("state", "") == "Closed":
+                doc_ids += [self.HookDataDB.get((self.Q.id == d["id"])).doc_id]
+            else:
+                add_data += [d]
+
+        if doc_ids:
+            # doc_ids = [d.doc_id for d in [self.HookDataDB.get(q) for q in qry]]
+            if add_data:
+                log.error("update_hook_data_db called with both open and closed notifications", show=True)
+                self.HookDataDB.truncate()
+                return self.HookDataDB.insert_multiple([*self.hook_active, *add_data])
+            else:
+                return self.HookDataDB.remove(doc_ids=doc_ids)
+        else:
+            self.HookDataDB.truncate()
+            return self.HookDataDB.insert_multiple([*self.hook_active, *data])
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs, db_res = [], []
@@ -754,7 +879,7 @@ class Cache:
         self,
         qry_str: str,
         qry_funcs: Sequence[str],
-        device_type: str = None,
+        device_type: Union[str, List[str]] = None,
         group: str = None,
         multi_ok: bool = False,
         completion: bool = False,
@@ -764,7 +889,7 @@ class Cache:
         Args:
             qry_str (str): The query string provided by user.
             qry_funcs (Sequence[str]): Sequence of strings "dev", "group", "site", "template"
-            device_type (str, optional): str indicating what devices types are valid for dev idens.
+            device_type (Union[str, List[str]], optional): Restrict matches to specific dev type(s).
                 Defaults to None.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
@@ -778,8 +903,9 @@ class Cache:
         Returns:
             CentralObject
         """
-        # TODO remove multi_ok once verified refs are removed
+        # DEPRECATED remove multi_ok once verified refs are removed
         match = None
+        device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
         for _ in range(0, 2):
             for q in qry_funcs:
@@ -879,14 +1005,15 @@ class Cache:
             for _dev_type in dev_type:
                 match += [d for d in all_match if d.generic_type.lower() in "".join(_dev_type[0:len(d.generic_type)]).lower()]
 
-        if match:
-            if completion:
-                return match
+        if completion:
+            return match or []
 
-            elif len(match) > 1:
+        if match:
+            if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str,)  # multi_ok=multi_ok)
 
             return match[0]
+
         elif retry:
             log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
@@ -914,6 +1041,10 @@ class Cache:
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
+
+        if completion and query_str == "":
+            return [CentralObject("site", s) for s in self.sites]
+
         match = None
         for _ in range(0, 2 if retry else 1):
             # try exact site match
@@ -926,6 +1057,8 @@ class Cache:
                 | (self.Q.state == query_str)
                 | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
             )
+
+            # raise ValueError(f'>{query_str}<, {type(query_str)}, {", ".join([m["name"] for m in match])} {bool(match)}')
 
             # retry with case insensitive name & address match if no match with original query
             if not match:
@@ -957,20 +1090,20 @@ class Cache:
                 self.check_fresh(refresh=True, site_db=True)
             if match:
                 match = [CentralObject("site", s) for s in match]
+                # raise ValueError(f'>{query_str}<, {type(query_str)}, {", ".join([m.name for m in match])}')
                 break
 
-        if match:
-            if completion:
-                return match
+        if completion:
+            return match
 
+        if match:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="site",)  # multi_ok=multi_ok)
 
             return match[0]
 
-        # FIXME check this ... would think if not retry also doesn't match other get_*_identifier func logic
         elif retry:
-            log.error(f"Unable to gather site {ret_field} from provided identifier {query_str}", show=not silent)
+            log.error(f"Unable to gather site info from provided identifier {query_str}", show=not silent)
             raise typer.Exit(1)
 
     def get_group_identifier(
@@ -1036,10 +1169,10 @@ class Cache:
                 match = [CentralObject("group", g) for g in match]
                 break
 
-        if match:
-            if completion:
-                return match
+        if completion:
+            return match or []
 
+        if match:
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type="group",)  # multi_ok=multi_ok)
 
