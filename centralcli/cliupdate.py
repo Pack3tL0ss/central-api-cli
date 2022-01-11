@@ -7,15 +7,16 @@ from typing import List
 # from typing import List
 import typer
 from rich import print
+from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, cli
+    from centralcli import utils, cli, caas, cleaner
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli
+        from centralcli import utils, cli, caas, cleaner
     else:
         print(pkg_dir.parts)
         raise e
@@ -154,7 +155,7 @@ def variables(
     help="Update group properties.",
     hidden=True,
 )
-def group_new(
+def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
     # group_password: str = typer.Argument(
     #     None,
@@ -162,17 +163,17 @@ def group_new(
     #     help="Group password is required. You will be prompted for password if not provided.",
     #     autocompletion=lambda incomplete: incomplete
     # ),
-    wired_tg: bool = typer.Option(None, help="Manage switch configurations via templates"),
-    wlan_tg: bool = typer.Option(None, help="Manage AP configurations via templates"),
+    wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
+    wlan_tg: bool = typer.Option(None, "--wlan-tg", help="Manage AP configurations via templates"),
     gw_role: GatewayRole = typer.Option(None,),
-    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default Instant)", show_default=False),
-    mb: bool = typer.Option(None, is_flag=True, help="Configure Group for MicroBranch APs (AOS10 only"),
-    ap: bool = typer.Option(None, help="Allow APs in group"),
-    sw: bool = typer.Option(None, help="Allow ArubaOS-SW switches in group."),
-    cx: bool = typer.Option(None, help="Allow ArubaOS-CX switches in group."),
-    gw: bool = typer.Option(None, help=f"Allow gateways in group.\n{' ':34}If No device types specified all are allowed."),
-    mon_only_sw: bool = typer.Option(None, help="Monitor Only for ArubaOS-SW"),
-    mon_only_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX", hidden=True),
+    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default AOS8/IAP)", show_default=False),
+    mb: bool = typer.Option(None, "--mb", help="Configure Group for MicroBranch APs (AOS10 only"),
+    ap: bool = typer.Option(None, "--ap", help="Allow APs in group"),
+    sw: bool = typer.Option(None, "--sw", help="Allow ArubaOS-SW switches in group."),
+    cx: bool = typer.Option(None, "--cx", help="Allow ArubaOS-CX switches in group."),
+    gw: bool = typer.Option(None, "--gw", help=f"Allow gateways in group.\n{' ':34}If No device types specified all are allowed."),
+    mo_sw: bool = typer.Option(None, is_flag=True, help="Monitor Only for ArubaOS-SW"),
+    mo_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX", hidden=True),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -198,7 +199,7 @@ def group_new(
     #     _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
     group = cli.cache.get_group_identifier(group)
 
-    if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mon_only_sw, mon_only_cx]):
+    if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mo_sw, mo_cx]):
         print(
             "[bright_red]Missing required options.[/bright_red] "
             "Use [italic bright_green]cencli update group ?[/italic bright_green] to see available options"
@@ -207,8 +208,16 @@ def group_new(
     if not aos10 and mb:
         print("[bright_red]Error: Microbranch is only valid if group is configured as AOS10 group.")
         raise typer.Exit(1)
-    if (mon_only_sw or mon_only_cx) and wired_tg:
+    if (mo_sw or mo_cx) and wired_tg:
         print("[bright_red]Error: Monitor only is not valid for template group.")
+        raise typer.Exit(1)
+    if mo_sw is not None and not sw:
+        print("Invalid combination --mo-sw not valid without --sw")
+        print("[bright_red]Error: Monitor only can only be set when initially adding AOS-SW as allowed to group.")
+        raise typer.Exit(1)
+    if mo_cx is not None and not cx:
+        print("Invalid combination --mo-cx not valid without --cx")
+        print("[bright_red]Error: Monitor only can only be set when initially adding AOS-CX as allowed to group.")
         raise typer.Exit(1)
 
     allowed_types = []
@@ -221,8 +230,11 @@ def group_new(
     if gw:
         allowed_types += ["gw"]
     if not all(x is None for x in [ap, sw, cx, gw]):
-        pass
-        # Need to get current allowed types to determine what changed
+        ...
+        # resp = cli.central.request(
+        #     cli.central.get_groups_properties,
+        #     group.name
+        # )
 
     _msg = f"[cyan]Update [cyan]group [bright_green]{group.name}[/bright_green]"
     if aos10 is not None:
@@ -237,10 +249,10 @@ def group_new(
         _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role or 'branch'}[/bright_green]"
     if mb is not None:
         _msg = f"{_msg}\n    [cyan]MicroBranch[/cyan]: [bright_green]{mb is True}[/bright_green]"
-    if mon_only_sw is not None:
-        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]{mon_only_sw is True}[/bright_green]"
-    if mon_only_cx is not None:
-        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]{mon_only_cx is True}[/bright_green]"
+    if mo_sw is not None:
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]{mo_sw is True}[/bright_green]"
+    if mo_cx is not None:
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]{mo_cx is True}[/bright_green]"
     print(f"{_msg}\n")
 
     kwargs = {
@@ -251,7 +263,7 @@ def group_new(
         "aos10": aos10,
         "microbranch": mb,
         "gw_role": gw_role,
-        "monitor_only_sw": mon_only_sw,
+        "monitor_only_sw": mo_sw,
     }
     # kwargs = utils.strip_none(kwargs)
 
@@ -270,8 +282,10 @@ def group_new(
 @app.command(
     short_help="Update group properties",
     help="Update group properties (AOS8 vs AOS10 & Monitor Only Switch enabled/disabled)",
+    hidden=True,
+    deprecated=True,
 )
-def group(
+def group_old(
     group_name: str = typer.Argument(..., autocompletion=cli.cache.group_completion),
     aos_version: int = typer.Argument(None, metavar="[10]", help="Set to 10 to Upgrade group to AOS 10"),
     mos: bool = typer.Option(None, help="Enable monitor only for switches in the group"),
@@ -312,22 +326,34 @@ def group(
         cli.display_results(resp)
 
 
-@app.command(
-    short_help="Replace AP configuration",
-    help="Update/Replace AP configuration by group or AP"
+
+@app.command("config",
+    short_help="Update Group or Device level config",
+    help="Update/Replace Group or Device level Configuration (ap or gw)"
 )
-def ap_config(
+def config_(
     group_dev: str = typer.Argument(
         ...,
-        autocompletion=lambda incomplete: [
-            m for m in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete, args=["ap"])]
-        ],
+        metavar="GROUP|DEVICE",
+        help="Group or device to update.",
+        autocompletion=cli.cache.group_dev_ap_gw_completion
     ),
-    # autocompletion=lambda i: [*cli.cache.group_completion(i), cli.cach.dev_completion(i, dev_) ),
+    # TODO simplify structure can just remove device arg
+    # device: str = typer.Argument(
+    #     None,
+    #     autocompletion=cli.cache.dev_ap_gw_completion
+    #     # TODO dev type gw or ap only
+    #     # autocompletion=lambda incomplete: [
+    #     #    c for c in cli.cache.dev_completion(incomplete, dev_type="gw") if c.lower().startswith(incomplete.lower())
+    #     # ]
+    # ),
+    # TODO collect multi-line input as option to paste in config
     cli_file: Path = typer.Argument(..., help="File containing desired config in CLI format.", exists=True),
+    # TODO --vars PATH  help="File containing variables to convert jinja2 template."
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
+    do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -335,13 +361,12 @@ def ap_config(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
-    cli.cache(refresh=update_cache)
-    group_dev: cli.cache.CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type="ap")
+    group_dev: cli.cache.CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     if cli_file:
-        cli_list = []
+        cli_cmds = []
         with cli_file.open() as f:
             for line in f:
-                cli_list += [line.rstrip()]
+                cli_cmds += [line.rstrip()]
                 if "******" in line:
                     typer.secho("Masked credential found in file.", fg="red")
                     typer.secho(
@@ -349,29 +374,85 @@ def ap_config(
                         fg="red",
                         )
                     raise typer.Exit(1)
-    if not cli_list:
-        typer.echo("Error No cli provided. No clis.", fg="bright red")
+    if not cli_cmds:
+        print("[red]Error:[/red] No cli provided.")
         raise typer.Exit(1)
 
-    _cfg_str = [
-        typer.style("\nConfiguration to be sent:", fg=None),
-        *[typer.style(line, fg="green") for line in cli_list],
-    ]
-    _cfg_str = "\n".join(_cfg_str)
-    _msg = [
-        typer.style(f"Update {'group' if group_dev.is_group else 'AP'}", fg="cyan"),
-        typer.style(group_dev.name, fg="bright_green"),
-    ]
-    _msg = " ".join(_msg)
-    _msg = f'{_cfg_str}\n{_msg}{typer.style("?", fg="cyan")}'
+    # TODO render.py module with helper function to return styled rule/line
+    console = Console(record=True, emoji=False)
+    with console.capture():
+        console.rule("Configuration to be sent")
+    top_line = console.export_text().rstrip()
 
-    if yes or typer.confirm(_msg, abort=True):
-        resp = cli.central.request(
-            cli.central.replace_ap_config,
-            group_dev.name if group_dev.is_group else group_dev.serial,
-            cli_list
-        )
-        typer.secho(str(resp), fg="green" if resp else "red")
+    with console.capture():
+        console.rule()
+    bot_line = console.export_text()
+
+    _msg = [
+        "",
+        top_line,
+        *[f"[green]{line}[/green]" for line in cli_cmds],
+        bot_line,
+        f"Updating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}"
+    ]
+    _msg = "\n".join(_msg)
+
+    if group_dev.is_group:
+        device = None
+        if not do_ap and not do_gw:
+            print("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            raise typer.Exit(1)
+    else:  # group_dev is a device iden
+        device = group_dev
+
+    if do_gw or (device and device.generic_type == "gw"):
+        if device and device.generic_type != "gw":
+            print(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+            raise typer.Exit(1)
+        use_caas = True
+        caasapi = caas.CaasAPI(central=cli.central)  # XXX Burried import
+        node_iden = group_dev.name if group_dev.is_group else group_dev.mac
+    elif do_ap or (device and device.generic_type == "ap"):
+        if device and device.generic_type != "ap":
+            print(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+            raise typer.Exit(1)
+        use_caas = False
+        node_iden = group_dev.name if group_dev.is_group else group_dev.serial
+
+    console.print(_msg)
+    # TODO just make parse caas resp a cleaner func
+    if yes or typer.confirm("Proceed? >>", abort=True):
+        if use_caas:
+            resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
+            cli.display_results(resp, cleaner=cleaner.parse_caas_response)
+        else:
+            resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
+            cli.display_results(resp, tablefmt="action")
+
+
+@app.command(
+    short_help="Update Group or Device level config",
+    help="Update/Replace Group or Device level Configuration (ap or gw)"
+)
+def webhook(
+    wid: str = typer.Argument(..., help="Use show webhooks to get the wid"),
+    # TODO need completion for id_
+    name: str = typer.Argument(...,),
+    urls: List[str] = typer.Argument(..., help="webhook URLs"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    print("Updating WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.update_webhook, wid, name, urls)
+
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

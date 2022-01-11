@@ -226,6 +226,9 @@ def short_key(key: str) -> str:
 
 def short_value(key: str, value: Any):
     # _unlist(value)
+    # Run any inner dicts through cleaner funcs
+    if isinstance(value, dict):
+        value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}
 
     if isinstance(value, (str, int, float)):
         return (
@@ -478,7 +481,8 @@ def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[d
         ]
     )
 
-    data = sorted(data, key=lambda i: (i.get("site") or "", i["name"]))
+    data = utils.listify(data)
+    data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
     # if sort and data and sort in data[-1]:
     #     return sorted(data, key=sort)
     # else:
@@ -576,6 +580,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
         # for key in ["device_type", "hostname", "device_serial", "device_mac"]:
         #     del d[key]
 
+    # Stash event_details in cache indexed starting @ most recent event
     if len(data) > 1 and cache_update_func:
         idx, cache_list = 1, []
         for d in data:
@@ -583,7 +588,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
                 _details = {
                     k: v for inner in d["events_details"] for k, v in inner.items()
                 }
-                cache_list += [{"id": idx, "details": _details}]
+                cache_list += [{"id": str(idx), "device": d["device info"], "details": _details}]
                 d["id"] = idx
                 idx += 1
             else:
@@ -796,3 +801,52 @@ def get_template_details_for_device(data: str) -> dict:
         "running_config": running_config,
         "central_config": central_config
     }
+
+def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
+    """Parses Response Object from caas API updates output attribute
+
+    """
+    data = utils.unlistify(data)
+    out = []
+    lines = f"[reset]{'-' * 22}"
+
+    if data.get("_global_result", {}).get("status", '') == 0:
+        global_res = "[bright_green]Success[/bright_green]"
+    else:
+        global_res = "[red]Failure[/red]"
+    out += [f"\n{lines}\nGlobal Result: {global_res}\n{lines}\n"]
+
+    if data.get("cli_cmds_result"):
+        out += ["\n -- [cyan bold]Command Results[/cyan bold] --"]
+        for cmd_resp in data["cli_cmds_result"]:
+            for _c, _r in cmd_resp.items():
+                _r_code = _r.get("status")
+                if _r_code == 0:
+                    _r_pretty = "[bright_green]OK[/bright_green]"
+                elif _r_code == 2:
+                    _r_pretty = "[dark_orange3]WARNING[/dark_orange3]"
+                else:
+                    _r_pretty = f"[red]ERROR[/red]" if _r_code == 1 else f"[red]ERROR ({_r_code})[/red]"
+
+                out += [f" [{_r_pretty}] {_c}"]
+                cmd_status = _r.get('status_str')
+                if cmd_status:
+                    _r_txt = f"[italic]{cmd_status}[/italic]"
+                    out += [f"{lines}\n{_r_txt}\n{lines}"]
+
+        from rich.console import Console
+        console = Console(emoji=False, record=True)
+        with console.capture():
+            console.print("\n".join(out))
+
+        out = console.export_text(styles=True)
+
+    return out
+
+def get_all_webhooks(data: list) -> list:
+    # TODO this is the default handling syntax
+    data = [
+        dict(short_value(k, d[k]) for k in d) for d in strip_no_value(data)
+    ]
+
+    return data

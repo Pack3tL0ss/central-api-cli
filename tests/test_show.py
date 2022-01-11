@@ -209,7 +209,7 @@ def test_show_template_by_dev_serial():
 
 
 def test_show_template_by_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower()],)
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower(), "--group", TEST_DEVICES["template"]["group"].upper()])
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
@@ -263,11 +263,20 @@ def test_show_clients():
     result = runner.invoke(app, ["show", "clients", "--no-pager"],)
     assert result.exit_code == 0
     assert "All Clients" in result.stdout
-    assert "role" in result.stdout
+    assert "mac" in result.stdout
 
 
-# def test_show_snapshots_by_group():
-#     result = runner.invoke(app, ["show", "snapshots", TEST_DEVICES["switch"]["group"]])
-#     assert result.exit_code == 0
-#     assert "name" in result.stdout
-#     assert "created" in result.stdout
+def test_show_group_level_config():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["gateway"]["group"],
+            "--gw",
+            "--out",
+            f"{Path(__file__).parent.parent / 'config' / '.cache' / 'test_runner_gw_grp_config'}",
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "!" in result.stdout
+    assert "mgmt-user" in result.stdout

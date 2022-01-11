@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "0.17.8"
+version = "0.18.1"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -46,6 +46,8 @@ aiohttp = "^3"
 asyncio = "^3"
 rich = "^10"
 tablib = "^3"
+fastapi = {version = "*", optional = true}
+uvicorn = {version = "*", optional = true}
 
 [tool.poetry.dev-dependencies]
 pyflakes = "^2"
@@ -62,4 +64,10 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore::DeprecationWarning"
+]
+
+[tool.poetry.extras]
+hook_proxy = [
+    "fastapi",
+    "uvicorn"
 ]

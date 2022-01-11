@@ -404,8 +404,7 @@ def add(
         if yes or typer.confirm(_msg, abort=True):
             resp = central.request(central.create_site, site_list=data)
             if resp:
-                cache_data = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
-                cache_res = asyncio.run(cli.cache.update_site_db(data=cache_data))
+                cache_res = asyncio.run(cli.cache.update_site_db(data=resp.output))
                 if len(cache_res) != len(data):
                     log.warning(
                         "Attempted to add entries to Site Cache after batch import.  Cache Response "

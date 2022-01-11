@@ -1496,13 +1496,111 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     async def get_all_webhooks(self) -> Response:
+        """List all defined webhooks.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/central/v1/webhooks"
+
         return await self.get(url)
 
-    async def post_add_webhook(self, name: str, *urls: Union[str, List[str]]) -> Response:
+    async def add_webhook(
+        self,
+        name: str,
+        urls: List[str],
+    ) -> Response:
+        """Add / update Webhook.
+
+        Args:
+            name (str): name of the webhook
+            urls (List[str]): List of webhook urls
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/central/v1/webhooks"
-        payload = {"name": name, "urls": utils.listify(urls)}
-        return await self.post(url, _json=payload)
+        urls = utils.listify(urls)
+
+        json_data = {
+            'name': name,
+            'urls': urls
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def update_webhook(
+        self,
+        wid: str,
+        name: str,
+        urls: List[str],
+    ) -> Response:
+        """Update webhook settings.
+
+        Args:
+            wid (str): id of the webhook
+            name (str): name of the webhook
+            urls (List[str]): List of webhook urls
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v1/webhooks/{wid}"
+
+        json_data = {
+            'name': name,
+            'urls': urls
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def delete_webhook(
+        self,
+        wid: str,
+    ) -> Response:
+        """Delete Webhooks.
+
+        Args:
+            wid (str): id of the webhook
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v1/webhooks/{wid}"
+
+        return await self.delete(url)
+
+    async def refresh_webhook_token(
+        self,
+        wid: str,
+    ) -> Response:
+        """Refresh the webhook token.
+
+        Args:
+            wid (str): id of the webhook
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v1/webhooks/{wid}/token"
+
+        return await self.put(url)
+
+    async def test_webhook(
+        self,
+        wid: str,
+    ) -> Response:
+        """Test for webhook notification.
+
+        Args:
+            wid (str): id of the webhook
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v1/webhooks/{wid}/ping"
+
+        return await self.get(url)
 
     async def get_ap_neighbors(self, device_serial: str) -> Response:
         """Get neighbor details reported by AP via LLDP.
@@ -2277,9 +2375,7 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    # FIXME It appears this update only works if all properties provided although is will send a 200 SUCCESS with partial
-    # Need to get_group_properties along with template groups (see get_all_groups) then update changes
-    # set defaults for everything to None
+    # API-FLAW add ap and gw to group with gw-role as wlan and upgrade to aos10.  Returns 200, but no changes made
     async def update_group_properties(
         self,
         group: str,
@@ -2339,6 +2435,15 @@ class CentralApi(Session):
                 error=f"{group} is currently an AOS10 group.  Upgrading to AOS10 is supported, reverting back is not.",
                 rl_str=resp.rl,
             )
+        if aos10 is True:
+            if "AccessPoints" in cur_group_props["AllowedDevTypes"] or \
+                "Gateways" in cur_group_props["AllowedDevTypes"]:
+                return Response(
+                    error=f"{color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
+                          f"\n{color(group)} can be cloned with option to upgrade during clone.",
+                    rl_str=resp.rl,
+                )
+
         if "AccessPoints" in cur_group_props["AllowedDevTypes"]:
             if microbranch is not None:
                 return Response(
@@ -2346,6 +2451,18 @@ class CentralApi(Session):
                           "when initially adding APs to allowed_types of group",
                     rl_str=resp.rl,
                 )
+        if monitor_only_sw is False and "AOS_S" in cur_group_props["AllowedSwitchTypes"]:
+            return Response(
+                error=f"{group} already allows AOS-SW.  Monitor Only can only be set "
+                      "when initially adding AOS-SW to allowed_types of group",
+                rl_str=resp.rl,
+            )
+        if monitor_only_cx is False and "AOS_CX" in cur_group_props["AllowedSwitchTypes"]:
+            return Response(
+                error=f"{group} already allows AOS-CX.  Monitor Only can only be set "
+                      "when initially adding AOS-CX to allowed_types of group",
+                rl_str=resp.rl,
+            )
 
         allowed_types = allowed_types or []
         allowed_switch_types = []
@@ -2379,8 +2496,9 @@ class CentralApi(Session):
         mon_only_switches = []
         if monitor_only_sw:
             mon_only_switches += ["AOS_S"]
-        # if monitor_only_cx:
-        #     mon_only_switches += ["AOS_CX"]
+        if monitor_only_cx:
+            mon_only_switches += ["AOS_CX"]
+            raise NotImplementedError("AOS_CX Monitor Only not supported in Central yet.")
 
         arch = None
         if microbranch is not None:
@@ -2408,13 +2526,13 @@ class CentralApi(Session):
                       f"[reset]Current Allowed Devices: {color(combined_allowed)}",
                 rl_str=resp.rl,
             )
-        if "Gateways" in combined_allowed or "AccessPoints" in combined_allowed:
-            if aos10 is not None:
-                return Response(
-                    error=f"{color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
-                          f"\n{color(group)} can be cloned with option to upgrade during clone.",
-                    rl_str=resp.rl,
-                )
+        # if "Gateways" in combined_allowed or "AccessPoints" in combined_allowed:
+        #     if aos10 is not None:
+        #         return Response(
+        #             error=f"{color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
+        #                   f"\n{color(group)} can be cloned with option to upgrade during clone.",
+        #             rl_str=resp.rl,
+        #         )
         # if wired_tg and monitor_only_sw or monitor_only_cx:
         if wired_tg and monitor_only_sw:
             return Response(
@@ -2456,9 +2574,10 @@ class CentralApi(Session):
         if len(json_data) == 1:
             raise ValueError("No Changes Detected")
         else:
-            print(f"[DEBUG] ---- Sending the following to {url}")
-            utils.json_print(json_data)
-            print("[DEBUG] ----")
+            if config.debugv:
+                print(f"[DEBUG] ---- Sending the following to {url}")
+                utils.json_print(json_data)
+                print("[DEBUG] ----")
             return await self.patch(url, json_data=json_data)
             # # FIXME remove debug prints
             # print(url)
@@ -3770,7 +3889,7 @@ class CentralApi(Session):
         offset: int = 0,
         limit: int = 500,
     ) -> Response:
-        """[central] List Notifications/Alerts.
+        """[central] List Notifications/Alerts.  Returns 1 day by default.
 
         Args:
             customer_id (str, optional): MSP user can filter notifications based on customer id

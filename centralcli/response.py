@@ -287,8 +287,14 @@ class Session:
         self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
         self.ssl = auth.ssl_verify
         self.req_cnt = 1
+        self.requests: list = []
         self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
         self.spinner._spinner_id = "spin_thread"
+
+    class LoggedRequests:
+        def __init__(self, url: str, method: str = "GET"):
+            self.url = url.split("arubanetworks.com")[-1]
+            self.method = method
 
     @property
     def aio_session(self):
@@ -301,7 +307,7 @@ class Session:
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
-
+        self.requests += [self.LoggedRequests(url, method)]
         resp = None
         _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'

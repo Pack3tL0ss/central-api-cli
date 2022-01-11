@@ -47,7 +47,7 @@ def certificate(
         typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Delete a site")
+@app.command(short_help="Delete sites")
 def site(
     sites: List[str] = typer.Argument(
         ...,
@@ -207,6 +207,23 @@ def firmware(
             typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
         else:
             cli.display_results(resp, tablefmt="action")
+
+# TODO cache webhook name/id so they can be deleted by name
+@app.command(short_help="Delete WebHook")
+def webhook(
+    id_: str = typer.Argument(...,),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    if yes or typer.confirm(f"Delete Webhook?", abort=True):
+        resp = cli.central.request(cli.central.delete_webhook, id_)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

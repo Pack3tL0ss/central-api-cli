@@ -292,6 +292,27 @@ def wlan(
         raise typer.Abort()
 
 
+@app.command(short_help="Add a WebHook")
+def webhook(
+    name: str = typer.Argument(..., ),
+    urls: List[str] = typer.Argument(..., help="webhook urls",),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+
+    print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.add_webhook, name, urls)
+
+        cli.display_results(resp, tablefmt="action")
+
+
 @app.callback()
 def callback():
     """

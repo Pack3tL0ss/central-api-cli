@@ -42,7 +42,7 @@ from . import constants
 from .config import Config
 config = Config(base_dir=base_dir)
 
-log_dir = base_dir / "logs"
+log_dir = config.base_dir / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / f"{__name__}.log"
 
@@ -51,7 +51,7 @@ if '--debug' in str(sys.argv):
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
-log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {base_dir}")
+log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
 log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()}, indent=4)}")
 
 from pycentral.base import ArubaCentralBase
