@@ -6,7 +6,7 @@ from typing import Optional
 import json
 import sys
 import time
-import functools
+# import functools
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Union
@@ -52,6 +52,7 @@ NOT_ACCOUNT_KEYS = [
     "limit",
     "no_pager",
     "sanitize",
+    "webclient_info",
 ]
 
 def abort():
@@ -217,6 +218,10 @@ class Config:
     @property
     def last_command_file(self):
         return self.cache_dir / "last_command" if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}_last_command"
+
+    @property
+    def wh_port(self):
+        return self.data.get("webclient_info", {}).get("port", "9443")
 
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:
