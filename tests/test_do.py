@@ -45,6 +45,13 @@ def test_blink_wrong_dev_type():
     assert "excluded" in result.stdout
 
 
+def test_clone_group():
+    result = runner.invoke(app, ["clone", "group", TEST_DEVICES["gateway"]["group"], TEST_DEVICES["clone"]["to_group"], "-Y"])
+    assert result.exit_code == 0
+    assert "201" in result.stdout
+    assert "Created" in result.stdout
+
+
 # def test_do_move_dev_to_group():
 #     result = runner.invoke(app, ["do", "move", "J9773A-80:C1:6E:CD:32:40",
 #                            "wadelab", "-Y", "--debug"])
