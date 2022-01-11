@@ -29,19 +29,23 @@ def eval_caas_response(resp) -> None:
                 _r_code = _r.get("status")
                 if _r_code == 0:
                     _r_pretty = typer.style("OK", fg="bright_green")
+                elif _r_code == 2:
+                    _r_pretty = typer.style("WARNING", fg="bright_red")
                 else:
                     _r_pretty = typer.style(f"ERROR {_r_code}", fg="red")
                 _r_txt = _r.get("status_str")
                 typer.echo(f" [{_bypass or _r_pretty}] {_c}")
-                if not _r_code == 0:
-                    _bypass = "bypassed"
-                    if _r_txt:
-                        typer.echo(f"\t{_r_txt}\n")
-                    typer.echo("-" * 65)
-                    typer.echo("!! Remaining Commands bypassed due to Error in previous object !!")
-                    typer.echo("-" * 65)
-                elif _r_txt and not _bypass:
-                    typer.echo(f"\t{_r_txt}")
+                if _r_txt:
+                    typer.echo(f"{lines}\n{_r_txt}\n{lines}")
+                # if _r_code not in [0, 2]:
+                #     _bypass = "bypassed"
+                #     if _r_txt:
+                #         typer.echo(f"\n{lines}{_r_txt}\n{lines}\n")
+                #     typer.echo("-" * 65)
+                #     typer.echo("!! Remaining Commands bypassed due to Error in previous object !!")
+                #     typer.echo("-" * 65)
+                # elif _r_txt and not _bypass:
+                #     typer.echo(f"\t{_r_txt}")
         typer.echo("")
 
 
