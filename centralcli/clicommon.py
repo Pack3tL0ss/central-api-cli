@@ -187,6 +187,7 @@ class CLICommon:
     def normalize_tokens(token: str) -> str:
         return token.lower() if token not in CASE_SENSITIVE_TOKENS else token
 
+    # DEPRECATED
     def dev_completion(
         self,
         ctx: typer.Context,
@@ -252,6 +253,7 @@ class CLICommon:
             if out_msg:
                 log.warning(out_msg, show=True)
 
+
     def _display_results(
         self,
         data: Union[List[dict], List[str], dict, None] = None,
@@ -266,6 +268,7 @@ class CLICommon:
         pad: int = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
+        fold_cols: Union[List[str], str] = [],
         cleaner: callable = None,
         **cleaner_kwargs,
     ):
@@ -305,7 +308,8 @@ class CLICommon:
                 "account": None if config.account in ["central_info", "account"] else config.account,
                 "config": config,
                 "set_width_cols": set_width_cols,
-                "full_cols": full_cols
+                "full_cols": full_cols,
+                "fold_cols": fold_cols,
             }
             outdata = utils.output(**kwargs)
             if stash:
@@ -313,6 +317,8 @@ class CLICommon:
                     json.dumps({k: v for k, v in kwargs.items() if k != "config"})
                 )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
+            if "API Rate Limit:" not in outdata and caption is not None:
+                print(caption)
 
             if outfile and outdata:
                 self.write_file(outfile, outdata.file)
@@ -334,6 +340,7 @@ class CLICommon:
         ok_status: Union[int, List[int], Dict[int, str]] = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
+        fold_cols: Union[List[str], str] = [],
         cleaner: callable = None,
         **cleaner_kwargs,
     ) -> None:
@@ -385,18 +392,24 @@ class CLICommon:
 
             for idx, r in enumerate(resp):
                 # Multi request url line
+                m_colors = {
+                    "DELETE": "red",
+                    "GET": "bright_green",
+                    "PATH": "dark_orange3",
+                }
+                fg = "bright_green" if r else "red"
                 if len(resp) > 1:
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     # typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
+                    m_color = m_colors.get(r.method, "reset")
                     print(
-                        f"Request [bright_green]{idx + 1}[/bright_green]. [[bright_green]{r.method}[/bright_green]: "
-                        f"[bright_green]{_url}[/bright_green]] Response:"
+                        f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
+                        f"[cyan]{_url}[/cyan]]\n [fg]Response[reset]:"
                     )
                 if self.raw_out:
                     tablefmt = "raw"
 
                 if not r or tablefmt in ["action", "raw"]:
-                    fg = "green" if r else "red"
 
                     if tablefmt == "raw":
                         # dots = f"[{fg}]{'.' * 16}[/{fg}]"
@@ -434,6 +447,7 @@ class CLICommon:
                         pad=pad,
                         set_width_cols=set_width_cols,
                         full_cols=full_cols,
+                        fold_cols=fold_cols,
                         cleaner=cleaner,
                         **cleaner_kwargs
                     )
@@ -451,6 +465,7 @@ class CLICommon:
                 pad=pad,
                 set_width_cols=set_width_cols,
                 full_cols=full_cols,
+                fold_cols=fold_cols,
                 cleaner=cleaner,
                 **cleaner_kwargs
             )
