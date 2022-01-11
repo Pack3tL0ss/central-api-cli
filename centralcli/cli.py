@@ -13,18 +13,21 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
+    from centralcli import (
+        clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone,
+        clirefresh, clitest, cli, log, utils
+    )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, cli, log, utils
+        from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, clirefresh, clitest, cli, log, utils
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import RefreshWhat, IdenMetaVars, BounceArgs, KickArgs, RenameArgs, BlinkArgs
+from centralcli.constants import IdenMetaVars, BounceArgs, KickArgs, RenameArgs, BlinkArgs, StartArgs
 
 iden = IdenMetaVars()
 
@@ -43,6 +46,8 @@ app.add_typer(cliupdate.app, name="update",)
 app.add_typer(cliupgrade.app, name="upgrade",)
 app.add_typer(clibatch.app, name="batch",)
 app.add_typer(clicaas.app, name="caas", hidden=True,)
+app.add_typer(clirefresh.app, name="refresh",)
+app.add_typer(clitest.app, name="test",)
 
 
 class MoveArgs(str, Enum):
@@ -471,37 +476,47 @@ def kick(
         # typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(hidden=True)
-def refresh(
-    what: RefreshWhat = typer.Argument(...),
+@app.command(short_help="Start WebHook Proxy",)
+def start(
+    what: StartArgs = typer.Argument(
+        ...,
+        # metavar=f"hook-proxy",
+    ),
+    port: int = typer.Option(None, help="Port to listen on (overrides config value if provided"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        hidden=True,
-        callback=cli.verbose_debug_callback,
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion
-    ),
-):
-    """refresh <'token'|'cache'>"""
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Start WebHook Proxy Service on this system in the background
 
-    central = CentralApi(account)
+    Requires optional hook-proxy component 'pip3 install centralcli[hook-proxy]'
 
-    if what.startswith("token"):
-        from centralcli.response import Session
-        Session(central.auth).refresh_token()
-    else:  # cache is only other option
-        cli.cache(refresh=True)
+    """
+    yes = yes_ if yes_ else yes
+    import subprocess
+    from centralcli import config
+    print(f"Webhook Proxy will listen on {port or config.wh_port}")
+    if yes or typer.confirm("\nProceed?", abort=True):
+        # p = subprocess.Popen(
+        #     [sys.executable, Path(__file__) / "wh_proxy.py"],
+        #     stdout=subprocess.PIPE,
+        #     stderr=subprocess.STDOUT
+        # )
+        p = subprocess.Popen(
+            ["nohup", sys.executable, Path(__file__).parent / "wh_proxy.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+        # from centralcli import wh_proxy
+        print(f"[{p.pid}] WebHook Proxy Started.")
 
 
+# DEPRECATED replaced with cencli test method
 @app.command(hidden=True, epilog="Output is displayed in yaml by default.")
 def method_test(
     method: str = typer.Argument(...),
@@ -524,11 +539,12 @@ def method_test(
         hidden=True,
         callback=cli.verbose_debug_callback,
     ),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion,
-                                ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
 ) -> None:
     """dev testing commands to run CentralApi methods from command line
 
