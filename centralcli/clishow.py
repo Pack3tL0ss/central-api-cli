@@ -614,6 +614,9 @@ def cache_(
 
 @app.command(short_help="Show groups/details")
 def groups(
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
     verbose: bool = typer.Option(False, "-v", help="Verbose: adds AoS10 / Monitor only switch attributes", show_default=False,),
@@ -651,7 +654,8 @@ def groups(
                 verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
                 resp = verbose_resp
 
-        cli.display_results(resp, tablefmt='rich', title="Groups", pager=not no_pager, outfile=outfile)
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
+        cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=not no_pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -923,36 +927,16 @@ def run(
     cli.display_results(resp, pager=not no_pager, outfile=outfile)
 
 
-# @app.command(short_help="Show Effective Group/Device Config", help="Show Effective Group/Device Config (UI Group)")
-# def _config(
-#     group: str = typer.Argument(..., autocompletion=cli.cache.group_completion),  # TODO also takes swarm_id
-#     version: str = typer.Option(None, "--ver", help="Version of AP"),
-#     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-#     no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
-#     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-#     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-#     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-#     account: str = typer.Option("central_info",
-#                                 envvar="ARUBACLI_ACCOUNT",
-#                                 help="The Aruba Central Account to use (must be defined in the config)",
-#                                 autocompletion=cli.cache.account_completion),
-# ) -> None:
-
-#     central = cli.central
-#     group = cli.cache.get_group_identifier(group)
-
-#     resp = central.request(central.get_ap_config, group.name)
-#     cli.display_results(resp, pager=not no_pager, outfile=outfile)
-
 
 @app.command("config", short_help="Show Effective Group/Device Config", help="Show Effective Group/Device Config (UI Group)")
 def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar=iden_meta.dev.replace("[", "[GROUP NAME|"),
-        autocompletion=lambda incomplete: [
-            c for c in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete)]
-        ]
+        autocompletion=lambda incomplete: cli.cache.group_dev_completion(incomplete, dev_type=["ap", "gw"])
+        # autocompletion=lambda incomplete: [
+        #     c for c in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete)]
+        # ]
     ),
     device: str = typer.Argument(
         None,
@@ -978,7 +962,7 @@ def config_(
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
-    group_dev = cli.cache.get_identifier(group_dev, ["group", "dev"])
+    group_dev = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
     if group_dev.is_group:
         group = group_dev
         if device:
@@ -1567,14 +1551,14 @@ def events(
     )
 
 
-@app.command(short_help="Show Alerts/Notifications. (Default Past 24 hours)", help="Show Alerts/Notifications.  Notification must be enabled.")
+@app.command(short_help="Show Alerts/Notifications. (last 24h default)", help="Show Alerts/Notifications (for past 24 hours by default).  Notification must be Configured.")
 def alerts(
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
     site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion,),
     start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)",),
     end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
-    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h Default: 24 hours"),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
@@ -1746,7 +1730,53 @@ def last(
     )
 
 
-
+@app.command(short_help="Show Alerts/Notifications. (last 24h default)", help="Show Alerts/Notifications (for past 24 hours by default).  Notification must be Configured.")
+def webhooks(
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
+    verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
+    verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
+    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    ...
+    resp = cli.central.request(cli.central.get_all_webhooks)
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="WebHooks",
+        pager=not no_pager,
+        sort_by=sort_by,
+        reverse=reverse,
+        fold_cols=["urls", "wid"],
+        cleaner=cleaner.get_all_webhooks
+    )
 
 # @app.command(short_help="Show config", hidden=True)
 def _get_cencli_config(
