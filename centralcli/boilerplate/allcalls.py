@@ -6062,7 +6062,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # appears to show alert types
+    # API-NOTE appears to show alert types
     async def central_get_types_(
         self,
         calculate_total: bool = None,
