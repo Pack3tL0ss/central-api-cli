@@ -266,8 +266,17 @@ def test_show_clients():
     assert "mac" in result.stdout
 
 
-# def test_show_snapshots_by_group():
-#     result = runner.invoke(app, ["show", "snapshots", TEST_DEVICES["switch"]["group"]])
-#     assert result.exit_code == 0
-#     assert "name" in result.stdout
-#     assert "created" in result.stdout
+def test_show_group_level_config():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["gateway"]["group"],
+            "--gw",
+            "--out",
+            f"{Path(__file__).parent.parent / 'config' / '.cache' / 'test_runner_gw_grp_config'}",
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "!" in result.stdout
+    assert "mgmt-user" in result.stdout
