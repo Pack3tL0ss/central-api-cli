@@ -24,7 +24,6 @@ def test_del_group_multiple():
     result = runner.invoke(app, [
         "delete",
         "group",
-        "cencli_test_group2",
         "cencli_test_group3",
         "cencli_test_group4",
         "-Y"
