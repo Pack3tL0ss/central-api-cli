@@ -8,11 +8,10 @@ central_info:
   token:
     access_toke: <access token>     # tokens are not required if using user/pass  These tokens will be invalid
     refresh_token: <refresh token>  # soon after you start using them, but cencli auto refreshes and stores the new tokens
-                                    # These are just to get you onboard the first time.  However they can be updated, and
-                                    # are used if the cached token returns a failure.
+    webhook_token: <webhook token>  # Optional used by optional hook-proxy feature.  "pip3 install centralcli[hook-proxy]"
 
 #
-# You can pass the --acount <customer_name> option to use different Aruba Central profiles.
+# You can pass the --account <customer_name> option to use different Aruba Central profiles.
 #
 #customer_one:
 #    client_id: "<Your Aruba Central API Client ID>"
@@ -40,6 +39,8 @@ central_info:
 #    base_url: "https://internal-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
 
 # -- Optional Global Options --
+#webclient_info:            # Configuration specific to webhook proxy feature
+#  port: 8123               # Port this system would listen on for webhooks from Aruba Central
 # no_pager: true            # turns off the automatic paged output (for longer outputs).  There is also a `--no-pager` flag.
 # forget_account_after: 30  # The --account <account-name> flag allows you to switch between central accounts.  The setting is sticky
                             # so you don't have to keep re-entering the flag on every command.  This setting will cause it to revert
