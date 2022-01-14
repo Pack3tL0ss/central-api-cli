@@ -770,7 +770,7 @@ class Cache:
                 add_data += [d]
 
         if rem_data and add_data:
-            log.error("update_hook_data_db called with both open and closed notifications", show=True)
+            log.error("update_hook_data_db called with both open and closed notifications")
 
         if rem_data:
             return self.HookDataDB.remove(doc_ids=rem_data)

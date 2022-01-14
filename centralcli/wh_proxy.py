@@ -88,6 +88,15 @@ def log_request(request: Request, route: str):
     log.info('[NEW API RQST IN] {} Requesting -- {} -- Data via API'.format(request.client.host, route))
 
 
+@app.get('/api/v1.0/alerts')
+async def alerts(request: Request,):
+    log_request(request, f'All Active Alerts')
+    try:
+        return json.dumps(cache.hook_active)
+    except Exception as e:
+        log.exception(e)
+
+
 @app.get('/api/v1.0/alerts/{serial}')
 async def alerts(request: Request, serial: str = None):
     log_request(request, f'fetching alerts details for {serial}')
