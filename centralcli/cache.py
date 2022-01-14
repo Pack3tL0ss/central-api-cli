@@ -312,6 +312,7 @@ class Cache:
             completion=True,
         )
         out = []
+        args = args or []
         if match:
             # remove devices that are already on the command line
             match = [m for m in match if m.name not in args]
