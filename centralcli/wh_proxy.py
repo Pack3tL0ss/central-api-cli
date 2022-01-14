@@ -122,14 +122,14 @@ async def webhook(
             del_id=x_central_delivery_id,
         ):
             # print_json(data=raw_input)
-            await cache.update_hook_data_db(data.dict())
+            await cache.update_hook_data_db(data)
             return {"result": "ok"}
         else:
             log.error("Invalid signature", show=True)
     else:  # curl test
         log.error("No Signature", show=True)
         # print_json(data=raw_input)
-        await cache.update_hook_data_db(data.dict())
+        await cache.update_hook_data_db(data)
         # print_json(data=cache.hook_data)
         return {"result": "ok"}
 
