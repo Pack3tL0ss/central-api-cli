@@ -91,8 +91,11 @@ def log_request(request: Request, route: str):
 @app.get('/api/v1.0/alerts/{serial}')
 async def alerts(request: Request, serial: str = None):
     log_request(request, f'fetching alerts details for {serial}')
-    # TODO get wh from cache and send
-    return await cache.get_hooks_by_serial(serial)
+    resp = await cache.get_hooks_by_serial(serial)
+    try:
+        return json.dumps(resp)
+    except Exception as e:
+        log.exception(e)
 
 
 @app.post("/webhook", status_code=200)
