@@ -403,7 +403,9 @@ def add(
         _msg = "\n".join(_msg)
         if yes or typer.confirm(_msg, abort=True):
             resp = central.request(central.create_site, site_list=data)
-            if resp:
+            if all([r.ok for r in resp]):
+                resp[-1].output = [r.output for r in resp]
+                resp = resp[-1]
                 cache_res = asyncio.run(cli.cache.update_site_db(data=resp.output))
                 if len(cache_res) != len(data):
                     log.warning(
