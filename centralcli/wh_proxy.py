@@ -125,9 +125,9 @@ async def webhook(
             await cache.update_hook_data_db(data)
             return {"result": "ok"}
         else:
-            log.error("Invalid signature", show=True)
+            log.error("POST from Central Rcvd with Invalid signature", show=False)
     else:  # curl test
-        log.error("No Signature", show=True)
+        log.error("Message Rcvd with No Signature, Assuming Test", show=False)
         # print_json(data=raw_input)
         await cache.update_hook_data_db(data)
         # print_json(data=cache.hook_data)
