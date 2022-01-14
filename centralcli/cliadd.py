@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import GatewayRole, LicenseTypes
+from centralcli.constants import GatewayRole, LicenseTypes, state_abbrev_to_pretty
 
 app = typer.Typer()
 color = utils.color
@@ -290,6 +290,61 @@ def wlan(
         typer.secho(str(resp), fg="green" if resp else "red")
     else:
         raise typer.Abort()
+
+
+@app.command(short_help="Add a site.")
+def site(
+    site_name: str = typer.Argument(...),
+    address: str = typer.Argument(None, help="street address"),
+    city: str = typer.Argument(None,),
+    state: str = typer.Argument(
+        None,
+        autocompletion=lambda incomplete: [
+        s for s in [
+            *list(state_abbrev_to_pretty.keys()),
+            *list(state_abbrev_to_pretty.values())
+            ]
+            if s.lower().startswith(incomplete.lower())
+        ]
+    ),
+    zipcode: int = typer.Argument(None,),
+    country: str = typer.Argument(None,),
+    lat: str = typer.Option(None,),
+    lon: str = typer.Option(None,),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Perform batch Add operations using import data from file."""
+    yes = yes_ if yes_ else yes
+    kwargs = {
+        "address": address,
+        "city": city,
+        "state": state,
+        "zipcode": str(zipcode),
+        "country": country,
+        "latitude": lat,
+        "longitude": lon
+    }
+    address_fields = {k: v for k, v in kwargs.items() if v}
+
+    print(f"Add Site: [cyan]{site_name}[reset]:")
+    _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
+    if yes or typer.confirm(f"\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
+        cli.display_results(resp)
+        if resp:
+            asyncio.run(cli.cache.update_site_db(resp.raw))
 
 
 @app.command(short_help="Add a WebHook")
