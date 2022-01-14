@@ -85,14 +85,15 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
 
 
 def log_request(request: Request, route: str):
-    log.info('[NEW API RQST IN] {} Requesting -- {} -- Data via API'.format(request.client.host, route))
+    log.info('[NEW API RQST IN] {} {} via API'.format(request.client.host, route))
 
 
 @app.get('/api/v1.0/alerts')
 async def alerts(request: Request,):
     log_request(request, f'All Active Alerts')
     try:
-        return json.dumps(cache.hook_active)
+        return cache.hook_active
+        # return json.dumps(cache.hook_active)
     except Exception as e:
         log.exception(e)
 
@@ -100,9 +101,9 @@ async def alerts(request: Request,):
 @app.get('/api/v1.0/alerts/{serial}')
 async def alerts(request: Request, serial: str = None):
     log_request(request, f'fetching alerts details for {serial}')
-    resp = await cache.get_hooks_by_serial(serial)
     try:
-        return json.dumps(resp)
+        return await cache.get_hooks_by_serial(serial)
+        # return json.dumps(resp)
     except Exception as e:
         log.exception(e)
 
