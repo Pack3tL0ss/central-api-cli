@@ -125,6 +125,14 @@ async def webhook(
             del_id=x_central_delivery_id,
         ):
             # print_json(data=raw_input)
+            if data.get("state"):
+                if data["state"] == "Open":
+                    log.info(f"Caching incoming alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
+                else:
+                    log.info(f"Clearing alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
+            else:
+                log.warning("State Attribute not found in Incoming data")
+
             await cache.update_hook_data_db(data)
             return {"result": "ok"}
         else:
