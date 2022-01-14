@@ -2086,13 +2086,21 @@ class CentralApi(Session):
             if not resp:
                 return resp
             if len(site_list) > 1:
-                resp_list = cleaner._unlist(
-                    [await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist)) for _json in site_list[1:]]
+                # TODO _batch_requests
+                ret = await self._batch_request(
+                    [
+                        BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
+                        for _json in site_list[1:]
+                    ]
                 )
-                # TODO make multi response packing function
-                resp.output = utils.listify(resp.output)
-                resp.output += [r.output for r in resp_list]
-                return resp
+                return [resp, *ret]
+                # resp_list = cleaner._unlist(
+                #     [await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist)) for _json in site_list[1:]]
+                # )
+                # # TODO make multi response packing function
+                # resp.output = utils.listify(resp.output)
+                # resp.output += [r.output for r in resp_list]
+                # return resp
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
 

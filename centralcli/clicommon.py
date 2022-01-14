@@ -317,7 +317,7 @@ class CLICommon:
                     json.dumps({k: v for k, v in kwargs.items() if k != "config"})
                 )
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
-            if "API Rate Limit:" not in outdata and caption is not None:
+            if "Limit:" not in outdata and caption is not None:
                 print(caption)
 
             if outfile and outdata:

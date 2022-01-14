@@ -431,8 +431,6 @@ class Cache:
     ):
         """Completion for argument that can be either group or device.
 
-        use lambda function to pass dev_type
-
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
@@ -685,7 +683,7 @@ class Cache:
                 for qry in data:
                     # provided list of site_ids to remove
                     if isinstance(qry, (int, str)) and str(qry).isdigit():
-                        doc_ids += [self.SiteDB.get((self.Q.id == int(qry))).doc_id]
+                        doc_ids += [self.SiteDB.get((self.Q.id == qry)).doc_id]
                     else:
                         # list of dicts with {search_key: value_to_search_for}
                         if len(qry.keys()) > 1:
@@ -758,27 +756,31 @@ class Cache:
         self.HookConfigDB.truncate()
         return self.HookConfigDB.insert_multiple(data)
 
-    def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:
+    async def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:
         data = utils.listify(data)
-        doc_ids = []
+        rem_data = []
         add_data = []
         for d in data:
             if d.get("state", "") == "Closed":
-                doc_ids += [self.HookDataDB.get((self.Q.id == d["id"])).doc_id]
+                match = self.HookDataDB.get((self.Q.id == d["id"]))
+                if match is not None:
+                    rem_data += [match.doc_id]
             else:
                 add_data += [d]
 
-        if doc_ids:
-            # doc_ids = [d.doc_id for d in [self.HookDataDB.get(q) for q in qry]]
-            if add_data:
-                log.error("update_hook_data_db called with both open and closed notifications", show=True)
-                self.HookDataDB.truncate()
-                return self.HookDataDB.insert_multiple([*self.hook_active, *add_data])
-            else:
-                return self.HookDataDB.remove(doc_ids=doc_ids)
-        else:
+        if rem_data and add_data:
+            log.error("update_hook_data_db called with both open and closed notifications", show=True)
+
+        if rem_data:
+            return self.HookDataDB.remove(doc_ids=rem_data)
+        elif add_data:
+            data = [*self.hook_active, *add_data]
             self.HookDataDB.truncate()
-            return self.HookDataDB.insert_multiple([*self.hook_active, *data])
+            return self.HookDataDB.insert_multiple(data)
+        else:
+            data = [*self.hook_active, *data]
+            self.HookDataDB.truncate()
+            return self.HookDataDB.insert_multiple(data)
 
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs, db_res = [], []

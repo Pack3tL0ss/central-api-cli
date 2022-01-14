@@ -660,7 +660,7 @@ def groups(
 
 @app.command(short_help="Show sites/details")
 def sites(
-    args: List[str] = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
@@ -679,17 +679,19 @@ def sites(
 ):
     central = cli.central
 
-    site = None
-    if args:
-        args = tuple([i for i in args if i != "all"])
-        if args:
-            site = cli.cache.get_site_identifier(args, multi_ok=True)
+    # site = None
+    # if args:
+    #     args = tuple([i for i in args if i != "all"])
+    #     if args:
+    #         site = cli.cache.get_site_identifier(args, multi_ok=True)
 
+    site = None if site.lower() == "all" else site
     if not site:
         if central.get_all_sites not in cli.cache.updated:
             resp = asyncio.run(cli.cache.update_site_db())
         # resp = Response(output=cli.cache.sites, rl_str=" ")  # HACK (rl_str) need cache update methods to return response
     else:
+        site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
@@ -697,7 +699,7 @@ def sites(
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Sites" if not args else f"{site.name} site details",
+        title="Sites" if not site else f"{site.name} site details",
         pager=not no_pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -932,15 +934,17 @@ def run(
 def config_(
     group_dev: str = typer.Argument(
         ...,
-        metavar=iden_meta.dev.replace("[", "[GROUP NAME|"),
-        autocompletion=lambda incomplete: cli.cache.group_dev_completion(incomplete, dev_type=["ap", "gw"])
+        metavar=iden_meta.group_or_dev,
+        autocompletion=cli.cache.group_dev_ap_gw_completion,
+        help = "Device Identifier for (AP or GW) or Group Name along with --ap or --gw option",
         # autocompletion=lambda incomplete: [
         #     c for c in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete)]
         # ]
     ),
     device: str = typer.Argument(
         None,
-        autocompletion=cli.cache.dev_completion
+        autocompletion=cli.cache.dev_completion,
+        hidden=True,
         # TODO dev type gw or ap only
         # autocompletion=lambda incomplete: [
         #    c for c in cli.cache.dev_completion(incomplete, dev_type="gw") if c.lower().startswith(incomplete.lower())
