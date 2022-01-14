@@ -34,6 +34,7 @@ class WebhookResponse(BaseModel):
     result: str
 
 
+# Not Used for now would need to ensure all possible fields
 class WebhookData(BaseModel):
     id: str
     timestamp: int
@@ -96,7 +97,7 @@ async def alerts(request: Request, serial: str = None):
 
 @app.post("/webhook", status_code=200)
 async def webhook(
-    data: WebhookData,
+    data: dict,
     request: Request,
     response: Response,
     content_length: int = Header(...),
