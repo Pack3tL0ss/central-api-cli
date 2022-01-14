@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "0.18.1"
+version = "0.18.2"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -67,7 +67,7 @@ filterwarnings = [
 ]
 
 [tool.poetry.extras]
-hook_proxy = [
+hook-proxy = [
     "fastapi",
     "uvicorn"
 ]
