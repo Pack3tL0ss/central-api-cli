@@ -773,6 +773,7 @@ class Cache:
             log.error("update_hook_data_db called with both open and closed notifications")
 
         if rem_data:
+            log.info(f"Removing {rem_data} from HookDataDB")
             return self.HookDataDB.remove(doc_ids=rem_data)
         elif add_data:
             data = [*self.hook_active, *add_data]
