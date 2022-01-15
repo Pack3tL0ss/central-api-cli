@@ -1618,19 +1618,27 @@ def alerts(
     #     )
     #     print(type(event_details))
     #     raise typer.Exit(0)
+    time_words = ""
     if start:
         try:
-            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
+            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm', tz="local")
             start = (dt.int_timestamp)
+            if not end:
+                time_words = pendulum.from_timestamp(start, tz="local").diff_for_humans()
+            else:
+                time_words = f'Alerts from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            typer.secho(f"start appears to be invalid {start}", fg="red")
+            print(f"[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print(f"  Value: {start} appears to be invalid.")
             raise typer.Exit(1)
     if end:
         try:
-            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
+            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm', tz="local")
             end = (dt.int_timestamp)
+            time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            typer.secho(f"end appears to be invalid {start}", fg="red")
+            print(f"[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print(f"  Value: {end} appears to be invalid.")
             raise typer.Exit(1)
     if past:
         now = int(time.time())
@@ -1641,11 +1649,14 @@ def alerts(
             start = now - (int(past.rstrip("h")) * 3600)
         if past.endswith("m"):
             start = now - (int(past.rstrip("m")) * 60)
+        time_words = f'Alerts from [cyan]{pendulum.from_timestamp(start, tz="local").diff_for_humans()}[/cyan] till [cyan]now[/cyan].'
+
+    time_words = f"[cyan]{time_words}[reset]\n" if time_words else "[cyan]Alerts in past 24 hours.\n[reset]"
 
     kwargs = {
         "group": group,
         "label": label,
-        "from_ts": start,  # or int(time.time() - 14400),
+        "from_ts": start,
         "to_ts": end,
         "serial": None if not device else device.serial,
         "site": site,
@@ -1658,26 +1669,27 @@ def alerts(
     central = cli.central
     resp = central.request(central.get_alerts, **kwargs)
 
-    if resp.ok and len(resp) == 0:
-        resp.output = "No Alerts"
-        tablefmt = "action"
-    else:
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    if resp.ok:
+        if len(resp) == 0:
+            resp.output = "No Alerts"
+        else:
+            time_words = f"[reset][cyan]{len(resp)}{' active' if not ack else ' '}[reset] {time_words}"
 
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    title = f"Alerts/Notifications (Configured Notification Rules)"
+    if device:
+        title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Alerts/Notifications (Configured Notification Rules)",
+        title=title,
         pager=not no_pager,
         outfile=outfile,
-        # TODO move sort_by underscore removal to display_results
-        sort_by=sort_by,  #  if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
+        sort_by=sort_by,
         reverse=reverse,
-        # set_width_cols={"event type": {"min": 5, "max": 12}},
         cleaner=cleaner.get_alerts if not verbose else None,
-        # cache_update_func=cli.cache.update_event_db if not verbose else None,
-        # caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
+        caption=time_words,
     )
 
 
