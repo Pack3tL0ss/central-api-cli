@@ -312,11 +312,14 @@ class CLICommon:
                 "fold_cols": fold_cols,
             }
             outdata = utils.output(**kwargs)
+
             if stash:
-                Path(config.cache_dir, "last_command").write_text(
+                config.last_command_file.write_text(
                     json.dumps({k: v for k, v in kwargs.items() if k != "config"})
                 )
+
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
+
             if "Limit:" not in outdata and caption is not None:
                 print(caption)
 
