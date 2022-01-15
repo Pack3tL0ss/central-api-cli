@@ -3931,6 +3931,9 @@ class CentralApi(Session):
         if ack in [True, False]:
             ack = str(ack).lower()
 
+        if to_ts <= from_ts:
+            return Response(error=f"To timestamp ({to_ts}) can not be less than from timestamp ({from_ts})")
+
         params = {
             'customer_id': customer_id,
             'group': group,
