@@ -135,24 +135,20 @@ async def webhook(
             del_id=x_central_delivery_id,
         ):
             # print_json(data=raw_input)
-            remove = False
             if data.get("state"):
                 if data["state"] == "Open":
                     log.info(f"Caching incoming alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
                 else:
                     log.info(f"Clearing alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
-                    remove = True
             else:
                 log.warning("State Attribute not found in Incoming data")
 
-            cache_res = await cache.update_hook_data_db(data)
-            if remove:
-                log.info(f"removed doc_id: {cache_res}")
+            _ = await cache.update_hook_data_db(data)
             return {"result": "ok"}
         else:
-            log.error("POST from Central Rcvd with Invalid signature", show=False)
+            log.error("POST from Central has invalid signature, ignoring", show=False)
     else:  # curl test
-        log.error("Message Rcvd with No Signature, Assuming Test", show=False)
+        log.error("Message received with no signature, assuming test", show=False)
         # print_json(data=raw_input)
         await cache.update_hook_data_db(data)
         # print_json(data=cache.hook_data)
