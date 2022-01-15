@@ -762,7 +762,7 @@ class Cache:
         rem_data = []
         add_data = []
         for d in data:
-            if d.get("state", "") == "Closed":
+            if d.get("state", "") == "Close":
                 match = self.HookDataDB.get((self.Q.id == d["id"]))
                 if match is not None:
                     rem_data += [match.doc_id]
