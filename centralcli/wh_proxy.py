@@ -34,6 +34,7 @@ class WebhookResponse(BaseModel):
     result: str
 
 
+# Not Used for now would need to ensure all possible fields
 class WebhookData(BaseModel):
     id: str
     timestamp: int
@@ -84,19 +85,32 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
 
 
 def log_request(request: Request, route: str):
-    log.info('[NEW API RQST IN] {} Requesting -- {} -- Data via API'.format(request.client.host, route))
+    log.info('[NEW API RQST IN] {} {} via API'.format(request.client.host, route))
+
+
+@app.get('/api/v1.0/alerts')
+async def alerts(request: Request,):
+    log_request(request, f'All Active Alerts')
+    try:
+        return cache.hook_active
+        # return json.dumps(cache.hook_active)
+    except Exception as e:
+        log.exception(e)
 
 
 @app.get('/api/v1.0/alerts/{serial}')
 async def alerts(request: Request, serial: str = None):
     log_request(request, f'fetching alerts details for {serial}')
-    # TODO get wh from cache and send
-    return await cache.get_hooks_by_serial(serial)
+    try:
+        return await cache.get_hooks_by_serial(serial)
+        # return json.dumps(resp)
+    except Exception as e:
+        log.exception(e)
 
 
 @app.post("/webhook", status_code=200)
 async def webhook(
-    data: WebhookData,
+    data: dict,
     request: Request,
     response: Response,
     content_length: int = Header(...),
@@ -121,14 +135,22 @@ async def webhook(
             del_id=x_central_delivery_id,
         ):
             # print_json(data=raw_input)
-            await cache.update_hook_data_db(data.dict())
+            if data.get("state"):
+                if data["state"] == "Open":
+                    log.info(f"Caching incoming alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
+                else:
+                    log.info(f"Clearing alert {data.get('alert_type', '')} for device {data.get('device_id', '')}")
+            else:
+                log.warning("State Attribute not found in Incoming data")
+
+            _ = await cache.update_hook_data_db(data)
             return {"result": "ok"}
         else:
-            log.error("Invalid signature", show=True)
+            log.error("POST from Central has invalid signature, ignoring", show=False)
     else:  # curl test
-        log.error("No Signature", show=True)
+        log.error("Message received with no signature, assuming test", show=False)
         # print_json(data=raw_input)
-        await cache.update_hook_data_db(data.dict())
+        await cache.update_hook_data_db(data)
         # print_json(data=cache.hook_data)
         return {"result": "ok"}
 

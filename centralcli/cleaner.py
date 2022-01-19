@@ -377,13 +377,12 @@ def get_clients(
 
 def strip_no_value(data: List[dict]) -> List[dict]:
     """strip out any columns that have no value in any row"""
+    no_val_strings = ["Unknown", "NA", "None", "--", ""]
     no_val: List[List[int]] = [
         [
             idx
             for idx, v in enumerate(id.values())
-            if not isinstance(v, bool)
-            and not v
-            or (isinstance(v, str) and v == "Unknown" or isinstance(v, str) and v == "NA" or isinstance(v, str) and v == "--")
+            if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
         ]
         for id in data
     ]
@@ -534,6 +533,7 @@ def get_alerts(data: List[dict],) -> List[dict]:
         "acknowledged",
         # "acknowledged_by",
         # "acknowledged_timestamp",
+        # "state",
     ]
     for d in data:
         # d["details"] = d.get("details") or {}

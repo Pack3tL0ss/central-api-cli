@@ -312,6 +312,7 @@ class Cache:
             completion=True,
         )
         out = []
+        args = args or []
         if match:
             # remove devices that are already on the command line
             match = [m for m in match if m.name not in args]
@@ -761,7 +762,7 @@ class Cache:
         rem_data = []
         add_data = []
         for d in data:
-            if d.get("state", "") == "Closed":
+            if d.get("state", "") == "Close":
                 match = self.HookDataDB.get((self.Q.id == d["id"]))
                 if match is not None:
                     rem_data += [match.doc_id]
@@ -769,9 +770,10 @@ class Cache:
                 add_data += [d]
 
         if rem_data and add_data:
-            log.error("update_hook_data_db called with both open and closed notifications", show=True)
+            log.error("update_hook_data_db called with both open and closed notifications")
 
         if rem_data:
+            log.info(f"Removing {rem_data} from HookDataDB")
             return self.HookDataDB.remove(doc_ids=rem_data)
         elif add_data:
             data = [*self.hook_active, *add_data]

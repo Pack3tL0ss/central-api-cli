@@ -502,17 +502,32 @@ def start(
     from centralcli import config
     print(f"Webhook Proxy will listen on {port or config.wh_port}")
     if yes or typer.confirm("\nProceed?", abort=True):
-        # p = subprocess.Popen(
-        #     [sys.executable, Path(__file__) / "wh_proxy.py"],
-        #     stdout=subprocess.PIPE,
-        #     stderr=subprocess.STDOUT
-        # )
+
+        # TODO add option to terminate existing process if running
+        # def terminate_process(pid):
+        #     p = psutil.Process(pid)
+        #     x = 0
+        #     while x < 2:
+        #         p.terminate()
+        #         if p.status() != 'Terminated':
+        #             p.kill()
+        #         else:
+        #             break
+        #         x += 1
+
+        # for p in psutil.process_iter(attrs=["name", "cmdline"]):
+        #     if p.info["cmdline"] and p.info["cmdline"][-1].endswith("wh_proxy.py"):
+        #         ppid = p.pid if p.ppid() == 1 else p.ppid()
+        #         terminate_process(ppid)
+        #         break
+
         p = subprocess.Popen(
             ["nohup", sys.executable, Path(__file__).parent / "wh_proxy.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT
         )
         # from centralcli import wh_proxy
+        # TODO verify running
         print(f"[{p.pid}] WebHook Proxy Started.")
 
 
