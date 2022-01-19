@@ -101,7 +101,7 @@ def group(
         show_default=False,
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
-    dev_type: GenericDevIdens = typer.Option(None, help="Upgrade a specific device type",),
+    dev_type: GenericDevIdens = typer.Option(..., help="Upgrade a specific device type",),
     model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -136,6 +136,9 @@ def group(
 
     if reboot:
         ver_msg = f"{ver_msg} and reboot"
+    else:
+        ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
+
 
     if yes or typer.confirm(
         f"{ver_msg}?",
