@@ -19,3 +19,4 @@ rich>=10.0
 sphinx_click
 fastapi
 uvicorn
+jinja2

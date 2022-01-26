@@ -37,6 +37,13 @@ else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
+# WORK_DIR = Path(__file__).parents[2]
+# if not Path.joinpath(WORK_DIR, "centralcli").exists():
+#     print(f"issue path append logic \n{Path(__file__).parts}\n{Path(__file__).parents[2]}")
+#     print(typer.get_app_dir(__name__))
+# else:
+#     sys.path.append(str(WORK_DIR / "centralcli"))
+
 from .logger import MyLogger
 from . import constants
 from .config import Config
@@ -77,7 +84,15 @@ raw_out = False
 if "-vv" in sys.argv:
     raw_out = True
     _ = sys.argv.pop(sys.argv.index("-vv"))
-
+if "--debug-limit" in sys.argv:
+    _idx = sys.argv.index("--debug-limit")
+    _ = sys.argv.pop(sys.argv.index("--debug-limit"))
+    if len(sys.argv) - 1 >= _idx and sys.argv[_idx].isdigit():
+        config.limit = int(sys.argv[_idx])
+        _ = sys.argv.pop(_idx)
+    else:
+        print(f"Invalid Value ({sys.argv[_idx]}) for --debug-limit expected an int")
+        sys.exit(1)
 
 central = CentralApi(config.account)
 cache = Cache(central)

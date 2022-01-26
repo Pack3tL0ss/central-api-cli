@@ -6201,6 +6201,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    # API-NOTE Use This Add sites to mute
     async def central_update_customer_settings_(
         self,
         add_sites_to_mute: List[str],
@@ -6332,6 +6333,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    # API-NOTE ack notifications
     async def central_acknowledge_notifications(
         self,
         NoName: List[str] = None,
@@ -6348,6 +6350,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
+    # API-NOTE ack notifications
     async def central_acknowledge_notification(
         self,
         notification_id: str,
@@ -6585,6 +6588,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    # API-NOTE cencli show archive
     async def platform_get_archive_devices(
         self,
         offset: int = 0,
@@ -6608,6 +6612,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    # API-NOTE cencli archive [devices]
     async def platform_archive_devices(
         self,
         serials: List[str],
@@ -6628,6 +6633,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
+    # API-NOTE cencli remove archive [devices]
     async def platform_unarchive_devices(
         self,
         serials: List[str],

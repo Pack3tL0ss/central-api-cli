@@ -724,6 +724,7 @@ class Cache:
         else:
             resp = await self.central.get_all_groups()
             if resp.ok:
+                resp.output = cleaner.get_all_groups(resp.output)
                 resp.output = utils.listify(resp.output)
                 self.updated.append(self.central.get_all_groups)
                 self.GroupDB.truncate()
