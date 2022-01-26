@@ -651,6 +651,7 @@ def groups(
                     for grp in resp.output:
                         if g["group"] == grp["name"]:
                             verbose_resp.output[idx] = {**grp, **g["properties"]}
+                            continue
                 verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
                 resp = verbose_resp
 
