@@ -105,6 +105,9 @@ def method(
     args = [k if not k.isdigit() else int(k) for k in kwargs if k and "=" not in k]
     kwargs = [k.split("=") for k in kwargs if "=" in k]
     kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
+    for arg in args:
+        if arg.startswith("[") and arg.endswith("]"):
+            args[args.index(arg)] = [a if not a.isdigit() else int(a) for a in arg.strip("[]").split(",")]
     for k, v in kwargs.items():
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
