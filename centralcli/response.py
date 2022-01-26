@@ -3,7 +3,7 @@
 
 from aiohttp.client_exceptions import ContentTypeError
 from pycentral.base import ArubaCentralBase
-from . import cleaner
+from . import cleaner, constants
 from typing import Union, List, Any
 from rich import print
 
@@ -171,6 +171,7 @@ class Response:
         return f"{status_code}{r}"
 
     def __setitem__(self, name: str, value: Any) -> None:
+        print(f"set name {name} value {value}")
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
             self.output[name] = value
 
@@ -190,6 +191,7 @@ class Response:
         return r.encode("UTF-8")
 
     def __getattr__(self, name: str) -> Any:
+        print(name)
         if hasattr(self, "output") and self.output:
             output = self.output
 
@@ -412,6 +414,7 @@ class Session:
 
         # Output pagination loop
         paged_output = None
+        paged_raw = None
         while True:
             # -- // Attempt API Call \\ --
             r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
@@ -437,14 +440,29 @@ class Session:
             else:
                 if isinstance(r.output, dict):
                     paged_output = {**paged_output, **r.output}
+                else:  # FIXME paged_output += r.output was also changed contents of paged_raw dunno why
+                    paged_output = paged_output + r.output
+
+            if not paged_raw:
+                paged_raw = r.raw
+            else:
+                if isinstance(r.raw, dict):
+                    for outer_key in constants.STRIP_KEYS:
+                        if outer_key in r.raw and outer_key in paged_raw:
+                            if isinstance(r.raw[outer_key], dict):
+                                paged_raw[outer_key] = {**paged_raw[outer_key], **r.raw[outer_key]}
+                            else:  # TODO use response magic method to do adds have Response figure this out
+                                paged_raw[outer_key] += r.raw[outer_key]
+                            break
                 else:
-                    paged_output += r.output
+                    paged_raw += r.raw
 
             _limit = params.get("limit", 0)
             _offset = params.get("offset", 0)
             if params.get("limit") and len(r.output) == _limit:
                 if count and len(paged_output) >= count:
                     r.output = paged_output
+                    r.raw = paged_raw
                     break
                 elif count and len(paged_output) < count:
                     next_limit = count - len(paged_output)
@@ -454,6 +472,7 @@ class Session:
                     params["offset"] = _offset + _limit
             else:
                 r.output = paged_output
+                r.raw = paged_raw
                 break
 
         return r
@@ -489,6 +508,7 @@ class Session:
         return token is not None
 
     def refresh_token(self, token_data: dict = None) -> None:
+        # TODO update self.requests
         auth = self.auth
         if not token_data:
             token: Union[dict, None] = auth.central_info.get("token")
