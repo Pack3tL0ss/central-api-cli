@@ -952,6 +952,8 @@ class CentralApi(Session):
                 return resp
 
         template_groups = [g["name"] for g in groups if True in g.get("template group", {}).values()]
+        if not template_groups:
+            return Response(ok=True, output=[])
         reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
         responses = await self._batch_request(reqs)
         failed = [r for r in responses if not r]
