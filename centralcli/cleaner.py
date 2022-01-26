@@ -4,23 +4,25 @@
 """
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 """
-from pathlib import Path
-import sys
 import functools
-import logging
-from typing import Dict, List, Any, Union
-import pendulum
 import ipaddress
+import logging
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Union
 
+import pendulum
+from rich.console import Console
+from rich.markup import escape
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, constants
+    from centralcli import constants, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, constants
+        from centralcli import constants, utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -244,13 +246,22 @@ def short_value(key: str, value: Any):
     return short_key(key), _unlist(value)
 
 
-def _get_group_names(
-    data: List[
-        str,
-    ]
-) -> list:
+def _get_group_names(data: List[List[str],]) -> list:
+    """Convert list of single item lists to a list of strs
+
+    Also removes "unprovisioned" group as it has no value for our
+    purposes, and moves default group to beginning of list.
+
+    Args:
+        data (List[List[str],]): Central response payload
+
+    Returns:
+        list: List of strings with "unprovisioned" group removed
+        and default moved to front.
+    """
     groups = [g for _ in data for g in _ if g != "unprovisioned"]
-    groups.insert(0, groups.pop(groups.index("default")))
+    if "default" in groups:
+        groups.insert(0, groups.pop(groups.index("default")))
     return groups
 
 
@@ -831,10 +842,9 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
                 out += [f" [{_r_pretty}] {_c}"]
                 cmd_status = _r.get('status_str')
                 if cmd_status:
-                    _r_txt = f"[italic]{cmd_status}[/italic]"
+                    _r_txt = f"[italic]{escape(cmd_status)}[/italic]"
                     out += [f"{lines}\n{_r_txt}\n{lines}"]
 
-        from rich.console import Console
         console = Console(emoji=False, record=True)
         with console.capture():
             console.print("\n".join(out))
