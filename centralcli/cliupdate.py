@@ -3,11 +3,13 @@
 
 from pathlib import Path
 import sys
-from typing import List
+from typing import List, Union
 # from typing import List
 import typer
 from rich import print
 from rich.console import Console
+from jinja2 import FileSystemLoader, Environment
+import yaml
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -325,6 +327,23 @@ def group_old(
         resp = cli.central.request(cli.central.update_group_properties_v1, group.name, aos_version, monitor_only_switch=mos)
         cli.display_results(resp)
 
+def generate_template(template_file: Union[Path, str], var_file: Union[Path, str], group_dev: str):
+    '''Generate configuration files based on j2 templates and provided variables
+    '''
+    template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
+    var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
+
+    config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
+
+    env = Environment(loader=FileSystemLoader(template_file.parent), trim_blocks=True, lstrip_blocks=True)
+    template = env.get_template(template_file.name)
+
+    # TODO output to temp or out dir cwd could be non-writable
+    group_dev = Path.cwd() / f"{group_dev}.cfg"
+    group_dev.write_text(template.render(config_data))
+
+    return group_dev
+
 
 
 @app.command("config",
@@ -348,7 +367,8 @@ def config_(
     #     # ]
     # ),
     # TODO collect multi-line input as option to paste in config
-    cli_file: Path = typer.Argument(..., help="File containing desired config in CLI format.", exists=True),
+    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True),
+    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True),
     # TODO --vars PATH  help="File containing variables to convert jinja2 template."
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -362,6 +382,9 @@ def config_(
 ) -> None:
     yes = yes_ if yes_ else yes
     group_dev: cli.cache.CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
+    if var_file:
+        cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
+
     if cli_file:
         cli_cmds = []
         with cli_file.open() as f:
