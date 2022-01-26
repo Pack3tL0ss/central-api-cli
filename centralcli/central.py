@@ -900,23 +900,39 @@ class CentralApi(Session):
 
         return templates.update_template(self.auth, **kwargs)
 
-    async def _get_group_names(self) -> Response:  # REVERIFIED
+    async def _get_group_names(self) -> Response:
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 20}  # 20 is the max
-        resp = await self.get(url, params=params, callback=cleaner._get_group_names)
+        resp = await self.get(url, params=params,)  # callback=cleaner._get_group_names)
+        resp.output = cleaner._get_group_names(resp.output)
         return resp
 
     # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:
-        url = "/configuration/v2/groups/template_info"
         resp = await self._get_group_names()
         if not resp.ok:
             return resp
         else:
+            url = "/configuration/v2/groups/template_info"
             # return await self.get_groups_properties(resp.output)
-            all_groups = ",".join(resp.output)
-            params = {"groups": all_groups}
-        return await self.get(url, params=params, callback=cleaner.get_all_groups)
+            batch_reqs = []
+            for groups in utils.chunker(resp.output, 20):  # This call allows a max of 20
+                params = {"groups": ",".join(groups)}
+                batch_reqs += [BatchRequest(self.get, url, params=params)]
+                # all_groups = await self.get(url, params=params)
+                # TODO dunder add in Response
+            batch_resp = await self._batch_request(batch_reqs)
+            # TODO method to combine raw and output attrs of all responses into last resp
+            output = [r for res in batch_resp for r in res.output]
+            resp = batch_resp[-1]
+            resp.output = output
+            if "data" in resp.raw:
+                resp.raw["data"] = output
+            else:
+                log.warning("raw attr in resp from get_all_groups lacks expected outer key 'data'")
+
+            return resp
+
 
     async def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
         """Get data for all defined templates from Aruba Central
@@ -2739,9 +2755,10 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # TODO NotUsed Yet
     async def get_groups_properties(self, groups: Union[str, List[str]]) -> Response:
         """Get properties set for groups.
+
+        // Used by show groups when -v flag is provided //
 
         Args:
             groups (List[str]): Group list to fetch properties.
@@ -2754,13 +2771,27 @@ class CentralApi(Session):
 
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
+        batch_reqs = []
+        for _groups in utils.chunker(groups, 20):  # This call allows a max of 20
+            params = {"groups": ",".join(_groups)}
+            batch_reqs += [BatchRequest(self.get, url, params=params)]
+        batch_resp = await self._batch_request(batch_reqs)
+        # TODO method to combine raw and output attrs of all responses into last resp
+        output = [r for res in batch_resp for r in res.output]
+        resp = batch_resp[-1]
+        resp.output = output
+        if "data" in resp.raw:
+            resp.raw["data"] = output
+        else:
+            log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'")
         groups = ",".join(utils.listify(groups))
 
-        params = {
-            'groups': groups
-        }
+        # params = {
+        #     'groups': groups
+        # }
 
-        return await self.get(url, params=params)
+        # return await self.get(url, params=params)
+        return resp
 
     async def get_vc_firmware(
         self,
