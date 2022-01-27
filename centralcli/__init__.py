@@ -73,8 +73,8 @@ from .clicommon import CLICommon
 # set -X to retain scrollback after quiting less
 #     -R for color output (default for the pager but defaults are not used if LESS is set)
 #     +G so (start with output scrolled to end) so scrollback contains all contents
-if not os.environ.get("LESS"):
-    os.environ["LESS"] = "-RX +G"
+# if not os.environ.get("LESS"):
+os.environ["LESS"] = "-RX +G"
 
 if os.environ.get("TERM_PROGRAM") == "vscode":
     from .vscodeargs import vscode_arg_handler
