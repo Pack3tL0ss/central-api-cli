@@ -51,7 +51,7 @@ def method(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
     outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
@@ -143,10 +143,10 @@ def method(
 
     if resp.raw and resp.output != resp.raw:
         typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=pager, outfile=outfile)
     if resp.raw:
         typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.raw, tablefmt="json", pager=not no_pager, outfile=outfile)
+        cli.display_results(data=resp.raw, tablefmt="json", pager=pager, outfile=outfile)
 
 @app.callback()
 def callback():

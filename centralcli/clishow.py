@@ -40,7 +40,7 @@ iden_meta = IdenMetaVars()
 def show_devices(
     dev_type: str, *args, serial: str = None, outfile: Path = None, update_cache: bool = False, group: str = None,
     status: str = None, state: str = None, label: Union[str, List[str]] = None, pub_ip: str = None, do_clients: bool = False,
-    do_stats: bool = False, sort_by: str = None, no_pager: bool = False, do_json: bool = False, do_csv: bool = False,
+    do_stats: bool = False, sort_by: str = None, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
 ) -> None:
     caption = None
@@ -113,7 +113,7 @@ def show_devices(
         tablefmt=tablefmt,
         title=f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}",
         caption=caption,
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         cleaner=cleaner.get_devices
@@ -138,7 +138,7 @@ def all(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -154,7 +154,7 @@ def all(
     show_devices(
         'all', outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, sort_by=sort_by,
-        no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -185,7 +185,7 @@ def devices(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -199,12 +199,6 @@ def devices(
     elif up:
         status = "Up"
 
-    # type_to_link = {
-    #     'ap': 'aps',
-    #     'SW': 'switches',
-    #     'CX': 'switches',
-    #     'gw': 'gateways'
-    # }
     serial = None
     if not device or device == 'all':
         dev_type = 'all'
@@ -212,13 +206,12 @@ def devices(
         dev = cli.cache.get_dev_identifier(device)
         device = dev.name
         serial = dev.serial
-        # dev_type = type_to_link.get(dev.type, dev.type)
         dev_type = lib_to_api("monitoring", dev.type)
 
     show_devices(
         dev_type, device, serial=serial, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -240,7 +233,7 @@ def aps(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -257,7 +250,7 @@ def aps(
     show_devices(
         'aps', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -279,7 +272,7 @@ def switches(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -297,7 +290,7 @@ def switches(
     show_devices(
         'switches', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -320,7 +313,7 @@ def gateways(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -337,7 +330,7 @@ def gateways(
     show_devices(
         'gateways', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -364,7 +357,7 @@ def controllers(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -381,7 +374,7 @@ def controllers(
     show_devices(
         'mobility_controllers', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
         state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, no_pager=no_pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 
@@ -397,7 +390,7 @@ def interfaces(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -414,7 +407,7 @@ def interfaces(
         resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "CX")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    cli.display_results(resp, tablefmt=tablefmt, pager=not no_pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -436,7 +429,7 @@ def vlans(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortVlanOptions = typer.Option(None, "--sort"),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -481,7 +474,7 @@ def vlans(
         resp,
         tablefmt=tablefmt,
         title=f"{obj.name} Vlans",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
@@ -505,7 +498,7 @@ def dhcp(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -540,7 +533,7 @@ def dhcp(
             resp,
             tablefmt=tablefmt,
             title=f"{dev.name} DHCP {what.rstrip('s')} details",
-            pager=not no_pager,
+            pager=pager,
             outfile=outfile,
             sort_by=sort_by,
             reverse=reverse,
@@ -556,7 +549,7 @@ def upgrade(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -584,7 +577,7 @@ def upgrade(
         resp,
         tablefmt=tablefmt,
         title="Upgrade Status" if not dev else f"{dev.name} Upgrade Status",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile
     )
 
@@ -596,7 +589,7 @@ def cache_(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -609,7 +602,7 @@ def cache_(
     for arg in args:
         cache_out = getattr(cli.cache, arg)
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_table=do_table, default="yaml")
-        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {args[-1]}", pager=not no_pager, outfile=outfile)
+        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {args[-1]}", pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show groups/details")
@@ -618,7 +611,7 @@ def groups(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     verbose: bool = typer.Option(False, "-v", help="Verbose: adds AoS10 / Monitor only switch attributes", show_default=False,),
     verbose2: bool = typer.Option(
         False,
@@ -656,7 +649,7 @@ def groups(
                 resp = verbose_resp
 
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-        cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=not no_pager, outfile=outfile)
+        cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -669,7 +662,7 @@ def sites(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortSiteOptions = typer.Option(None, "--sort"),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -680,17 +673,10 @@ def sites(
 ):
     central = cli.central
 
-    # site = None
-    # if args:
-    #     args = tuple([i for i in args if i != "all"])
-    #     if args:
-    #         site = cli.cache.get_site_identifier(args, multi_ok=True)
-
     site = None if site.lower() == "all" else site
     if not site:
         if central.get_all_sites not in cli.cache.updated:
             resp = asyncio.run(cli.cache.update_site_db())
-        # resp = Response(output=cli.cache.sites, rl_str=" ")  # HACK (rl_str) need cache update methods to return response
     else:
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
@@ -701,7 +687,7 @@ def sites(
         resp,
         tablefmt=tablefmt,
         title="Sites" if not site else f"{site.name} site details",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
@@ -736,7 +722,7 @@ def templates(
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     sort_by: SortTemplateOptions = typer.Option(None, "--sort"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -793,7 +779,7 @@ def templates(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     title = "All Templates" if not name else f"{name.name.title()} Template"
-    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=not no_pager, outfile=outfile, sort_by=sort_by)
+    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by)
 
 
 @app.command(short_help="Show Variables for all or specific device")
@@ -814,7 +800,7 @@ def variables(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -835,7 +821,7 @@ def variables(
         resp,
         tablefmt=tablefmt,
         title="Variables" if not args else f"{args.name} Variables",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
     )
 
@@ -852,7 +838,7 @@ def lldp(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -877,7 +863,7 @@ def lldp(
         resp,
         tablefmt=tablefmt,
         title=f"{dev.name} lldp neighbor",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         cleaner=cleaner.get_lldp_neighbor,
     )
@@ -893,7 +879,7 @@ def certs(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -905,7 +891,7 @@ def certs(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     cli.display_results(
-        resp, tablefmt=tablefmt, title="Certificates", pager=not no_pager, outfile=outfile, sort_by=sort_by, reverse=reverse
+        resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse
     )
 
 
@@ -913,7 +899,7 @@ def certs(
 def run(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -927,7 +913,7 @@ def run(
     dev = cli.cache.get_dev_identifier(device)
 
     resp = central.request(central.get_device_configuration, dev.serial)
-    cli.display_results(resp, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, pager=pager, outfile=outfile)
 
 
 
@@ -955,7 +941,7 @@ def config_(
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1025,7 +1011,7 @@ def config_(
     if resp and _data_key:
         resp.output = resp.output[_data_key]
 
-    cli.display_results(resp, pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show device routing table")
@@ -1037,7 +1023,7 @@ def routes(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1068,7 +1054,7 @@ def routes(
         title=f"{device.name} IP Routes",
         caption=caption,
         reverse=reverse,
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         cleaner=cleaner.routes,
     )
@@ -1093,7 +1079,7 @@ def wlans(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1122,7 +1108,7 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
-    cli.display_results(resp, tablefmt=tablefmt, title="WLANs (SSIDs)", pager=not no_pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, title="WLANs (SSIDs)", pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show clients/details")
@@ -1156,7 +1142,7 @@ def clients(
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
     ),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output",),
+    pager: bool = typer.Option(False, help="Enable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -1262,7 +1248,7 @@ def clients(
         tablefmt=tablefmt,
         title=title,
         caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose else None,
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
@@ -1306,7 +1292,7 @@ def logs(
     ),
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
     verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
@@ -1398,7 +1384,7 @@ def logs(
             resp,
             tablefmt=tablefmt,
             title="Audit Logs",
-            pager=not no_pager,
+            pager=pager,
             outfile=outfile,
             # TODO move sort_by underscore removal to display_results
             sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
@@ -1454,7 +1440,7 @@ def events(
     # count: int = typer.Option(None, "-n", help="Collect Last n logs",),
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
     verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
@@ -1544,7 +1530,7 @@ def events(
         resp,
         tablefmt=tablefmt,
         title="Event Logs",
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         # TODO move sort_by underscore removal to display_results
         sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
@@ -1586,7 +1572,7 @@ def alerts(
     ),
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
     verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
@@ -1685,7 +1671,7 @@ def alerts(
         resp,
         tablefmt=tablefmt,
         title=title,
-        pager=not no_pager,
+        pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
@@ -1706,7 +1692,7 @@ def last(
         help="Reverse Output order",
         show_default=False
     ),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     default: bool = typer.Option(
         False, "-d",
@@ -1743,7 +1729,7 @@ def last(
     del kwargs["outdata"]
 
     cli.display_results(
-        data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=not no_pager, stash=False, **kwargs
+        data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=pager, stash=False, **kwargs
     )
 
 
@@ -1760,7 +1746,7 @@ def webhooks(
     ),
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
     verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
@@ -1788,7 +1774,7 @@ def webhooks(
         resp,
         tablefmt=tablefmt,
         title="WebHooks",
-        pager=not no_pager,
+        pager=pager,
         sort_by=sort_by,
         reverse=reverse,
         fold_cols=["urls", "wid"],

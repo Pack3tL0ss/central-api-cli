@@ -50,7 +50,7 @@ def compliance(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(False, "--no-pager", help="Disable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -98,7 +98,7 @@ def compliance(
             resp,
             tablefmt=tablefmt,
             title=f"{'Global ' if not group else f'{group} '}Firmware Compliance",
-            pager=not no_pager,
+            pager=pager,
             outfile=outfile
         )
 
