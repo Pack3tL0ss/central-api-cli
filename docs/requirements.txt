@@ -19,6 +19,8 @@ tablib
 rich>=10.0
 fastapi
 uvicorn
+jinja2
+psutil
 
 # doc requirements
 docutils==0.17.1
