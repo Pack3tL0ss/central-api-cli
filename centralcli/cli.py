@@ -8,6 +8,10 @@ import importlib
 from pathlib import Path
 from typing import List
 from rich import print
+import subprocess
+import psutil
+from time import sleep
+from rich.console import Console
 
 import typer
 
@@ -15,13 +19,16 @@ import typer
 try:
     from centralcli import (
         clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone,
-        clirefresh, clitest, cli, log, utils
+        clirefresh, clitest, cli, log, utils, config
     )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone, clirefresh, clitest, cli, log, utils
+        from centralcli import (
+            clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone,
+            clirefresh, clitest, cli, log, utils, config
+        )
     else:
         print(pkg_dir.parts)
         raise e
@@ -498,37 +505,47 @@ def start(
 
     """
     yes = yes_ if yes_ else yes
-    import subprocess
-    from centralcli import config
+    def terminate_process(pid):
+        p = psutil.Process(pid)
+        for _ in range(2):
+            p.terminate()
+            if p.status() != 'Terminated':
+                p.kill()
+            else:
+                break
+
+    def get_pid():
+        for p in psutil.process_iter(attrs=["name", "cmdline"]):
+            if p.info["cmdline"] and True in [x.endswith("wh_proxy.py") for x in p.info["cmdline"][1:]]:
+                return p.pid # if p.ppid() == 1 else p.ppid()
+
+    pid = get_pid()
+    if pid:
+        _abort = True if not port or port == int(config.wh_port) else False
+        print(f"Webhook proxy is currently running (process id {pid}).")
+        if typer.confirm("Terminate existing process", abort=_abort):
+            terminate_process(pid)
+            print("[cyan]Process Terminated")
+
     print(f"Webhook Proxy will listen on {port or config.wh_port}")
     if yes or typer.confirm("\nProceed?", abort=True):
+        console = Console()
+        port = port or config.wh_port
+        with console.status("Starting Webhook Proxy..."):
+            p = subprocess.Popen(
+                ["nohup", sys.executable, Path(__file__).parent / f"wh_proxy.py", str(port)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT
+            )
+            sleep(1)
 
-        # TODO add option to terminate existing process if running
-        # def terminate_process(pid):
-        #     p = psutil.Process(pid)
-        #     x = 0
-        #     while x < 2:
-        #         p.terminate()
-        #         if p.status() != 'Terminated':
-        #             p.kill()
-        #         else:
-        #             break
-        #         x += 1
-
-        # for p in psutil.process_iter(attrs=["name", "cmdline"]):
-        #     if p.info["cmdline"] and p.info["cmdline"][-1].endswith("wh_proxy.py"):
-        #         ppid = p.pid if p.ppid() == 1 else p.ppid()
-        #         terminate_process(ppid)
-        #         break
-
-        p = subprocess.Popen(
-            ["nohup", sys.executable, Path(__file__).parent / "wh_proxy.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        )
-        # from centralcli import wh_proxy
-        # TODO verify running
-        print(f"[{p.pid}] WebHook Proxy Started.")
+        proc = psutil.Process(p.pid)
+        if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
+            output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
+            print("\n".join(output))
+            print(f"\n[red]WebHook Proxy Startup Failed")
+        else:
+            print(f"[{p.pid}] WebHook Proxy Started.")
 
 
 # DEPRECATED replaced with cencli test method
@@ -541,7 +558,7 @@ def method_test(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
     outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-    no_pager: bool = typer.Option(True, "--pager", help="Enable Paged Output"),
+    pager: bool = typer.Option(False, help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
@@ -630,10 +647,10 @@ def method_test(
 
     if resp.raw and resp.output != resp.raw:
         typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=not no_pager, outfile=outfile)
+        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=pager, outfile=outfile)
     if resp.raw:
         typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.raw, tablefmt="json", pager=not no_pager, outfile=outfile)
+        cli.display_results(data=resp.raw, tablefmt="json", pager=pager, outfile=outfile)
 
 
 def all_commands_callback(ctx: typer.Context, debug: bool):

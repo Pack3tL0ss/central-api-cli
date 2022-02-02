@@ -260,7 +260,7 @@ class CLICommon:
         tablefmt: str = "rich",
         title: str = None,
         caption: str = None,
-        pager: bool = True,
+        pager: bool = False,
         outfile: Path = None,
         sort_by: str = None,
         reverse: bool = False,
@@ -333,7 +333,7 @@ class CLICommon:
         tablefmt: TableFormat = "rich",
         title: str = None,
         caption: str = None,
-        pager: bool = True,
+        pager: bool = False,
         outfile: Path = None,
         sort_by: str = None,
         reverse: bool = False,
@@ -382,8 +382,6 @@ class CLICommon:
         # TODO remove ok_status, and handle in CentralAPI method (set resp.ok = True)
         if pad:
             log.error("Deprecated pad parameter referenced in display_results", show=True)
-
-        pager = False if config.no_pager else pager
 
         if resp is not None:
             resp = utils.listify(resp)

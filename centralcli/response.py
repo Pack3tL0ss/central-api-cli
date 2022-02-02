@@ -515,7 +515,7 @@ class Session:
             retry_token: Union[dict, None] = auth.central_info.get("retry_token")
             token_data = [t for t in [token, retry_token] if t is not None]
         else:
-            token_data: List[dict] = [token_data]
+            token_data = [token_data]
 
         if self._refresh_token(token_data):
             return
@@ -523,15 +523,15 @@ class Session:
             token_data = self.get_token_from_user()
             self._refresh_token(token_data)
 
-    def get_token_from_user(self) -> None:
+    def get_token_from_user(self) -> dict:
         """Handle invalid or expired tokens
 
         For prod cluster it leverages ArubaCentralBase.handleTokenExpiry()
         For internal cluster it extends functionality to support user input
         copy paste of Download Token dict from Aruba Central GUI.
 
-        Args:
-            central (ArubaCentralBase): ArubaCentralBase class
+        Returns:
+            dict: access and refresh tokens extracted from user provided json
         """
         auth = self.auth
         token_data: dict = None

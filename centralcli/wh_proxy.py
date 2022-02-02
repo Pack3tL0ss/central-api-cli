@@ -154,5 +154,7 @@ async def webhook(
         # print_json(data=cache.hook_data)
         return {"result": "ok"}
 
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=config.wh_port, log_level="info")
+    port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
