@@ -108,7 +108,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
         # falling back to default for load of central for auto completion
         central_info = config.data["central_info"]
     token_store = config.token_store
-    ssl_verify = config.data.get("ssl_verify", True)
+    ssl_verify = central_info.get("ssl_verify", config.data.get("ssl_verify", True))
 
     conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=ssl_verify)
     token_cache = Path(tokenLocalStoreUtil(token_store, central_info["customer_id"], central_info["client_id"]))
