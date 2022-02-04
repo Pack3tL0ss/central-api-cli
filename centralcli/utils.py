@@ -276,11 +276,11 @@ class Utils:
         return contents
 
     @staticmethod
-    def strip_none(_dict: Union[dict, None], strip_empty_obj: bool = False) -> Any:
-        """strip all keys from a dict where value is NoneType
+    def strip_none(data: Union[dict, list, None], strip_empty_obj: bool = False) -> Any:
+        """strip all keys from a list or dict where value is NoneType
 
         args:
-            _dict: The dictionary object to have all keys removed that have None as value
+            data (Union[dict, list, None]): The iterable object to have all items/keys where value is None
             strip_empty_obj (bool): If True will strip keys that have empty objects as
                 well as NoneType for value.
 
@@ -288,13 +288,18 @@ class Utils:
             (Any) Return same type that is provided to method as first argument.
             If dict is provided it returns modified dict.
         """
-        if not isinstance(_dict, dict):
-            return _dict
-
-        if not strip_empty_obj:
-            return {k: v if not callable(v) else v.__name__ for k, v in _dict.items() if v is not None}
+        if isinstance(data, dict):
+            if not strip_empty_obj:
+                return {k: v if not callable(v) else v.__name__ for k, v in data.items() if v is not None}
+            else:
+                return {k: v for k, v in data.items() if not isinstance(v, bool) and v}
+        elif isinstance(data, (list, tuple)):
+            if strip_empty_obj:
+                return type(data)(d for d in data if d)
+            return type(data)(d for d in data if d is None)
         else:
-            return {k: v for k, v in _dict.items() if not isinstance(v, bool) and v}
+            return data
+
 
     class Output:
         def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
