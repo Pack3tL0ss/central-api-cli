@@ -827,7 +827,7 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
         global_res = "[bright_green]Success[/bright_green]"
     else:
         global_res = "[red]Failure[/red]"
-    out += [f"\n{lines}\nGlobal Result: {global_res}\n{lines}\n"]
+    out += [lines, f"Global Result: {global_res}", lines]
 
     if data.get("cli_cmds_result"):
         out += ["\n -- [cyan bold]Command Results[/cyan bold] --"]
@@ -845,7 +845,7 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
                 cmd_status = _r.get('status_str')
                 if cmd_status:
                     _r_txt = f"[italic]{escape(cmd_status)}[/italic]"
-                    out += [f"{lines}\n{_r_txt}\n{lines}"]
+                    out += [lines, _r_txt, lines]
 
         console = Console(emoji=False, record=True)
         with console.capture():
