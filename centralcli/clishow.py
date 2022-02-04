@@ -673,7 +673,7 @@ def sites(
 ):
     central = cli.central
 
-    site = None if site.lower() == "all" else site
+    site = None if site and site.lower() == "all" else site
     if not site:
         if central.get_all_sites not in cli.cache.updated:
             resp = asyncio.run(cli.cache.update_site_db())
