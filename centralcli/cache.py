@@ -419,8 +419,8 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-            for m in out:
-                yield m[0], m[1]
+        for m in out:
+            yield m[0], m[1]
 
     def dev_gw_completion(
         self,
@@ -444,8 +444,8 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-            for m in out:
-                yield m[0], m[1]
+        for m in out:
+            yield m[0], m[1]
 
     def group_dev_ap_gw_completion(
         self,
@@ -467,8 +467,8 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-            for m in out:
-                yield m[0], m[1]
+        for m in out:
+            yield m[0], m[1]
 
     def group_dev_gw_completion(
         self,
@@ -491,8 +491,8 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-            for m in out:
-                yield m[0], m[1]
+        for m in out:
+            yield m[0], m[1]
 
     def group_site_dev_gw_completion(
         self,
@@ -1033,7 +1033,7 @@ class Cache:
             # Try exact match
             match = self.DevDB.search(
                 (self.Q.name == query_str)
-                | (self.Q.ip.test(lambda v: v.split("/")[0] == query_str))
+                | (self.Q.ip.test(lambda v: v and v.split("/")[0] == query_str))
                 | (self.Q.mac == utils.Mac(query_str).cols)
                 | (self.Q.serial == query_str)
             )
