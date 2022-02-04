@@ -82,15 +82,20 @@ def method(
 
     Displays all attributes of Response object
     """
-    cli.cache(refresh=update_cache)
+    # FIXME account only works if method is in central.py
     central = CentralApi(account)
+    cli.cache(refresh=update_cache)
     if not hasattr(central, method):
+        if account != "central_info":
+            print("Testing methods only supports the --account option for methods in central.py")
+            raise typer.Exit(1)
         bpdir = Path(__file__).parent / "boilerplate"
         all_calls = [
             importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
             if not f.name.startswith("_") and f.suffix == ".py"
         ]
         for m in all_calls:
+            log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
             if hasattr(m.AllCalls(), method):
                 central = m.AllCalls()
                 break
