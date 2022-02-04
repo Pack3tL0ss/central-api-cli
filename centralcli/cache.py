@@ -125,8 +125,11 @@ class CentralObject:
                 self.serial,
                 self.mac,
                 self.ip,
-                f"s:{self.site}",
+                self.site,
             ]
+            parts = utils.strip_none(parts, strip_empty_obj=True)
+            if self.site:
+                parts[-1] = f"s:{parts[-1]}"
 
         return "|".join(
             [
@@ -265,23 +268,17 @@ class Cache:
             for m in out:
                 yield m
         elif args[-1].lower() == "serial":
-            # out = [m for m in self.serial_pfx_completion(incomplete, args)]
             out = ["|", "<SERIAL NUMBER>"]
             if incomplete:
                 out.append(incomplete)
             for m in out:
                 yield m
         elif args[-1].lower() == "mac":
-            # out = [m for m in self.mac_oui_completion(incomplete, args)]
             out = ["|", "<MAC ADDRESS>"]
             for m in out:
                 yield m
 
         else:
-            # print(args[-2], incomplete)
-            # if args[-2].lower() == "mac":
-            #     # TODO not sure why but colons in prev arg breaks completion for next kw
-            #     args[-1] = args[-1].strip(":-.")
             for kw in kwds:
                 if kw not in args and kw.lower().startswith(incomplete):
                     yield kw
@@ -422,8 +419,33 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-        for m in out:
-            yield m[0], m[1]
+            for m in out:
+                yield m[0], m[1]
+
+    def dev_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for device idens where only gateways are valid.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            tuple: name and help_text for the device
+        """
+        # match = [m for m in self.dev_completion(incomplete) if m.generic_type == "gw"]
+        match = self.get_identifier(incomplete, ["dev"], device_type="gw", completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+            for m in out:
+                yield m[0], m[1]
 
     def group_dev_ap_gw_completion(
         self,
@@ -445,8 +467,56 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
-        for m in out:
-            yield m[0], m[1]
+            for m in out:
+                yield m[0], m[1]
+
+    def group_dev_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group or a gateway.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        # dev_types = ["gw"]
+        # dev_match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        # match = [*self.get_group_identifier(incomplete, completion=True), *dev_match]
+        match = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+            for m in out:
+                yield m[0], m[1]
+
+    def group_site_dev_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group, site, or a gateway.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        # match = self.get_group_identifier(incomplete, completion=True)
+        # match = match or self.get_site_identifier(incomplete, completion=True)
+        # match = match or self.get_dev_identifier(incomplete, dev_type="gw", completion=True)
+        match = self.get_identifier(incomplete, ["group", "site", "dev"], device_type="gw", completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+            for m in out:
+                yield m[0], m[1]
 
     def group_completion(
         self,
@@ -830,7 +900,7 @@ class Cache:
             if not all([r.ok for r in db_res]):
                 # if db_res and False in db_res:
                 res_map = ["dev_db", "site_db", "template_db", "group_db"]
-                res_map = ", ".join([db for idx, db in enumerate(res_map) if not db_res(idx)])
+                res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
                 # log.error(f"TinyDB returned error ({res_map}) during db update")
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
