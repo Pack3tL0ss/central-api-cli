@@ -494,29 +494,40 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
-    def group_site_dev_gw_completion(
+    def send_cmds_completion(
         self,
         incomplete: str,
         args: List[str] = None,
     ):
-        """Completion for argument that can be either group, site, or a gateway.
+        """Completion for argument that can be either group, site, or a gateway or keyword "commands".
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
-        # match = self.get_group_identifier(incomplete, completion=True)
-        # match = match or self.get_site_identifier(incomplete, completion=True)
-        # match = match or self.get_dev_identifier(incomplete, dev_type="gw", completion=True)
-        match = self.get_identifier(incomplete, ["group", "site", "dev"], device_type="gw", completion=True)
+        if args[-1] == "all":
+            yield "commands"
+        elif args[-1] in ["commands", "file"]:
+            yield None
+        elif args[-1] not in ["group", "site", "devices"]:
+            yield "commands"
+        else:
+            if args[-1] == "group":
+                db = "group"
+            elif args[-1] == "site":
+                db = "site"
+            else:
+                db = "dev"
 
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+            match = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
 
-            for m in out:
-                yield m[0], m[1]
+            out = []
+            if match:
+                for m in sorted(match, key=lambda i: i.name):
+                    out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
+
+                for m in out:
+                    yield m[0], m[1]
 
     def group_completion(
         self,
@@ -957,8 +968,9 @@ class Cache:
         device_type: Union[str, List[str]] = None,
         group: str = None,
         multi_ok: bool = False,
+        all: bool = False,
         completion: bool = False,
-    ) -> CentralObject:
+    ) -> Union[CentralObject, List[CentralObject]]:
         """Get Identifier when iden type could be one of multiple types.  i.e. device or group
 
         Args:
@@ -969,6 +981,7 @@ class Cache:
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
             multi_ok (bool, optional): DEPRECATED, NO LONGER USED
+            all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
                 When called for completion it will fail silently and will return multiple when multiple matches are found.
 
@@ -976,9 +989,11 @@ class Cache:
             typer.Exit: If not ran for completion, and there is no match, exit with code 1.
 
         Returns:
-            CentralObject
+            CentralObject or list[CentralObject, ...]
         """
         # DEPRECATED remove multi_ok once verified refs are removed
+        if multi_ok:
+            log.warning("DEV NOTE: get_identifier called with deprecated kwarg mutli_ok", show=True)
         match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
@@ -1004,6 +1019,10 @@ class Cache:
                 )
 
         if completion:
+            if all:
+                if "all".startswith(qry_str.lower()):
+                    match = utils.listify(match)
+                    match += CentralObject("dev", {"name": "all", "help_text": "All Devices"})
             return match
 
         if not match:
