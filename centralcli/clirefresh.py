@@ -37,10 +37,7 @@ def tokens(
         autocompletion=cli.cache.account_completion
     ),
 ):
-    central = CentralApi(account)
-
-    from centralcli.response import Session
-    Session(central.auth).refresh_token()
+    cli.central.refresh_token()
 
 @app.command(hidden=True, help="Refresh Cache", short_help="Refresh Cache")
 def cache(

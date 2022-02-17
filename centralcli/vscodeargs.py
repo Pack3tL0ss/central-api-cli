@@ -36,16 +36,22 @@ def vscode_arg_handler():
                         vsc_args = vsc_args.replace("cli ", "")
                     elif vsc_args.startswith("cencli "):
                         vsc_args = vsc_args.replace("cencli ", "")
-                    if "\\'" in vsc_args:  # I think this was for dev on Windows
-                        _loc = vsc_args.find("\\'")
-                        _before = vsc_args[:_loc - 1]
-                        _before = _before.split()
-                        _str_end = vsc_args.find("\\'", _loc + 1)
-                        sys.argv += [i.rstrip(',') for i in _before if i != ',']
-                        sys.argv += [f"{vsc_args[_loc + 2:_str_end]}"]
-                        _the_rest = vsc_args[_str_end + 2:].split()
-                        sys.argv += [i.rstrip(',') for i in _the_rest if i != ',']
-                    else:
+                    # handle quoted args as single arg `"caas send-cmds \\'service dhcp\\' --device R3v SDBrA"`
+                    vsc_args = vsc_args.replace('"', '\\"')  # vscode double escapes ' but not "
+                    found = False
+                    for qstr in ["\\'", '\\"']:
+                        if qstr in vsc_args:  # I think this was for dev on Windows
+                            _loc = vsc_args.find(qstr)
+                            _before = vsc_args[:_loc - 1]
+                            _before = _before.split()
+                            _str_end = vsc_args.find(qstr, _loc + 1)
+                            sys.argv += [i.rstrip(',') for i in _before if i != ',']
+                            sys.argv += [f"{vsc_args[_loc + 2:_str_end]}"]
+                            _the_rest = vsc_args[_str_end + 2:].split()
+                            sys.argv += [i.rstrip(',') for i in _the_rest if i != ',']
+                            found = True
+
+                    if not found:
                         sys.argv += vsc_args.split()
 
         # if len(sys.argv) > 2:
@@ -71,7 +77,7 @@ def vscode_arg_handler():
         history_lines = None
         base_dir = Path(__file__).parent.parent
         history_file = base_dir / ".vscode" / "prev_args"
-        this_args = " ".join(sys.argv[1:])
+        this_args = " ".join([x if " " not in x else f"'{x}'" for x in sys.argv[1:]])
         if not this_args:
             return
 

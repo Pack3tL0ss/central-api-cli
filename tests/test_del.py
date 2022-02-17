@@ -30,4 +30,4 @@ def test_del_group_multiple():
         ])
     assert result.exit_code == 0
     assert "Success" in result.stdout
-    assert result.stdout.count("Success") == 3
+    assert result.stdout.count("Success") == 2

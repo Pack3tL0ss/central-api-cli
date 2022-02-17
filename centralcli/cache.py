@@ -21,9 +21,6 @@ except Exception:
 #     import better_exceptions # noqa
 # except Exception:
 #     pass
-from rich.traceback import install
-install(show_locals=True)
-
 
 TinyDB.default_table_name = "devices"
 
@@ -125,8 +122,11 @@ class CentralObject:
                 self.serial,
                 self.mac,
                 self.ip,
-                f"s:{self.site}",
+                self.site,
             ]
+            parts = utils.strip_none(parts, strip_empty_obj=True)
+            if self.site:
+                parts[-1] = f"s:{parts[-1]}"
 
         return "|".join(
             [
@@ -265,23 +265,17 @@ class Cache:
             for m in out:
                 yield m
         elif args[-1].lower() == "serial":
-            # out = [m for m in self.serial_pfx_completion(incomplete, args)]
             out = ["|", "<SERIAL NUMBER>"]
             if incomplete:
                 out.append(incomplete)
             for m in out:
                 yield m
         elif args[-1].lower() == "mac":
-            # out = [m for m in self.mac_oui_completion(incomplete, args)]
             out = ["|", "<MAC ADDRESS>"]
             for m in out:
                 yield m
 
         else:
-            # print(args[-2], incomplete)
-            # if args[-2].lower() == "mac":
-            #     # TODO not sure why but colons in prev arg breaks completion for next kw
-            #     args[-1] = args[-1].strip(":-.")
             for kw in kwds:
                 if kw not in args and kw.lower().startswith(incomplete):
                     yield kw
@@ -425,6 +419,31 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
+    def dev_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for device idens where only gateways are valid.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            tuple: name and help_text for the device
+        """
+        # match = [m for m in self.dev_completion(incomplete) if m.generic_type == "gw"]
+        match = self.get_identifier(incomplete, ["dev"], device_type="gw", completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m[0], m[1]
+
     def group_dev_ap_gw_completion(
         self,
         incomplete: str,
@@ -447,6 +466,65 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
+
+    def group_dev_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group or a gateway.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        # dev_types = ["gw"]
+        # dev_match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        # match = [*self.get_group_identifier(incomplete, completion=True), *dev_match]
+        match = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m[0], m[1]
+
+    def send_cmds_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Completion for argument that can be either group, site, or a gateway or keyword "commands".
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        if args[-1] == "all":
+            yield "commands"
+        elif args[-1] in ["commands", "file"]:
+            yield None
+        elif args[-1] not in ["group", "site", "devices"]:
+            yield "commands"
+        else:
+            if args[-1] == "group":
+                db = "group"
+            elif args[-1] == "site":
+                db = "site"
+            else:
+                db = "dev"
+
+            match = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
+
+            out = []
+            if match:
+                for m in sorted(match, key=lambda i: i.name):
+                    out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
+
+                for m in out:
+                    yield m[0], m[1]
 
     def group_completion(
         self,
@@ -734,7 +812,13 @@ class Cache:
             return resp
 
     async def update_template_db(self):
-        groups = self.groups if self.central.get_all_groups in self.updated else None
+        # groups = self.groups if self.central.get_all_groups in self.updated else None
+        if self.central.get_all_groups not in self.updated:
+            gr_resp = await self.update_group_db()
+            if not gr_resp.ok:
+                return gr_resp
+
+        groups = self.groups
         resp = await self.central.get_all_templates(groups=groups)
         if resp.ok:
             resp.output = utils.listify(resp.output)
@@ -830,7 +914,7 @@ class Cache:
             if not all([r.ok for r in db_res]):
                 # if db_res and False in db_res:
                 res_map = ["dev_db", "site_db", "template_db", "group_db"]
-                res_map = ", ".join([db for idx, db in enumerate(res_map) if not db_res(idx)])
+                res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
                 # log.error(f"TinyDB returned error ({res_map}) during db update")
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
@@ -887,8 +971,9 @@ class Cache:
         device_type: Union[str, List[str]] = None,
         group: str = None,
         multi_ok: bool = False,
+        all: bool = False,
         completion: bool = False,
-    ) -> CentralObject:
+    ) -> Union[CentralObject, List[CentralObject]]:
         """Get Identifier when iden type could be one of multiple types.  i.e. device or group
 
         Args:
@@ -899,6 +984,7 @@ class Cache:
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
             multi_ok (bool, optional): DEPRECATED, NO LONGER USED
+            all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
                 When called for completion it will fail silently and will return multiple when multiple matches are found.
 
@@ -906,9 +992,11 @@ class Cache:
             typer.Exit: If not ran for completion, and there is no match, exit with code 1.
 
         Returns:
-            CentralObject
+            CentralObject or list[CentralObject, ...]
         """
         # DEPRECATED remove multi_ok once verified refs are removed
+        if multi_ok:
+            log.warning("DEV NOTE: get_identifier called with deprecated kwarg mutli_ok", show=True)
         match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
@@ -934,6 +1022,10 @@ class Cache:
                 )
 
         if completion:
+            if all:
+                if "all".startswith(qry_str.lower()):
+                    match = utils.listify(match)
+                    match += CentralObject("dev", {"name": "all", "help_text": "All Devices"})
             return match
 
         if not match:
@@ -963,7 +1055,7 @@ class Cache:
             # Try exact match
             match = self.DevDB.search(
                 (self.Q.name == query_str)
-                | (self.Q.ip.test(lambda v: v.split("/")[0] == query_str))
+                | (self.Q.ip.test(lambda v: v and v.split("/")[0] == query_str))
                 | (self.Q.mac == utils.Mac(query_str).cols)
                 | (self.Q.serial == query_str)
             )
@@ -1267,9 +1359,12 @@ class Cache:
         if "audit_trail" in query:
             return query
         elif query == "":  # tab completion
-            return [x["id"] for x in self.logs]
+            return ["cencli", *[x["id"] for x in self.logs]]
 
         try:
+
+            if "cencli".startswith(query.lower()):
+                return ["cencli"]
 
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:

@@ -9,7 +9,7 @@
         // disregard... This didn't work, the promptString executes prior to the task
         "label": "show-prev-args",
         "type": "shell",
-        "command": "[[ -f ${workspaceFolder}/.vscode/prev_args ]] && cat ${workspaceFolder}/.vscode/prev_args"
+        "command": "[[ -f ${workspaceFolder}/.vscode/prev_args ]] && cat ${workspaceFolder}/.vscode/prev_args && sleep 3"
       },
       {
         "label": "pre-get-args",

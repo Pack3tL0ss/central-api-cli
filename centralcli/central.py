@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Tuple, Union
 from datetime import datetime, timedelta
 
-from aiohttp import ClientSession
+# from aiohttp import ClientSession
 import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
@@ -56,6 +56,7 @@ DEFAULT_ACCESS_RULES = {
     ],
 }
 
+START = time.monotonic()
 
 class WlanType(str, Enum):
     employee = "employee"
@@ -108,7 +109,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
         # falling back to default for load of central for auto completion
         central_info = config.data["central_info"]
     token_store = config.token_store
-    ssl_verify = config.data.get("ssl_verify", True)
+    ssl_verify = central_info.get("ssl_verify", config.data.get("ssl_verify", True))
 
     conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=ssl_verify)
     token_cache = Path(tokenLocalStoreUtil(token_store, central_info["customer_id"], central_info["client_id"]))
@@ -134,28 +135,9 @@ def get_conn_from_file(account_name, logger: MyLogger = log):
 
     return conn
 
-
-class BatchRequest:
-    def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
-        """Constructor object for for api requests.
-
-        Used to pass multiple requests into CentralApi batch_request method for parallel
-        execution.
-
-        Args:
-            func (callable): The CentralApi method to execute.
-            args (Any, optional): args passed on to method. Defaults to ().
-            kwargs (dict, optional): kwargs passed on to method. Defaults to {}.
-        """
-        self.func = func
-        self.args: Union[list, tuple] = args if isinstance(args, (list, tuple)) else (args, )
-        self.kwargs = kwargs
-
-
 class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
         self.silent = False  # toggled in _batch_request to squelch Auto logging in Response
-        self.BatchRequest = BatchRequest
         if config.valid and constants.do_load_pycentral():
             self.auth = get_conn_from_file(account_name)
             super().__init__(auth=self.auth)
@@ -193,103 +175,6 @@ class CentralApi(Session):
             log.error("Unexpected response type no sort performed.", show=True)
 
         return resp
-
-    async def _request(self, func: callable, *args, **kwargs):
-        async with ClientSession() as self.aio_session:
-            return await func(*args, **kwargs)
-
-    def request(self, func: callable, *args, **kwargs) -> Response:
-        """non async to async wrapper for all API calls
-
-        Args:
-            func (callable): One of the CentralApi methods
-
-        Returns:
-            centralcli.response.Response object
-        """
-        log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
-        return asyncio.run(self._request(func, *args, **kwargs))
-
-    async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
-        async with ClientSession() as self.aio_session:
-            # Always run first call solo to ensure access token validity
-            self.silent = True
-            resp = await api_calls[0].func(
-                *api_calls[0].args,
-                **api_calls[0].kwargs
-                )
-            if not resp or len(api_calls) == 1:
-                return [resp]
-
-            m_resp = await asyncio.gather(
-                *[call.func(*call.args, **call.kwargs) for call in api_calls[1:]]
-            )
-            self.silent = False
-
-            log.debug(f"{[r.rl.remain_per_sec for r in [resp, *m_resp]]}")
-
-            return [resp, *m_resp]
-
-    def batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
-        """non async to async wrapper for multiple parallel API calls
-
-        First entry is ran alone, if successful the remaining calls
-        are made in parallel.
-
-        Args:
-            api_calls (List[BatchRequest]): List of BatchRequest objects.
-
-        Returns:
-            List[Response]: List of centralcli.response.Response objects.
-        """
-        return asyncio.run(self._batch_request(api_calls))
-
-    async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, params=params, headers=headers, **kwargs)
-
-    async def post(
-        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
-    ) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        if json_data:
-            json_data = self.strip_none(json_data)
-        return await self.api_call(
-            f_url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
-        )
-
-    async def put(
-        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
-    ) -> Response:
-
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(
-            f_url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
-        )
-
-    async def patch(self, url, params: dict = {}, payload: dict = None,
-                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, method="PATCH", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
-
-    async def delete(
-        self,
-        url,
-        params: dict = {},
-        payload: dict = None,
-        json_data: Union[dict, list] = None,
-        headers: dict = None,
-        **kwargs
-    ) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, method="DELETE", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
 
     @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
@@ -529,8 +414,8 @@ class CentralApi(Session):
         #         resp.output = wlan_resp.output + wired_resp.output
 
         reqs = [
-            BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
-            BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
+            self.BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
+            self.BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
         ]
         resp = await self._batch_request(reqs)
         if len(resp) == 2 and all(x.ok for x in resp):
@@ -918,7 +803,7 @@ class CentralApi(Session):
             batch_reqs = []
             for groups in utils.chunker(resp.output, 20):  # This call allows a max of 20
                 params = {"groups": ",".join(groups)}
-                batch_reqs += [BatchRequest(self.get, url, params=params)]
+                batch_reqs += [self.BatchRequest(self.get, url, params=params)]
                 # all_groups = await self.get(url, params=params)
                 # TODO dunder add in Response
             batch_resp = await self._batch_request(batch_reqs)
@@ -938,30 +823,41 @@ class CentralApi(Session):
         """Get data for all defined templates from Aruba Central
 
         Args:
-            groups (List[dict], optional): List of group dictionaries (Used to send cache vs trigerring a fresh API call).
-                                           Defaults to None (Central will first be queried for all groups)
+            groups (List[dict], optional): List of group dictionaries (If provided additional API
+                calls to get group names for all template groups are not performed).
+                Defaults to None.
 
         Returns:
             Response: centralcli Response Object
         """
         if not groups:
             resp = await self.get_all_groups()
-            if resp:
-                groups = resp.output
-            else:
+            if not resp:
                 return resp
+            groups = cleaner.get_all_groups(resp.output)
 
-        template_groups = [g["name"] for g in groups if True in g.get("template group", {}).values()]
+        template_groups = [g["name"] for g in groups if True in g["template group"].values()]
+
         if not template_groups:
-            return Response(ok=True, output=[])
+            return Response(ok=True, output="None of the configured groups are Template Groups.")
+
         reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
+        # TODO maybe call the aggregator from _bath_request
         responses = await self._batch_request(reqs)
         failed = [r for r in responses if not r]
-        if failed:
+        if failed:  # TODO may be able to return list
             return failed[-1]
 
-        all_templates = [rr for r in responses for rr in r.output]
-        responses[-1].output = all_templates
+        # combine result for all calls into 1
+        # TODO aggregator Response object for multi response
+        # maybe add property to Response that returns dict being done with dict comp below
+        all_output = [rr for r in responses for rr in r.output]
+        all_raw = {
+            f"[{r.error}] {r.method} {r.url.path if not int(r.url.query.get('offset', 0)) else r.url.path_qs}": r.raw
+            for r in responses
+        }
+        responses[-1].output = all_output
+        responses[-1].raw = all_raw
 
         return responses[-1]
 
@@ -990,7 +886,7 @@ class CentralApi(Session):
         }
         _output = {}
 
-        reqs = [BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
+        reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failures = [idx for idx, r in enumerate(res) if not (r)]
         if _failures:
@@ -1041,6 +937,28 @@ class CentralApi(Session):
         url = f"/monitoring/v1/switches/{serial}/ports"
 
         params = {"slot": slot}
+
+        return await self.get(url, params=params)
+
+    async def get_switch_poe_detail(
+        self,
+        serial: str,
+        port: str = None,
+    ) -> Response:
+        """Get switch port poe info.
+
+        Args:
+            serial (str): Filter by switch serial
+            port (str, optional): Filter by switch port
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/switches/{serial}/poe_detail"
+
+        params = {
+            'port': str(port)
+        }
 
         return await self.get(url, params=params)
 
@@ -1604,6 +1522,7 @@ class CentralApi(Session):
 
         return await self.put(url)
 
+    # API-FLAW Test webhook does not send an "id", it's how you determine what to Close
     async def test_webhook(
         self,
         wid: str,
@@ -1934,8 +1853,15 @@ class CentralApi(Session):
         url = f"/configuration/v1/groups/{group}/snapshots"
         return await self.get(url)
 
-    async def get_mc_tunnels(self, serial: str, timerange: str, limit: int = 250, offset: int = 0) -> Response:
-        """Mobility Controllers Uplink Tunnel Details.
+    async def get_gw_tunnels(
+        self, serial: str,
+        timerange: str = "1M",
+        limit: int = 250,
+        offset: int = 0
+    ) -> Response:
+        """Get gateway Uplink tunnel details.
+
+        // Used by wh_proxy, currently not used by a command will be in show gateway tunnels //
 
         Args:
             serial (str): Serial number of mobility controller to be queried
@@ -1947,9 +1873,13 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/mobility_controllers/{serial}/tunnels"
+        url = f"/monitoring/v1/gateways/{serial}/tunnels"
 
-        params = {"timerange": timerange, offset: offset, limit: limit}
+        params = {
+            "timerange": timerange,
+            "offset": offset,
+            "limit": limit
+        }
 
         return await self.get(url, params=params)
 
@@ -2107,7 +2037,7 @@ class CentralApi(Session):
                 # TODO _batch_requests
                 ret = await self._batch_request(
                     [
-                        BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
+                        self.BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
                         for _json in site_list[1:]
                     ]
                 )
@@ -2757,13 +2687,14 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_groups_properties(self, groups: Union[str, List[str]]) -> Response:
+    async def get_groups_properties(self, groups: Union[str, List[str]] = None) -> Response:
         """Get properties set for groups.
 
         // Used by show groups when -v flag is provided //
 
         Args:
-            groups (List[str]): Group list to fetch properties.
+            groups (List[str], optional): Group list to fetch properties.
+                Will fetch all if no groups provided.
                 Maximum 20 comma separated group names allowed.
 
         Returns:
@@ -2773,10 +2704,16 @@ class CentralApi(Session):
 
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
+        if groups is None:
+            resp = await self._get_group_names()
+            if not resp.ok:
+                return resp
+            else:
+                groups = resp.output
         batch_reqs = []
         for _groups in utils.chunker(groups, 20):  # This call allows a max of 20
             params = {"groups": ",".join(_groups)}
-            batch_reqs += [BatchRequest(self.get, url, params=params)]
+            batch_reqs += [self.BatchRequest(self.get, url, params=params)]
         batch_resp = await self._batch_request(batch_reqs)
         # TODO method to combine raw and output attrs of all responses into last resp
         output = [r for res in batch_resp for r in res.output]
@@ -2915,7 +2852,7 @@ class CentralApi(Session):
         if isinstance(site_id, list):
             return await self._batch_request(
                 [
-                    BatchRequest(self.delete, (f"{b_url}/{_id}",))
+                    self.BatchRequest(self.delete, (f"{b_url}/{_id}",))
                     for _id in site_id
                 ]
             )
@@ -3928,7 +3865,7 @@ class CentralApi(Session):
         ack: bool = None,
         fields: str = None,
         offset: int = 0,
-        limit: int = 500,
+        limit: int = 1000,
     ) -> Response:
         """[central] List Notifications/Alerts.  Returns 1 day by default.
 
@@ -4079,7 +4016,8 @@ class CentralApi(Session):
 
         Args:
             serial (str): Serial Number of AP
-            clis (List[str]): Whole per AP setting List in CLI format
+            clis (List[str]): All per AP setting List in CLI format
+                Must provide all per AP settings, not partial
 
         Returns:
             Response: CentralAPI Response object
@@ -4091,6 +4029,56 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def get_brach_health(
+        self,
+        name: str = None,
+        column: int = None,
+        reverse: bool = False,
+        filters: dict = {},
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get data for all sites.
+
+        Args:
+            name (str, optional): site / label name or part of its name
+            column (int, optional): Column to sort on
+            reverse (bool, optional): Sort in reverse order:
+                * asc - Ascending, from A to Z.
+                * desc - Descending, from Z to A.
+                Valid Values: asc, desc
+            filters (str, optional): Site thresholds
+                * All properties of a site can be used as filter parameters with a threshold
+                * The range filters can be combined with the column names with "\__"  # noqa
+                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in  # noqa
+                down state
+                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan  # noqa
+                in down state
+                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10  # noqa
+                devices in up state
+                Valid Values: gt  (Greater than), lt  (Less than), gte (Greater than or equal to),
+                lte (Less than or equal to)
+            offset (int, optional): pagination start index Defaults to 0.
+            limit (int, optional): pagination size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/branchhealth/v1/site"
+
+        params = {
+            "name": name,
+            # "column": column,
+            "order": "asc" if not reverse else "desc",
+            # "wan_tunnels_down\__gt": "0",
+            # "wan_uplinks_down\__gt": "0",
+            # **filters,
+            "offset": offset,
+            "limit": limit,
+        }
+
+        return await self.get(url, params=params)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,11 @@ import typer
 from pathlib import Path
 import sys
 
+import click
+
+from rich.traceback import install
+install(show_locals=True, suppress=[click])
+
 # try:
 #     from icecream import ic
 # except Exception:
@@ -55,6 +60,11 @@ log_file = log_dir / f"{__name__}.log"
 
 if '--debug' in str(sys.argv):
     config.debug = True  # for the benefit of the 2 log messages below
+if '--debugv' in str(sys.argv):
+    config.debugv = True
+    _ = sys.argv.pop(sys.argv.index("--debugv"))
+
+# TODO pop debugv from sys.argv update config
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 

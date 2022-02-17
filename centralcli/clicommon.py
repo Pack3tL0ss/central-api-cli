@@ -4,7 +4,7 @@
 import typer
 import sys
 import time
-from typing import Dict, List, Literal, Union
+from typing import Dict, List, Literal, Union, Tuple
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -165,6 +165,20 @@ class CLICommon:
             return default
 
     @staticmethod
+    def send_cmds_node_callback(ctx: typer.Context, commands: Union[str, Tuple[str]]):
+        if ctx.resilient_parsing:  # tab completion, return without validating
+            return
+
+        # utils.json_print(ctx.__dict__)
+        # utils.json_print(ctx.parent.__dict__)
+        # utils.json_print(locals())
+        if ctx.params["kw1"].lower() == "all" and ctx.params["nodes"].lower() == "commands":
+            ctx.params["nodes"] = None
+            return tuple([ctx.params["kw2"], *commands])
+        else:
+            return commands
+
+    @staticmethod
     def debug_callback(ctx: typer.Context, debug: bool):
         if ctx.resilient_parsing:  # tab completion, return without validating
             return False
@@ -300,12 +314,16 @@ class CLICommon:
             if self.raw_out and tablefmt in ["simple", "rich"]:
                 tablefmt = "json"
 
+            # TODO make sure "account" is not valid then remove from list below
+            if config.account == "account":
+                log.warning("DEV NOTE account is 'account'", show=True)
+
             kwargs = {
                 "outdata": data,
                 "tablefmt": tablefmt,
                 "title": title,
                 "caption": caption,
-                "account": None if config.account in ["central_info", "account"] else config.account,
+                "account": None if config.account in ["central_info", "default", "account"] else config.account,
                 "config": config,
                 "set_width_cols": set_width_cols,
                 "full_cols": full_cols,
@@ -320,11 +338,13 @@ class CLICommon:
 
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-            if "Limit:" not in outdata and caption is not None:
+            if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
                 print(caption)
 
             if outfile and outdata:
                 self.write_file(outfile, outdata.file)
+        else:
+            log.warning(f"No data passed to _display_output {title} {caption}")
 
     def display_results(
         self,
@@ -400,7 +420,7 @@ class CLICommon:
                 }
                 fg = "bright_green" if r else "red"
                 if len(resp) > 1:
-                    _url = r.url if not hasattr(r.url, "path") else r.url.path
+                    _url = r.url if not hasattr(r.url, "raw_path_qs") else r.url.path
                     # typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
                     m_color = m_colors.get(r.method, "reset")
                     print(
@@ -433,8 +453,6 @@ class CLICommon:
                     if idx + 1 == len(resp):
                         console.print(f"\n{rl_str}")
 
-                    if not r and exit_on_fail:
-                        raise typer.Exit(1)
                 else:
                     self._display_results(
                         r.output,
@@ -452,6 +470,14 @@ class CLICommon:
                         cleaner=cleaner,
                         **cleaner_kwargs
                     )
+
+            # TODO make elegant caas send-cmds uses this logic
+            if cleaner and cleaner.__name__ == "parse_caas_response":
+                print(caption)
+
+            if exit_on_fail and not all([r.ok for r in resp]):
+                print("DEBUG error code return")
+                raise typer.Exit(1)
 
         elif data:
             self._display_results(

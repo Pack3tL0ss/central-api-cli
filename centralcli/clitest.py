@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import List
-import typer
+import importlib
 import sys
 from pathlib import Path
-import importlib
+from typing import List
 
-
+import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -82,15 +81,20 @@ def method(
 
     Displays all attributes of Response object
     """
-    cli.cache(refresh=update_cache)
+    # FIXME account only works if method is in central.py
     central = CentralApi(account)
+    cli.cache(refresh=update_cache)
     if not hasattr(central, method):
+        if account != "central_info":
+            print("Testing methods only supports the --account option for methods in central.py")
+            raise typer.Exit(1)
         bpdir = Path(__file__).parent / "boilerplate"
         all_calls = [
             importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
             if not f.name.startswith("_") and f.suffix == ".py"
         ]
         for m in all_calls:
+            log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
             if hasattr(m.AllCalls(), method):
                 central = m.AllCalls()
                 break
@@ -106,8 +110,9 @@ def method(
     kwargs = [k.split("=") for k in kwargs if "=" in k]
     kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
     for arg in args:
-        if arg.startswith("[") and arg.endswith("]"):
-            args[args.index(arg)] = [a if not a.isdigit() else int(a) for a in arg.strip("[]").split(",")]
+        if isinstance(arg, str):
+            if arg.startswith("[") and arg.endswith("]"):
+                args[args.index(arg)] = [a if not a.isdigit() else int(a) for a in arg.strip("[]").split(",")]
     for k, v in kwargs.items():
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):

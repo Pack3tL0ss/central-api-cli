@@ -165,7 +165,10 @@ class Config:
 
             # No config found trigger first run wizard
             if not self.file.exists() and sys.stdin.isatty():
-                self.first_run()
+                if "-completion" not in str(sys.argv):
+                    self.first_run()
+                else:
+                    ...  # TODO add typer.confirm(No config found ...)
 
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
@@ -230,8 +233,24 @@ class Config:
             return self.data[self.account].get(key, default)
 
     @staticmethod
-    def get_file_data(import_file: Path) -> dict:
-        '''Return dict from yaml/json/csv... file.'''
+    def get_file_data(import_file: Path, text_ok: bool = False) -> Union[dict, list]:
+        """Returns dict from yaml/json/csv or list of lines from file when text_ok=True.
+
+        Args:
+            import_file (Path): import file.
+            text_ok (bool, optional): When file extension is not one of yaml/yml/json/csv/tsv...
+                parse file as text and return list of lines. Defaults to False.
+
+        Raises:
+            UserWarning: Raises UserWarning when text_ok is False (default) and extension is
+                not in ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+            UserWarning: Raises UserWarning when a failure occurs when parsing the file,
+                passes on the underlying exception.
+
+        Returns:
+            Union[dict, list]: Normally dict, list when text_ok and file extension not in
+                ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx'].
+        """
         if import_file.exists() and import_file.stat().st_size > 0:
             with import_file.open() as f:
                 try:
@@ -242,6 +261,8 @@ class Config:
                     elif import_file.suffix in ['.csv', '.tsv', '.dbf', '.xls', '.xlsx']:
                         with import_file.open('r') as fh:
                             return tablib.Dataset().load(fh)
+                    elif text_ok:
+                        return [line.rstrip() for line in import_file.read_text().splitlines()]
                     else:
                         raise UserWarning(
                             "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"

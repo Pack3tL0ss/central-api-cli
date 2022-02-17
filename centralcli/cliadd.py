@@ -233,6 +233,8 @@ def group(
             asyncio.run(
                 cli.cache.update_group_db({'name': group, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
             )
+        else:
+            raise typer.Exit(1)
 
 
 # TODO autocompletion
@@ -345,6 +347,8 @@ def site(
         cli.display_results(resp)
         if resp:
             asyncio.run(cli.cache.update_site_db(resp.raw))
+        else:
+            raise typer.Exit(1)
 
 
 @app.command(short_help="Add a WebHook")
@@ -366,6 +370,8 @@ def webhook(
         resp = cli.central.request(cli.central.add_webhook, name, urls)
 
         cli.display_results(resp, tablefmt="action")
+        if not resp:
+            raise typer.Exit(1)
 
 
 @app.callback()

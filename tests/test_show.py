@@ -253,14 +253,14 @@ def test_show_switch_vlans_by_name():
 
 
 def test_show_events_past():
-    result = runner.invoke(app, ["show", "events", "--past", "30m", "--no-pager"],)
+    result = runner.invoke(app, ["show", "events", "--past", "30m"],)
     assert result.exit_code == 0
     assert "Event Logs" in result.stdout
     assert "description" in result.stdout
 
 
 def test_show_clients():
-    result = runner.invoke(app, ["show", "clients", "--no-pager"],)
+    result = runner.invoke(app, ["show", "clients"],)
     assert result.exit_code == 0
     assert "All Clients" in result.stdout
     assert "mac" in result.stdout
