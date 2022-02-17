@@ -21,9 +21,6 @@ except Exception:
 #     import better_exceptions # noqa
 # except Exception:
 #     pass
-from rich.traceback import install
-install(show_locals=True)
-
 
 TinyDB.default_table_name = "devices"
 
@@ -815,7 +812,13 @@ class Cache:
             return resp
 
     async def update_template_db(self):
-        groups = self.groups if self.central.get_all_groups in self.updated else None
+        # groups = self.groups if self.central.get_all_groups in self.updated else None
+        if self.central.get_all_groups not in self.updated:
+            gr_resp = await self.update_group_db()
+            if not gr_resp.ok:
+                return gr_resp
+
+        groups = self.groups
         resp = await self.central.get_all_templates(groups=groups)
         if resp.ok:
             resp.output = utils.listify(resp.output)
@@ -1356,9 +1359,12 @@ class Cache:
         if "audit_trail" in query:
             return query
         elif query == "":  # tab completion
-            return [x["id"] for x in self.logs]
+            return ["cencli", *[x["id"] for x in self.logs]]
 
         try:
+
+            if "cencli".startswith(query.lower()):
+                return ["cencli"]
 
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:
