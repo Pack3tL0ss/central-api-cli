@@ -279,7 +279,6 @@ def _client_concat_associated_dev(
     verbose: bool = False,
     cache=None,
 ) -> Dict[str, Any]:
-    # FIXME
     if cache is None:
         from centralcli import cache
     strip_keys = [
@@ -860,5 +859,65 @@ def get_all_webhooks(data: list) -> list:
     data = [
         dict(short_value(k, d[k]) for k in d) for d in strip_no_value(data)
     ]
+
+    return data
+
+def get_branch_health(data: list, down: bool = False, wan_down: bool = False) -> list:
+    field_order = [
+                "name",
+                "potential_issue",
+                "device_up",
+                "device_down",
+                "connected_count",
+                "failed_count",
+                "wan_tunnels_down",
+                "wan_tunnels_no_issue",
+                "wan_uplinks_down",
+                "wan_uplinks_no_issue",
+                "branch_cpu_high",
+                "branch_device_status_up",
+                "branch_device_status_down",
+                "cape_state",
+                "cape_state_dscr",
+                "cape_url",
+                "device_high_ch_2_4ghz",
+                "device_high_ch_5ghz",
+                "device_high_cpu",
+                "device_high_mem",
+                "device_high_noise_2_4ghz",
+                "device_high_noise_5ghz",
+                "insight_hi",
+                "insight_lo",
+                "insight_mi",
+                "score",
+                "silverpeak_state",
+                "silverpeak_state_summary",
+                "silverpeak_url",
+                "user_conn_health_score",
+                "wired_cpu_high",
+                "wired_device_status_down",
+                "wired_device_status_up",
+                "wired_mem_high",
+                "wlan_cpu_high",
+                "wlan_device_status_down",
+                "wlan_device_status_up",
+                "branch_mem_high",
+                "wlan_mem_high",
+    ]
+    # if wan_down:
+    #     test = lambda d: d["wan_uplinks_down"] > 0 or d["wan_tunnels_down"] > 0
+    # elif down:
+    #     test = lambda d: d["device_down"] > 0
+    # else:
+    #     test = lambda d: True
+
+    # data = [
+    #     dict(short_value(k, d[k]) for k in field_order) for d in data if test(d)
+    # ]
+    data = [
+        dict(short_value(k, d[k]) for k in field_order) for d in data
+    ]
+    data = strip_no_value(data)
+
 
     return data
