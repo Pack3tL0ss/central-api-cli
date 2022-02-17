@@ -1,7 +1,10 @@
+from os import environ
 from pathlib import Path
 from typing import Union
 from logging.handlers import RotatingFileHandler
+from time import sleep
 from rich.console import Console
+from rich.logging import RichHandler
 
 import logging
 import typer
@@ -14,7 +17,14 @@ log_colors = {
     "fatal": typer.colors.RED,
     "warning": typer.colors.YELLOW,
 }
-console = Console()
+# log_colors = {
+#     "error": "[bright_red]",
+#     "exception": "[bright_red]",
+#     "critical": "[bright_red]",
+#     "fatal": "[bright_red]",
+#     "warning": "[dark_orange4]",
+# }
+console = Console(emoji=False, markup=False)
 to_debug = [
     "Loaded token from storage from file"
 ]
@@ -39,16 +49,20 @@ class MyLogger:
         else:
             raise AttributeError(f"'MyLogger' object has no attribute '{name}'")
 
-    def get_logger(self):
+    def get_logger(self) -> logging.Logger:
         '''Return custom log object.'''
-        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
         dateStr = "%m/%d/%Y %I:%M:%S %p"
+        # fmtStr = "%(message)s"
+        # dateStr = "[%X]"
         logging.basicConfig(
             # filename=self.log_file.absolute(),
             level=logging.DEBUG if self.DEBUG else logging.INFO,
             format=fmtStr,
             datefmt=dateStr,
             handlers=[
+                # RichHandler(rich_tracebacks=True, tracebacks_show_locals=True, show_path=False),
                 RotatingFileHandler(self.log_file.absolute(),  maxBytes=250000, backupCount=5,),
             ],
         )
@@ -56,6 +70,24 @@ class MyLogger:
 
     def print_file(self):
         console.print(self.log_file.read_text(),)
+
+    def follow(self):
+        '''generator function that yields new lines in log file
+        '''
+        with self.log_file.open("r") as lf:
+            lines = lf.readlines()
+            console.print("".join(lines[int(f"-{len(lines) if len(lines) <= 20 else 20}"):]).rstrip())
+
+            while True:
+                try:
+                    line = lf.readline()
+                    if not line:
+                        sleep(1)
+                        continue
+
+                    console.print(line.rstrip())
+                except (KeyboardInterrupt, EOFError):
+                    break
 
     def log_print(self, msgs, log: bool = False, show: bool = False, level: str = 'info', *args, **kwargs):
         # TODO can prob remove log_msgs, used by another project I re-used this object from (ConsolePi)
@@ -76,8 +108,13 @@ class MyLogger:
         if True in [show, self.show]:
             self.log_msgs += _msgs
             for m in self.log_msgs:
-                typer.secho(m, fg=log_colors.get(level))
+                if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
+                    typer.secho(m, fg=log_colors.get(level))
             self.log_msgs = []
+
+    @property
+    def level_name(self):
+        return logging.getLevelName(self._log.level)
 
     @property
     def DEBUG(self):
