@@ -31,7 +31,6 @@ Then run via
 # from enum import auto
 from pathlib import Path
 import sys
-from threading import get_ident
 from rich import print
 import typer
 from typing import List
@@ -49,10 +48,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+cache = cli.cache
+
 tty = utils.tty
 iden = constants.IdenMetaVars()
 app = typer.Typer()
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
+
 
 
 @app.command(short_help="Import Apply settings from bulk-edit.csv")
@@ -235,28 +237,57 @@ def caas_batch(
             caas.eval_caas_response(resp)
 
 
-@app.command(help="Send commands to gateway(s) (group or device level)", short_help="Send commands to gateways", hidden=True)
+
+    # Determine devices to send commands to.
+    # if dev_file:
+    #     devices = [
+    #         cache.get_dev_identifier(d, dev_type="gw") for d in dev_file.read_text().splitlines()
+    #     ]
+    #     if node:
+    #         devices += [cache.get_dev_identifier(node)]
+    # elif node:
+    #     devices = [cache.get_dev_identifier(node, dev_type="gw")]
+
+    # if group:
+    #     group = cache.get_group_identifier(group)
+    #     if all:
+    #         devices = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] == group.name]
+    #         action = f"all devices in {group.name} group."
+    #     elif devices:
+    #         devices = [d for d in devices if d.group == group.name]
+    #         action = "\n".join(node)
+    #     else:
+    #         devices = [group.name]
+    # elif site:
+    #     site = cache.get_site_identifier(site)
+    #     if all:
+    #         devices = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] == site.name]
+    #     elif devices:
+    #         devices = [d for d in devices if d.site == site.name]
+
+@app.command(help="Send commands to gateway(s) (group or device level)", short_help="Send commands to gateways", hidden=False,)
 def send_cmds(
-    device: str = typer.Argument(
-        None,
-        autocompletion=cli.cache.dev_gw_completion,
-        hidden=True,
-        is_eager=True,
+    kw1: constants.SendCmdArgs = typer.Argument(
+        ...,
     ),
-    commands: List[str] = typer.Argument(None),
+    nodes: str = typer.Argument(
+        None,
+        autocompletion=cache.send_cmds_completion,
+        metavar=iden.group_or_dev_or_site,
+        # callback=cli.send_cmds_node_callback,
+        # is_eager=True,
+    ),
+    kw2: str = typer.Argument(
+        None,
+        autocompletion=cache.send_cmds_completion,
+        # callback=cli.send_cmds_node_callback,
+    ),
+    commands: List[str] = typer.Argument(None, callback=cli.send_cmds_node_callback),
     cmd_file: Path = typer.Option(None, help="Path to file containing commands (1 per line) to be sent to device", exists=True),
-    dev_file: Path = typer.Option(None, help="Path to file containing iden for devices to send commands to", exists=True),
-    # devices: List[str] = typer.Option(
-    #     None,
-    #     metavar=iden.dev,
-    #     autocompletion=cli.cache.dev_gw_completion,
-    #     help="Gateways to send commands to",
-    #     is_eager=True,
-    # ),
-    group: str = typer.Option(None, help="Send commands to all gateways in a group", autocompletion=cli.cache.group_completion),
-    site: str = typer.Option(None, help="Send commands to all gateways in a site", autocompletion=cli.cache.site_completion),
-    # file: Path = typer.Option(None, exists=True,),
-    # all: bool = typer.Option(False, "--all", help="Send command to all gateways in the site or group.  Requires --site or --group option"),
+    # dev_file: Path = typer.Option(None, help="Path to file containing iden for devices to send commands to", exists=True),
+    # group: bool = typer.Option(None, help="Send commands to all gateways in a group", autocompletion=cli.cache.group_completion),
+    # site: bool = typer.Option(None, help="Send commands to all gateways in a site", autocompletion=cli.cache.site_completion),
+    all: bool = typer.Option(False, "-A", help="Send command(s) to all gateways (device level update) when group is provided"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
@@ -271,79 +302,58 @@ def send_cmds(
     console = Console(emoji=False)
     yes = yes if yes else yes_
     commands = commands or []
-    if dev_file and device:
-        commands.insert(0, device)
-        device = None
-    elif group or site and device:
-        commands = [device, *commands]
-        device = None
-    # devices = devices if devices else device
-    error = None
-    if not commands and (not cmd_file and dev_file and not device):
-        error = "Error: No commands provided, provide as arguments or with --cmd-file <Path> option."
-    elif commands and cmd_file:
-        error = "Invalid combination, provide commands as arguments or --cmd-file <path> not both."
-    if all([x is None for x in [device, dev_file, group, site]]):
-        error = "Error: You must provide one --device --dev-file <Path> --group <group> --site <site>"
-    if site and group:
-        error = "Error: Invalid combination, provide only 1 of --site <site> --group <group>"
+    if kw1 == "group":
+        if all:
+            g = cache.get_group_identifier(nodes)
+            nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
+            action = f"all devices in {g.name} group."
+        else:
+            nodes = cache.get_group_identifier(nodes)
+            action = f"group level gateway config for {nodes.name} group."
+    elif kw1 == "site":
+        s = cache.get_group_identifier(nodes)
+        nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
+        action = f"all devices in site: {s.name}"
+    elif kw1 == "file":
+        dev_file = Path(nodes)
+        file_data = config.get_file_data(dev_file, text_ok=True)
+        if not file_data:
+            print(f"No data parsed from file {dev_file.name}.")
+            raise typer.Exit(1)
 
-    if error:
-        print(error)
-        raise typer.Exit(1)
+        if isinstance(file_data, list):
+            nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data]
+        else:
+            devices = file_data.get("devices", file_data.get("gateways"))
+            if devices:
+                nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data["devices"]]
+            elif "groups" in file_data:
+                nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
+            elif "sites" in file_data:
+                nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
+            else:
+                print(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
+                raise typer.Exit(1)
 
-    # Determine devices to send commands to.
-    all_group, all_site = False, False
-    if dev_file:
-        devices = [
-            cli.cache.get_dev_identifier(d, dev_type="gw") for d in dev_file.read_text().splitlines()
-        ]
-    if device:
-        # devices = [cli.cache.get_dev_identifier(d, dev_type="gw") for d in devices]
-        devices = [cli.cache.get_dev_identifier(device, dev_type="gw")]
-    if group:
-        group = cli.cache.get_group_identifier(group)
-        devices = [d for d in cli.cache.devices if d["type"] == "gw" and d["group"] == group.name]
-        all_group = True
-        # if devices:
-        #     devices = [d for d in devices if d.group == group.name]
-        # else:
-        #     devices = [d for d in cli.cache.devices if d.generic_type == "gw" and d.group == group.name]
-        #     all_group = True
-    if site:
-        site = cli.cache.get_site_identifier(site)
-        devices = [d for d in cli.cache.devices if d["type"] == "gw" and d["site"] == site.name]
-        all_site = True
-        # if devices:
-        #     devices = [d for d in devices if d.site == site.name]
-        # else:
-        #     devices = [d for d in cli.cache.devices if d.generic_type == "gw" and d.site == site.name]
-        #     all_site = True
-
-    if not devices:
-        print(f"Error: This command has a logic error, no devices based on current options")
-        raise typer.Exit(1)
-
+            if "cmds" in file_data or "commands" in file_data:
+                if commands:
+                    print("Providing commands on the command line and in the import file is a strange thing to do.")
+                    raise typer.Exit(1)
+                commands = file_data.get("cmds", file_data.get("commands"))
     if cmd_file:
-        commands = cmd_file.read_text().splitlines()
+        if commands:
+            print("Providing commands on the command line and in the import file is a strange thing to do.")
+            raise typer.Exit(1)
+        else:
+            commands = [line.rstrip() for line in cmd_file.read_text().splitlines()]
 
-    _cmds = "\n".join(commands)
-    console.print()
-    console.rule(f"Sending the following commands")
-    console.print(f"[bright_green]{_cmds}")
-    console.rule()
-    if all_group:
-        print(f"To all {len(devices)} gateways in {group.name} group.")
-    elif all_site:
-        print(f"To all {len(devices)} gateways in {site.name} branch.")
-    else:
-        print(f"\nTo the following {len(devices)} Gateways")
-        print(
-            "\n".join([f"[cyan]{d.name}[/cyan]|{typer.unstyle(d.help_text).replace('GW|', '')}" for d in devices])
-        )
+    if not commands:
+        print("Error No commands provided")
+        raise typer.Exit(1)
+
     if yes or typer.confirm("\nProceed?", abort=True):
         caasapi = caas.CaasAPI(central=cli.central)
-        _reqs = [cli.central.BatchRequest(caasapi.send_commands, dev["mac"], cli_cmds=commands) for dev in devices]
+        _reqs = [cli.central.BatchRequest(caasapi.send_commands, n.mac if n.is_dev else n.name, cli_cmds=commands) for n in nodes]
         batch_res = cli.central.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
         # caas.
