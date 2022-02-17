@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import asyncio
 from aiohttp.client_exceptions import ContentTypeError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
 from typing import Union, List, Any
 from rich import print
+from yarl import URL
+import aiohttp
 
 
 from centralcli import config, utils, log
@@ -14,40 +17,103 @@ from halo import Halo
 import sys
 import typer
 import json
-import aiohttp
+from aiohttp import ClientSession, ClientResponse
 import time
+
+
+# FIXME  Based on logs failed req is logged in 2 places
+# 02/09/2022 12:46:40 AM [1169][ERROR]: [Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/%5B'cencli'%5D Elapsed: 0.37046146392822266
+# 02/09/2022 12:46:40 AM [1169][ERROR]: [GET][Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/['cencli']
+# 02/09/2022 12:48:14 AM [1181][ERROR]: [Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/%5B'cencli'%5D Elapsed: 0.4578061103820801
+# 02/09/2022 12:48:14 AM [1181][ERROR]: [GET][Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/['cencli']
 
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
 }
+THROTTLE_BACKOFF = 0.5
+INIT_TS = time.monotonic()
+CENTRAL_MAX_CONNECTIONS = 7
 
 
-class RateLimit:
-    def __init__(self, resp: aiohttp.ClientResponse = None):
-        self.total, self.remain, self.total_per_sec, self.remain_per_sec = 0, 0, 0, 0
-        if resp and hasattr(resp, "headers"):
+
+class BatchRequest:
+    def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
+        """Constructor object for for api requests.
+
+        Used to pass multiple requests into CentralApi batch_request method for parallel
+        execution.
+
+        Args:
+            func (callable): The CentralApi method to execute.
+            args (Any, optional): args passed on to method. Defaults to ().
+            kwargs (dict, optional): kwargs passed on to method. Defaults to {}.
+        """
+        self.func = func
+        self.args: Union[list, tuple] = args if isinstance(args, (list, tuple)) else (args, )
+        self.kwargs = kwargs
+
+class LoggedRequests:
+    def __init__(self, url: str, method: str = "GET",):
+        self.ts = float(f"{time.monotonic() - INIT_TS:.2f}")
+        self.url = url
+        self.method = method
+        self.reason = None
+        self.ok = None
+        self.remain_day = None
+        self.remain_sec = None
+
+    def update(self, response: ClientResponse) -> None:
+        rh = response.headers
+        self.reason = response.reason
+        self.ok = response.ok
+        self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
+        self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
+
+        return self
+
+
+class RateLimit():
+    def __init__(self, resp: ClientResponse = None):
+        self.total_day, self.remain_day, self.total_sec, self.remain_sec = 0, 0, 0, 0
+        if hasattr(resp, "headers"):
             rh = resp.headers
-            self.total = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
-            self.remain = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
-            self.total_per_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
-            self.remain_per_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
-        self.used = self.total - self.remain
-        self.used_per_sec = self.total_per_sec - self.remain_per_sec
-        # self.ok = True if sum([self.total, self.used]) > 0 else False
-        self.ok = True if all([self.remain != 0, self.remain_per_sec > 1]) else False
-        self.call_performed = False if resp is None else True
+            self.total_day = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
+            self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
+            self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
+            self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
+            self.call_performed = True
+        else:
+            self.call_performed = False
+
+        self.used_day = self.total_day - self.remain_day
+        self.used_sec = self.total_sec - self.remain_sec
+        self.ok = True if all([self.remain_day != 0, self.remain_sec > 0]) else False
+        self.near_limit = self.near_sec or self.near_day
 
     def __str__(self):
         if self.call_performed:
-            return f"API Rate Limit: {self.remain} of {self.total} remaining." if self.ok else ""
+            return f"API Rate Limit: {self.remain_day} of {self.total_day} remaining."
         else:
             return "No API call was performed."
 
+    @property
+    def near_sec(self):
+        return True if self.remain_sec <= 2 else False
+
+    @property
+    def near_day(self):
+        return True if self.remain_day <= 100 else False
+
+    @property
+    def text(self):
+        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        return full_text if self.call_performed else str(self)
+
 
 class Response:
-    '''wrapper aiohttp.ClientResponse object
+    '''wrapper ClientResponse object
 
     Assigns commonly evaluated attributes regardless of API execution result
 
@@ -59,7 +125,7 @@ class Response:
         - status (int): http status code returned from response
 
     Create instance by providing at minimum one of the following parameters:
-        - response (aiohttp.ClientResponse): all other paramaters ignored if providing response
+        - response (ClientResponse): all other paramaters ignored if providing response
         - error (str): ok, output, status set to logical default if not provided
             OK / __bool__ is False if error is provided and ok is not.
         - output (Any): ok, error, status set to logical default if not provided
@@ -67,8 +133,8 @@ class Response:
     '''
     def __init__(
         self,
-        response: aiohttp.ClientResponse = None,
-        url: str = None,
+        response: ClientResponse = None,
+        url: Union[URL, str] = "",
         ok: bool = None,
         error: str = None,
         output: Any = {},
@@ -89,11 +155,15 @@ class Response:
             self.error = response.reason
             self.status = response.status
             self.method = response.method
+            _offset_str = ""
+            if "offset" in response.url.query and int(response.url.query['offset']) > 0:
+                _offset_str = f" offset: {response.url.query['offset']} limit: {response.url.query.get('limit', '?')}"
+            _log_msg = f"[{response.reason}] {response.method}:{response.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
-                log.error(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
+                log.error(_log_msg)
             else:
-                log.info(f"[{response.reason}] {response.url} Elapsed: {elapsed}")
+                log.info(_log_msg)
         else:
             if error:
                 self.ok = ok or False
@@ -103,15 +173,11 @@ class Response:
                 self.ok = ok or True
                 self.error = error or "OK"
 
-            self.url = str(url)
+            self.url = URL(url)
             self.status = status_code or 299 if self.ok else 418
 
         if self.output and "error" in self.output and "error_description" in self.output and isinstance(self.output, dict):
             self.output = f"{self.output['error']}: {self.output['error_description']}"
-
-    # @property
-    # def output(self) -> int:
-    #     return self.output
 
     def __bool__(self):
         return self.ok
@@ -131,7 +197,6 @@ class Response:
         if isinstance(val, dict):
             val = utils.output(outdata=[val], tablefmt="yaml")
             val = "\n".join([f"      {line}" for line in val.file.splitlines() if not line.endswith(": []")])
-            # val = "".join([f"\n    {k}: {val[k] if not isinstance(val[k], (dict, list) else )}" for k in val if val[k]])
 
         return val
 
@@ -141,6 +206,7 @@ class Response:
         else:
             status_code = ""
         r = self.output
+
         # indent single line output
         if isinstance(self.output, str):
             if "\n" not in self.output:
@@ -152,7 +218,6 @@ class Response:
                     r = "  {}".format(
                         self.output.replace('\n  ', '\n').replace('\n', '\n  ')
                     )
-                    # r = self.output
 
         if isinstance(self.output, dict):
             r = "\n".join(
@@ -191,7 +256,6 @@ class Response:
         return r.encode("UTF-8")
 
     def __getattr__(self, name: str) -> Any:
-        print(name)
         if hasattr(self, "output") and self.output:
             output = self.output
 
@@ -219,7 +283,7 @@ class Response:
             for k, v in self.output.items():
                 yield k, v
 
-    def get(self, key: Any, default: Any = None):
+    def get(self, key: Union[int, str], default: Any = None):
         if isinstance(self.output, dict):
             return self.output.get(key, default)
 
@@ -237,6 +301,7 @@ class Response:
         return self.status
 
 
+# TODO determine which is used.  same is in utils, can't recall if removed all refs one should be whacked
 def get_multiline_input(prompt: str = None, print_func: callable = print,
                         return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
     def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
@@ -275,11 +340,14 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
     return contents
 
 
-class Session:
+class Session():
+    RATE = 1
+    MAX_TOKENS = 6
+
     def __init__(
         self,
         auth: ArubaCentralBase = None,
-        aio_session: aiohttp.ClientSession = None,
+        aio_session: ClientSession = None,
         silent: bool = True,
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
@@ -289,38 +357,49 @@ class Session:
         self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
         self.ssl = auth.ssl_verify
         self.req_cnt = 1
-        self.requests: list = []
+        self.requests: List[LoggedRequests] = []
+        self.throttle: int = 0
         self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
         self.spinner._spinner_id = "spin_thread"
-
-    class LoggedRequests:
-        def __init__(self, url: str, method: str = "GET"):
-            self.url = url.split("arubanetworks.com")[-1]
-            self.method = method
+        self.tokens = self.MAX_TOKENS
+        self.updated_at = time.monotonic()
+        self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
+        self.BatchRequest = BatchRequest
 
     @property
     def aio_session(self):
-        return self._aio_session if self._aio_session and not self._aio_session.closed else aiohttp.ClientSession()
+        if self._aio_session:
+            if self._aio_session.closed:
+                # TODO finiish refactor
+                # log.warning("DEV NOTE: Client Session is closed. Providing new session.", show=True)
+                return ClientSession()
+            return self._aio_session
+        else:
+            # connector = aiohttp.TCPConnector(limit=CENTRAL_MAX_CONNECTIONS)
+            # return ClientSession(connector=connector)
+            return ClientSession()
+        # return self._aio_session if self._aio_session and not self._aio_session.closed else ClientSession()
 
     @aio_session.setter
-    def aio_session(self, session: aiohttp.ClientSession):
+    def aio_session(self, session: ClientSession):
         self._aio_session = session
 
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
-        self.requests += [self.LoggedRequests(url, method)]
         resp = None
-        _data_msg = ' ' if not url else f' [{url.split("arubanetworks.com/")[-1]}]'
+        # _url = URL(url).with_query({k: v for k, v in params.items() if k in {"offset", "limit"}})
+        _url = URL(url).with_query(params)
+        _data_msg = ' ' if not url else f' [{_url.path}]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
+        spin_txt_retry = ""
         spin_txt_fail = f"{spin_word} Data{_data_msg}"
         self.spinner.text = spin_txt_run
-        self.req_cnt += 1
         for _ in range(0, 2):
             if _ > 0:
-                spin_txt_run = f"{spin_txt_run} (retry after token refresh)"
+                spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -343,49 +422,79 @@ class Session:
                 call_data = utils.strip_none(call_data, strip_empty_obj=True)
                 utils.json_print(call_data)
 
+            headers = self.headers if not headers else {**self.headers, **headers}
             try:
-                _start = time.time()
-                headers = self.headers if not headers else {**self.headers, **headers}
+                req_log = LoggedRequests(_url.path_qs, method)
+
                 # -- // THE API REQUEST \\ --
+                #  -- // RATE LIMIT TEST \\ --
+                # await self.wait_for_token()
+                _start = time.monotonic()
+                now = time.monotonic() - INIT_TS
+                _try_cnt = [u.url for u in self.requests].count(_url.path_qs) + 1
+                self.rl_log += [
+                    f'{now:.2f} [{method}]{_url.path_qs} Try: {_try_cnt}'
+                ]
+                #  -- // RATE LIMIT TEST \\ --
                 self.spinner.start(spin_txt_run)
-                resp = await self.aio_session.request(
-                    method=method,
-                    url=url,
-                    params=params,
-                    data=data,
-                    json=json_data,
-                    headers=headers,
-                    ssl=self.ssl,
-                    **kwargs
-                )
+                self.req_cnt += 1
+                # TODO move batch_request _bacth_request, get, put, etc into Session
+                # change where client is instantiated to _request / _batch_requests pass in the client
+                # remove aio_session property call ClientSession() direct
+                async with self.aio_session as client:
+                    resp = await client.request(
+                        method=method,
+                        url=url,
+                        params=params,
+                        data=data,
+                        json=json_data,
+                        headers=headers,
+                        ssl=self.ssl,
+                        **kwargs
+                    )
+                    elapsed = time.monotonic() - _start
+                    self.requests += [req_log.update(resp)]
 
-                elapsed = time.time() - _start
-
-                try:
-                    output = await resp.json()
                     try:
-                        raw_output = output.copy()
-                    except AttributeError:
-                        raw_output = output
-                    output = cleaner.strip_outer_keys(output)
-                except (json.decoder.JSONDecodeError, ContentTypeError):
-                    output = raw_output = await resp.text()
+                        output = await resp.json()
+                        try:
+                            raw_output = output.copy()
+                        except AttributeError:
+                            raw_output = output
 
-                resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
+                        # Strip outer key sent by central
+                        output = cleaner.strip_outer_keys(output)
+                    except (json.decoder.JSONDecodeError, ContentTypeError):
+                        output = raw_output = await resp.text()
+
+                    resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
+
             except Exception as e:
-                resp = Response(error=str(e), url=url)
+                resp = Response(error=str(e), url=_url.path_qs)
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
                 self.spinner.fail(fail_msg)
                 if "invalid_token" in resp.output:
+                    spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
-                else:
-                    log.error(f"[{method}][{resp.error}] {url}")
+                elif resp.status == 429:  # per second rate limit.
+                    # log.error(f"[{method}][{resp.error}] {resp.url.path}{_offset_msg}")  # should be logged on Response __init__
+                    spin_txt_retry = "(retry after hitting per second rate limit)"
+                    self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
+                    _ -= 1
+                else:  # else
                     break
             else:
-                # self.spinner.succeed()
+                if resp.rl.near_sec:
+                    self.rl_log += [
+                        f"{time.monotonic() - INIT_TS:.2f} [[bright_green]{resp.error}[/] but [dark_orange3]NEARING RATE LIMIT[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
+                    ]
+                else:
+                    self.rl_log += [
+                        f"{time.monotonic() - INIT_TS:.2f} [[bright_green]{resp.error}[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
+                    ]
                 self.spinner.stop()
                 break
 
@@ -395,6 +504,11 @@ class Session:
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
 
+        params = utils.strip_none(params)
+        # if isinstance(url, URL):
+        #     print(f"{url} is already yarl.URL")
+        # url: URL = URL(url).with_query(params)  #  .update_query(params)
+
         # Debugging flag to lower paging limit to test paging with smaller chunks.
         if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
@@ -402,7 +516,6 @@ class Session:
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
-        params = utils.strip_none(params)
         json_data = utils.strip_none(json_data)
         if json_data:  # strip second nested dict if all keys = NoneType
             y = json_data.copy()
@@ -419,19 +532,13 @@ class Session:
             # -- // Attempt API Call \\ --
             r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
                                          params=params, **kwargs)
-
-            if r.status == 429:
-                log.warning(f"Rate Limit hit on call to {r.url} slowing down", show=True)
-                time.sleep(1)
-                continue
-
             if not r.ok:
                 break
 
             # data cleaner methods to strip any useless columns, change key names, etc.
             elif callback is not None:
                 # TODO [remove] moving callbacks to display output in cli, leaving methods to return raw output
-                log.debug(f"DEV NOTE CALLBACK IN centralapi lib {url} -> {callback}")
+                log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}")
                 r.output = callback(r.output, **callback_kwargs or {})
 
             # -- // paging \\ --
@@ -560,3 +667,128 @@ class Session:
             auth.handleTokenExpiry()
 
         return token_data
+
+    async def _request(self, func: callable, *args, **kwargs):
+        async with ClientSession() as self.aio_session:
+            return await func(*args, **kwargs)
+
+    def request(self, func: callable, *args, **kwargs) -> Response:
+        """non async to async wrapper for all API calls
+
+        Args:
+            func (callable): One of the CentralApi methods
+
+        Returns:
+            centralcli.response.Response object
+        """
+        log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
+        return asyncio.run(self._request(func, *args, **kwargs))
+
+    async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+        # async with ClientSession() as self.aio_session:
+        # async with self.aio_session as client:
+        # Always run first call solo to ensure access token validity
+        self.silent = True
+        _tot_start = time.monotonic()
+        resp: Response = await api_calls[0].func(
+            *api_calls[0].args,
+            **api_calls[0].kwargs
+            )
+        if not resp or len(api_calls) == 1:
+            return [resp]
+        # client.close()
+
+        chunked_calls = utils.chunker(api_calls, 7)
+        # remove first call performed above from first chunk
+        chunked_calls[0] = chunked_calls[0][1:]
+
+        m_resp: List[Response] = [resp]
+
+        # Make calls 7 at a time ensuring timing so that 7 per second limit is not exceeded
+        for chunk in chunked_calls:
+            # tasks = [asyncio.ensure_future(call.func(*call.args, **call.kwargs)) for call in chunk]
+
+            # async with self.aio_session as client:
+            _start = time.monotonic()
+            # m_resp += await asyncio.gather(*tasks)
+            m_resp += await asyncio.gather(
+                *[call.func(*call.args, **call.kwargs) for call in chunk]
+            )
+            _elapsed = time.monotonic() - _start
+            log.debug(f"chunk of {len(chunk)} took {_elapsed:.2f}.")
+
+            if _elapsed < 1 and len(m_resp) < len(api_calls):
+                time.sleep(1 - _elapsed)
+                log.debug(f"sleeping {1 - _elapsed:.2f}")
+            # client.close()
+
+        log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.monotonic() - _tot_start:.2f}")
+
+        self.silent = False
+
+        log.debug(f"API per sec ratelimit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+
+        return m_resp
+
+    # TODO return a BatchResponse object (subclass Response) where OK indicates all OK
+    # and method that returns merged output from all resp...
+    def batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+        """non async to async wrapper for multiple parallel API calls
+
+        First entry is ran alone, if successful the remaining calls
+        are made in parallel.
+
+        Args:
+            api_calls (List[BatchRequest]): List of BatchRequest objects.
+
+        Returns:
+            List[Response]: List of centralcli.response.Response objects.
+        """
+        return asyncio.run(self._batch_request(api_calls))
+
+    async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
+        f_url = self.auth.central_info["base_url"] + url
+        params = self.strip_none(params)
+        return await self.api_call(f_url, params=params, headers=headers, **kwargs)
+
+    async def post(
+        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
+    ) -> Response:
+        f_url = self.auth.central_info["base_url"] + url
+        params = self.strip_none(params)
+        if json_data:
+            json_data = self.strip_none(json_data)
+        return await self.api_call(
+            f_url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
+        )
+
+    async def put(
+        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
+    ) -> Response:
+
+        f_url = self.auth.central_info["base_url"] + url
+        params = self.strip_none(params)
+        return await self.api_call(
+            f_url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
+        )
+
+    async def patch(self, url, params: dict = {}, payload: dict = None,
+                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
+        f_url = self.auth.central_info["base_url"] + url
+        params = self.strip_none(params)
+        return await self.api_call(f_url, method="PATCH", data=payload,
+                                   json_data=json_data, params=params, headers=headers, **kwargs)
+
+    async def delete(
+        self,
+        url,
+        params: dict = {},
+        payload: dict = None,
+        json_data: Union[dict, list] = None,
+        headers: dict = None,
+        **kwargs
+    ) -> Response:
+        f_url = self.auth.central_info["base_url"] + url
+        params = self.strip_none(params)
+        return await self.api_call(f_url, method="DELETE", data=payload,
+                                   json_data=json_data, params=params, headers=headers, **kwargs)
