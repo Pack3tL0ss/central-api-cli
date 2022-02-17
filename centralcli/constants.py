@@ -60,6 +60,7 @@ STRIP_KEYS = [
     "events",
     "notifications",
     "settings",
+    "items",
 ]
 
 
@@ -285,6 +286,9 @@ class ArgToWhat:
     def _init_bounce(self):
         self.interface = self.port = self.ports = self.interfaces = "interface"
 
+    def _init_caas(self):
+        self.send_cmd = self.send_cmds = "send_cmds"
+
     def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
             if hasattr(self, f"_init_{cmd}"):
@@ -454,6 +458,12 @@ class ShowArg2(str, Enum):
     certs = "certs"
 
 
+class ShowHookProxyArgs(str, Enum):
+    logs = "logs"
+    pid = "pid"
+    port = "port"
+
+
 # TODO remove once all refs removed
 class SortOptions(str, Enum):
     name_asc = "+name"
@@ -494,6 +504,18 @@ class SortCertOptions(str, Enum):
     expired = "expired"
     md5_checksum = "md5_checksum"
     sha1_checksum = "sha1_checksum"
+
+
+class SendCmdArgs(str, Enum):
+    device = "device"
+    site = "site"
+    group = "group"
+    all = "all"
+    file = "file"
+
+
+class SendCmdArg2(str, Enum):
+    commands = "commands"
 
 
 class SortSiteOptions(str, Enum):
@@ -576,6 +598,7 @@ class IdenMetaVars:
         self.generic_dev_types = "[ap|gw|switch]"
         self.dev_types = "[ap|gw|cx|sw]"
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
+        self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
 
 
 class LogSortBy(str, Enum):
