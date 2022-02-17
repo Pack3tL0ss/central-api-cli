@@ -9,9 +9,14 @@ from pathlib import Path
 from typing import List
 from rich import print
 import subprocess
-import psutil
 from time import sleep
 from rich.console import Console
+
+try:
+    import psutil
+    hook_enabled = True
+except (ImportError, ModuleNotFoundError):
+    hook_enabled = False
 
 import typer
 
@@ -328,7 +333,7 @@ def blink(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., ),  # metavar="Device: [on|off|<# of secs to blink>]"),
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes", hidden=True),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -337,11 +342,12 @@ def blink(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
+    yes = yes_ if yes_ else yes  # Not using confirmation for blink but will allow -Y
     command = f'blink_led_{action}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
-    typer.secho(str(resp), fg="green" if resp else "red")
+    cli.display_results(resp, tablefmt="action")
+    # typer.secho(str(resp), fg="green" if resp else "red")
 
 
 @app.command(short_help="Factory Default A Device")
@@ -441,7 +447,7 @@ def kick(
     device: str = typer.Argument(
         ...,
         metavar=f"CONNECTED_DEVICE{iden.dev}",
-        autocompletion=lambda incomplete: ["all", *[m for m in cli.cache.dev_completion(incomplete)]]
+        autocompletion=cli.cache.dev_completion
     ),
     what: KickArgs = typer.Argument(...,),
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
@@ -483,13 +489,86 @@ def kick(
         # typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Start WebHook Proxy",)
+# TODO get the account, port and process details (start_time, pid) cache
+# add cach.RunDB or InfoDB to use to store this kind of stuff
+@app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
         ...,
         # metavar=f"hook-proxy",
     ),
     port: int = typer.Option(None, help="Port to listen on (overrides config value if provided"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes_both: bool = typer.Option(False, "-YY", help="Bypass all confirmations, including killing current process if running."),
+    yes_both_: bool = typer.Option(False, "-yy", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Start WebHook Proxy Service on this system in the background
+
+    Requires optional hook-proxy component 'pip3 install centralcli[hook-proxy]'
+
+    """
+    yes = yes_ if yes_ else yes
+    yes_both = yes_both_ if yes_both_ else yes_both
+    def terminate_process(pid):
+        p = psutil.Process(pid)
+        for _ in range(2):
+            p.terminate()
+            if p.status() != 'Terminated':
+                p.kill()
+            else:
+                break
+
+    def get_pid():
+        for p in psutil.process_iter(attrs=["name", "cmdline"]):
+            if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
+                return p.pid # if p.ppid() == 1 else p.ppid()
+
+    pid = get_pid()
+    if pid:
+        _abort = True if not port or port == int(config.wh_port) else False
+        print(f"Webhook proxy is currently running (process id {pid}).")
+        if yes_both or typer.confirm("Terminate existing process", abort=_abort):
+            terminate_process(pid)
+            print("[cyan]Process Terminated")
+
+    # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
+    print(f"Webhook Proxy will listen on {port or config.wh_port}")
+    if yes or yes_both or typer.confirm("\nProceed?", abort=True):
+        console = Console()
+        port = port or config.wh_port
+        with console.status("Starting Webhook Proxy..."):
+            p = subprocess.Popen(
+                ["nohup", sys.executable, "-m", "centralcli.wh_proxy", str(port)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT
+            )
+            sleep(2)
+
+        with console.status("Ensuring startup succes...", spinner="dots2"):
+            sleep(8)
+
+        proc = psutil.Process(p.pid)
+        if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
+            output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
+            print("\n".join(output))
+            print(f"\n[red]WebHook Proxy Startup Failed")
+        else:
+            print(f"[{p.pid}] WebHook Proxy Started.")
+
+
+@app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
+def stop(
+    what: StartArgs = typer.Argument(
+        ...,
+        # metavar=f"hook-proxy",
+    ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -506,46 +585,44 @@ def start(
     """
     yes = yes_ if yes_ else yes
     def terminate_process(pid):
-        p = psutil.Process(pid)
-        for _ in range(2):
-            p.terminate()
-            if p.status() != 'Terminated':
-                p.kill()
-            else:
-                break
+        console = Console(emoji=False)
+        with console.status("Terminating Webhook Proxy..."):
+            p = psutil.Process(pid)
+            for _ in range(2):
+                p.terminate()
+                sleep(2)
 
-    def get_pid():
+                if p.is_running():
+                    p.kill()
+                else:
+                    return True
+
+        with console.status("Waiting for WebHook Proxy to die..."):
+            _pass = 0
+            while p.is_running() or _pass < 8:
+                sleep(1)
+                if not p.is_running():
+                    return True
+                _pass += 1
+
+        return False
+
+
+    def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if p.info["cmdline"] and True in [x.endswith("wh_proxy.py") for x in p.info["cmdline"][1:]]:
-                return p.pid # if p.ppid() == 1 else p.ppid()
+            if "wh_proxy" in str(p.cmdline()[1:]):
+                return p.pid, p.cmdline()[-1]
 
-    pid = get_pid()
-    if pid:
-        _abort = True if not port or port == int(config.wh_port) else False
-        print(f"Webhook proxy is currently running (process id {pid}).")
-        if typer.confirm("Terminate existing process", abort=_abort):
-            terminate_process(pid)
-            print("[cyan]Process Terminated")
-
-    print(f"Webhook Proxy will listen on {port or config.wh_port}")
-    if yes or typer.confirm("\nProceed?", abort=True):
-        console = Console()
-        port = port or config.wh_port
-        with console.status("Starting Webhook Proxy..."):
-            p = subprocess.Popen(
-                ["nohup", sys.executable, Path(__file__).parent / f"wh_proxy.py", str(port)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
-            )
-            sleep(1)
-
-        proc = psutil.Process(p.pid)
-        if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
-            output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
-            print("\n".join(output))
-            print(f"\n[red]WebHook Proxy Startup Failed")
-        else:
-            print(f"[{p.pid}] WebHook Proxy Started.")
+    proc = _get_process_info()
+    if proc:
+        print(f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}")
+        if yes or typer.confirm("Terminate existing process", abort=True):
+            dead = terminate_process(proc[0])
+            print("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.")
+            raise typer.Exit(0 if dead else 1)
+    else:
+        print("WebHook Proxy is not running.")
+        raise typer.Exit(0)
 
 
 # DEPRECATED replaced with cencli test method
