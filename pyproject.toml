@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "0.19.3"
+version = "0.19.4"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -28,8 +28,6 @@ cencli = "centralcli.cli:app"
 [tool.poetry.dependencies]
 python = "^3.7"
 cchardet = "^2.1.*"
-colorama = "^0.4.*"
-Pygments = "^2"
 tabulate = "^0.8.*"
 halo = "^0.0.*"
 typer = "^0.4"
@@ -68,5 +66,5 @@ filterwarnings = [
 hook-proxy = [
     "fastapi",
     "uvicorn",
-    "psutil"
+    "psutil",
 ]
