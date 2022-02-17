@@ -4,7 +4,7 @@
 import typer
 import sys
 import time
-from typing import Dict, List, Literal, Union
+from typing import Dict, List, Literal, Union, Tuple
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -163,6 +163,20 @@ class CLICommon:
             typer.secho("Using default central account", fg="bright_green")
             config.sticky_account_file.unlink()
             return default
+
+    @staticmethod
+    def send_cmds_node_callback(ctx: typer.Context, commands: Union[str, Tuple[str]]):
+        if ctx.resilient_parsing:  # tab completion, return without validating
+            return
+
+        # utils.json_print(ctx.__dict__)
+        # utils.json_print(ctx.parent.__dict__)
+        # utils.json_print(locals())
+        if ctx.params["kw1"].lower() == "all" and ctx.params["nodes"].lower() == "commands":
+            ctx.params["nodes"] = None
+            return tuple([ctx.params["kw2"], *commands])
+        else:
+            return commands
 
     @staticmethod
     def debug_callback(ctx: typer.Context, debug: bool):
@@ -439,8 +453,6 @@ class CLICommon:
                     if idx + 1 == len(resp):
                         console.print(f"\n{rl_str}")
 
-                    if not r and exit_on_fail:
-                        raise typer.Exit(1)
                 else:
                     self._display_results(
                         r.output,
@@ -458,9 +470,14 @@ class CLICommon:
                         cleaner=cleaner,
                         **cleaner_kwargs
                     )
+
             # TODO make elegant caas send-cmds uses this logic
             if cleaner and cleaner.__name__ == "parse_caas_response":
                 print(caption)
+
+            if exit_on_fail and not all([r.ok for r in resp]):
+                print("DEBUG error code return")
+                raise typer.Exit(1)
 
         elif data:
             self._display_results(
