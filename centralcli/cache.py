@@ -774,13 +774,12 @@ class Cache:
             resp = await self.central.get_all_sites()
             if resp.ok:
                 resp.output = utils.listify(resp.output)
+                resp.output = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
                 # TODO time this to see which is more efficient
-                # start = time.time()
                 # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
                 # upd = [item for in_list in upd for item in in_list]
                 self.updated.append(self.central.get_all_sites)
                 self.SiteDB.truncate()
-                # print(f" site db Done: {time.time() - start}")
                 update_res = self.SiteDB.insert_multiple(resp.output)
                 if False in update_res:
                     log.error("Tiny DB returned an error during site db update")
@@ -919,7 +918,7 @@ class Cache:
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
                 self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.time() - start, 2)} sec")
-            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
+            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds", show=False)
             # typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
     def handle_multi_match(
