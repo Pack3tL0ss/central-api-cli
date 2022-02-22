@@ -106,11 +106,13 @@ def vscode_arg_handler():
                     _spaces = len(line) - len(line.lstrip(" "))
                     new_line = f'{" ":{_spaces}}"default": "{this_args}"  // VSC_PREV_ARGS'
                     if line != new_line:
+                        log_old_line = line.split('"')[-2]
+                        log_new_line = new_line.split('"')[-2]
                         do_update = True
-                        log.debug(
+                        log.debugv(
                             f"changing default arg for promptString:\n"
-                            f"    from: {line}\n"
-                            f"    to: {new_line}"
+                            f"    from: {log_old_line}\n"
+                            f"    to: {log_new_line}"
                         )
                         launch_data[idx] = new_line
 
@@ -120,10 +122,10 @@ def vscode_arg_handler():
                     new_line = f'{" ":{_spaces}}"options": {json.dumps(history_lines)},  // VSC_ARG_HISTORY'
                     if line != new_line:
                         do_update = True
-                        log.debug(
+                        log.debugv(
                             f"changing options arg for pickString:\n"
-                            f"    from: {line}\n"
-                            f"    to: {new_line}"
+                            f"    from: {line.strip()}\n"
+                            f"    to: {new_line.strip()}"
                         )
                         launch_data[idx] = new_line
 
