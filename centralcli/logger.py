@@ -105,7 +105,7 @@ class MyLogger:
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
 
-        if True in [show, self.show]:
+        if show is not False and True in [show, self.show]:
             self.log_msgs += _msgs
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
