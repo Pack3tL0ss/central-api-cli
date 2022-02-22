@@ -335,7 +335,7 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
 
     config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
 
-    env = Environment(loader=FileSystemLoader(template_file.parent), trim_blocks=True, lstrip_blocks=True)
+    env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template(template_file.name)
 
     # TODO output to temp or out dir cwd could be non-writable
