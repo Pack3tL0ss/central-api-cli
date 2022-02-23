@@ -51,8 +51,8 @@ class MyLogger:
 
     def get_logger(self) -> logging.Logger:
         '''Return custom log object.'''
-        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
-        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
+        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
         dateStr = "%m/%d/%Y %I:%M:%S %p"
         # fmtStr = "%(message)s"
         # dateStr = "[%X]"
