@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import typer
+from rich import print
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -63,6 +64,7 @@ def device(
 
     ver_msg = "Recommended version" if not version else version
     ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
+    print("[bright_red blink]ATTENTION[/] REBOOT MAY OCCUR regardless OF -R flag.  During Testing it did when upgrading all APs in a group.")
 
     if yes or typer.confirm(
         typer.style(
