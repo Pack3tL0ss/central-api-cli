@@ -3184,7 +3184,7 @@ class AllCalls(CentralApi):
         self,
         group_name_or_guid: str,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 20,
     ) -> Response:
         """Get dirty diff.
 
@@ -3194,7 +3194,7 @@ class AllCalls(CentralApi):
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
             limit (int, optional): Maximum number of group config_mode records to be returned.
-                Defaults to 100.
+                Max 20 Default 20.
 
         Returns:
             Response: CentralAPI Response object
