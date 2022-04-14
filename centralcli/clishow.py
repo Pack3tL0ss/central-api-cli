@@ -1560,7 +1560,7 @@ def events(
         "bssid": bssid,
         # "device_mac": None if not device else device.mac,
         "hostname": hostname,
-        "device_type": api_dev_types[dev_type],
+        "device_type": None if not dev_type else api_dev_types[dev_type],
         "site": site,
         "serial": None if not device else device.serial,
         # "level": level,
