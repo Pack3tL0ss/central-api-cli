@@ -1543,6 +1543,13 @@ def events(
             if past.endswith("m"):
                 start = now - (int(past.rstrip("m")) * 60)
 
+    api_event_types = {
+        "ap": "ACCESS POINT",
+        "switch": "SWITCH",
+        "gw": "GATEWAY",
+        "client": "CLIENT"
+    }
+
     kwargs = {
         "group": group,
         # "swarm_id": swarm_id,
@@ -1558,7 +1565,7 @@ def events(
         "serial": None if not device else device.serial,
         # "level": level,
         "event_description": description,
-        "event_type": event_type,
+        "event_type": api_event_types[event_type],
         # "fields": fields,
         # "calculate_total": None,
     }
