@@ -24,6 +24,8 @@ from centralcli.constants import GenericDevIdens, lib_to_api, lib_to_gen_plural 
 
 app = typer.Typer()
 
+# TODO reboot flag Applicable only on MAS, aruba switches and controller since IAP reboots automatically after firmware download.
+# can only specify one of group, swarm_id or serial parameters
 
 @app.command(short_help="Upgrade firmware on a specific device",)
 def device(
@@ -49,7 +51,7 @@ def device(
         show_default=False,
         formats=["%m/%d/%Y_%H:%M", "%d_%H:%M"],
         ),
-    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
+    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -60,11 +62,12 @@ def device(
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
+    if dev.generic_type == "ap":
+        reboot = True
     at = None if not at else int(round(at.timestamp()))
 
     ver_msg = "Recommended version" if not version else version
     ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
-    print("[bright_red blink]ATTENTION[/] REBOOT MAY OCCUR regardless OF -R flag.  During Testing it did when upgrading all APs in a group.")
 
     if yes or typer.confirm(
         typer.style(
@@ -105,7 +108,7 @@ def group(
         ),
     dev_type: GenericDevIdens = typer.Option(..., help="Upgrade a specific device type",),
     model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
-    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
+    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -121,6 +124,8 @@ def group(
 
     ver_msg = [typer.style("Upgrade", fg="cyan")]
     if dev_type:
+        if dev_type == "ap":
+            reboot = True
         ver_msg += [lib_to_gen_plural(dev_type)]
         dev_type = lib_to_api("upgrade", dev_type)
 
@@ -140,7 +145,6 @@ def group(
         ver_msg = f"{ver_msg} and reboot"
     else:
         ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
-
 
     if yes or typer.confirm(
         f"{ver_msg}?",
