@@ -51,8 +51,8 @@ class MyLogger:
 
     def get_logger(self) -> logging.Logger:
         '''Return custom log object.'''
-        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
-        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
+        fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
         dateStr = "%m/%d/%Y %I:%M:%S %p"
         # fmtStr = "%(message)s"
         # dateStr = "[%X]"
@@ -105,7 +105,7 @@ class MyLogger:
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
 
-        if True in [show, self.show]:
+        if show is not False and True in [show, self.show]:
             self.log_msgs += _msgs
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):

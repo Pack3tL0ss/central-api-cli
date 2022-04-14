@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from enum import Enum
 import os
-import sys
-import importlib
-from pathlib import Path
-from typing import List
-from rich import print
 import subprocess
+import sys
+from enum import Enum
+from pathlib import Path
 from time import sleep
+from typing import List
+
+from rich import print
 from rich.console import Console
 
 try:
@@ -22,24 +22,25 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (
-        clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone,
-        clirefresh, clitest, cli, log, utils, config
-    )
+    from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
+                            clirefresh, clishow, clitest, cliupdate,
+                            cliupgrade, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (
-            clibatch, clicaas, clishow, clidel, cliadd, cliupdate, cliupgrade, cliclone,
-            clirefresh, clitest, cli, log, utils, config
-        )
+        from centralcli import (cli, cliadd, clibatch, clicaas, cliclone,
+                                clidel, clirefresh, clishow, clitest,
+                                cliupdate, cliupgrade, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import IdenMetaVars, BounceArgs, KickArgs, RenameArgs, BlinkArgs, StartArgs
+from centralcli.constants import (
+    BlinkArgs, BounceArgs, IdenMetaVars,
+    KickArgs, RenameArgs, StartArgs
+)
 
 iden = IdenMetaVars()
 
@@ -108,6 +109,7 @@ def move(
         hidden=True,
         autocompletion=cli.cache.site_completion,
     ),
+    cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
@@ -161,23 +163,31 @@ def move(
             else:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
 
-    _msg_devs = ", " if len(dev_all_names) > 2 else " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+    if len(dev_all_names) > 2:
+        _msg_devs = ", ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+    else:
+        _msg_devs = " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+
     print(f"Move {_msg_devs}")
 
     if group:
         _group = cli.cache.get_group_identifier(group)
         print(f"  To Group: [bright_green]{_group.name}[/bright_green]")
+        if cx_retain_config:
+            print(f"  [italic]Config for CX switches will be preserved during move.[/]")
     if site:
         _site = cli.cache.get_site_identifier(site)
         print(f"  To Site: [bright_green]{_site.name}[/bright_green]")
         if devs_by_site:
-            print("  [italic bright_red](devices will be removed from current sites.)[/bright_red]")
+            print("  [italic bright_red](devices will be removed from current sites.)[/]")
 
     resp, site_rm_resp = None, None
     confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
 
     # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
     # If devices are associated with a site currently remove them from that site first
+    # FIXME moving 3 devices from one site to another no longer works correctly (disassociated 2 then 1, (2 calls) then added 1)
+    # FIXME completion flaw  cencli move barn--ap ... given barn- -ap was the completion [barn-303p.2c30-ap, barn-518.2816-ap]
     if confirmed and _site and devs_by_site:
         site_remove_reqs = []
         for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
@@ -195,7 +205,7 @@ def move(
 
     # run both group and site move in parallel
     if confirmed and _group and _site:
-        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)]
+        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials, cx_retain_config=cx_retain_config)]
         site_remove_reqs = []
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
@@ -350,7 +360,7 @@ def blink(
     # typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Factory Default A Device")
+@app.command(short_help="Factory Default A Switch", help="Factory Default A Switch")
 def nuke(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -364,10 +374,14 @@ def nuke(
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
-    nuke_msg = f"{typer.style('*Factory Default*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
-    if yes or typer.confirm(typer.style(f"Please Confirm: {nuke_msg}", fg="cyan"), abort=True):
+    if dev.type != "sw":
+        print(f"[bright_red]ERROR:[/] This command only applies to AOS-SW (switches), not {dev.type.upper()}")
+        raise typer.Exit(1)
+
+    print(f"You are about to [bright_red blink]Factory Default[/] [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]")
+    if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Save Device Running Config to Startup")
@@ -625,117 +639,47 @@ def stop(
         raise typer.Exit(0)
 
 
-# DEPRECATED replaced with cencli test method
 @app.command(hidden=True, epilog="Output is displayed in yaml by default.")
-def method_test(
-    method: str = typer.Argument(...),
-    kwargs: List[str] = typer.Argument(None),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        hidden=True,
-        callback=cli.verbose_debug_callback,
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-    """dev testing commands to run CentralApi methods from command line
+def profile(
+    module: str = typer.Argument(...),
+    command: str = typer.Argument(None),
+    args: List[str] = typer.Argument(None),
+    kwargs: List[str] = typer.Option(None, lazy=True),
+):
+    print(f"module: {module} of type {type(module)}" )
+    print(f"command: {command} of type {type(command).__class__.__name__}" )
+    print(f"args: {args} of type {type(args)}" )
+    print(f"kwargs: {kwargs} of type {type(kwargs)}" )
+    # import cProfile
+    # args = sys.argv[2:]
+    # cmd_group = args.pop(0)
+    # cmd = args.pop(0)
+    # module = globals().get(f"cli{cmd_group}")
+    # if module:
+    #     if not hasattr(module, cmd):
+    #         print(f"Unable to find command {args}")
+    #         raise typer.Exit(1)
 
-    Args:
-        method (str, optional): CentralAPI method to test.
-        kwargs (List[str], optional): list of args kwargs to pass to function.
-
-    format: arg1 arg2 keyword=value keyword2=value
-        or  arg1, arg2, keyword = value, keyword2=value
-
-    Displays all attributes of Response object
-    """
-    cli.cache(refresh=update_cache)
-    central = CentralApi(account)
-    if not hasattr(central, method):
-        bpdir = Path(__file__).parent / "boilerplate"
-        all_calls = [
-            importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
-            if not f.name.startswith("_") and f.suffix == ".py"
-        ]
-        for m in all_calls:
-            if hasattr(m.AllCalls(), method):
-                central = m.AllCalls()
-                break
-
-    if not hasattr(central, method):
-        typer.secho(f"{method} does not exist", fg="red")
-        raise typer.Exit(1)
-
-    kwargs = (
-        "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
-    )
-    args = [k if not k.isdigit() else int(k) for k in kwargs if k and "=" not in k]
-    kwargs = [k.split("=") for k in kwargs if "=" in k]
-    kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
-    for k, v in kwargs.items():
-        if isinstance(v, str):
-            if v.startswith("[") and v.endswith("]"):
-                kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
-            if v.lower() in ["true", "false"]:
-                kwargs[k] = True if v.lower() == "true" else False
-
-    from rich.console import Console
-    c = Console(file=outfile)
-
-    req = (
-        f"central.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
-        f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
-    )
-
-    resp = central.request(getattr(central, method), *args, **kwargs)
-    if "should be str" in resp.output and "bool" in resp.output:
-        c.log(f"{resp.output}.  LAME!  Converting to str!")
-        args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
-        kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
-        resp = central.request(getattr(central, method), *args, **kwargs)
-
-    attrs = {
-        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
-    }
-
-    c.print(req)
-    c.print("\n".join([f"  {k}: {v}" for k, v in attrs.items()]))
-
-    tablefmt = cli.get_format(
-        do_json, do_yaml, do_csv, do_table, default="yaml"
-    )
-
-    if resp.raw and resp.output != resp.raw:
-        typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=pager, outfile=outfile)
-    if resp.raw:
-        typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.raw, tablefmt="json", pager=pager, outfile=outfile)
+    #     func = getattr(module, cmd)
+    # else:
+    #     func = globals().get(cmd_group)
+    #     if not func:
+    #         print(f"Unable to find command {args}")
+    #         raise typer.Exit(1)
+    #     args = (cmd, *args)
+    # cProfile.run(func(*args))
+    # https://stackoverflow.com/questions/55880601/how-to-use-profiler-with-click-cli-in-python
 
 
-def all_commands_callback(ctx: typer.Context, debug: bool):
+
+def all_commands_callback(ctx: typer.Context, update_cache: bool):
     if not ctx.resilient_parsing:
-        account, debug, default, update_cache = None, None, None, None
+        account, debug, debugv, default, update_cache = None, None, None, None, None
         for idx, arg in enumerate(sys.argv):
             if arg == "--debug":
                 debug = True
+            if arg == "--debugv":
+                debugv = True
             elif arg == "-d":
                 default = True
             elif arg == "--account" and "-d" not in sys.argv:
@@ -757,23 +701,35 @@ def all_commands_callback(ctx: typer.Context, debug: bool):
             cli.account_name_callback(ctx, account=account)
         if debug:
             cli.debug_callback(ctx, debug=debug)
+        if debugv:
+            log.DEBUG = config.debug = log.verbose = config.debugv = debugv
+            _ = sys.argv.pop(sys.argv.index("--debugv"))
         if update_cache:
-            # cli.cache(refresh=True)
+            cli.cache(refresh=True)
+            _ = sys.argv.pop(sys.argv.index("-U"))
             # TODO can do cache update here once update is removed from all commands
             pass
 
 
 @app.callback()
 def callback(
-    ctx: typer.Context,
-    debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=all_commands_callback),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),
+    # ctx: typer.Context,
+    # debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    #                         #    callback=all_commands_callback),
+    # debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+    #                         #    callback=all_commands_callback),
+    # default: bool = typer.Option(
+    #     False,
+    #     "-d",
+    #     is_flag=True,
+    #     help="Use default central account",
+    #     show_default=False,
+    # ),
+    # account: str = typer.Option("central_info",
+    #                             envvar="ARUBACLI_ACCOUNT",
+    #                             help="The Aruba Central Account to use (must be defined in the config)",
+    #                             autocompletion=cli.cache.account_completion),
+    # update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
 ) -> None:
     """
     Aruba Central API CLI

@@ -1395,6 +1395,7 @@ class CentralApi(Session):
             level (str, optional): Filter by event level
             event_description (str, optional): Filter by event description
             event_type (str, optional): Filter by event type
+                valid event types: ['ACCESS POINT', 'SWITCH', 'GATEWAY', 'CLIENT']
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 number, level
             calculate_total (bool, optional): Whether to calculate total events
@@ -3183,6 +3184,8 @@ class CentralApi(Session):
         self,
         group: str,
         serial_nums: Union[str, List[str]],
+        *,
+        cx_retain_config: bool = True,  # TODO can we send this attribute even if it's not CX, will it ignore or error
     ) -> Response:
         """Move devices to a group.
 
@@ -3209,6 +3212,9 @@ class CentralApi(Session):
             'group': group,
             'serials': serial_nums
         }
+
+        if cx_retain_config:
+            json_data["preserve_config_overrides"] = ["AOS_CX"]
 
         resp = await self.post(url, json_data=json_data)
 

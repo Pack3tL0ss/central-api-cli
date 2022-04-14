@@ -257,9 +257,10 @@ class Cache:
 
 
 
-    def smg_kw_completion(self, incomplete: str, args: List[str] = []):
+    def smg_kw_completion(self, ctx: typer.Context, incomplete: str, args: List[str] = []):
         kwds = ["group", "mac", "serial"]
         out = []
+        args = [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
@@ -328,6 +329,7 @@ class Cache:
 
     def dev_kwarg_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
@@ -336,23 +338,30 @@ class Cache:
         i.e. cencli move dev1 dev2 dev3 site site_name group group_name
 
         Args:
+            ctx (typer.Context): Provided automatically by typer
             incomplete (str): The incomplete word for autocompletion
             args (List[str], optional): The prev args passed into the command.
+            # TODO verify and remove
+                Ignore this param params are pulled from ctx.params provided by typer
 
         Yields:
             tuple: matching completion string, help text
         """
-        if args[-1].lower() == "group":
+        args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
+        args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+        p = ctx.params
+        a = ctx.__dict__
+        if args and args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
                 yield m
 
-        elif args[-1].lower() == "site":
+        elif args and args[-1].lower() == "site":
             out = [m for m in self.site_completion(incomplete, args)]
             for m in out:
                 yield m
 
-        elif args[-1].lower() == "ap":
+        elif args and args[-1].lower() == "ap":
             out = [m for m in self.dev_completion(incomplete, args)]
             for m in out:
                 yield m
@@ -361,9 +370,11 @@ class Cache:
             out = []
             if len(args) > 1:
                 if "site" not in args and "site".startswith(incomplete.lower()):
-                    out += ("site", )
+                    _help = "move device(s) to a different site" if ctx.info_name == "move" else f"{ctx.info_name} ... site"  # TODO the fallback ... need to check which commands use this.
+                    out += [("site", _help)]
                 if "group" not in args and "group".startswith(incomplete.lower()):
-                    out += ("group", )
+                    _help = "move device(s) to a different group" if ctx.info_name == "move" else f"{ctx.info_name} ... group"  # TODO the fallback ... need to check which commands use this.
+                    out += [("group", _help)]
 
             if "site" not in args and "group" not in args:
                 out += [m for m in self.dev_completion(incomplete, args)]
@@ -372,7 +383,7 @@ class Cache:
                 out += ["|", "<cr>"]
 
             for m in out:
-                yield m
+                yield m if isinstance(m, tuple) else (m, f"{ctx.info_name} ... {m}")
 
     def dev_switch_ap_completion(
         self,
@@ -774,13 +785,12 @@ class Cache:
             resp = await self.central.get_all_sites()
             if resp.ok:
                 resp.output = utils.listify(resp.output)
+                resp.output = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
                 # TODO time this to see which is more efficient
-                # start = time.time()
                 # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
                 # upd = [item for in_list in upd for item in in_list]
                 self.updated.append(self.central.get_all_sites)
                 self.SiteDB.truncate()
-                # print(f" site db Done: {time.time() - start}")
                 update_res = self.SiteDB.insert_multiple(resp.output)
                 if False in update_res:
                     log.error("Tiny DB returned an error during site db update")
@@ -919,7 +929,7 @@ class Cache:
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
                 self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.time() - start, 2)} sec")
-            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds")
+            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds", show=False)
             # typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
 
     def handle_multi_match(
@@ -1299,6 +1309,13 @@ class Cache:
     ) -> CentralObject:
         """Allows case insensitive template match by template name"""
         retry = False if completion else retry
+        if not query_str and completion:
+            return [CentralObject("template", data=t) for t in self.templates]
+
+        # TODO verify and remove
+        if multi_ok:
+            log.error("depricated parameter multi_ok sent to get_template_identifier.")
+
         match = None
         for _ in range(0, 2 if retry else 1):
             # exact

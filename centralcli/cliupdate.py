@@ -24,6 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, TemplateDevIdens, GatewayRole
+from centralcli import CentralObject
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -35,18 +36,22 @@ iden_meta = IdenMetaVars()
 app = typer.Typer()
 
 
+# TODO add support for j2 / variable conversion as with cencli update config
+# FIXME pushing template via API returned 200 but template was not updated??
 @app.command(short_help="Update an existing template")
 def template(
-    # identifier: template_iden_args = typer.Argument(...,),
     name: str = typer.Argument(
         ...,
+        metavar="IDENTIFIER",
         help=f"Template: [name] or Device: {iden_meta.dev}",
         autocompletion=cli.cache.dev_template_completion,
     ),
-    # device: str = typer.Argument(None, metavar=iden_meta.dev, help="The device associated with the template"),
-    # variable: str = typer.Argument(None, help="[Variable operations] What Variable To Update"),
-    # value: str = typer.Argument(None, help="[Variable operations] The Value to assign"),
-    template: Path = typer.Argument(None, help="Path to file containing new template", exists=True),
+    template: Path = typer.Argument(
+        None,
+        help="Path to file containing new template",
+        exists=True,
+        autocompletion=lambda incomplete: [],
+    ),
     group: str = typer.Option(
         None,
         help="The template group the template belongs to",
@@ -71,6 +76,17 @@ def template(
     obj = cli.cache.get_identifier(
         name, ("template", "dev"), device_type=device_type, group=group
     )
+    if obj.is_dev:
+        _tmplt = [t for t in cli.cache.templates if t["group"] == obj.group and t["model"] in obj.model]
+
+        if version:
+            _tmplt = [t for t in cli.cache.templates if t["version"] in ["ALL", version]]
+
+        if len(_tmplt) != 1:
+            print(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
+            raise typer.Exit(1)
+        else:
+            obj = CentralObject("template", _tmplt[0])
 
     kwargs = {
         "group": group or obj.group,
@@ -82,7 +98,7 @@ def template(
 
     do_prompt = False
     if template:
-        if not template.is_file() or not template.stat().st_size > 0:
+        if not template.stat().st_size > 0:
             typer.secho(f"{template} not found or invalid.", fg="red")
             do_prompt = True
     else:
@@ -92,8 +108,8 @@ def template(
     payload = None
     if do_prompt:
         payload = utils.get_multiline_input(
-            "Paste in new template contents then press CTRL-D to proceed. Type 'abort!' to abort",
-            print_func=typer.secho, fg="cyan", abort_str="abort!"
+            "Paste in new template contents then press CTRL-D to proceed. Type 'abort' to abort",
+            print_func=typer.secho, fg="cyan", abort_str="abort"
         )
         payload = "\n".join(payload).encode()
 
@@ -335,7 +351,7 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
 
     config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
 
-    env = Environment(loader=FileSystemLoader(template_file.parent), trim_blocks=True, lstrip_blocks=True)
+    env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template(template_file.name)
 
     # TODO output to temp or out dir cwd could be non-writable
@@ -367,8 +383,8 @@ def config_(
     #     # ]
     # ),
     # TODO collect multi-line input as option to paste in config
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True),
-    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True),
+    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple()),
+    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple()),
     # TODO --vars PATH  help="File containing variables to convert jinja2 template."
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -381,7 +397,7 @@ def config_(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
-    group_dev: cli.cache.CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
+    group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     if var_file:
         cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
 
@@ -449,6 +465,7 @@ def config_(
             resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         else:
+            # FIXME this is OK for group level ap config , for AP this method is not valid
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 

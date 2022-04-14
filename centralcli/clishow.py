@@ -638,7 +638,6 @@ def groups(
     central = cli.central
     if central.get_all_groups not in cli.cache.updated:
         resp = asyncio.run(cli.cache.update_group_db())
-        # resp = Response(output=cli.cache.groups, rl_str=" ")  # HACK
         if resp and verbose:
             groups = [g["name"] for g in resp.output]
             verbose_resp = central.request(central.get_groups_properties, groups=groups)
@@ -1147,6 +1146,7 @@ def wlans(
 
 # FIXME show clients wireless <tab completion> does not filter based on type of device
 # FIXME show clients wireless AP-NAME does not filter only devices on that AP
+# Same applies for wired
 @app.command(short_help="Show clients/details")
 def clients(
     filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
@@ -1543,6 +1543,13 @@ def events(
             if past.endswith("m"):
                 start = now - (int(past.rstrip("m")) * 60)
 
+    api_event_types = {
+        "ap": "ACCESS POINT",
+        "switch": "SWITCH",
+        "gw": "GATEWAY",
+        "client": "CLIENT"
+    }
+
     kwargs = {
         "group": group,
         # "swarm_id": swarm_id,
@@ -1558,7 +1565,7 @@ def events(
         "serial": None if not device else device.serial,
         # "level": level,
         "event_description": description,
-        "event_type": event_type,
+        "event_type": api_event_types[event_type],
         # "fields": fields,
         # "calculate_total": None,
     }

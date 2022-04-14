@@ -21,6 +21,9 @@ install(show_locals=True, suppress=[click])
 #     def ic(*_, **__):
 #         pass
 
+# TODO after install if you --install-completion prior to configuration completion will freeze the terminal (first_run is running with no interactive prompt)
+# TODO first command after config is provided updates the cache but returns no output.  Bug.  Works fine from then on.
+
 _calling_script = Path(sys.argv[0])
 if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
     _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
@@ -60,11 +63,9 @@ log_file = log_dir / f"{__name__}.log"
 
 if '--debug' in str(sys.argv):
     config.debug = True  # for the benefit of the 2 log messages below
-if '--debugv' in str(sys.argv):
-    config.debugv = True
-    _ = sys.argv.pop(sys.argv.index("--debugv"))
-
-# TODO pop debugv from sys.argv update config
+# if '--debugv' in str(sys.argv):
+#     config.debugv = True
+#     _ = sys.argv.pop(sys.argv.index("--debugv"))
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
@@ -76,7 +77,7 @@ from .utils import Utils
 utils = Utils()
 from .response import Response
 from .central import CentralApi
-from .cache import Cache
+from .cache import Cache, CentralObject
 from .clicommon import CLICommon
 
 # if no environ vars set for LESS command line options
