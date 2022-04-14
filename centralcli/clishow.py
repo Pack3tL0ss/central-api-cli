@@ -1543,7 +1543,7 @@ def events(
             if past.endswith("m"):
                 start = now - (int(past.rstrip("m")) * 60)
 
-    api_event_types = {
+    api_dev_types = {
         "ap": "ACCESS POINT",
         "switch": "SWITCH",
         "gw": "GATEWAY",
@@ -1560,12 +1560,12 @@ def events(
         "bssid": bssid,
         # "device_mac": None if not device else device.mac,
         "hostname": hostname,
-        "device_type": dev_type,
+        "device_type": api_dev_types[dev_type],
         "site": site,
         "serial": None if not device else device.serial,
         # "level": level,
         "event_description": description,
-        "event_type": api_event_types[event_type],
+        "event_type": event_type,
         # "fields": fields,
         # "calculate_total": None,
     }
