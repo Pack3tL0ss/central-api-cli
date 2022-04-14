@@ -1395,7 +1395,6 @@ class CentralApi(Session):
             level (str, optional): Filter by event level
             event_description (str, optional): Filter by event description
             event_type (str, optional): Filter by event type
-                valid event types: ['ACCESS POINT', 'SWITCH', 'GATEWAY', 'CLIENT']
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 number, level
             calculate_total (bool, optional): Whether to calculate total events
