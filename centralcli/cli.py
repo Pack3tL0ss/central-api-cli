@@ -109,6 +109,7 @@ def move(
         hidden=True,
         autocompletion=cli.cache.site_completion,
     ),
+    cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
@@ -162,23 +163,31 @@ def move(
             else:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
 
-    _msg_devs = ", " if len(dev_all_names) > 2 else " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+    if len(dev_all_names) > 2:
+        _msg_devs = ", ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+    else:
+        _msg_devs = " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+
     print(f"Move {_msg_devs}")
 
     if group:
         _group = cli.cache.get_group_identifier(group)
         print(f"  To Group: [bright_green]{_group.name}[/bright_green]")
+        if cx_retain_config:
+            print(f"  [italic]Config for CX switches will be preserved during move.[/]")
     if site:
         _site = cli.cache.get_site_identifier(site)
         print(f"  To Site: [bright_green]{_site.name}[/bright_green]")
         if devs_by_site:
-            print("  [italic bright_red](devices will be removed from current sites.)[/bright_red]")
+            print("  [italic bright_red](devices will be removed from current sites.)[/]")
 
     resp, site_rm_resp = None, None
     confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
 
     # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
     # If devices are associated with a site currently remove them from that site first
+    # FIXME moving 3 devices from one site to another no longer works correctly (disassociated 2 then 1, (2 calls) then added 1)
+    # FIXME completion flaw  cencli move barn--ap ... given barn- -ap was the completion [barn-303p.2c30-ap, barn-518.2816-ap]
     if confirmed and _site and devs_by_site:
         site_remove_reqs = []
         for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
@@ -196,7 +205,7 @@ def move(
 
     # run both group and site move in parallel
     if confirmed and _group and _site:
-        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)]
+        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials, cx_retain_config=cx_retain_config)]
         site_remove_reqs = []
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
@@ -351,7 +360,7 @@ def blink(
     # typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Factory Default A Device")
+@app.command(short_help="Factory Default A Switch", help="Factory Default A Switch")
 def nuke(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -365,10 +374,14 @@ def nuke(
 ) -> None:
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
-    nuke_msg = f"{typer.style('*Factory Default*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
-    if yes or typer.confirm(typer.style(f"Please Confirm: {nuke_msg}", fg="cyan"), abort=True):
+    if dev.type != "sw":
+        print(f"[bright_red]ERROR:[/] This command only applies to AOS-SW (switches), not {dev.type.upper()}")
+        raise typer.Exit(1)
+
+    print(f"You are about to [bright_red blink]Factory Default[/] [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]")
+    if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Save Device Running Config to Startup")
@@ -700,23 +713,23 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
 
 @app.callback()
 def callback(
-    ctx: typer.Context,
-    debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-                            #    callback=all_commands_callback),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-                            #    callback=all_commands_callback),
-    default: bool = typer.Option(
-        False,
-        "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-    update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
+    # ctx: typer.Context,
+    # debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    #                         #    callback=all_commands_callback),
+    # debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+    #                         #    callback=all_commands_callback),
+    # default: bool = typer.Option(
+    #     False,
+    #     "-d",
+    #     is_flag=True,
+    #     help="Use default central account",
+    #     show_default=False,
+    # ),
+    # account: str = typer.Option("central_info",
+    #                             envvar="ARUBACLI_ACCOUNT",
+    #                             help="The Aruba Central Account to use (must be defined in the config)",
+    #                             autocompletion=cli.cache.account_completion),
+    # update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
 ) -> None:
     """
     Aruba Central API CLI
