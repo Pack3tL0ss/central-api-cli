@@ -713,23 +713,23 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
 
 @app.callback()
 def callback(
-    # ctx: typer.Context,
-    # debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    #                         #    callback=all_commands_callback),
-    # debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    #                         #    callback=all_commands_callback),
-    # default: bool = typer.Option(
-    #     False,
-    #     "-d",
-    #     is_flag=True,
-    #     help="Use default central account",
-    #     show_default=False,
-    # ),
-    # account: str = typer.Option("central_info",
-    #                             envvar="ARUBACLI_ACCOUNT",
-    #                             help="The Aruba Central Account to use (must be defined in the config)",
-    #                             autocompletion=cli.cache.account_completion),
-    # update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
+    ctx: typer.Context,
+    debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+                            #    callback=all_commands_callback),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+                            #    callback=all_commands_callback),
+    default: bool = typer.Option(
+        False,
+        "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+    update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
 ) -> None:
     """
     Aruba Central API CLI
