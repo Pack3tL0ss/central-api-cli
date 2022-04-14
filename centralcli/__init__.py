@@ -77,7 +77,7 @@ from .utils import Utils
 utils = Utils()
 from .response import Response
 from .central import CentralApi
-from .cache import Cache
+from .cache import Cache, CentralObject
 from .clicommon import CLICommon
 
 # if no environ vars set for LESS command line options
