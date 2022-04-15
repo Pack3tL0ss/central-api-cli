@@ -1277,16 +1277,23 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_dhcp_clients(self, serial_num: str, reservation: bool = True,
-                               offset: int = 0, limit: int = 100) -> Response:
-        """Mobility Controllers DHCP Client information.
+    # API-FLAW This method returns next to nothing for reserved IPs.
+    # Would be more ideal if it returned client_name pool pvid etc as it does with non resserved IPs
+    async def get_dhcp_clients(
+        self,
+        serial_num: str,
+        reservation: bool = True,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """Get DHCP Client information from Gateway.
 
         Args:
             serial_num (str): Serial number of mobility controller to be queried
             reservation (bool, optional): Flag to turn on/off listing DHCP reservations(if any).
                 Defaults to True
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. max 1000 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -1294,13 +1301,15 @@ class CentralApi(Session):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
 
         params = {
-            'reservation': str(reservation)
+            'reservation': str(reservation),
+            "offset": offset,
+            "limit": limit
         }
 
         return await self.get(url, params=params)
 
     async def get_dhcp_server(self, serial_num: str) -> Response:
-        """Mobility Controllers DHCP Server details.
+        """Get DHCP Server details from Gateway.
 
         Args:
             serial_num (str): Serial number of mobility controller to be queried
