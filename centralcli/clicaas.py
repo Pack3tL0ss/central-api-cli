@@ -340,6 +340,12 @@ def send_cmds(
                     print("Providing commands on the command line and in the import file is a strange thing to do.")
                     raise typer.Exit(1)
                 commands = file_data.get("cmds", file_data.get("commands"))
+    elif kw1 == "device":
+        if not isinstance(nodes, str):
+            print(f"nodes is of type {type(nodes)} this is unexpected.")
+
+        nodes = [cache.get_identifier(nodes, ["dev"], "gw")]
+
     if cmd_file:
         if commands:
             print("Providing commands on the command line and in the import file is a strange thing to do.")
@@ -353,7 +359,14 @@ def send_cmds(
 
     if yes or typer.confirm("\nProceed?", abort=True):
         caasapi = caas.CaasAPI(central=cli.central)
-        _reqs = [cli.central.BatchRequest(caasapi.send_commands, n.mac if n.is_dev else n.name, cli_cmds=commands) for n in nodes]
+        _reqs = [
+            cli.central.BatchRequest(
+                caasapi.send_commands,
+                n.name if not n.is_dev else n.mac,
+                cli_cmds=commands
+            )
+            for n in utils.listify(nodes)
+        ]
         batch_res = cli.central.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
         # caas.
