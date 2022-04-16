@@ -1042,8 +1042,14 @@ class CentralApi(Session):
         # return await self.patch(url, headers=headers, data=data)
         return await self.patch(url, json_data=json_data)
 
+    # API-FLAW  Seems to work fine for cx, ap, but gw the return is
+    # "Fetching configuration in progress for Mobility Controller SERIAL/MAC"
+    # subsequent calls for the same gw return 500 internal server error.
+    # FIXME
     async def get_device_configuration(self, device_serial: str) -> Response:
         """Get last known running configuration for a device.
+
+        // Used by show run <DEVICE-IDEN> //
 
         Args:
             device_serial (str): Serial number of the device.
