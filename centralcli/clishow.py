@@ -848,6 +848,12 @@ def lldp(
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+    ),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1178,7 +1184,7 @@ def clients(
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
     ),
-    pager: bool = typer.Option(False, help="Enable Paged Output",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
