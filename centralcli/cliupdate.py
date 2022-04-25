@@ -471,8 +471,8 @@ def config_(
 
 
 @app.command(
-    short_help="Update Group or Device level config",
-    help="Update/Replace Group or Device level Configuration (ap or gw)"
+    short_help="Update webhook details",
+    help="Update webhook details (name/urls)"
 )
 def webhook(
     wid: str = typer.Argument(..., help="Use show webhooks to get the wid"),
