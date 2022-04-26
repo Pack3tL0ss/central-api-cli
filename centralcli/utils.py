@@ -297,7 +297,7 @@ class Utils:
         elif isinstance(data, (list, tuple)):
             if strip_empty_obj:
                 return type(data)(d for d in data if d)
-            return type(data)(d for d in data if d is None)
+            return type(data)(d for d in data if d is not None)
         else:
             return data
 
