@@ -1312,7 +1312,10 @@ def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
     return cencli
 
 # TODO add dedicated completion function and remove cencli match from get_log_identifier
-@app.command(short_help="Show Event Logs (2 days by default)")
+@app.command(
+    help="Show Audit Logs or cencli logs.  Audit Logs will displays prior 48 hours if no time options are provided.",
+    short_help="Show Audit Logs (last 48h default)",
+)
 def logs(
     args: List[str] = typer.Argument(
         None,
@@ -1325,6 +1328,7 @@ def logs(
     start: str = typer.Option(None, help="Start time of range to collect logs, format: yyyy-mm-ddThh:mm (24 hour notation)",),
     end: str = typer.Option(None, help="End time of range to collect logs, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
     past: str = typer.Option(None, help="Collect Logs for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
+    _all: bool = typer.Option(False, "--all", help="Display all available audit logs.  Overrides default of 48h"),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
@@ -1382,6 +1386,11 @@ def logs(
         if device:
             device = cli.cache.get_dev_identifier(device)
 
+        if _all and True in list(map(bool, [start, end, past])):
+            print("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/]")
+            print("are invalid when [cyan]--all[/] is used.")
+            raise typer.Exit(1)
+
         if start:
             # TODO add common dt function allow HH:mm and assumer current day
             try:
@@ -1410,7 +1419,7 @@ def logs(
     kwargs = {
         "log_id": log_id,
         "username": user,
-        "start_time": start or int(time.time() - 172800),
+        "start_time": start or int(time.time() - 172800) if not _all else None,
         "end_time": end,
         "description": description,
         "target": None if not device else device.serial,
@@ -1424,7 +1433,6 @@ def logs(
     resp = central.request(central.get_audit_logs, **kwargs)
 
     if kwargs.get("log_id"):
-        # typer.secho(str(resp), fg="green" if resp else "red")
         cli.display_results(resp, tablefmt="action")
     else:
         if verbose2:
