@@ -1042,8 +1042,14 @@ class CentralApi(Session):
         # return await self.patch(url, headers=headers, data=data)
         return await self.patch(url, json_data=json_data)
 
+    # API-FLAW  Seems to work fine for cx, ap, but gw the return is
+    # "Fetching configuration in progress for Mobility Controller SERIAL/MAC"
+    # subsequent calls for the same gw return 500 internal server error.
+    # FIXME
     async def get_device_configuration(self, device_serial: str) -> Response:
         """Get last known running configuration for a device.
+
+        // Used by show run <DEVICE-IDEN> //
 
         Args:
             device_serial (str): Serial number of the device.
@@ -1277,16 +1283,23 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_dhcp_clients(self, serial_num: str, reservation: bool = True,
-                               offset: int = 0, limit: int = 100) -> Response:
-        """Mobility Controllers DHCP Client information.
+    # API-FLAW This method returns next to nothing for reserved IPs.
+    # Would be more ideal if it returned client_name pool pvid etc as it does with non resserved IPs
+    async def get_dhcp_clients(
+        self,
+        serial_num: str,
+        reservation: bool = True,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """Get DHCP Client information from Gateway.
 
         Args:
             serial_num (str): Serial number of mobility controller to be queried
             reservation (bool, optional): Flag to turn on/off listing DHCP reservations(if any).
                 Defaults to True
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. max 1000 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -1294,13 +1307,15 @@ class CentralApi(Session):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
 
         params = {
-            'reservation': str(reservation)
+            'reservation': str(reservation),
+            "offset": offset,
+            "limit": limit
         }
 
         return await self.get(url, params=params)
 
     async def get_dhcp_server(self, serial_num: str) -> Response:
-        """Mobility Controllers DHCP Server details.
+        """Get DHCP Server details from Gateway.
 
         Args:
             serial_num (str): Serial number of mobility controller to be queried
@@ -1861,7 +1876,7 @@ class CentralApi(Session):
     ) -> Response:
         """Get gateway Uplink tunnel details.
 
-        // Used by wh_proxy, currently not used by a command will be in show gateway tunnels //
+        Used by wh_proxy, currently not used by a command will be in show gateway tunnels
 
         Args:
             serial (str): Serial number of mobility controller to be queried
@@ -1883,6 +1898,8 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    # API-FLAW max limit 100 enforced if you provide the limit parameter, otherwise no limit? returned 811 w/ no param provided
+    # API-FLAW does not return all logs available in UI wtf??
     async def get_audit_logs(
         self,
         log_id: str = None,
@@ -1923,7 +1940,6 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # max limit 100 if you provide the parameter, otherwise no limit? returned 811 w/ no param
         url = "/platform/auditlogs/v1/logs"
 
         params = {
@@ -2051,6 +2067,60 @@ class CentralApi(Session):
                 # return resp
         else:
             return await self.post(url, json_data=json_data, callback=cleaner._unlist)
+
+    # TODO add cli
+    async def update_site(
+        self,
+        site_id: int,
+        site_name: str,
+        address: str = None,
+        city: str = None,
+        state: str = None,
+        zipcode: str = None,
+        country: str = None,
+        latitude: str = None,
+        longitude: str = None,
+    ) -> Response:
+        """Update Site.
+
+        Provide geo-loc or address details, not both.
+        Can provide both in subsequent calls, but apigw does not
+        allow both in same call.
+
+        # TODO Used by cencli update site [name|id|address]'
+
+        Args:
+            site_id (int): Site ID
+            site_name (str): Site Name
+            address (str): Address
+            city (str): City Name
+            state (str): State Name
+            zipcode (str): Zipcode
+            country (str): Country Name
+            latitude (str): Latitude (in the range of -90 and 90)
+            longitude (str): Longitude (in the range of -180 and 180)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v2/sites/{site_id}"
+        if zipcode:
+            zipcode = str(zipcode)
+
+
+        site_address = {"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode}
+        geolocation = {"latitude": latitude, "longitude": longitude}
+
+        site_address = utils.strip_none(site_address)
+        geolocation = utils.strip_none(geolocation)
+
+        json_data = {
+            "site_name": site_name,
+            "site_address": site_address,
+            "geolocation": geolocation
+        }
+
+        return await self.patch(url, json_data=json_data)
 
     async def create_group_v2(
         self,
@@ -3331,6 +3401,7 @@ class CentralApi(Session):
         mac_address: str = None,
         serial_num: str = None,
         group: str = None,
+        site: str = None,
         part_num: str = None,
         license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
@@ -3344,6 +3415,7 @@ class CentralApi(Session):
             mac_address (str, optional): MAC address of device to be added
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
+            site (str, optional): Assign device to a site (additional API call is made)
             part_num (str, optional): Part Number is required for Central On Prem.
             license (str|List(str), optional): The subscription license(s) to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
@@ -3430,6 +3502,10 @@ class CentralApi(Session):
             if to_group:
                 group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
+
+            # TODO add assign to site, need to determine if we know device type at this point
+            if site:
+                print("Assign device to site not implemented yet")
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:

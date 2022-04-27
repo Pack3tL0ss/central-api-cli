@@ -191,7 +191,7 @@ def caas_batch(
     """cencli caas batch add-vlan add-vlan-99"""
     caasapi = caas.CaasAPI(central=cli.central)
     if file == config.stored_tasks_file and not key:
-        typer.echo("key is required when using the default import file")
+        print("[bright_red]ERROR:[/] key is required when using the default import file")
         raise typer.Exit(1)
 
     data = config.get_file_data(file)
@@ -202,15 +202,15 @@ def caas_batch(
         data = data.get(key)
 
     if not data:
-        _msg = typer.style(f"{key} not found in {file}.  No Data to Process", fg="red")
-        typer.echo(_msg)
+        print(f"[bright_red]ERROR:[/] [cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
+        raise typer.Exit(1)
     else:
         args = data.get("arguments", [])
         kwargs = data.get("options", {})
         cmds = data.get("cmds", [])
 
         if not args:
-            typer.secho("import data requires an argument specifying the group / device")
+            print("[bright_red]ERROR:[/] import data requires an argument specifying the group / device")
             raise typer.Exit(1)
 
         if command:
@@ -232,9 +232,16 @@ def caas_batch(
                 typer.echo(f"{command} doesn't appear to be valid")
 
         elif cmds:
-            kwargs = {**kwargs, **{"cli_cmds": cmds}}
-            resp = cli.central.request(caasapi.send_commands, *args, **kwargs)
-            caas.eval_caas_response(resp)
+            print(f"\nSending the following to [cyan]{utils.unlistify(args)}[/]")
+            if kwargs:
+                print("\n  With the following options:")
+                _ = [print(f"    {k} : {v}") for k, v in kwargs.items()]
+                print(f"  [bold]cli cmds:[/]")
+            _ = [print(f"    [cyan]{c}[/]") for c in cmds]
+            if typer.confirm("Proceed:"):
+                kwargs = {**kwargs, **{"cli_cmds": cmds}}
+                resp = cli.central.request(caasapi.send_commands, *args, **kwargs)
+                caas.eval_caas_response(resp)
 
 
 
@@ -340,6 +347,12 @@ def send_cmds(
                     print("Providing commands on the command line and in the import file is a strange thing to do.")
                     raise typer.Exit(1)
                 commands = file_data.get("cmds", file_data.get("commands"))
+    elif kw1 == "device":
+        if not isinstance(nodes, str):
+            print(f"nodes is of type {type(nodes)} this is unexpected.")
+
+        nodes = [cache.get_identifier(nodes, ["dev"], "gw")]
+
     if cmd_file:
         if commands:
             print("Providing commands on the command line and in the import file is a strange thing to do.")
@@ -353,7 +366,14 @@ def send_cmds(
 
     if yes or typer.confirm("\nProceed?", abort=True):
         caasapi = caas.CaasAPI(central=cli.central)
-        _reqs = [cli.central.BatchRequest(caasapi.send_commands, n.mac if n.is_dev else n.name, cli_cmds=commands) for n in nodes]
+        _reqs = [
+            cli.central.BatchRequest(
+                caasapi.send_commands,
+                n.name if not n.is_dev else n.mac,
+                cli_cmds=commands
+            )
+            for n in utils.listify(nodes)
+        ]
         batch_res = cli.central.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
         # caas.

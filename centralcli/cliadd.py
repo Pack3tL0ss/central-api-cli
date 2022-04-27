@@ -48,6 +48,7 @@ class AddGroupArgs(str, Enum):
 
 
 # TODO update completion with mac oui, serial prefix
+# FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
@@ -57,8 +58,12 @@ def device(
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion),
+    kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
+    val4: str = typer.Argument(None, metavar="site [SITE]", help="Assign newly added device to site",
+                               autocompletion=cli.cache.smg_kw_completion),
     _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
+    _site: str = typer.Option(None, "--site", autocompletion=cli.cache.site_completion, hidden=True),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -69,12 +74,13 @@ def device(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
-    kwd_vars = [kw1, kw2, kw3]
-    vals = [val1, val2, val3]
+    kwd_vars = [kw1, kw2, kw3, kw4]
+    vals = [val1, val2, val3, val4]
     kwargs = {
         "mac": None,
         "serial": None,
         "group": None,
+        "site": None,
         "license": license
     }
 
@@ -82,12 +88,13 @@ def device(
         print("DEVELOPER NOTE Null completion item has value... being ignored.")
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            print(f"[bright_red][blink]Error[/bright_red]: {name} in invalid")
+            print(f"[bright_red][blink]Error[/bright_red]: {name} is invalid")
             raise typer.Exit(1)
         else:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
+    kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
@@ -99,7 +106,13 @@ def device(
 
     _msg = [f"Add device: [bright_green]{kwargs['serial_num']}|{kwargs['mac_address']}[/bright_green]"]
     if "group" in kwargs and kwargs["group"]:
+        _group = cli.cache.get_group_identifier(kwargs["group"])
+        kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
+    if "site" in kwargs and kwargs["site"]:
+        _site = cli.cache.get_site_identifier(kwargs["site"])
+        kwargs["site"] = _site.id
+        _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]

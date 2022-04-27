@@ -39,7 +39,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.central import CentralApi  # noqa
 from centralcli.constants import (
     BlinkArgs, BounceArgs, IdenMetaVars,
-    KickArgs, RenameArgs, StartArgs
+    KickArgs, LicenseTypes, RenameArgs, StartArgs
 )
 
 iden = IdenMetaVars()
@@ -312,6 +312,37 @@ def remove(
                 device_type=dev_type) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
+        cli.display_results(resp, tablefmt="action")
+
+# TODO Add test
+# FIXME can unhide once adapt to query device inventory / devices not checked into central yet.
+@app.command(short_help="Assign License to device(s).", help="Assign License to device(s)", hidden=True)
+def assign(
+    license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    yes = yes_ if yes_ else yes
+    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+
+    # TODO add confirmation method builder to output class
+    _msg = f"Assign [bright_green]{license}[/bright_green] to"
+    if len(devices) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev.name}|{dev.serial}|{dev.mac}[/]' for dev in devices])
+        _msg = f"{_msg}:\n{_dev_msg}"
+    else:
+        dev = devices[0]
+        _msg = f"{_msg} [cyan]{dev.name}|{dev.serial}|{dev.mac}[/]"
+    print(_msg)
+    if yes or typer.confirm("\nProceed?"):
+        resp = cli.central.request(cli.central.assign_licenses, [d.serial for d in devices], services=license)
         cli.display_results(resp, tablefmt="action")
 
 

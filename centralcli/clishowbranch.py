@@ -26,7 +26,7 @@ tty = utils.tty
 iden_meta = IdenMetaVars()
 
 
-@app.command(short_help="Show Detected Rogue APs")
+@app.command(help="Show Branch Health statistics", short_help="Show Branch Health statistics")
 def health(
     site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
     wan_down: bool = typer.Option(False, "--wan-down", help="Show branches with wan uplinks or tunnels Down."),

@@ -64,6 +64,7 @@ def _time_diff_words(epoch: float) -> str:
 @epoch_convert
 def _log_timestamp(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
+    # DEBUG return f'{epoch} | {pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")}'
 
 
 def _short_connection(value: str) -> str:
@@ -78,7 +79,7 @@ def _serial_to_name(sernum: str) -> str:
     ):
         return sernum
 
-    match = cache.get_dev_identifier(sernum)
+    match = cache.get_dev_identifier(sernum, retry=False, silent=True)
     if not match:
         return sernum
 
