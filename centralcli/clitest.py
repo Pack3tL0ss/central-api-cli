@@ -45,6 +45,7 @@ def webhook(
 def method(
     method: str = typer.Argument(..., autocompletion=cli.cache.method_test_completion),
     kwargs: List[str] = typer.Argument(None),
+    _help: bool = typer.Option(False, "--doc", help="Get details on required args/keyword args for provided method."),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
@@ -70,7 +71,11 @@ def method(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """dev testing commands to run CentralApi methods from command line
+    """Dev testing commands to run CentralApi methods from command line.
+
+    Refer to central.py and the schema generated code in the boilerplate dir
+    for available calls.  Tab completion will also return available methods.
+    Use --doc to get details on arguments for the provided method.
 
     Args:
         method (str, optional): CentralAPI method to test.
@@ -78,6 +83,11 @@ def method(
 
     format: arg1 arg2 keyword=value keyword2=value
         or  arg1, arg2, keyword = value, keyword2=value
+
+    Examples: cencli test method platform_get_devices all_ap
+
+        Use --doc flag to see documentation for usage of a method.
+        cencli test method platform_get_devices --doc
 
     Displays all attributes of Response object
     """
@@ -102,6 +112,12 @@ def method(
     if not hasattr(central, method):
         typer.secho(f"{method} does not exist", fg="red")
         raise typer.Exit(1)
+
+    if _help:
+        old_ret = "Response: CentralAPI Response object"
+        new_ret = "Response from Aruba Central API gateway."
+        print(getattr(central, method).__doc__.replace(old_ret, new_ret))
+        raise typer.Exit(0)
 
     kwargs = (
         "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
