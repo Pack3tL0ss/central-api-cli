@@ -487,7 +487,6 @@ class Utils:
             from rich.text import Text
             # from rich.progress import Progress
             from centralcli import constants
-            console = Console(record=True, emoji=False)
 
             customer_id, customer_name = "", ""
             # outdata = self.listify(outdata)
@@ -542,14 +541,16 @@ class Utils:
 
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
 
-                with console.capture():
-                    console.print(table)
+                # TODO look into this. console.capture stopped working reliably this works
+                console = Console(record=True, emoji=False)
+                console.begin_capture()
+                console.print(table)
+                table_data = console.end_capture()
+                raw_data = typer.unstyle(table_data)
 
-                raw_data = console.export_text(clear=False)
-                table_data = console.export_text(styles=True)
-
-                raw_data = f"{data_header}{raw_data}" if customer_id else f"{raw_data}"
-                table_data = f"{data_header}{table_data}" if customer_id else f"{table_data}"
+                if customer_id:
+                    raw_data = f"{data_header}{raw_data}"
+                    table_data = f"{data_header}{table_data}"
 
         elif tablefmt == "tabulate":
             customer_id = customer_name = ""
