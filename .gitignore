@@ -183,3 +183,5 @@ temp/
 # ignore for now, until dynamic
 tests/__init__.py
 tests/test_devices.json
+
+*.ignore
