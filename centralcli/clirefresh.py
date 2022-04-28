@@ -69,13 +69,5 @@ def webhook(
     cli.display_results(resp, tablefmt="action")
 
 
-@app.callback()
-def callback():
-    """
-    Perform Tests
-    """
-    pass
-
-
 if __name__ == "__main__":
     app()
