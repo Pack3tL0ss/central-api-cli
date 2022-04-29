@@ -5,26 +5,6 @@ import sys
 
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():
-
-    # def get_arguments_from_import(import_file: str, key: str = None) -> list:
-    #     """Get arguments from default import_file (stored_tasks.yaml)
-
-    #     Args:
-    #         import_file (str): name of import file
-    #         key (str, optional): return single value for specific key if provided. Defaults to None.
-
-    #     Returns:
-    #         list: updated sys.argv list.
-    #     """
-    #     # args = utils.read_yaml(import_file)
-    #     args = config.get_file_data(Path(import_file))
-    #     if key and key in args:
-    #         args = args[key]
-
-    #     sys.argv += args
-
-    #     return sys.argv
-
     try:
         if len(sys.argv) > 1:
             if " " in sys.argv[1] or not sys.argv[1]:
@@ -54,19 +34,6 @@ def vscode_arg_handler():
                     if not found:
                         sys.argv += vsc_args.split()
 
-        # if len(sys.argv) > 2:
-        #     _import_file, _import_key = None, None
-        #     if sys.argv[2].endswith((".yaml", ".yml", "json")):
-        #         _import_file = sys.argv.pop(2)
-        #         if not utils.valid_file(_import_file):
-        #             if utils.valid_file(config.dir.joinpath(_import_file)):
-        #                 _import_file = config.dir.joinpath(_import_file)
-
-        #         if len(sys.argv) > 2:
-        #             _import_key = sys.argv.pop(2)
-
-        #         sys.argv = get_arguments_from_import(_import_file, key=_import_key)
-
     except Exception as e:
         log.exception(f"Exception in vscode arg handler (arg split) {e.__class__.__name__}.{e}", show=True)
         return
@@ -75,7 +42,12 @@ def vscode_arg_handler():
     try:
         # Update prev_args history file
         history_lines = None
-        base_dir = Path(__file__).parent.parent
+
+        if len(set(["lib", "site-packages"]).intersection(Path(__file__).parent.parts)) != 2:
+            base_dir = Path(__file__).parent.parent  # dev from git folder
+        else:
+            base_dir = Path(__file__).parent  # troubleshooting from installed package
+
         history_file = base_dir / ".vscode" / "prev_args"
         this_args = " ".join([x if " " not in x else f"'{x}'" for x in sys.argv[1:]])
         if not this_args:
