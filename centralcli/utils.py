@@ -428,9 +428,9 @@ class Utils:
                                                 box=SIMPLE
                                                 )
                             _ = [inner_table.add_row(*[self.do_pretty(kk, str(vv)) for kk, vv in v.items()]) for v in val]
-                            with console.capture():
-                                console.print(inner_table)
-                            inner_dict[key] = console.export_text()
+                            console.begin_capture()
+                            console.print(inner_table)
+                            inner_dict[key] = console.end_capture()
                         elif val and tablefmt == "tabulate" and hasattr(val[0], 'keys'):
                             inner_table = tabulate(val, headers="keys", tablefmt=tablefmt)
                             inner_dict[key] = inner_table
@@ -487,6 +487,7 @@ class Utils:
             from rich.text import Text
             # from rich.progress import Progress
             from centralcli import constants
+            console = Console(record=True, emoji=False)
 
             customer_id, customer_name = "", ""
             # outdata = self.listify(outdata)
@@ -542,7 +543,6 @@ class Utils:
                 data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
 
                 # TODO look into this. console.capture stopped working reliably this works
-                console = Console(record=True, emoji=False)
                 console.begin_capture()
                 console.print(table)
                 table_data = console.end_capture()
