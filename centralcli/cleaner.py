@@ -423,6 +423,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
         to_front = [
             "vlan_id",
             "name",
+            "status",
             "type",
             "model",
             'mode',
@@ -460,7 +461,6 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             'version',
             'firmware_backup_version',
             'oper_state_reason',
-            "status",
         ]
     to_front = [i for i in to_front if i in all_keys]
     _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]

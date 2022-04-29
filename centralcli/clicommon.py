@@ -463,6 +463,7 @@ class CLICommon:
                         outfile=outfile,
                         sort_by=sort_by,
                         reverse=reverse,
+                        stash=stash,
                         pad=pad,
                         set_width_cols=set_width_cols,
                         full_cols=full_cols,
@@ -476,7 +477,6 @@ class CLICommon:
                 print(caption)
 
             if exit_on_fail and not all([r.ok for r in resp]):
-                print("DEBUG error code return")
                 raise typer.Exit(1)
 
         elif data:
@@ -489,6 +489,7 @@ class CLICommon:
                 outfile=outfile,
                 sort_by=sort_by,
                 reverse=reverse,
+                stash=stash,
                 pad=pad,
                 set_width_cols=set_width_cols,
                 full_cols=full_cols,
