@@ -59,50 +59,92 @@ def _get_full_int(val: List[str]) -> FstrInt:
 
 
 def _lldp_rename_get_fstr():
-    rtxt = typer.style("RESULT: ", fg=typer.colors.BRIGHT_BLUE)
-    while True:
-        typer.secho("Rename APs based on LLDP:", fg="bright_green")
-        typer.echo(
-            "  This function will automatically rename APs based on a combination of\n"
-            "  information from the upstream switch (via LLDP) and from the AP itself.\n\n"
-            "    Values used in the examples below: \n"
-            "      switch hostname (%h): 'SNAN-IDF3-sw1'\n"
-            "      switch port (%p): 7\n"
-            "      AP mac (%m): aa:bb:cc:dd:ee:ff\n"
-            "      AP model (%M): 535\n\n"
-            f"{typer.style('Format String Syntax:', fg='bright_green')}\n"
-            "  '%h[1:2]'  will use the first 2 characters of the switches hostname.\n"
-            f"    {rtxt} 'SN'\n"
-            "  '%h[2:4]'  will use characters 2 through 4 of the switches hostname.\n"
-            f"    {rtxt} 'NAN'\n"
-            "  '%h-1'  will split the hostname into parts separating on '-' and use\n"
-            "  the firt segment.\n"
-            f"    {rtxt} 'SNAN\n"
-            "  '%p'  represents the interface.\n"
-            f"    {rtxt} '7'\n"
-            "  '%p/3'  seperates the port string on / and uses the 3rd segment.\n"
-            f"    {rtxt} (given port 1/1/7): '7'\n"
-            f"  '%M'  represents the the AP model.\n"
-            f"    {rtxt} '535'\n"
-            "  '%m' The MAC of the AP NOTE: delimiters ':' are stripped from MAC\n"
-            "  '%m[-4]'  The last 4 digits of the AP MAC\n"
-            f"    {rtxt} 'eeff'\n\n"
-            f"{typer.style('Examples:', fg='bright_green')}\n"
-            f"  %h-1-AP%M-%m[-4]  {rtxt} SNAN-AP535-eeff\n"
-            f"  %h[1-4]-%h-2%h-3.p%p.%M-ap  {rtxt} SNAN-IDF3sw1.p7.535-ap\n"
-            f"  %h-1-%M.%m[-4]-ap  {rtxt} SNAN-535.eeff-ap\n"
+    rtxt = "[bright_blue]RESULT: [/bright_blue]"
+    point_txt = "[bright_blue]-->[/bright_blue]"
+    lldp_rename_text = f"""
+[bright_green]Auto rename APs based on LLDP:[/]
 
-        )
+[bold cyan]This function will automatically rename APs based on a combination of
+information from the upstream switch (via LLDP) and from the AP itself.[/]
+
+[cyan]Use the following field indicators:[reset]
+    %h: switch hostname
+    %m: AP MAC
+    %p: switch port
+    %M: AP model
+    %S: site
+    %s: AP serial
+
+[cyan]Values used in the examples below:[/]
+    switch hostname (%h): 'SNAN-IDF3-sw1'
+    switch port (%p): 7
+    AP mac (%m): aa:bb:cc:dd:ee:ff
+    AP model (%M): 655
+    site (%S): WadeLab
+    [italic]Note: serial (%s) not shown as examples but follow same format.[/]
+
+[bold bright_green]Format String Syntax:[/]
+    '%h[1:2]'  will use the first 2 characters of the switches hostname.
+    {rtxt} 'SN'
+    '%h[2:4]'  will use characters 2 through 4 of the switches hostname.
+    {rtxt} 'NAN'
+    '%h-1'  will split the hostname into parts separating on '-' and use
+            the firt segment.
+    {rtxt} 'SNAN
+    '%p'  represents the interface.
+    {rtxt} '7'
+    '%p/3'  seperates the port string on / and uses the 3rd segment.
+    {rtxt} (given port 1/1/7): '7'
+    '%M'  represents the the AP model.
+    {rtxt} '655'
+    '%m[-4]'  The last 4 digits of the AP MAC
+    [italic]NOTE: delimiters ':' are stripped from MAC[/]
+    {rtxt} 'eeff'
+
+[bold bright_green]Examples:[/]
+    %h-1-AP%M-%m[-4]           {point_txt} [cyan]SNAN-AP535-eeff[/]
+    %h[1-4]-%h-2%h-3.p%p.%M-ap {point_txt} [cyan]SNAN-IDF3sw1.p7.535-ap[/]
+    %S-%h-1-%M-%m[-4]-ap       {point_txt} [cyan]WadeLab-SNAN-655-eeff-ap[/]
+    %h-1-%M.%m[-4]-ap          {point_txt} [cyan]SNAN-535.eeff-ap[/]
+
+[italic bright_red]Note:[/][italic] Automation will only apply to APs that are [bright_green]Up[/].
+[italic]Use[/] [cyan]'cencli show aps --down'[/] to see APs that were excluded.
+    """
+    while True:
+        print(lldp_rename_text)
         fstr = typer.prompt("Enter Desired format string",)
         if "%%" in fstr:
             typer.clear()
-            typer.secho(f"\n{fstr} appears to be invalid.  Should never be 2 consecutive '%'.\n", fg="red")
+            print(f"\n[cyan]{fstr}[/] appears to be invalid.  Should never be 2 consecutive '%'.")
         else:
             return fstr
 
+def _get_lldp_dict(ap_dict: dict) -> dict:
+    """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
+    """
+    br = cli.central.BatchRequest
+    lldp_reqs = [br(cli.central.get_ap_lldp_neighbor, ap) for ap in ap_dict]
+    lldp_resp = cli.central.batch_request(lldp_reqs)
+
+    if not all(r.ok for r in lldp_resp):
+        log.error("Error occured while gathering lldp neighbor info", show=True)
+        cli.display_results(lldp_resp, exit_on_fail=True)
+
+    lldp_dict = {d.output[-1]["serial"]: {k: v for k, v in d.output[-1].items()} for d in lldp_resp}
+    ap_dict = {
+        ser: {
+            **val,
+            "neighborHostName": lldp_dict[ser]["neighborHostName"],
+            "remotePort": lldp_dict[ser]["remotePort"],
+        }
+        for ser, val in ap_dict.items()
+    }
+
+    return ap_dict
 
 def do_lldp_rename(fstr: str, **kwargs) -> Response:
-    br = cli.central.BatchRequest
+    need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
+    # TODO get all APs then filter down after, stash down aps for easy subsequent call
     resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
 
     if not resp:
@@ -117,148 +159,154 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
         cli.display_results(resp, exit_on_fail=True)
 
     _all_aps = utils.listify(resp.output)
-    _keys = ["name", "mac", "model"]
-    ap_dict = {d["serial"]: {k: d[k] for k in d if k in _keys} for d in _all_aps}
+    _keys = ["name", "macaddr", "model", "site", "serial"]
+    ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}
     fstr_to_key = {
         "h": "neighborHostName",
         "m": "mac",
         "p": "remotePort",
         "M": "model",
         "S": "site",
+        "s": "serial"
     }
+
     req_list, name_list, shown_promt = [], [], False
-    if ap_dict:
-        lldp_reqs = [br(cli.central.get_ap_lldp_neighbor, ap) for ap in ap_dict]
-        lldp_resp = cli.central.batch_request(lldp_reqs)
+    if not ap_dict:
+        log.error("Something went wrong, no ap_dict provided or empty", show=True)
+        raise typer.Exit(1)
 
-        if not all(r.ok for r in lldp_resp):
-            log.error("Error occured while gathering lldp neighbor info", show=True)
-            cli.display_results(lldp_resp, exit_on_fail=True)
+    num_calls = len(ap_dict) * 3 if need_lldp else len(ap_dict) * 2
 
-        lldp_dict = {d.output[-1]["serial"]: {k: v for k, v in d.output[-1].items()} for d in lldp_resp}
-        ap_dict = {
-            ser: {
-                **val,
-                "neighborHostName": lldp_dict[ser]["neighborHostName"],
-                "remotePort": lldp_dict[ser]["remotePort"],
-                "site": None if "%S" not in fstr else cli.cache.get_dev_identifier(lldp_dict[ser]["neighborSerial"])
-            }
-            for ser, val in ap_dict.items()
-        }
+    if len(ap_dict) > 5:
+        _warn = "\n\n[blink bright_red blink]WARNING[reset]"
+        if need_lldp:
+            _warn = f"{_warn} Format provided requires details about the upstream switch.\n"
+            _warn = f"{_warn} This automation will result in [cyan]{num_calls}[/] API calls. 3 per switch .\n"
+            _warn = f"{_warn} 1 to gather details about the upstream switch\n"
+        else:
+            _warn = f"{_warn} This automation will result in [cyan]{num_calls}[/] API calls, 1 for each AP.\n"
+        _warn = f"{_warn}1 to get the aps curreant settings (all settings need to be provided during the update, only the name changes).\n"
+        _warn = f"{_warn}1 to rename the AP.\n"
 
-        for ap in ap_dict:
-            ap_dict[ap]["mac"] = utils.Mac(ap_dict[ap]["mac"]).clean
-            # _lldp = cli.central.request(cli.central.get_ap_lldp_neighbor, ap)
-            # if _lldp:
-            #     ap_dict[ap]["neighborHostName"] = _lldp.output[-1]["neighborHostName"]
-            #     ap_dict[ap]["remotePort"] = _lldp.output[-1]["remotePort"]
+        print(_warn)
+        if resp.rl.remain_day < num_calls:
+            print(f"  {resp.rl}")
+            print(f"  More calls required {num_calls} than what's remaining in daily quota {resp.rl.remain_day}.")
 
-            while True:
-                st = 0
-                x = ''
-                try:
-                    for idx, c in enumerate(fstr):
-                        if not idx >= st:
-                            continue
-                        if c == '%':
-                            if fstr[idx + 1] not in fstr_to_key.keys():
-                                _e1 = typer.style(
-                                        f"Invalid source specifier ({fstr[idx + 1]}) in format string {fstr}: ",
-                                        fg="red"
-                                )
-                                _e2 = "Valid values:\n{}".format(
-                                    ", ".join(fstr_to_key.keys())
-                                )
-                                typer.echo(f"{_e1}\n{_e2}")
-                                raise KeyError(f"{fstr[idx + 1]} is not valid")
+        typer.confirm("Proceed:", abort=True)
 
-                            _src = ap_dict[ap][fstr_to_key[fstr[idx + 1]]]
-                            if fstr[idx + 2] != "[":
-                                if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
-                                    x = f'{x}{_src}'
-                                    st = idx + 2
-                                elif fstr[idx + 2:idx + 4] == "((":
-                                    # +3 should also be (
-                                    _from = fstr[idx + 4]
-                                    _to = fstr[idx + 6]
+    if need_lldp:
+        ap_dict = _get_lldp_dict(ap_dict)
 
-                                    if not fstr[idx + 5] == ",":
-                                        typer.secho(
-                                            f"expected a comma at character {idx + 1 + 5} but found {fstr[idx + 5]}\n"
-                                            "will try to proceed.", fg="bright_red"
-                                        )
+    # TODO refactor and use a template string or j2 something should already exist for this stuff.
+    for ap in ap_dict:
+        ap_dict[ap]["mac"] = utils.Mac(ap_dict[ap]["mac"]).clean
+        while True:
+            st = 0
+            x = ''
+            try:
+                for idx, c in enumerate(fstr):
+                    if not idx >= st:
+                        continue
+                    if c == '%':
+                        if fstr[idx + 1] not in fstr_to_key.keys():
+                            _e1 = typer.style(
+                                    f"Invalid source specifier ({fstr[idx + 1]}) in format string {fstr}: ",
+                                    fg="red"
+                            )
+                            _e2 = "Valid values:\n{}".format(
+                                ", ".join(fstr_to_key.keys())
+                            )
+                            typer.echo(f"{_e1}\n{_e2}")
+                            raise KeyError(f"{fstr[idx + 1]} is not valid")
 
-                                    if not fstr[idx + 7:idx + 9] == "))":
-                                        typer.secho(
-                                            f"expected a )) at characters {idx + 1 + 7}-{idx + 1 + 8} "
-                                            f"but found {fstr[idx + 7]}{fstr[idx + 8]}\n"
-                                            "will try to proceed.", fg="bright_red"
-                                        )
+                        _src = ap_dict[ap][fstr_to_key[fstr[idx + 1]]]
+                        if fstr[idx + 2] != "[":
+                            if fstr[idx + 2] == "%" or fstr[idx + 3] == "%":
+                                x = f'{x}{_src}'
+                                st = idx + 2
+                            elif fstr[idx + 2:idx + 4] == "((":
+                                # +3 should also be (
+                                _from = fstr[idx + 4]
+                                _to = fstr[idx + 6]
 
-                                    x = f'{x}{_src.replace(_from, _to)}'
-                                    st = idx + 9
-                                else:
-                                    try:
-                                        fi = _get_full_int(fstr[idx + 3:])
-                                        x = f'{x}{_src.split(fstr[idx + 2])[fi.i]}'
-                                        st = idx + 3 + len(fi)
-                                    except IndexError:
-                                        _e1 = ", ".join(_src.split(fstr[idx + 2]))
-                                        _e2 = len(_src.split(fstr[idx + 2]))
-                                        typer.secho(
-                                            f"\nCan't use segment {fi.o} of '{_e1}'\n"
-                                            f"  It only has {_e2} segments.\n",
-                                            fg="red"
-                                        )
-                                        raise
-                            else:  # +2 is '['
-                                if fstr[idx + 3] == "-":
-                                    try:
-                                        fi = _get_full_int(fstr[idx + 4:])
-                                        x = f'{x}{"".join(_src[-fi.o:])}'
-                                        st = idx + 4 + len(fi) + 1  # +1 for closing ']'
-                                    except IndexError:
-                                        typer.secho(
-                                            f"Can't extract the final {fi.o} characters from {_src}"
-                                            f"It's only {len(_src)} characters."
-                                        )
-                                        raise
-                                else:  # +2 is '[' +3: should be int [1:4]
+                                if not fstr[idx + 5] == ",":
+                                    typer.secho(
+                                        f"expected a comma at character {idx + 1 + 5} but found {fstr[idx + 5]}\n"
+                                        "will try to proceed.", fg="bright_red"
+                                    )
+
+                                if not fstr[idx + 7:idx + 9] == "))":
+                                    typer.secho(
+                                        f"expected a )) at characters {idx + 1 + 7}-{idx + 1 + 8} "
+                                        f"but found {fstr[idx + 7]}{fstr[idx + 8]}\n"
+                                        "will try to proceed.", fg="bright_red"
+                                    )
+
+                                x = f'{x}{_src.replace(_from, _to)}'
+                                st = idx + 9
+                            else:
+                                try:
                                     fi = _get_full_int(fstr[idx + 3:])
-                                    fi2 = _get_full_int(fstr[idx + 3 + len(fi) + 1:])  # +1 for expected ':'
-                                    if len(_src[slice(fi.i, fi2.o)]) < fi2.o - fi.i:
-                                        _e1 = typer.style(
-                                            f"\n{fstr} wants to take characters "
-                                            f"\n{fi.o} through {fi2.o}"
-                                            f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
-                                            fg="red"
-                                        )
-                                        if not shown_promt and typer.confirm(
-                                            f"{_e1}"
-                                            f"\n\nResult will be \""
-                                            f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
-                                            " for this segment."
-                                            "\nOK to continue?"
-                                        ):
-                                            shown_promt = True
-                                            x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
-                                            st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
-                                        else:
-                                            raise typer.Abort()
-                        else:
-                            x = f'{x}{c}'
-                    req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
-                    name_list += [f"  {x}"]
-                    break
-                except typer.Abort:
+                                    x = f'{x}{_src.split(fstr[idx + 2])[fi.i]}'
+                                    st = idx + 3 + len(fi)
+                                except IndexError:
+                                    _e1 = ", ".join(_src.split(fstr[idx + 2]))
+                                    _e2 = len(_src.split(fstr[idx + 2]))
+                                    typer.secho(
+                                        f"\nCan't use segment {fi.o} of '{_e1}'\n"
+                                        f"  It only has {_e2} segments.\n",
+                                        fg="red"
+                                    )
+                                    raise
+                        else:  # +2 is '['
+                            if fstr[idx + 3] == "-":
+                                try:
+                                    fi = _get_full_int(fstr[idx + 4:])
+                                    x = f'{x}{"".join(_src[-fi.o:])}'
+                                    st = idx + 4 + len(fi) + 1  # +1 for closing ']'
+                                except IndexError:
+                                    typer.secho(
+                                        f"Can't extract the final {fi.o} characters from {_src}"
+                                        f"It's only {len(_src)} characters."
+                                    )
+                                    raise
+                            else:  # +2 is '[' +3: should be int [1:4]
+                                fi = _get_full_int(fstr[idx + 3:])
+                                fi2 = _get_full_int(fstr[idx + 3 + len(fi) + 1:])  # +1 for expected ':'
+                                if len(_src[slice(fi.i, fi2.o)]) < fi2.o - fi.i:
+                                    _e1 = typer.style(
+                                        f"\n{fstr} wants to take characters "
+                                        f"\n{fi.o} through {fi2.o}"
+                                        f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
+                                        fg="red"
+                                    )
+                                    if not shown_promt and typer.confirm(
+                                        f"{_e1}"
+                                        f"\n\nResult will be \""
+                                        f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
+                                        " for this segment."
+                                        "\nOK to continue?"
+                                    ):
+                                        shown_promt = True
+                                        x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
+                                        st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
+                                    else:
+                                        raise typer.Abort()
+                    else:
+                        x = f'{x}{c}'
+                req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
+                name_list += [f"  {x}"]
+                break
+            except typer.Abort:
+                fstr = _lldp_rename_get_fstr()
+            except Exception as e:
+                log.exception(f"LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
+                print(f"\nThere Appears to be a problem with [red]{fstr}[/]: {e.__class__.__name__}")
+                if typer.confirm("Do you want to edit the fomat string and try again?", abort=True):
                     fstr = _lldp_rename_get_fstr()
-                except Exception as e:
-                    log.exception(f"LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
-                    typer.secho(f"\nThere Appears to be a problem with {fstr}: {e.__class__.__name__}", fg="red")
-                    if typer.confirm("Do you want to edit the fomat string and try again?", abort="True"):
-                        fstr = _lldp_rename_get_fstr()
 
-    typer.secho(f"Resulting AP names based on '{fstr}':", fg="bright_green")
+    print(f"[bright_green]Resulting AP names based on '{fstr}':")
     if len(name_list) <= 6:
         typer.echo("\n".join(name_list))
     else:
@@ -510,6 +558,7 @@ def rename(
     debug: bool = typer.Option(
         False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
     ),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
@@ -524,16 +573,16 @@ def rename(
         import_file = None
 
     if not import_file and not lldp:
-        typer.echo("Error: Missing required parameter [IMPORT_FILE|'lldp']")
+        print("[bright_red]ERROR[/]: Missing required parameter [IMPORT_FILE|'lldp']")
         raise typer.Exit(1)
 
     central = cli.central
     if import_file:
-        if not import_file.exists():
-            typer.secho(f"Error: {import_file} not found.", fg="red")
-            raise typer.Exit(1)
-
         data = config.get_file_data(import_file)
+
+        if not data:
+            print(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
+            raise typer.Exit(1)
 
         resp = None
         if what == "aps":
@@ -550,8 +599,8 @@ def rename(
                         {k: v for k, v in i.items() if not k.startswith("serial")} for i in data.dict
                     }
 
-            calls, conf_msg = [], [typer.style("Names Gathered from import:", fg="bright_green")]
-            for ap in data:  # serial num
+            calls, conf_msg = [], [typer.style("\nNames gathered from import:", fg="bright_green")]
+            for ap in data:  # keyed by serial num
                 conf_msg += [f"  {ap}: {data[ap]['hostname']}"]
                 calls.append(central.BatchRequest(central.update_ap_settings, ap, **data[ap]))
 
@@ -559,7 +608,7 @@ def rename(
                 conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
             typer.echo("\n".join(conf_msg))
 
-            if yes or typer.confirm("Proceed with AP rename?", abort=True):
+            if yes or typer.confirm("\nProceed with AP rename?", abort=True):
                 resp = central.batch_request(calls)
 
     elif lldp:
