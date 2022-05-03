@@ -98,6 +98,9 @@ def show_devices(
                 _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
                 caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
                 caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device type use [cyan]show <DEVICE TYPE>[/cyan]\n "
+            else:
+                # get_all_devicesv2 already called (to populate/update cache) grab response from cache.
+                resp = cli.cache.responses.dev
         else:  # will only run if user specifies params (filters)
             resp = central.request(central.get_all_devicesv2, **params)
     elif serial:
@@ -567,6 +570,7 @@ def upgrade(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
+    # TODO The API method only accepts swarm id for IAP which AOS10 does not have / serial rejected
     central = cli.central
     if len(device) > 2:
         typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
@@ -576,7 +580,7 @@ def upgrade(
         dev = cli.cache.get_dev_identifier(device[-1])
         params["serial"] = dev.serial
     else:
-        typer.echo("Missing required parameter <device>")
+        print("Missing required parameter [cyan]<device>[/]")
 
     resp = central.request(central.get_upgrade_status, **params)
 
@@ -638,26 +642,29 @@ def groups(
     central = cli.central
     if central.get_all_groups not in cli.cache.updated:
         resp = asyncio.run(cli.cache.update_group_db())
-        if resp and verbose:
-            groups = [g["name"] for g in resp.output]
-            verbose_resp = central.request(central.get_groups_properties, groups=groups)
-            if not verbose_resp:
-                print("Error: Additional API call to gather group properties for verbose output failed.")
-                cli.display_results(verbose_resp, tablefmt="action")
-            else:
-                for idx, g in enumerate(verbose_resp.output):
-                    g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
-                    g["properties"]["GwNetworkRole"] = g["properties"].get("GwNetworkRole", "NA")
-                    g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys())}
-                    for grp in resp.output:
-                        if g["group"] == grp["name"]:
-                            verbose_resp.output[idx] = {**grp, **g["properties"]}
-                            continue
-                verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
-                resp = verbose_resp
+    else:
+        resp = cli.cache.responses.group
 
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-        cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile)
+    if resp and verbose:
+        groups = [g["name"] for g in resp.output]
+        verbose_resp = central.request(central.get_groups_properties, groups=groups)
+        if not verbose_resp:
+            print("Error: Additional API call to gather group properties for verbose output failed.")
+            cli.display_results(verbose_resp, tablefmt="action")
+        else:
+            for idx, g in enumerate(verbose_resp.output):
+                g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
+                g["properties"]["GwNetworkRole"] = g["properties"].get("GwNetworkRole", "NA")
+                g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys())}
+                for grp in resp.output:
+                    if g["group"] == grp["name"]:
+                        verbose_resp.output[idx] = {**grp, **g["properties"]}
+                        continue
+            verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
+            resp = verbose_resp
+
+    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show sites/details")
@@ -685,6 +692,8 @@ def sites(
     if not site:
         if central.get_all_sites not in cli.cache.updated:
             resp = asyncio.run(cli.cache.update_site_db())
+        else:
+            resp = cli.cache.responses.site
     else:
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
@@ -769,10 +778,12 @@ def templates(
             if not params:  # show templates - Just update and show data from cache
                 if central.get_all_templates not in cli.cache.updated:
                     resp = asyncio.run(cli.cache.update_template_db())
-                    # resp = Response(output=cli.cache.templates)
                 else:
-                    # Can't use cache due to filtering options
-                    resp = central.request(central.get_all_templates, **params)
+                    # cache updated this session use response from cache update
+                    resp = cli.cache.responses.template
+            else:
+                # Can't use cache due to filtering options
+                resp = central.request(central.get_all_templates, **params)
         else:  # show templates --group <group name>
             resp = central.request(central.get_all_templates_in_group, group, **params)
             # TODO update cache on individual grabs

@@ -5,7 +5,7 @@ from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
-from centralcli import log, utils, config, CentralApi, cleaner, constants
+from centralcli import log, utils, config, CentralApi, cleaner, constants, Response
 from pathlib import Path
 
 import asyncio
@@ -17,10 +17,13 @@ try:
 except Exception:
     pass
 
-# try:
-#     import better_exceptions # noqa
-# except Exception:
-#     pass
+# TODO remove after TESTING NEW string matching lookup
+try:
+    from fuzzywuzzy import process # type: ignore noqa
+    FUZZ = True
+except Exception:
+    FUZZ = False
+    pass
 
 TinyDB.default_table_name = "devices"
 
@@ -134,6 +137,62 @@ class CentralObject:
             ]
         )
 
+# TODO Not used yet refactor to make consistent Response object available for when using contents of cache to avoid API call
+class CacheResponses:
+    def __init__(
+        self,
+        dev: Response = None,
+        site: Response = None,
+        template: Response = None,
+        group: Response = None
+    ) -> None:
+        self._dev = dev
+        self._site = site
+        self._template = template
+        self._group = group
+
+    def update_rl(self, resp: Response) -> Response:
+        """Returns provided Response object with the RateLimit info from the most recent API call.
+        """
+        _last_rl = sorted([r.rl for r in [self._dev, self._site, self._template, self._group] if r is not None], key=lambda k: k.remain_day)
+        if _last_rl:
+            resp.rl = _last_rl[0]
+        return resp
+
+    @property
+    def dev(self):
+        return self.update_rl(self._dev)
+
+    @dev.setter
+    def dev(self, resp: Response):
+        self._dev = resp
+
+    @property
+    def site(self):
+        return self.update_rl(self._site)
+
+    @site.setter
+    def site(self, resp: Response):
+        self._site = resp
+
+    @property
+    def template(self):
+        return self.update_rl(self._template)
+
+    @template.setter
+    def template(self, resp: Response):
+        self._template = resp
+
+    @property
+    def group(self):
+        return self.update_rl(self._group)
+
+    @group.setter
+    def group(self, resp: Response):
+        self._group = resp
+
+
+
 
 class Cache:
     def __init__(
@@ -147,6 +206,7 @@ class Cache:
         self.rl: str = ""  # TODO temp might refactor cache updates to return resp
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
+        self.responses = CacheResponses()
         if config.valid and config.cache_dir.exists():
             self.DevDB = TinyDB(config.cache_file)
             self.SiteDB = self.DevDB.table("sites")
@@ -502,6 +562,7 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
+    # FIXME completion doesn't pop args need ctx: typer.Context and reference ctx.params which is dict?
     def send_cmds_completion(
         self,
         incomplete: str,
@@ -748,6 +809,7 @@ class Cache:
             self.rl = str(resp.rl)
             resp.output = utils.listify(resp.output)
             resp.output = cleaner.get_devices(resp.output)
+            self.responses.dev = resp
             # resp.output = [
             #     {
             #         k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
@@ -786,6 +848,7 @@ class Cache:
             if resp.ok:
                 resp.output = utils.listify(resp.output)
                 resp.output = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
+                self.responses.site = resp
                 # TODO time this to see which is more efficient
                 # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
                 # upd = [item for in_list in upd for item in in_list]
@@ -814,6 +877,7 @@ class Cache:
             if resp.ok:
                 resp.output = cleaner.get_all_groups(resp.output)
                 resp.output = utils.listify(resp.output)
+                self.responses.group = resp
                 self.updated.append(self.central.get_all_groups)
                 self.GroupDB.truncate()
                 update_res = self.GroupDB.insert_multiple(resp.output)
@@ -833,6 +897,7 @@ class Cache:
         if resp.ok:
             resp.output = utils.listify(resp.output)
             self.updated.append(self.central.get_all_templates)
+            self.responses.template = resp
             self.TemplateDB.truncate()
             update_res = self.TemplateDB.insert_multiple(resp.output)
             if False in update_res:
@@ -879,6 +944,7 @@ class Cache:
             self.HookDataDB.truncate()
             return self.HookDataDB.insert_multiple(data)
 
+    # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all atributes
     async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
         update_funcs, db_res = [], []
         if dev_db:
@@ -918,11 +984,13 @@ class Cache:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
+            _word = "Refreshing" if refresh else "Populating"
+            print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
+
             start = time.time()
-            print("[cyan]-- Refreshing Identifier mapping Cache --[/cyan]", end="")
             db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db))
+
             if not all([r.ok for r in db_res]):
-                # if db_res and False in db_res:
                 res_map = ["dev_db", "site_db", "template_db", "group_db"]
                 res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
                 # log.error(f"TinyDB returned error ({res_map}) during db update")
@@ -1269,8 +1337,14 @@ class Cache:
                 )
 
             if not match and retry and self.central.get_all_groups not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
-                self.check_fresh(refresh=True, group_db=True)
+                print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
+                    if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
+                        match = self.GroupDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
+                    self.check_fresh(refresh=True, group_db=True)
                 _ += 1
             if match:
                 match = [CentralObject("group", g) for g in match]
