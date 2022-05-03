@@ -1143,23 +1143,6 @@ class CentralApi(Session):
             'offset': offset,
             'limit': limit
         }
-        # params = {
-        #     "swarm_id": swarm_id,
-        #     "site": site,
-        #     "serial": serial,
-        #     "macaddr": macaddr,
-        #     "model": model,
-        #     "cluster_id": cluster_id,
-        #     "stack_id": stack_id,
-        #     "status": None if not status else status.title(),
-        #     "fields": fields,
-        #     "show_resource_details": str(show_resource_details).lower(),
-        #     "calculate_client_count": str(calculate_client_count).lower(),
-        #     "calculate_ssid_count": str(calculate_ssid_count).lower(),
-        #     "public_ip_address": public_ip_address,
-        #     "limit": limit,
-        #     "offset": offset,
-        # }
 
         url = f"/monitoring/v1/{dev_type}"
         if dev_type == "aps":
@@ -2050,7 +2033,6 @@ class CentralApi(Session):
             if not resp:
                 return resp
             if len(site_list) > 1:
-                # TODO _batch_requests
                 ret = await self._batch_request(
                     [
                         self.BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
@@ -3137,6 +3119,8 @@ class CentralApi(Session):
 
         return await self.put(url, json_data=json_data)
 
+    # TODO changte to use consistent dev tpe ap gw cx sw
+    # convert to the stuff apigw wants inside method
     async def upgrade_firmware(
         self,
         scheduled_at: int = None,
@@ -3183,6 +3167,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # API-FLAW only accepts swarm id for IAP, AOS10 show as IAP but no swarm id.  serial is rejected.
     async def get_upgrade_status(self, swarm_id: str = None, serial: str = None) -> Response:
         """Get firmware upgrade status.
 

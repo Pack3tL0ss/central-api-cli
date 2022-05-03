@@ -702,7 +702,6 @@ def profile(
     # https://stackoverflow.com/questions/55880601/how-to-use-profiler-with-click-cli-in-python
 
 
-
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
     if not ctx.resilient_parsing:
         account, debug, debugv, default, update_cache = None, None, None, None, None
@@ -723,13 +722,15 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
                 if "U" in arg:
                     update_cache = True
 
-        account = account or os.environ.get("ARUBACLI_ACCOUNT", False)
+        account = account or os.environ.get("ARUBACLI_ACCOUNT")
         debug = debug or os.environ.get("ARUBACLI_DEBUG", False)
 
         if default:
             default = cli.default_callback(ctx, True)
-        elif account:
+        # elif account:
+        else:
             cli.account_name_callback(ctx, account=account)
+
         if debug:
             cli.debug_callback(ctx, debug=debug)
         if debugv:
@@ -744,7 +745,7 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
 
 @app.callback()
 def callback(
-    ctx: typer.Context,
+    # ctx: typer.Context,``
     debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
                             #    callback=all_commands_callback),
     debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),

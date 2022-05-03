@@ -291,11 +291,8 @@ def group(
             **kwargs
         )
         cli.display_results(resp, tablefmt="action")
-        # if resp:  # resp:
-        #     asyncio.run(
-        #         cli.cache.update_group_db({'name': group.name, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
-        #     )
 
+# TODO command for update site
 
 @app.command(
     short_help="Update group properties",

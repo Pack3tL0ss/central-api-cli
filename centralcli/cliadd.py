@@ -195,17 +195,17 @@ def group(
     # -- // Error on combinations that are not allowed by API \\ --
     if not aos10 and microbranch:
         print(
-            f"[bright_red]Microbranch is only valid if group is configured as AOS10 group ({color('--aos10')})."
+            f":x: [bright_red]Microbranch is only valid if group is configured as AOS10 group ({color('--aos10')})."
         )
         raise typer.Exit(1)
     if (mon_only_sw or mon_only_cx) and wired_tg:
-        print("[bright_red]Error: Monitor only is not valid for template group.")
+        print(":x: [bright_red]Error: Monitor only is not valid for template group.")
         raise typer.Exit(1)
     if not [t for t in allowed_types if allowed_types in ["cx", "sw"]] and (mon_only_sw or mon_only_cx):
-        print("[bright_red]Error: Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
+        print(":x: [bright_red]Error: Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
         raise typer.Exit(1)
     if gw_role and gw_role == "wlan" and not aos10:
-        print("[bright_red]WLAN role for Gateways requires the group be configured as AOS10 via --aos10 option.")
+        print(":x: [bright_red]WLAN role for Gateways requires the group be configured as AOS10 via --aos10 option.")
         raise typer.Exit(1)
     if all([x is None for x in [ap, sw, cx, gw]]):
         print("[green]No Allowed devices provided. Allowing all device types.")

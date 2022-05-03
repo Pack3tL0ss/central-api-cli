@@ -8,7 +8,6 @@ from . import cleaner, constants
 from typing import Union, List, Any
 from rich import print
 from yarl import URL
-import aiohttp
 
 
 from centralcli import config, utils, log
@@ -371,14 +370,10 @@ class Session():
         if self._aio_session:
             if self._aio_session.closed:
                 # TODO finiish refactor
-                # log.warning("DEV NOTE: Client Session is closed. Providing new session.", show=True)
                 return ClientSession()
             return self._aio_session
         else:
-            # connector = aiohttp.TCPConnector(limit=CENTRAL_MAX_CONNECTIONS)
-            # return ClientSession(connector=connector)
             return ClientSession()
-        # return self._aio_session if self._aio_session and not self._aio_session.closed else ClientSession()
 
     @aio_session.setter
     def aio_session(self, session: ClientSession):
@@ -480,7 +475,6 @@ class Session():
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif resp.status == 429:  # per second rate limit.
-                    # log.error(f"[{method}][{resp.error}] {resp.url.path}{_offset_msg}")  # should be logged on Response __init__
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
@@ -504,10 +498,8 @@ class Session():
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
 
+        # TODO cleanup, if we do strip_none here can remove from calling funcs.
         params = utils.strip_none(params)
-        # if isinstance(url, URL):
-        #     print(f"{url} is already yarl.URL")
-        # url: URL = URL(url).with_query(params)  #  .update_query(params)
 
         # Debugging flag to lower paging limit to test paging with smaller chunks.
         if params and params.get("limit") and config.limit:
@@ -669,7 +661,8 @@ class Session():
         return token_data
 
     async def _request(self, func: callable, *args, **kwargs):
-        async with ClientSession() as self.aio_session:
+        # async with ClientSession() as self.aio_session:
+        async with self.aio_session:
             return await func(*args, **kwargs)
 
     def request(self, func: callable, *args, **kwargs) -> Response:
@@ -684,45 +677,47 @@ class Session():
         log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
         return asyncio.run(self._request(func, *args, **kwargs))
 
+    @staticmethod
+    async def pause(start: float) -> None:
+        _elapsed = time.perf_counter() - start
+        _pause = (int(_elapsed) + 1) - _elapsed
+        log.debug("PAUSE {_pause:.2f}s...")
+        time.sleep(_pause)
+
     async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
-        # async with ClientSession() as self.aio_session:
-        # async with self.aio_session as client:
-        # Always run first call solo to ensure access token validity
         self.silent = True
-        _tot_start = time.monotonic()
+        _tot_start = time.perf_counter()
         resp: Response = await api_calls[0].func(
             *api_calls[0].args,
             **api_calls[0].kwargs
             )
         if not resp or len(api_calls) == 1:
             return [resp]
-        # client.close()
-
-        chunked_calls = utils.chunker(api_calls, 7)
-        # remove first call performed above from first chunk
-        chunked_calls[0] = chunked_calls[0][1:]
 
         m_resp: List[Response] = [resp]
 
+        chunked_calls = utils.chunker(api_calls, 7)
+
+        # remove first call performed above from first chunk
+        chunked_calls[0] = chunked_calls[0][1:]
+
         # Make calls 7 at a time ensuring timing so that 7 per second limit is not exceeded
         for chunk in chunked_calls:
-            # tasks = [asyncio.ensure_future(call.func(*call.args, **call.kwargs)) for call in chunk]
+            _start = time.perf_counter()
 
-            # async with self.aio_session as client:
-            _start = time.monotonic()
-            # m_resp += await asyncio.gather(*tasks)
+            if chunk != chunked_calls[-1]:
+                _br = self.BatchRequest(self.pause, (_start,))
+                chunk += [_br]
             m_resp += await asyncio.gather(
                 *[call.func(*call.args, **call.kwargs) for call in chunk]
             )
-            _elapsed = time.monotonic() - _start
+            _elapsed = time.perf_counter() - _start
             log.debug(f"chunk of {len(chunk)} took {_elapsed:.2f}.")
 
-            if _elapsed < 1 and len(m_resp) < len(api_calls):
-                time.sleep(1 - _elapsed)
-                log.debug(f"sleeping {1 - _elapsed:.2f}")
-            # client.close()
+        # strip out the pause/limitter responses (None)
+        m_resp = utils.strip_none(m_resp)
 
-        log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.monotonic() - _tot_start:.2f}")
+        log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 

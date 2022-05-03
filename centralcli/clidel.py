@@ -190,7 +190,7 @@ def firmware(
         group = cli.cache.get_group_identifier(group).name
 
     kwargs = {
-        'device_type': _type_to_name.get(device_type.upper(), device_type),
+        'device_type': _type_to_name.get(device_type.lower(), device_type),
         'group': group
     }
 

@@ -61,7 +61,7 @@ class CLICommon:
                 f"{typer.style(f'Using Account: {acct_clr}.', fg='magenta')}  "
                 f"{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
                 f"\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
-                f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}"
+                f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}\n"
             )
 
         @property
@@ -70,28 +70,37 @@ class CLICommon:
                 f"{typer.style(f'Using previously specified account: ', fg='magenta')}"
                 f"{typer.style(self.account, fg='cyan', blink=True)}.  "
                 f"\n{typer.style('Use `--account <account name>` to switch to another account.', fg='magenta')}"
-                f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}"
+                f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}\n"
             )
 
         @property
         def forgot(self):
             return typer.style(
-                "Forget option set for account, and expiration has passed.  reverting to default account", fg="magenta"
+                "Forget option set for account, and expiration has passed.  reverting to default account\n", fg="magenta"
             )
 
         @property
         def will_forget(self):
-            return typer.style(
-                f"Forget options is configured, will revert to default account "
-                f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
-                f'{typer.style(" after last command.", fg="magenta")}',
-                fg="magenta",
-            )
+            will_forget_msg = f"[magenta]Forget options is configured, will revert to default account[/]\n"
+            will_forget_msg = f"{will_forget_msg}[cyan]{config.forget_account_after}[/][magenta] mins after last command[/]"
+            console = Console(emoji=False, record=True)
+            console.begin_capture()
+            console.print(will_forget_msg)
+            return console.end_capture()
+            # return typer.style(
+            #     f"Forget options is configured, will revert to default account "
+            #     f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
+            #     f'{typer.style(" after last command.", fg="magenta")}',
+            #     fg="magenta",
+            # )
 
         @property
         def previous_will_forget(self):
             return f"{self.previous}\n\n{self.will_forget}"
 
+    # TODO Can remove most of this and AcctMsg the bulk of messaging is now done in __init__
+    # as we need to know the account to load the correct cache.
+    # Initial --account still uses msg below in else
     def account_name_callback(self, ctx: typer.Context, account: str):
         if ctx.resilient_parsing:  # tab completion, return without validating
             return account
@@ -160,7 +169,7 @@ class CLICommon:
             return
 
         if default and config.sticky_account_file.is_file():
-            typer.secho("Using default central account", fg="bright_green")
+            typer.secho(" Using default central account", fg="bright_green")
             config.sticky_account_file.unlink()
             return default
 
@@ -298,14 +307,19 @@ class CLICommon:
                     sort_by = sort_by.replace("_", " ")
 
                 if not all([True if sort_by in d else False for d in data]):
-                    print(f"[dark_orange3]Warning: [cyan]{sort_by}[reset] does not appear to be a valid field")
+                    print(f":x: [dark_orange3]Error: [cyan]{sort_by}[reset] does not appear to be a valid field")
                     print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
                 else:
                     try:
-                        data = sorted(data, key=lambda d: d[sort_by])
+                        type_ = str
+                        for d in data:
+                            if d[sort_by] is not None:
+                                type_ = type(d[sort_by])
+                                break
+                        data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
                     except TypeError as e:
                         print(
-                            f"[dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}.\n{e} "
+                            f":x: [dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "
                         )
 
             if reverse:
@@ -408,8 +422,8 @@ class CLICommon:
 
             # update caption with rate limit
             if resp[-1].rl:
-                rl_str = f"[italic dark_olive_green2]{resp[-1].rl}".lstrip()
-                caption = f"{caption} {rl_str}" if caption else rl_str
+                rl_str = f"[italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
+                caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
 
             for idx, r in enumerate(resp):
                 # Multi request url line
@@ -421,7 +435,6 @@ class CLICommon:
                 fg = "bright_green" if r else "red"
                 if len(resp) > 1:
                     _url = r.url if not hasattr(r.url, "raw_path_qs") else r.url.path
-                    # typer.secho(f"Request {idx + 1} [{r.method}: {_url}] Response:", fg="cyan")
                     m_color = m_colors.get(r.method, "reset")
                     print(
                         f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
@@ -447,7 +460,6 @@ class CLICommon:
                             self.write_file(outfile, r.raw)
 
                     else:
-                        # typer.secho(str(r), fg=fg)
                         print(f"[{fg}]{r}")
 
                     if idx + 1 == len(resp):

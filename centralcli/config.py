@@ -93,8 +93,6 @@ def ask(
     return choice
 
 
-
-
 def _get_config_file(dirs: List[Path]) -> Path:
     dirs = [dirs] if not isinstance(dirs, list) else dirs
     for _dir in dirs:
@@ -296,13 +294,21 @@ class Config:
                 last_cmd_ts = float(last_cmd_ts)
 
                 # last account sticky file handling -- messaging is in cli callback --
+                console = Console()
                 if self.forget:
                     if time.time() > last_cmd_ts + (self.forget * 60):
                         self.sticky_account_file.unlink(missing_ok=True)
+                        _m = f":warning: Forget option set for [cyan]{last_account}[/], and expiration has passed.  [bright_green]reverting to default account[/]"
+                        _m = f"{_m}\nUse [cyan]--account[/] option or set environment variable ARUBACLI_ACCOUNT to use alternate account"
+                        console.print(_m)
+                        if not Confirm(f"Proceed using default account", console=console):
+                            abort()
                     else:
                         account = last_account
+                        console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
                 else:
                     account = last_account
+                    console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
         else:
             if account in self.data:
                 self.sticky_account_file.parent.mkdir(exist_ok=True)

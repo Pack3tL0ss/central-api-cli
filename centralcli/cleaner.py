@@ -31,7 +31,9 @@ except (ImportError, ModuleNotFoundError) as e:
 def epoch_convert(func):
     @functools.wraps(func)
     def wrapper(epoch):
-        if len(str(int(epoch))) > 10:
+        # FIXME don't know why started getting ValueError: invalid literal for int() with base 10: '24 minutes 20 seconds'
+        # appears show all was hitting the cleaner 2x
+        if str(epoch).isdigit() and len(str(int(epoch))) > 10:
             epoch = epoch / 1000
         return func(epoch)
 
@@ -515,7 +517,7 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
     data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
     data = strip_no_value(data)
 
-    if len(data) > 1 and cache_update_func:
+    if len(data) > 0 and cache_update_func:
         idx, cache_list = 1, []
         for d in data:
             if d.get("has details") is True:
