@@ -46,3 +46,6 @@ def test_rate_limit():
     print(b_resp[-1].rl.text)
     assert all([r.reason == "OK" for r in central.requests])
     assert len(b_reqs) == len(central.requests)
+
+if __name__ == '__main__':
+    test_rate_limit()
