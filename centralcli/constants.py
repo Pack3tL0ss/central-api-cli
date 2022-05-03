@@ -334,12 +334,12 @@ class LibToAPI:
 
         # from CentralApi consistent value to Random API value
         self.monitoring_to_api = {
-             "gw": "gateways",
-             "ap": "aps",
-             "switch": "switches",
-             "cx": "switches",
-             "sw": "switches"
-         }
+            "gw": "gateways",
+            "ap": "aps",
+            "switch": "switches",
+            "cx": "switches",
+            "sw": "switches"
+        }
         self.site_to_api = {
             "gw": "CONTROLLER",
             "ap": "IAP",
