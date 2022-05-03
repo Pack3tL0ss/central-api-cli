@@ -611,7 +611,6 @@ class LogSortBy(str, Enum):
     ip = "ip"
     user = "user"
     id = "id"
-    has_details = "has_details"
 
 
 LIB_DEV_TYPE = {
