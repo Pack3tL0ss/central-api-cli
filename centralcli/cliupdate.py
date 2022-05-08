@@ -13,12 +13,12 @@ import yaml
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, cli, caas, cleaner
+    from centralcli import utils, cli, caas, cleaner, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli, caas, cleaner
+        from centralcli import utils, cli, caas, cleaner, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -395,43 +395,17 @@ def config_(
 ) -> None:
     yes = yes_ if yes_ else yes
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
-    if var_file:
-        cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
-
-    if cli_file:
-        cli_cmds = []
-        with cli_file.open() as f:
-            for line in f:
-                cli_cmds += [line.rstrip()]
-                if "******" in line:
-                    typer.secho("Masked credential found in file.", fg="red")
-                    typer.secho(
-                        f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
-                        fg="red",
-                        )
-                    raise typer.Exit(1)
-    if not cli_cmds:
-        print("[red]Error:[/red] No cli provided.")
-        raise typer.Exit(1)
+    config_out = utils.generate_template(cli_file, var_file=var_file)
+    cli_cmds = utils.validate_config(config_out)
 
     # TODO render.py module with helper function to return styled rule/line
     console = Console(record=True, emoji=False)
-    with console.capture():
-        console.rule("Configuration to be sent")
-    top_line = console.export_text().rstrip()
-
-    with console.capture():
-        console.rule()
-    bot_line = console.export_text()
-
-    _msg = [
-        "",
-        top_line,
-        *[f"[green]{line}[/green]" for line in cli_cmds],
-        bot_line,
-        f"Updating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}"
-    ]
-    _msg = "\n".join(_msg)
+    console.begin_capture()
+    console.rule("Configuration to be sent")
+    console.print("\n".join([f"[green]{line}[/green]" for line in cli_cmds]))
+    console.rule()
+    console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}")
+    _msg = console.end_capture()
 
     if group_dev.is_group:
         device = None
@@ -455,14 +429,16 @@ def config_(
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.serial
 
-    console.print(_msg)
-    # TODO just make parse caas resp a cleaner func
-    if yes or typer.confirm("Proceed? >>", abort=True):
+    typer.echo(_msg)
+    if yes or typer.confirm("Proceed?", abort=True):
         if use_caas:
             resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         else:
             # FIXME this is OK for group level ap config , for AP this method is not valid
+            if group_dev.is_dev:
+                print("Not Implemented yet for AP device level updates")
+                raise typer.Exit(1)
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
