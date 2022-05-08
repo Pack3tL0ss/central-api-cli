@@ -75,10 +75,11 @@ log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict
 from pycentral.base import ArubaCentralBase
 from .utils import Utils
 utils = Utils()
-from .response import Response
+from .response import Response, BatchRequest
 from .central import CentralApi
 from .cache import Cache, CentralObject
 from .clicommon import CLICommon
+from . import cleaner
 
 # if no environ vars set for LESS command line options
 # set -X to retain scrollback after quiting less
