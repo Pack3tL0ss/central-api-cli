@@ -25,6 +25,13 @@ class TemplateDevIdens(str, Enum):
     gw = "gw"
 
 
+class SendConfigDevIdens(str, Enum):
+    ap = "ap"
+    gw = "gw"
+    # sw = "sw"  # hopefully some day
+    # cx = "cx"
+
+
 class GatewayRole(str, Enum):
     branch = "branch"
     vpnc = "vpnc"
@@ -598,6 +605,7 @@ class IdenMetaVars:
         self.generic_dev_types = "[ap|gw|switch]"
         self.dev_types = "[ap|gw|cx|sw]"
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
+        self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
 
 
@@ -754,10 +762,13 @@ class SiteStates(str, Enum):
     UM = United_States_Minor_Outlying_Islands = "United States Minor Outlying Islands",
     VI = US_Virgin_Islands = "U.S. Virgin Islands"
 
+
 NO_LOAD_COMMANDS = [
     "show config cencli",
     "show last"
 ]
+
+
 NO_LOAD_FLAGS = [
     "--help",
     "--cencli",
