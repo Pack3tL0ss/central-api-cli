@@ -942,16 +942,23 @@ def run(
     cli.display_results(resp, pager=pager, outfile=outfile)
 
 
-@app.command("config", short_help="Show Effective Group/Device Config", help="Show Effective Group/Device Config (UI Group)")
+@app.command(
+    "config",
+    short_help="Show Central Group/Device or cencli Config",
+    help="Show Effective Group/Device Config (UI Group) or cencli config.",
+    epilog= (
+        "Examples:\n"
+        " cencli show config GROUPNAME --gw\n"
+        " cencli show config DEVICENAME\n"
+        " cencli show config cencli\n"
+    ),
+)
 def config_(
     group_dev: str = typer.Argument(
         ...,
-        metavar=iden_meta.group_or_dev,
+        metavar=f"{iden_meta.group_dev_cencli}",
         autocompletion=cli.cache.group_dev_ap_gw_completion,
-        help = "Device Identifier for (AP or GW) or Group Name along with --ap or --gw option",
-        # autocompletion=lambda incomplete: [
-        #     c for c in [*cli.cache.group_completion(incomplete), *cli.cache.dev_completion(incomplete)]
-        # ]
+        help = "Device Identifier for (AP or GW), Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
     ),
     device: str = typer.Argument(
         None,
