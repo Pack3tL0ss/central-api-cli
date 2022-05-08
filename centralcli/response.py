@@ -53,6 +53,9 @@ class BatchRequest:
         self.args: Union[list, tuple] = args if isinstance(args, (list, tuple)) else (args, )
         self.kwargs = kwargs
 
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.func.__name__}) object at {hex(id(self))}>"
+
 class LoggedRequests:
     def __init__(self, url: str, method: str = "GET",):
         self.ts = float(f"{time.monotonic() - INIT_TS:.2f}")
@@ -218,7 +221,7 @@ class Response:
                         self.output.replace('\n  ', '\n').replace('\n', '\n  ')
                     )
 
-        if isinstance(self.output, dict):
+        elif isinstance(self.output, dict):
             r = "\n".join(
                 [
                     "  {}: {}".format(
