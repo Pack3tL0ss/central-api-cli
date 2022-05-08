@@ -121,30 +121,31 @@ def _get_user_input(valid: list) -> str:
 
 class Config:
     def __init__(self, base_dir: Path = None):
+        self.valid_suffix = valid_ext
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
         self.base_dir = base_dir or Path(__file__).parent.parent
-        cwd = Path().cwd()
+        self.cwd = Path().cwd()
         self.file = _get_config_file(
             [
                 Path().home() / ".config" / "centralcli",
                 Path().home() / ".centralcli",
-                cwd / "config",
-                cwd,
+                self.cwd / "config",
+                self.cwd,
                 # Path().home() / ".config" / "centralcli" / "config",
             ]
         )
         if self.file:
             self.dir = self.file.parent
             self.base_dir = self.dir.parent if self.dir.name != "centralcli" else self.dir
-            if Path.joinpath(cwd, "out").is_dir():
-                self.outdir = cwd / "out"
+            if Path.joinpath(self.cwd, "out").is_dir():
+                self.outdir = self.cwd / "out"
             else:
-                self.outdir = cwd
+                self.outdir = self.cwd
         else:
             if str(Path('.config/centralcli')) in str(self.base_dir):
                 self.dir = self.base_dir
-                self.outdir = cwd / "out"
+                self.outdir = self.cwd / "out"
             else:  # pypi installed but no config exists yet
                 if 'site-packages' in str(self.base_dir):
                     if Path.joinpath(Path().home(), ".config").exists():
@@ -258,6 +259,8 @@ class Config:
                         return yaml.load(f, Loader=yaml.SafeLoader)
                     elif import_file.suffix in ['.csv', '.tsv', '.dbf', '.xls', '.xlsx']:
                         with import_file.open('r') as fh:
+                            # TODO return consistent data type list/dict
+                            # tough given csv etc dictates a flat structure
                             return tablib.Dataset().load(fh)
                     elif text_ok:
                         return [line.rstrip() for line in import_file.read_text().splitlines()]
@@ -293,6 +296,7 @@ class Config:
                 last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
                 last_cmd_ts = float(last_cmd_ts)
 
+                # TODO can't print here with about breaking auto-complete - restore messaging to account_name_callback
                 # last account sticky file handling -- messaging is in cli callback --
                 console = Console()
                 if self.forget:
@@ -300,15 +304,15 @@ class Config:
                         self.sticky_account_file.unlink(missing_ok=True)
                         _m = f":warning: Forget option set for [cyan]{last_account}[/], and expiration has passed.  [bright_green]reverting to default account[/]"
                         _m = f"{_m}\nUse [cyan]--account[/] option or set environment variable ARUBACLI_ACCOUNT to use alternate account"
-                        console.print(_m)
+                        # console.print(_m)
                         if not Confirm(f"Proceed using default account", console=console):
                             abort()
                     else:
                         account = last_account
-                        console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
+                        # console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
                 else:
                     account = last_account
-                    console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
+                    # console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
         else:
             if account in self.data:
                 self.sticky_account_file.parent.mkdir(exist_ok=True)
