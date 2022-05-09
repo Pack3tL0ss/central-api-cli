@@ -4,13 +4,14 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 import shutil
 import socket
 import string
 import sys
 import urllib.parse
 # from pprint import pprint
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import typer
 import logging
 
@@ -20,7 +21,10 @@ import threading
 from pygments import formatters, highlight, lexers
 from tabulate import tabulate
 from rich import print_json
+from rich.console import Console
+from rich.prompt import Prompt
 from rich.pretty import pprint
+from jinja2 import FileSystemLoader, Environment
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -641,3 +645,109 @@ class Utils:
     @staticmethod
     def chunker(seq, size):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
+
+    @staticmethod
+    def generate_template(template_file: Union[Path, str], var_file: Union[Path, str, None],) -> List[str]:
+        '''Generate configuration files based on j2 templates and provided variables
+        '''
+        template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
+        var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
+
+        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+        if template_file.suffix == ".j2":
+            if var_file is None or not var_file.exists():
+                _var_files = [template_file.parent / f"{template_file.stem}{sfx}" for sfx in valid_ext]
+                _var_files = [f for f in _var_files if f.exists()]
+                if _var_files:
+                    var_file = _var_files[0]
+                else:
+                    print(f":x: No variable file found for {template_file}")
+                    raise typer.Exit(1)
+
+            # TODO refactor to use helper function in utils
+            # cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
+            config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
+
+            env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
+            template = env.get_template(template_file.name)
+
+            config_out = template.render(config_data)
+        else:
+            config_out = template.read_text()
+
+        return config_out.splitlines()
+
+
+    # TODO decorator func
+    @staticmethod
+    def ask(
+        prompt: str = "",
+        *,
+        console: Optional[Console] = None,
+        password: bool = False,
+        choices: Optional[List[str]] = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+        default: Any = ...,
+    ) -> str:
+        """wrapper function for rich.Prompt().ask()
+
+        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort"
+
+        """
+        def abort():
+            print("Aborted")
+            sys.exit()
+
+        choices = choices if choices is not None and "abort" in choices else ["abort", *choices]
+
+        try:
+            choice = Prompt.ask(
+                prompt,
+                console=console,
+                password=password,
+                choices=choices,
+                show_default=show_default,
+                show_choices=show_choices,
+                default=default,
+            )
+        except (KeyboardInterrupt, EOFError):
+            abort()
+
+        if choice.lower() == "abort":
+            abort()
+
+        return choice
+
+    @staticmethod
+    def validate_config(data: List[str]) -> List[str]:
+        """Validator for resulting config after j2 conversion
+
+        Args:
+            data (List[str]): list of str representing the final configuration.
+
+        Raises:
+            typer.Exit: If indications of j2 conversion failure or masked creds found
+
+        Returns:
+            Original list of str with each line rstrip.
+        """
+        cli_cmds = []
+        for line in data:
+            cli_cmds += [line.rstrip()]
+            if "******" in line:
+                typer.secho("Masked credential found in file.", fg="red")
+                typer.secho(
+                    f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
+                    fg="red",
+                    )
+                raise typer.Exit(1)
+            if "{{" in line and "}}" in line or "{%" in line and "%}" in line:
+                print(f":x: Not all j2 variables seem to have been converted\n [cyan]{line}[/]")
+                raise typer.Exit(1)
+
+        if not cli_cmds:
+            print(":x: [bright_red]Error:[/] No cli commands.")
+            raise typer.Exit(1)
+
+        return cli_cmds

@@ -821,6 +821,7 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
     """Parses Response Object from caas API updates output attribute
 
     """
+    console = Console(emoji=False, record=True)
     data = utils.unlistify(data)
     out = []
     lines = f"[reset]{'-' * 22}"
@@ -849,11 +850,9 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
                     _r_txt = f"[italic]{escape(cmd_status)}[/italic]"
                     out += [lines, _r_txt, lines]
 
-        console = Console(emoji=False, record=True)
-        with console.capture():
-            console.print("\n".join(out))
-
-        out = console.export_text(styles=True)
+        console.begin_capture()
+        console.print("\n".join(out))
+        out = console.end_capture()
 
     return out
 

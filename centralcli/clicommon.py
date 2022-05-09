@@ -102,7 +102,7 @@ class CLICommon:
     # as we need to know the account to load the correct cache.
     # Initial --account still uses msg below in else
     def account_name_callback(self, ctx: typer.Context, account: str):
-        if ctx.resilient_parsing:  # tab completion, return without validating
+        if ctx.resilient_parsing or account is None:  # tab completion, return without validating
             return account
 
         # -- // sticky last account messaging account is loaded in __init__ \\ --
@@ -251,12 +251,16 @@ class CLICommon:
             outdata (str): The text to write.
         """
         if outfile and outdata:
-            if Path().cwd() != Path.joinpath(config.outdir / outfile):
-                if Path.joinpath(outfile.parent.resolve() / ".git").is_dir():
-                    typer.secho(
-                        "It looks like you are in the root of a git repo dir.\n"
-                        "Exporting to out subdir."
-                        )
+            if config.cwd != config.outdir:
+                if (
+                    outfile.parent.resolve().name == "central-api-cli" and
+                    Path.joinpath(outfile.parent.resolve() / ".git").is_dir()
+                ):
+                    # outdir = Path.home() / 'cencli-out'
+                    print(
+                        "\n[bright_green]You appear to be in the development git dir.\n"
+                        f"Exporting to[/] [cyan]{config.outdir.relative_to(config.cwd)}[/] directory."
+                    )
                     config.outdir.mkdir(exist_ok=True)
                     outfile = config.outdir / outfile
 
@@ -428,20 +432,30 @@ class CLICommon:
             for idx, r in enumerate(resp):
                 # Multi request url line
                 m_colors = {
-                    "DELETE": "red",
                     "GET": "bright_green",
+                    "DELETE": "red",
                     "PATH": "dark_orange3",
+                    "PUT": "dark_orange3",
+                    "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
-                if len(resp) > 1:
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw"], r.ok and not r.output]
+                if any(conditions):
                     _url = r.url if not hasattr(r.url, "raw_path_qs") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
                     print(
                         f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
                         f"[cyan]{_url}[/cyan]]\n [fg]Response[reset]:"
                     )
+
                 if self.raw_out:
                     tablefmt = "raw"
+                if not r.output:
+                    c = Console(record=True)
+                    c.begin_capture()
+                    c.print(f"  Status Code: [{fg}]{r.status}[/]")
+                    c.print(f"  :warning: Empty Response.  This may be normal.")
+                    r.output = c.end_capture()
 
                 if not r or tablefmt in ["action", "raw"]:
 

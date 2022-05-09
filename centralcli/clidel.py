@@ -7,6 +7,7 @@ from typing import List
 import sys
 import typer
 import asyncio
+from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -110,17 +111,20 @@ def group(
     groups = [cli.cache.get_group_identifier(g) for g in groups]
     reqs = [cli.central.BatchRequest(cli.central.delete_group, (g.name, )) for g in groups]
 
-    _delim = typer.style(", ", fg="cyan")
-    confirm_1 = typer.style("Please Confirm:", fg="cyan")
-    confirm_2 = typer.style("Delete", fg="bright_red")
-    confirm_3 = typer.style("group" if len(groups) == 1 else "groups", fg="cyan")
-    confirm_4 = f'{_delim.join(typer.style(g.name, fg="bright_green") for g in groups)}{typer.style("?", fg="cyan")}'
+    _grp_msg = "\n".join([f"  [cyan]{g.name}[/]" for g in groups])
+    _grp_msg = _grp_msg.lstrip() if len(groups) == 1 else f"\n{_grp_msg}"
+    print(
+        f"[bright_red]Delete[/] {'group ' if len(groups) == 1 else 'groups:'}{_grp_msg}"
+    )
+    if len(reqs) > 1:
+        print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3} {confirm_4}", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         if resp:
-            asyncio.run(cli.cache.update_group_db(data=[{"name": g.name} for g in groups], remove=True))
+            upd_res = asyncio.run(cli.cache.update_group_db(data=[{"name": g.name} for g in groups], remove=True))
+            log.debug(f"cache update to remove deleted groups returns {upd_res}")
 
 
 @app.command(short_help="Delete a WLAN (SSID)")

@@ -238,7 +238,7 @@ def test_show_certs():
 
 
 def test_show_logs_past():
-    result = runner.invoke(app, ["show", "logs", "--past", "1d"],)
+    result = runner.invoke(app, ["show", "logs", "--past", "5d"],)
     print(result.stdout)
     assert result.exit_code == 0
     assert "Audit Logs" in result.stdout

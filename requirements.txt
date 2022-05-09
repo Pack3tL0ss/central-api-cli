@@ -1,5 +1,6 @@
 cchardet
 colorama
+click==7.1.2
 pygments
 tabulate
 halo
@@ -7,7 +8,6 @@ typer
 pylibyaml
 pyYAML
 tinydb
-# colorlog
 shellingham
 pendulum
 pycentral>=0.0.3

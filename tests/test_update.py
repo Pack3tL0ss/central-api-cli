@@ -1,5 +1,6 @@
 # from pathlib import Path
 from typer.testing import CliRunner
+import pytest
 
 from cli import app  # type: ignore # NoQA
 import json
@@ -14,7 +15,19 @@ if test_dev_file.is_file():
     TEST_DEVICES = json.loads(test_dev_file.read_text())
 
 
-def test_update_gw_group_config():
+def do_nothing():
+    ...
+
+@pytest.fixture(scope='session', autouse=True)
+def cleanup():
+    # Will be executed before the first test
+    yield do_nothing
+    # executed after test is run
+    result = runner.invoke(app, ["delete", "group", TEST_DEVICES["clone"]["to_group"], "-Y"])
+    assert "Success" in result.stdout
+    assert result.exit_code == 0
+
+def test_update_gw_group_config(cleanup):
     result = runner.invoke(
         app,
         [
@@ -29,6 +42,7 @@ def test_update_gw_group_config():
     assert result.exit_code == 0
     assert "Global Result:" in result.stdout
     assert "[OK]" in result.stdout
+    cleanup()
 
 
 # Lots of rules around what can be updated once the group is created

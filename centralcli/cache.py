@@ -67,7 +67,7 @@ class CentralObject:
 
         if isinstance(data, list):
             if len(data) > 1:
-                raise ValueError(f"CentralObject expects a single item presented with list of {len(data)}")
+                raise ValueError(f"CentralObject expects a single item. Got list of {len(data)}")
             elif data:
                 data = data[0]
 
@@ -387,6 +387,29 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_switch_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Device completion for returning matches that are either switch or AP
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        match = self.get_dev_identifier(incomplete, dev_type=["switch"], completion=True)
+
+        out = []
+        if match:
+            out = [
+                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+                if m.name not in args
+                ]
+
+        for m in out:
+            yield m
+
     def dev_kwarg_completion(
         self,
         ctx: typer.Context,
@@ -407,10 +430,13 @@ class Cache:
         Yields:
             tuple: matching completion string, help text
         """
+        # print(f"b4 args {args}, incomplete: {incomplete}")
         args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
         args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
-        p = ctx.params
-        a = ctx.__dict__
+        # print(f"after args {args}, incomplete: {incomplete}")
+        # print(f"ctx.params: {ctx.params}")
+        # p = ctx.params
+        # a = ctx.__dict__
         if args and args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
@@ -437,7 +463,7 @@ class Cache:
                     out += [("group", _help)]
 
             if "site" not in args and "group" not in args:
-                out += [m for m in self.dev_completion(incomplete, args)]
+                out = [*out, *[m for m in self.dev_completion(incomplete, args)]]
             elif "site" in args and "group" in args:
                 incomplete = "NULL_COMPLETION"
                 out += ["|", "<cr>"]
@@ -614,7 +640,7 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
 
         for m in out:
-            yield m[0], m[1]
+            yield m
 
     def event_completion(
         self,
@@ -823,7 +849,7 @@ class Cache:
                 log.error("Tiny DB returned an error during dev db update")
         return resp
 
-    async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
+    async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
         if data:
             data = utils.listify(data)
@@ -859,7 +885,7 @@ class Cache:
                     log.error("Tiny DB returned an error during site db update")
             return resp
 
-    async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> List[int]:
+    async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         if data:
             data = utils.listify(data)
             if not remove:
@@ -1222,6 +1248,9 @@ class Cache:
 
         match = None
         for _ in range(0, 2 if retry else 1):
+            # TODO match on name first then the other stuff
+            # 'm' returns Pommore          main-batch-demo  mb1-batch-demo
+            #   because Pommore is in Milford
             # try exact site match
             match = self.SiteDB.search(
                 (self.Q.name == query_str)
@@ -1294,7 +1323,16 @@ class Cache:
         retry = False if completion else retry
         for _ in range(0, 2):
             # Exact match
-            match = self.GroupDB.search((self.Q.name == query_str))
+            if query_str == "":
+                match = self.groups
+            else:
+            # case insensitive startswith
+                match = self.GroupDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            if not match:
+                match = self.GroupDB.search((self.Q.name == query_str))
 
             # case insensitive
             if not match:
@@ -1310,23 +1348,6 @@ class Cache:
                             lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
                         )
                     )
-                #     match = self.GroupDB.search(
-                #         self.Q.name.test(
-                #             lambda v: v.lower() == query_str.lower().replace("_", "-")
-                #         )
-                #     )
-                # elif "-" in query_str:
-                #     match = self.GroupDB.search(
-                #         self.Q.name.test(
-                #             lambda v: v.lower() == query_str.lower().replace("-", "_")
-                #         )
-                #     )
-
-            # case insensitive startswith
-            if not match:
-                match = self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                )
 
             # case insensitive startswith ignore - _
             if not match:

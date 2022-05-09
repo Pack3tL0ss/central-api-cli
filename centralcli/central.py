@@ -1569,7 +1569,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     async def send_bounce_command_to_device(self, serial: str, command: str, port: str) -> Response:
-        """Generic Action Command for bouncing interface or POE (power-over-ethernet) port.
+        """Bounce interface or POE (power-over-ethernet) on switch port.  Valid only for Aruba Switches.
 
         Args:
             serial (str): Serial of device
@@ -1582,7 +1582,7 @@ class CentralApi(Session):
         """
         url = f"/device_management/v2/device/{serial}/action/{command}"
 
-        json_data = {"port": port}
+        json_data = {"port": str(port)}
 
         return await self.post(url, json_data=json_data)
 
@@ -2023,11 +2023,15 @@ class CentralApi(Session):
         """
         url = "/central/v2/sites"
 
-        json_data = {
-            "site_name": site_name,
-            "site_address": {"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode},
-            "geolocation": {"latitude": latitude, "longitude": longitude},
-        }
+        address_dict = utils.strip_none({"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode})
+        geo_dict = utils.strip_none({"latitude": latitude, "longitude": longitude})
+        json_data = {"site_name": site_name}
+        if address_dict:
+            json_data["site_address"] = address_dict
+        if geo_dict:
+            json_data["geolocation"] = geo_dict
+
+        # TODO revert this to single site add and use batch_add_site method for multi-add
         if site_list:
             resp = await self.post(url, json_data=site_list[0])
             if not resp:
@@ -2187,7 +2191,7 @@ class CentralApi(Session):
         microbranch: bool = False,
         gw_role: constants.GatewayRole = "branch",
         monitor_only_sw: bool = False,
-        # monitor_only_cx: bool = False,  # Not supported by central yet
+        monitor_only_cx: bool = False,  # Not supported by central yet
     ) -> Response:
         """Create new group with specified properties. v3
 
@@ -2242,8 +2246,9 @@ class CentralApi(Session):
         mon_only_switches = []
         if monitor_only_sw:
             mon_only_switches += ["AOS_S"]
-        # if monitor_only_cx:
-        #     mon_only_switches += ["AOS_CX"]
+        if monitor_only_cx:
+            log.warning("monitor_only_cx not yet supported by Aruba Central", show=True)
+            # mon_only_switches += ["AOS_CX"]
 
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
 
@@ -4146,6 +4151,75 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_archived_devices(
+        self,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get Archived devices from device inventory.
+
+        // Used by show archived //
+
+        Args:
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of devices to get Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices/archive"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def archive_devices(
+        self,
+        serials: List[str],
+    ) -> Response:
+        """Archive devices using Serial list.
+
+        // Used by archive dev ... //
+
+        Args:
+            serials (List[str]): serials
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices/archive"
+
+        json_data = {
+            'serials': utils.listify(serials)
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    # API-NOTE cencli remove archive [devices]
+    async def unarchive_devices(
+        self,
+        serials: List[str],
+    ) -> Response:
+        """Unarchive devices using Serial list.
+
+        // Used by unarchive dev ... //
+
+        Args:
+            serials (List[str]): serials
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices/unarchive"
+
+        json_data = {
+            'serials': utils.listify(serials)
+        }
+
+        return await self.post(url, json_data=json_data)
 
 if __name__ == "__main__":
     pass

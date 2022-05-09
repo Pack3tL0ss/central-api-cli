@@ -73,7 +73,7 @@ class MoveArgs(str, Enum):
     help="Move device(s) to a defined group and/or site.",
 )
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_kwarg_completion,),
+    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_kwarg_completion),
     kw1: str = typer.Argument(
         None,
         metavar="",
@@ -164,30 +164,30 @@ def move(
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
 
     if len(dev_all_names) > 2:
-        _msg_devs = ", ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+        _msg_devs = ", ".join(f"[cyan]{n}[/]" for n in dev_all_names)
     else:
-        _msg_devs = " & ".join(f"[bright_green]{n}[/bright_green]" for n in dev_all_names)
+        _msg_devs = " & ".join(f"[cyan]{n}[/]" for n in dev_all_names)
 
-    print(f"Move {_msg_devs}")
-
+    confirm_msg = f"[bright_green]Move[/] {_msg_devs}\n"
     if group:
         _group = cli.cache.get_group_identifier(group)
-        print(f"  To Group: [bright_green]{_group.name}[/bright_green]")
+        confirm_msg += f"  To Group: [cyan]{_group.name}[/]\n"
         if cx_retain_config:
-            print(f"  [italic]Config for CX switches will be preserved during move.[/]")
+            confirm_msg += f"  [italic]Config for CX switches will be preserved during move.[/]\n"
     if site:
         _site = cli.cache.get_site_identifier(site)
-        print(f"  To Site: [bright_green]{_site.name}[/bright_green]")
+        confirm_msg += f"  To Site: [cyan]{_site.name}[/]\n"
         if devs_by_site:
-            print("  [italic bright_red](devices will be removed from current sites.)[/]")
+            confirm_msg += "\n  [italic bright_red]Devices will be removed from current sites.[/]\n"
 
-    resp, site_rm_resp = None, None
+    print(confirm_msg)
     confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
 
     # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
     # If devices are associated with a site currently remove them from that site first
     # FIXME moving 3 devices from one site to another no longer works correctly (disassociated 2 then 1, (2 calls) then added 1)
     # FIXME completion flaw  cencli move barn--ap ... given barn- -ap was the completion [barn-303p.2c30-ap, barn-518.2816-ap]
+    resp, site_rm_resp = None, None
     if confirmed and _site and devs_by_site:
         site_remove_reqs = []
         for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
@@ -240,7 +240,7 @@ def move(
 @app.command(short_help="Bounce Interface or PoE on Interface")
 def bounce(
     what: BounceArgs = typer.Argument(...),
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_completion),
     port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -254,9 +254,11 @@ def bounce(
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
-    if yes or typer.confirm(typer.style(f"Please Confirm bounce {what} on {dev.name} port {port}", fg="cyan")):
+    print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/] port [cyan]{port}[/]")
+    if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
+        # typer.secho(str(resp), fg="green" if resp else "red")
         # !! removing this for now Central ALWAYS returns:
         # !!   reason: Sending command to device. state: QUEUED, even after command execution.
         # if resp and resp.get('task_id'):
@@ -319,7 +321,7 @@ def remove(
 @app.command(short_help="Assign License to device(s).", help="Assign License to device(s)", hidden=True)
 def assign(
     license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -330,7 +332,7 @@ def assign(
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
-    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     # TODO add confirmation method builder to output class
     _msg = f"Assign [bright_green]{license}[/bright_green] to"
@@ -669,37 +671,82 @@ def stop(
         print("WebHook Proxy is not running.")
         raise typer.Exit(0)
 
+# TODO Unhide once impact of archive is known post GreenLake... still licensed and shows in device list.
+@app.command(help="Archive devices", hidden=True)
+def archive(
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    yes = yes_ if yes_ else yes
+    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
-@app.command(hidden=True, epilog="Output is displayed in yaml by default.")
-def profile(
-    module: str = typer.Argument(...),
-    command: str = typer.Argument(None),
-    args: List[str] = typer.Argument(None),
-    kwargs: List[str] = typer.Option(None, lazy=True),
-):
-    print(f"module: {module} of type {type(module)}" )
-    print(f"command: {command} of type {type(command).__class__.__name__}" )
-    print(f"args: {args} of type {type(args)}" )
-    print(f"kwargs: {kwargs} of type {type(kwargs)}" )
-    # import cProfile
-    # args = sys.argv[2:]
-    # cmd_group = args.pop(0)
-    # cmd = args.pop(0)
-    # module = globals().get(f"cli{cmd_group}")
-    # if module:
-    #     if not hasattr(module, cmd):
-    #         print(f"Unable to find command {args}")
-    #         raise typer.Exit(1)
+    # TODO add confirmation method builder to output class
+    _dev_str = "\n".join([f"- [cyan]{str(dev).lstrip()}[/]" for dev in devices])
+    _msg = f"[bright_green]Archive Devices[/]:"
+    if len(devices) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev.name}|{dev.serial}|{dev.mac}[/]' for dev in devices])
+        _msg = f"{_msg}:\n{_dev_msg}"
+    else:
+        dev = devices[0]
+        _msg = f"{_msg} [cyan]{dev.name}|{dev.serial}|{dev.mac}[/]"
+    print(_msg)
+    if yes or typer.confirm("\nProceed?"):
+        resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
+        cli.display_results(resp, tablefmt="action")
 
-    #     func = getattr(module, cmd)
-    # else:
-    #     func = globals().get(cmd_group)
-    #     if not func:
-    #         print(f"Unable to find command {args}")
-    #         raise typer.Exit(1)
-    #     args = (cmd, *args)
-    # cProfile.run(func(*args))
-    # https://stackoverflow.com/questions/55880601/how-to-use-profiler-with-click-cli-in-python
+
+@app.command(short_help="convert j2 templates")
+def convert(
+    template: Path = typer.Argument(..., help="j2 template to convert", exists=True),
+    var_file: Path = typer.Argument(
+        None,
+        help="Optional variable file, will automatically look for file with same name as template and supported extension/format.",
+        exists=True,
+        ),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Convert specified j2 template into final form based on variable file.
+
+    --var-file is optional, If not provided cencli will look in the same dir as the template
+    for a file with the same name and supported extension.
+
+    cencli supports most common extension for variable import:
+    '.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx'
+
+    """
+    if not var_file:
+        var_file = [
+            template.parent / f"{template.stem}{sfx}"
+            for sfx in config.valid_suffix
+            if Path.joinpath(template.parent, f"{template.stem}{sfx}").exists()
+        ]
+        if not var_file:
+            print(f":x: No variable file found matching template base-name [cyan]{template.stem}[/]")
+            print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
+            raise typer.Exit(1)
+        elif  len(var_file) > 1:
+            print(f":x: Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
+            raise typer.Exit(1)
+        else:
+            var_file = var_file[0]
+    final_config = utils.generate_template(template, var_file=var_file)
+    cli.display_results(data=final_config, outfile=outfile)
+
+
 
 
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
