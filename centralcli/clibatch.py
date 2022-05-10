@@ -476,34 +476,8 @@ def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, v
 
     br = cli.central.BatchRequest
     caasapi = caas.CaasAPI(central=cli.central)
-    # TODO this block is used in cliupdate config consider moving to utils
-    if cfg_file.suffix == ".j2":
-        if var_file is None or not var_file.exists():
-            _var_files = [cfg_file.parent / f"{cfg_file.stem}{sfx}" for sfx in config.valid_suffix]
-            _var_files = [f for f in _var_files if f.exists()]
-            if _var_files:
-                var_file = _var_files[0]
-                # TODO test / accomodate csv
-            else:
-                print(f"No variable file found for {cfg_file}")
-                raise typer.Exit(1)
-
-        config_out = utils.generate_template(cfg_file, var_file=var_file)
-    else:
-        config_out = cfg_file.read_text()
-    # end block
-
-    commands = []
-    for line in config_out.splitlines():
-        if "******" in line:
-            print(f":warning: [bright_red]ERROR[/] Masked credential found in [cyan]{cfg_file}[/]")
-            print(f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}")
-            raise typer.Exit(1)
-        commands += [line.rstrip()]
-
-    if not commands:
-        print(f"Error No commands provided in gw group level config {cfg_file.name}")
-        raise typer.Exit(1)
+    config_out = utils.generate_template(cfg_file, var_file=var_file)
+    commands = utils.validate_config(config_out)
 
     if dev_type == "gw":
         return PreConfig(name=node, config=config_out, request=br(caasapi.send_commands, node, cli_cmds=commands))
@@ -522,6 +496,7 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
     reqs, gw_reqs, ap_reqs = [], [], []
     pre_cfgs = []
     _pre_config_msg = ""
+    cache_data = []
     for group in data:
         if "allowed-types" in data[group]:
             data[group]["allowed_types"] = data[group]["allowed-types"]
@@ -545,6 +520,9 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
                 monitor_only_sw=g.monitor_only_sw,
                 monitor_only_cx=g.monitor_only_cx,
             )
+        ]
+        cache_data += [
+            {"name": g.group, "template group": {"Wired": g.wired_tg, "Wireless": g.wlan_tg}}
         ]
         for dev_type, cfg_file, var_file in zip(["gw", "ap"], [g.gw_config, g.ap_config], [g.gw_vars, g.ap_vars]):
             if cfg_file is not None:
@@ -589,9 +567,13 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
 
     if reqs and yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.batch_request(reqs)
+        if all(r.ok for r in resp):
+            cache_resp = asyncio.run(cli.cache.update_group_db(cache_data))
+            log.debug(f"batch add group cache resp: {cache_resp}")
         cli.display_results(resp)
         if gw_reqs:
-            print("\n[bright_green]Results from Group level gateway config push (CLI commands)[/]\n")
+            print("\n[bright_green]Results from Group level gateway config push (CLI commands)[/]")
+            print("\n  [italic]This can take some time.[/]")
             resp = cli.central.batch_request(gw_reqs)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         if ap_reqs:
