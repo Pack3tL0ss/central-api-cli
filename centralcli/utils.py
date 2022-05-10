@@ -646,38 +646,6 @@ class Utils:
     def chunker(seq, size):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
-    @staticmethod
-    def generate_template(template_file: Union[Path, str], var_file: Union[Path, str, None],) -> List[str]:
-        '''Generate configuration files based on j2 templates and provided variables
-        '''
-        template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
-        var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
-
-        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
-        if template_file.suffix == ".j2":
-            if var_file is None or not var_file.exists():
-                _var_files = [template_file.parent / f"{template_file.stem}{sfx}" for sfx in valid_ext]
-                _var_files = [f for f in _var_files if f.exists()]
-                if _var_files:
-                    var_file = _var_files[0]
-                else:
-                    print(f":x: No variable file found for {template_file}")
-                    raise typer.Exit(1)
-
-            # TODO refactor to use helper function in utils
-            # cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
-            config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
-
-            env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
-            template = env.get_template(template_file.name)
-
-            config_out = template.render(config_data)
-        else:
-            config_out = template.read_text()
-
-        return config_out.splitlines()
-
-
     # TODO decorator func
     @staticmethod
     def ask(
@@ -720,20 +688,51 @@ class Utils:
         return choice
 
     @staticmethod
-    def validate_config(data: List[str]) -> List[str]:
+    def generate_template(template_file: Union[Path, str], var_file: Union[Path, str, None],) -> str:
+        '''Generate configuration files based on j2 templates and provided variables
+        '''
+        template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
+        var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
+
+        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+        if template_file.suffix == ".j2":
+            if var_file is None or not var_file.exists():
+                _var_files = [template_file.parent / f"{template_file.stem}{sfx}" for sfx in valid_ext]
+                _var_files = [f for f in _var_files if f.exists()]
+                if _var_files:
+                    var_file = _var_files[0]
+                else:
+                    print(f":x: No variable file found for {template_file}")
+                    raise typer.Exit(1)
+
+            # TODO refactor to use helper function in utils
+            # cli_file = generate_template(cli_file, var_file, group_dev=group_dev)
+            config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
+
+            env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
+            template = env.get_template(template_file.name)
+
+            config_out = template.render(config_data)
+        else:
+            config_out = template.read_text()
+
+        return config_out
+
+    @staticmethod
+    def validate_config(data: str) -> List[str]:
         """Validator for resulting config after j2 conversion
 
         Args:
-            data (List[str]): list of str representing the final configuration.
+            data (str): str representing the final configuration.
 
         Raises:
-            typer.Exit: If indications of j2 conversion failure or masked creds found
+            typer.Exit: If masked creds found
 
         Returns:
             Original list of str with each line rstrip.
         """
         cli_cmds = []
-        for line in data:
+        for line in data.splitlines():
             cli_cmds += [line.rstrip()]
             if "******" in line:
                 typer.secho("Masked credential found in file.", fg="red")
@@ -741,9 +740,6 @@ class Utils:
                     f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
                     fg="red",
                     )
-                raise typer.Exit(1)
-            if "{{" in line and "}}" in line or "{%" in line and "%}" in line:
-                print(f":x: Not all j2 variables seem to have been converted\n [cyan]{line}[/]")
                 raise typer.Exit(1)
 
         if not cli_cmds:

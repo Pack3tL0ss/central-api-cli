@@ -744,7 +744,7 @@ def convert(
         else:
             var_file = var_file[0]
     final_config = utils.generate_template(template, var_file=var_file)
-    cli.display_results(data=final_config, outfile=outfile)
+    cli.display_results(data=final_config.splitlines(), outfile=outfile)
 
 
 
