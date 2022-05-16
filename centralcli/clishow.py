@@ -1913,6 +1913,24 @@ def hook_proxy(
         raise typer.Exit(0)
 
 
+@app.command()
+def archived(
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Show archived devices"""
+    resp = cli.central.request(cli.central.get_archived_devices)
+    cli.display_results(resp, tablefmt="yaml")
+
 # @app.command(short_help="Show config", hidden=True)
 def _get_cencli_config(
     default: bool = typer.Option(
