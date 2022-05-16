@@ -5,7 +5,7 @@ import asyncio
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Tuple
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich.console import Console
@@ -23,7 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import GatewayRole, GenericDevIdens, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
+from centralcli.constants import BatchAddArgs, BatchRenameArgs, GatewayRole, GenericDevIdens, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
 
 iden_meta_vars = IdenMetaVars()
 tty = utils.tty
@@ -68,14 +68,6 @@ class SiteImport(BaseModel):
             return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
         except ValueError:
             return SiteStates(v).value
-
-
-
-
-class BatchArgs(str, Enum):
-    sites = "sites"
-    # aps = "aps"
-    groups = "groups"
 
 
 class BatchDelArgs(str, Enum):
@@ -453,6 +445,22 @@ class PreConfig(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+# TODO finish extraction of uplink commands from commands sent to gw
+# so they can be sent in 2nd request as gw always errors interface doesn't
+# exist yet.
+def _extract_uplink_commands(commands: List[str]) -> Tuple[List[str], List[str]]:
+    _start=None
+    uplk_cmds = []
+    for idx, c in enumerate(commands):
+        if c.lower().startswith("uplink wired"):
+            _start = idx
+        elif _start and c.lstrip().startswith("!"):
+            uplk_cmds += [slice(_start, idx + 1)]
+            _start = None
+    uplk_lines = [line for x in [commands[s] for s in uplk_cmds] for line in x]
+    idx_list = [x for idx in [list(range(s.start, s.stop)) for s in uplk_cmds] for x in idx]
+    non_uplk_lines = [cmd for idx, cmd in enumerate(commands) if idx not in idx_list]
+    return uplk_lines, non_uplk_lines
 
 def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, var_file: Path = None) -> PreConfig:
     """Build Configuration from raw config or jinja2 template/variable file.
@@ -585,7 +593,7 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
 
 @app.command(short_help="Perform Batch Add from file")
 def add(
-    what: BatchArgs = typer.Argument(...,),
+    what: BatchAddArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(..., exists=True),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -689,7 +697,7 @@ def delete(
 
 @app.command(help="Batch rename APs based on import file or site/LLDP info.")
 def rename(
-    what: BatchArgs = typer.Argument(...,),
+    what: BatchRenameArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),  # TODO completion
     lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
     ap: str = typer.Option(None, metavar=iden_meta_vars.dev, help="[LLDP rename] Perform on specified AP",),
