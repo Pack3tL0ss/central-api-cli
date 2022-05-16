@@ -6493,19 +6493,24 @@ class AllCalls(CentralApi):
 
     async def platform_delete_device(
         self,
-        NoName: list = None,
+        device: Union[str, List[str]],
     ) -> Response:
         """Delete devices using Serial number.
+        Valid only for Central On Prem
 
         Args:
-            NoName (list, optional): ...
+            devices (List[str]): ...
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
+        devices = [devices] if not isinstance(devices, list) else devices
+        params = [
+            {"serial": s} for s in devices
+        ]
 
-        return await self.delete(url)
+        return await self.delete(url, params=params)
 
     async def platform_get_devices_stats(
         self,
