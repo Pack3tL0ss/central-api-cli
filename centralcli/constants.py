@@ -48,7 +48,7 @@ STRIP_KEYS = [
     "gateways",
     "switches",
     "aps",
-    "swarms"
+    "swarms",
     "devices",
     "mcs",
     "group",
@@ -185,6 +185,14 @@ class KickArgs(str, Enum):
 class BatchApArgs(str, Enum):
     rename = "rename"
 
+class BatchAddArgs(str, Enum):
+    sites = "sites"
+    groups = "groups"
+
+class BatchRenameArgs(str, Enum):
+    sites = "sites"
+    aps = "aps"
+    groups = "groups"
 
 class RenameArgs(str, Enum):
     group = "group"
