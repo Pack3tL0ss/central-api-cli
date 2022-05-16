@@ -450,7 +450,7 @@ def sync(
 
 # XXX Doesn't actually appear to be valid for any group rename
 # TODO non batch rename AP
-@app.command(short_help="Rename an Access Point.", help="Rename an Access Point", hidden=False)
+@app.command(help="Rename an Access Point", hidden=False)
 def rename(
     what: RenameArgs = typer.Argument(...,),
     group_ap: str = typer.Argument(..., metavar=f"AP{iden.dev}", autocompletion=cli.cache.dev_kwarg_completion),
