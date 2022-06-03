@@ -231,6 +231,18 @@ class BuildCLI:
         return await self.central.get(url)
 
 
+    # FIXME
+    async def get_config_status(self, serial: str) -> Response:
+        """Bad API endpoint.  ignore this.
+
+        // -- used by show config <gw> --status -- //
+
+        The endpoint appears to be invalid though.
+        """
+        url = "/caas/v1/status/device"
+        params = {"serial_num": serial}
+        return await self.central.get(url, params=params)
+
 class CaasAPI(BuildCLI):
     def __init__(self, central=None, data: dict = None, file: Path = None) -> None:
         self.data = data
