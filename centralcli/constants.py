@@ -32,10 +32,52 @@ class SendConfigDevIdens(str, Enum):
     # cx = "cx"
 
 
+class ShowInventoryArgs(str, Enum):
+    all = "all"
+    ap = "ap"
+    gw = "gw"
+    vgw = "vgw"
+    switch = "switch"
+    others = "others"
+
+
+SHOWINVENTORY_LIB_TO_API = {
+    "all": "all",
+    "ap": "all_ap",
+    "switch": "switch",
+    "gw": "gateway",
+    "vgw": "vgw",
+    "others": "others"
+}
+
+class InventorySortOptions(str, Enum):
+    type = "type"
+    model = "model"
+    sku = "sku"
+    mac = "mac"
+    serial = "serial"
+    services = "services"
+
 class GatewayRole(str, Enum):
     branch = "branch"
     vpnc = "vpnc"
     wlan = "wlan"
+
+
+class CertTypes(str, Enum):
+    SERVER_CERT = "SERVER_CERT"
+    CA_CERT = "CA_CERT"
+    CRL = "CRL"
+    INTERMEDIATE_CA = "INTERMEDIATE_CA"
+    OCSP_RESPONDER_CERT = "OCSP_RESPONDER_CERT"
+    OCSP_SIGNER_CERT = "OCSP_SIGNER_CERT"
+    PUBLIC_CERT = "PUBLIC_CERT"
+
+
+class CertFormat(str, Enum):
+    PEM = "PEM"
+    DER = "DER"
+    PKCS12 = "PKCS12"
 
 
 class StartArgs(str, Enum):
