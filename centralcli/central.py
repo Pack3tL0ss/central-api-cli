@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import base64
 from enum import Enum
 import json
 import time
@@ -627,19 +628,38 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
-    async def post_certificates(
-        self, name: str, cert_type: str, passphrase: str, cert_data: str, format: str = "PEM"
-    ) -> Response:
-        """Upload a Certificate"""
-        url = "/configuration/v1/certificates"
-        payload = {
-            "cert_name": name,
-            "cert_type": cert_type,
-            "cert_format": format,
-            "passphrase": passphrase,
-            "cert_data": cert_data,
-        }
-        return await self.post(url, payload=payload)
+    # async def upload_certificate(
+    #     self,
+    #     cert_name: str,
+    #     cert_type: Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"],
+    #     cert_format: Literal["PEM", "DER", "PKCS12"],
+    #     passphrase: str,
+    #     cert_data: str,
+    # ) -> Response:
+    #     """Upload a certificate.
+
+    #     Args:
+    #         cert_name (str): cert_name
+    #         cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+    #             OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+    #         cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+    #         passphrase (str): passphrase
+    #         cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+    #     Returns:
+    #         Response: CentralAPI Response object
+    #     """
+    #     url = "/configuration/v1/certificates"
+
+    #     json_data = {
+    #         'cert_name': cert_name,
+    #         'cert_type': cert_type,
+    #         'cert_format': cert_format,
+    #         'passphrase': passphrase,
+    #         'cert_data': cert_data
+    #     }
+
+    #     return await self.post(url, json_data=json_data)
 
     async def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
@@ -866,17 +886,32 @@ class CentralApi(Session):
         params = {"sku_type": "all"}
         return await self.get(url, params=params)
 
-    async def get_all_devices(self) -> Response:
-        """Get All Devices. Not Used by CLI replaced with get_all_devicesv2"""
+    async def get_device_inventory(
+        self,
+        sku_type: str = "all",
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get devices from device inventory.
+
+        Args:
+            sku_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
+                Defaults to all.
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of devices to get Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/platform/device_inventory/v1/devices"
-        dev_types = ["iap", "switch", "gateway"]
 
-        tasks = [self.get(url, params={"sku_type": dev_type}) for dev_type in dev_types]
-        _ap, _switch, _gateway = await asyncio.gather(*tasks)
+        params = {
+            'sku_type': sku_type,
+            'offset': offset,
+            'limit': limit
+        }
 
-        _ap.output = [*_ap.output, *_switch.output, *_gateway.output]
-        _ap.url = str(_ap.url).replace("sku_type=iap", "sku_type=<3 calls: ap, switch, gw>")
-        return _ap
+        return await self.get(url, params=params)
 
     async def get_all_devicesv2(self, **kwargs) -> Response:
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
@@ -1784,10 +1819,38 @@ class CentralApi(Session):
         params = {"device_type": dev_type}
         return await self.get(url, params=params)
 
-    async def start_ts_session(self, device_serial: str, dev_type: str, commands: Union[dict, List[dict]]) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        payload = {"device_type": dev_type, "commands": commands}
-        return await self.post(url, _json=payload)
+    async def start_ts_session(
+        self,
+        serial: str,
+        dev_type: str,
+        commands: list,
+    ) -> Response:
+        """Start Troubleshooting Session.
+
+        Args:
+            serial (str): Serial of device
+            dev_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
+                switches, CX Switches, MAS switches and controllers respectively.
+            commands (List[int | dict]): List of int or dict.  int maps to command_id, use dict to
+                specify both the command_id and arguments. [command_id, {command_id: (argument1, argument2)}]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+        cmds = []
+        for cmd in commands:
+            if isinstance(cmd, int):
+                cmds += [{"command_id": cmd}]
+            elif isinstance(cmd, dict):
+                cmds += [{"command_id": cmd, "arguments": cmds[cmd]}]
+
+        json_data = {
+            'device_type': dev_type,
+            'commands': cmds
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
         url = f"/troubleshooting/v1/devices/{device_serial}"
@@ -3506,7 +3569,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO flawed API method, PUBLIC_CERT is not accepted
+        # API-FLAW API method, PUBLIC_CERT is not accepted
         url = "/configuration/v1/certificates"
         valid_types = [
             "SERVER_CERT",
@@ -3525,7 +3588,7 @@ class CentralApi(Session):
 
         if cert_format and cert_format.upper() not in ["PEM", "DER", "PKCS12"]:
             raise ValueError(f"Invalid cert_format {cert_format}, valid values are 'PEM', 'DER', 'PKCS12'")
-        elif not cert_file:
+        elif not cert_format and not cert_file:
             raise ValueError("cert_format is required when not providing certificate via file.")
 
         if not cert_data and not cert_file:
@@ -3551,18 +3614,48 @@ class CentralApi(Session):
             else:
                 cert_format = cert_format.upper()
 
-            # TODO converting from other formats to Base64 not implemented yet
             cert_data = cert_file.read_text()
+
+        cert_bytes = cert_data.encode("utf-8")
+        cert_b64 = base64.b64encode(cert_bytes).decode("utf-8")
 
         json_data = {
             'cert_name': cert_name,
             'cert_type': cert_type,
             'cert_format': cert_format,
             'passphrase': passphrase,
-            'cert_data': cert_data
+            'cert_data': cert_b64
         }
 
         return await self.post(url, json_data=json_data)
+
+    # TODO add command show subscriptions
+    async def get_subscriptions(
+        self,
+        license_type: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get user subscription keys.
+
+        Args:
+            license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing
+                types as well
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of subscriptions to get Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/subscriptions"
+
+        params = {
+            'license_type': license_type,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     # API-NOTE: grabs All valid license types, display names...
     async def get_services_config(
@@ -4123,6 +4216,28 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    # // -- Not used by commands yet.  undocumented kms api -- //
+    async def kms_get_synced_aps(self, mac: str) -> Response:
+        url = f"/keymgmt/v1/syncedaplist/{mac}"
+        return await self.get(url)
+
+    async def kms_get_client_record(self, mac: str) -> Response:
+        url = f"/keymgmt/v1/keycache/{mac}"
+        return await self.get(url)
+
+    async def kms_get_hash(self) -> Response:
+        url = f"/keymgmt/v1/keyhash"
+        return await self.get(url)
+
+    async def kms_get_ap_state(self, serial: str) -> Response:
+        url = f"/keymgmt/v1/Stats/ap/{serial}"
+        return await self.get(url)
+
+    # Bad endpoint URL 404
+    async def kms_get_health(self) -> Response:
+        url = "/keymgmt/v1/health"
+        return await self.get(url)
 
 if __name__ == "__main__":
     pass
