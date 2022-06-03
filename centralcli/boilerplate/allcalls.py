@@ -13974,7 +13974,7 @@ class AllCalls(CentralApi):
             serial (str): Serial of device
             device_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
                 switches, CX Switches, MAS switches and controllers respectively.
-            commands (list): List of commands
+            commands (list): List of command ids use get_command_list to get command to id map.
 
         Returns:
             Response: CentralAPI Response object
