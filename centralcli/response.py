@@ -481,7 +481,7 @@ class Session():
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
-                else:  # else
+                else:
                     break
             else:
                 if resp.rl.near_sec:
