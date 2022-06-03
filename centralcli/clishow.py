@@ -30,7 +30,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    ClientArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
+    ClientArgs, InventorySortOptions, ShowInventoryArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
     DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, lib_to_api, what_to_pretty  # noqa
 )
@@ -131,6 +131,34 @@ def show_devices(
         cleaner=cleaner.get_devices
     )
 
+
+@app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
+def inventory(
+    _type: ShowInventoryArgs = typer.Argument("all", metavar="[all|ap|gw|vgw|switch|others]"),
+    sub: bool = typer.Option(
+        None,
+        help="Show devices with applied subscription/license, or devices with no subscription/license applied."
+    ),
+    sort_by: InventorySortOptions = typer.Option(None, "--sort"),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    verbose: bool = typer.Option(False, "-v", help="Gather additional details about device from cache.", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", show_default=False),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = cli.central.request(cli.central.get_device_inventory, _type)
+
+    cli.display_results(resp, tablefmt=tablefmt, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_device_inventory, sub=sub)
 
 @app.command(short_help="Show All Devices")
 def all(
@@ -942,15 +970,16 @@ def run(
     cli.display_results(resp, pager=pager, outfile=outfile)
 
 
+# TODO --status does not work
+# https://web.yammer.com/main/org/hpe.com/threads/eyJfdHlwZSI6IlRocmVhZCIsImlkIjoiMTQyNzU1MDg5MTQ0MjE3NiJ9
 @app.command(
     "config",
     short_help="Show Central Group/Device or cencli Config",
-    help="Show Effective Group/Device Config (UI Group) or cencli config.",
-    epilog= (
-        "Examples:\n"
-        " cencli show config GROUPNAME --gw\n"
-        " cencli show config DEVICENAME\n"
-        " cencli show config cencli\n"
+    help=(
+        "Show Effective Group/Device Config (UI Group) or cencli config."
+        "    Examples: 'cencli show config GROUPNAME --gw', "
+        "'cencli show config DEVICENAME', "
+        "'cencli show config cencli'"
     ),
 )
 def config_(
@@ -971,6 +1000,12 @@ def config_(
     ),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
+    status: bool = typer.Option(
+        False,
+        "--status",
+        help="Show config (sync) status. Applies to GWs.",
+        hidden=True,
+    ),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
@@ -1007,36 +1042,34 @@ def config_(
             print(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
             raise typer.Exit(1)
         caasapi = caas.CaasAPI(central=cli.central)
-        func = caasapi.show_config
-        _data_key = "config"
+        if not status:
+            func = caasapi.show_config
+            _data_key = "config"
+        else:
+            func = caasapi.get_config_status
     elif do_ap or (device and device.generic_type == "ap"):
         if device:
             if device.generic_type == "ap":
                 func = cli.central.get_per_ap_config
+                args = [device.serial]
             else:
                 print(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
                 raise typer.Exit(1)
         else:
             func = cli.central.get_ap_config
+            args = [group.name]
     else:
         print(f"This command is currently only supported for gw and ap, not {device.generic_type}")
         raise typer.Exit(1)
 
     # Build arguments cli.central method associated with each device type supported.
     if device:
-        if device.generic_type == "ap":
-            args = [
-                device.serial,
-            ]
+        if device.generic_type == "ap" or status:
+            args = [device.serial]
         else:
-            args = [
-                group.name,
-                device.mac
-            ]
+            args = [group.name, device.mac]
     else:
-        args = [
-            group.name
-        ]
+        args = [group.name]
 
     resp = cli.central.request(func, *args)
 
