@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import GatewayRole, LicenseTypes, state_abbrev_to_pretty
+from centralcli.constants import GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty
 
 app = typer.Typer()
 color = utils.color
@@ -362,6 +362,114 @@ def site(
             asyncio.run(cli.cache.update_site_db(resp.raw))
         else:
             raise typer.Exit(1)
+    # async def upload_certificate(
+    #     self,
+    #     cert_name: str,
+    #     cert_type: Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"],
+    #     cert_format: Literal["PEM", "DER", "PKCS12"],
+    #     passphrase: str,
+    #     cert_data: str,
+    # ) -> Response:
+    #     """Upload a certificate.
+
+    #     Args:
+    #         cert_name (str): cert_name
+    #         cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+    #             OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+    #         cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+    #         passphrase (str): passphrase
+    #         cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+    #     Returns:
+    #         Response: CentralAPI Response object
+    #     """
+
+# FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
+# "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
+@app.command(help="Add/Upload a Certificate.", hidden=True)
+def certificate(
+    cert_name: str = typer.Argument(...),
+    passphrase: str = typer.Argument(...,),
+    # cert_type: CertTypes = typer.Argument(...),
+    # cert_format: CertFormat = typer.Argument(None,),
+    pem: bool = typer.Option(False, "-pem"),
+    der: bool = typer.Option(False, "-der"),
+    pkcs12: bool = typer.Option(False, "-pkcs12"),
+    server_cert: bool = typer.Option(False, "-svr"),
+    ca_cert: bool = typer.Option(False, "-ca"),
+    crl: bool = typer.Option(False, "-crl"),
+    int_ca_cert: bool = typer.Option(False, "-int-ca"),
+    ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp"),
+    ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer",),
+    ssh_pub_key: bool = typer.Option(False, "-public",),
+    cert_data: Path = typer.Argument(None,),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Upload a Certificate to Aruba Central
+
+    This command is built but the API endpoint does not appear to work currently.
+    """
+    yes = yes_ if yes_ else yes
+    cert_format_params = [pem, der, pkcs12]
+    cert_formats = ["PEM", "DER", "PKCS12"]
+    cert_format = None
+
+    if not any([server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]):
+        print("Error: Certificate Type must be provided using one of the options i.e. -svr")
+        raise typer.Exit(1)
+    elif not any(cert_format_params):
+        if cert_data is None:
+            print("Error: Cert format must be provided use one of '-pem'. '-der', or '-pkcs12'")
+            raise typer.Exit(1)
+    else:
+        cert_format = cert_formats[cert_format_params.index(True)]
+
+    kwargs = {
+        "passphrase": passphrase,
+        "cert_name": cert_name,
+        "cert_format": cert_format,
+        "server_cert": server_cert,
+        "ca_cert": ca_cert,
+        "crl": crl,
+        "int_ca_cert": int_ca_cert,
+        "ocsp_resp_cert": ocsp_resp_cert,
+        "ocsp_signer_cert": ocsp_signer_cert,
+        "ssh_pub_key": ssh_pub_key
+    }
+
+    kwargs = {k: v for k, v in kwargs.items() if v}
+
+    if not cert_data:
+        print("\n[bright_green]No Cert file specified[/]")
+        print("Provide certificate content encoded in base64 format.")
+        cert_data = utils.get_multiline_input(return_type="str")
+        kwargs["cert_data"] = cert_data
+    elif cert_data.exists():
+        kwargs["cert_file"] = cert_data
+    else:
+        print(f"ERROR: The specified certificate file [cyan]{cert_data.name}[/] not found.")
+        raise typer.Exit(1)
+
+    print("[bright_green]Upload Certificate:")
+    _ = [
+        print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
+        if k not in  ["passphrase", "cert_data"]
+        ]
+    if yes or typer.confirm(f"\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.upload_certificate, **kwargs)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Add a WebHook")
