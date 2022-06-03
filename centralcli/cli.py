@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 from time import sleep
 from typing import List
+import clitshoot
 
 from rich import print
 from rich.console import Console
@@ -61,6 +62,7 @@ app.add_typer(clibatch.app, name="batch",)
 app.add_typer(clicaas.app, name="caas", hidden=True,)
 app.add_typer(clirefresh.app, name="refresh",)
 app.add_typer(clitest.app, name="test",)
+app.add_typer(clitshoot.app, name="tshoot",)
 
 
 class MoveArgs(str, Enum):
