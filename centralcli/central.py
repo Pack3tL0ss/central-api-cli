@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import base64
 from enum import Enum
 import json
 import time
@@ -627,19 +628,38 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
-    async def post_certificates(
-        self, name: str, cert_type: str, passphrase: str, cert_data: str, format: str = "PEM"
-    ) -> Response:
-        """Upload a Certificate"""
-        url = "/configuration/v1/certificates"
-        payload = {
-            "cert_name": name,
-            "cert_type": cert_type,
-            "cert_format": format,
-            "passphrase": passphrase,
-            "cert_data": cert_data,
-        }
-        return await self.post(url, payload=payload)
+    # async def upload_certificate(
+    #     self,
+    #     cert_name: str,
+    #     cert_type: Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"],
+    #     cert_format: Literal["PEM", "DER", "PKCS12"],
+    #     passphrase: str,
+    #     cert_data: str,
+    # ) -> Response:
+    #     """Upload a certificate.
+
+    #     Args:
+    #         cert_name (str): cert_name
+    #         cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+    #             OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+    #         cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+    #         passphrase (str): passphrase
+    #         cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+    #     Returns:
+    #         Response: CentralAPI Response object
+    #     """
+    #     url = "/configuration/v1/certificates"
+
+    #     json_data = {
+    #         'cert_name': cert_name,
+    #         'cert_type': cert_type,
+    #         'cert_format': cert_format,
+    #         'passphrase': passphrase,
+    #         'cert_data': cert_data
+    #     }
+
+    #     return await self.post(url, json_data=json_data)
 
     async def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
@@ -866,17 +886,32 @@ class CentralApi(Session):
         params = {"sku_type": "all"}
         return await self.get(url, params=params)
 
-    async def get_all_devices(self) -> Response:
-        """Get All Devices. Not Used by CLI replaced with get_all_devicesv2"""
+    async def get_device_inventory(
+        self,
+        sku_type: str = "all",
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get devices from device inventory.
+
+        Args:
+            sku_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
+                Defaults to all.
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of devices to get Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/platform/device_inventory/v1/devices"
-        dev_types = ["iap", "switch", "gateway"]
 
-        tasks = [self.get(url, params={"sku_type": dev_type}) for dev_type in dev_types]
-        _ap, _switch, _gateway = await asyncio.gather(*tasks)
+        params = {
+            'sku_type': sku_type,
+            'offset': offset,
+            'limit': limit
+        }
 
-        _ap.output = [*_ap.output, *_switch.output, *_gateway.output]
-        _ap.url = str(_ap.url).replace("sku_type=iap", "sku_type=<3 calls: ap, switch, gw>")
-        return _ap
+        return await self.get(url, params=params)
 
     async def get_all_devicesv2(self, **kwargs) -> Response:
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
@@ -1784,10 +1819,38 @@ class CentralApi(Session):
         params = {"device_type": dev_type}
         return await self.get(url, params=params)
 
-    async def start_ts_session(self, device_serial: str, dev_type: str, commands: Union[dict, List[dict]]) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        payload = {"device_type": dev_type, "commands": commands}
-        return await self.post(url, _json=payload)
+    async def start_ts_session(
+        self,
+        serial: str,
+        dev_type: str,
+        commands: list,
+    ) -> Response:
+        """Start Troubleshooting Session.
+
+        Args:
+            serial (str): Serial of device
+            dev_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
+                switches, CX Switches, MAS switches and controllers respectively.
+            commands (List[int | dict]): List of int or dict.  int maps to command_id, use dict to
+                specify both the command_id and arguments. [command_id, {command_id: (argument1, argument2)}]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+        cmds = []
+        for cmd in commands:
+            if isinstance(cmd, int):
+                cmds += [{"command_id": cmd}]
+            elif isinstance(cmd, dict):
+                cmds += [{"command_id": cmd, "arguments": cmds[cmd]}]
+
+        json_data = {
+            'device_type': dev_type,
+            'commands': cmds
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
         url = f"/troubleshooting/v1/devices/{device_serial}"
@@ -2108,43 +2171,8 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    async def create_group_v2(
-        self,
-        group: str,
-        group_password: str,
-        wired_tg: bool = False,
-        wlan_tg: bool = False
-    ) -> Response:
-        """Create new group.
-
-        Deprecated formerly used by cli add group
-
-        Args:
-            group (str): Group Name
-            group_password (str): local admin password used to access devices added to the group.
-            wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
-                using templates.
-            wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
-                group is managed using templates.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/configuration/v2/groups"
-
-        json_data = {
-            "group": group,
-            "group_attributes": {
-                "group_password": group_password,
-                "template_info": {
-                    "Wired": wired_tg,
-                    "Wireless": wlan_tg
-                }
-            }
-        }
-
-        return await self.post(url, json_data=json_data)
-
+    # TODO all params required by API GW, need call to get current properties
+    # if not all are provided
     async def update_ap_system_config(
         self,
         group_swarmid: str,
@@ -2154,6 +2182,8 @@ class CentralApi(Session):
         password: str = None,
     ) -> Response:
         """Update system config.
+
+        All params are required by Aruba Central
 
         Args:
             group_swarmid (str): Group name of the group or guid of the swarm. Example:Group_1
@@ -2195,7 +2225,7 @@ class CentralApi(Session):
     ) -> Response:
         """Create new group with specified properties. v3
 
-        // Used by add group //
+        // Used by add group batch add group //
 
         Args:
             group (str): Group Name
@@ -2323,70 +2353,6 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
-
-    # TODO Deprecated verify not used by any commands
-    async def update_group(
-        self,
-        group: str,
-        group_password: str,
-        template_group: bool
-    ) -> Response:
-        """Update existing group.
-
-        Args:
-            group (str): Name of the group to be updated.
-            group_password (str): password for UI group
-            template_group (bool): Set to true if group is of type template.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/groups/{group}"
-
-        json_data = {
-            'group_password': group_password,
-            'template_group': template_group
-        }
-
-        return await self.patch(url, json_data=json_data)
-
-    # TODO REMOVE DEPRECATED REPLACED WITH V2
-    async def update_group_properties_v1(
-        self,
-        group: str,
-        aos10: bool = None,
-        monitor_only_switch: bool = None,
-    ) -> Response:
-        """Update properties for the given group.
-
-        If aos10 argument is not provided an additional API call is made to gather the current aos_version
-        and use the current setting as the argument is required by the Central API gw.
-
-        Args:
-            group (str): Group for which properties need to be updated.
-            aos10 (bool, optional): If True will upgrade the group to AOS10
-                Note: AOS10 groups can not be downgraded back to AOS8
-            MonitorOnlySwitch (bool, optional): Indicates if the Monitor Only mode for switches is enabled for
-                the group.  Defaults to False
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v1/groups/{group}/properties"
-        json_data = {}
-
-        if aos10 is None:
-            resp = await self.get_groups_properties(group)
-            if not resp:
-                return resp
-            json_data['AOSVersion'] = resp[0]["properties"]["AOSVersion"]
-        else:
-            json_data['AOSVersion'] = "AOS_10X" if aos10 else "AOS_8X"
-
-        if monitor_only_switch is not None:
-            json_data['MonitorOnlySwitch'] = monitor_only_switch
-
-        return await self.patch(url, json_data=json_data)
 
     # API-FLAW add ap and gw to group with gw-role as wlan and upgrade to aos10.  Returns 200, but no changes made
     async def update_group_properties(
@@ -3603,7 +3569,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO flawed API method, PUBLIC_CERT is not accepted
+        # API-FLAW API method, PUBLIC_CERT is not accepted
         url = "/configuration/v1/certificates"
         valid_types = [
             "SERVER_CERT",
@@ -3622,7 +3588,7 @@ class CentralApi(Session):
 
         if cert_format and cert_format.upper() not in ["PEM", "DER", "PKCS12"]:
             raise ValueError(f"Invalid cert_format {cert_format}, valid values are 'PEM', 'DER', 'PKCS12'")
-        elif not cert_file:
+        elif not cert_format and not cert_file:
             raise ValueError("cert_format is required when not providing certificate via file.")
 
         if not cert_data and not cert_file:
@@ -3648,18 +3614,48 @@ class CentralApi(Session):
             else:
                 cert_format = cert_format.upper()
 
-            # TODO converting from other formats to Base64 not implemented yet
             cert_data = cert_file.read_text()
+
+        cert_bytes = cert_data.encode("utf-8")
+        cert_b64 = base64.b64encode(cert_bytes).decode("utf-8")
 
         json_data = {
             'cert_name': cert_name,
             'cert_type': cert_type,
             'cert_format': cert_format,
             'passphrase': passphrase,
-            'cert_data': cert_data
+            'cert_data': cert_b64
         }
 
         return await self.post(url, json_data=json_data)
+
+    # TODO add command show subscriptions
+    async def get_subscriptions(
+        self,
+        license_type: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get user subscription keys.
+
+        Args:
+            license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing
+                types as well
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of subscriptions to get Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/subscriptions"
+
+        params = {
+            'license_type': license_type,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     # API-NOTE: grabs All valid license types, display names...
     async def get_services_config(
@@ -4220,6 +4216,28 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    # // -- Not used by commands yet.  undocumented kms api -- //
+    async def kms_get_synced_aps(self, mac: str) -> Response:
+        url = f"/keymgmt/v1/syncedaplist/{mac}"
+        return await self.get(url)
+
+    async def kms_get_client_record(self, mac: str) -> Response:
+        url = f"/keymgmt/v1/keycache/{mac}"
+        return await self.get(url)
+
+    async def kms_get_hash(self) -> Response:
+        url = f"/keymgmt/v1/keyhash"
+        return await self.get(url)
+
+    async def kms_get_ap_state(self, serial: str) -> Response:
+        url = f"/keymgmt/v1/Stats/ap/{serial}"
+        return await self.get(url)
+
+    # Bad endpoint URL 404
+    async def kms_get_health(self) -> Response:
+        url = "/keymgmt/v1/health"
+        return await self.get(url)
 
 if __name__ == "__main__":
     pass

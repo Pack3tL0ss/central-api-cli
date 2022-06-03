@@ -458,7 +458,7 @@ name = "pydantic"
 version = "1.9.0"
 description = "Data validation and settings management using python 3.6 type hinting"
 category = "main"
-optional = true
+optional = false
 python-versions = ">=3.6.1"
 
 [package.dependencies]
@@ -791,7 +791,7 @@ hook-proxy = ["fastapi", "uvicorn", "psutil"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "209aa0ab8aaead293f12ee84e694c6a15d6300121c7e634b7e70ef3c9cefdc47"
+content-hash = "2ffc622de8527cf131c011c346b8ae112090a296f703bbed1c05cd5f0016620b"
 
 [metadata.files]
 aiohttp = [

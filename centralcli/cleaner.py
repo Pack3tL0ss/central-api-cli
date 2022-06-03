@@ -171,6 +171,7 @@ _short_key = {
     # "acknowledged": "ack",
     "acknowledged_by": "ack by",
     "acknowledged_timestamp": "ack time",
+    "aruba_part_no": "sku",
 }
 
 
@@ -921,5 +922,30 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
     ]
     data = strip_no_value(data)
 
+
+    return data
+
+
+def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
+    field_order = [
+        "device_type",
+        "model",
+        "aruba_part_no",
+        "imei",
+        "macaddr",
+        "serial",
+        "services",
+        # "tier_type"
+    ]
+    data = [
+        dict(short_value(k, d[k]) for k in field_order) for d in data
+    ]
+    data = sorted(strip_no_value(data), key=lambda i: (i["type"], i["model"]))
+
+    if sub is not None:
+        if sub:
+            data = [{k: v for k, v in d.items()} for d in data if d["services"]]
+        else:
+            data = [{k: v for k, v in d.items()} for d in data if not d["services"]]
 
     return data

@@ -375,9 +375,6 @@ def suspect(
         outfile=outfile,
         sort_by=sort_by if not sort_by else sort_by.replace("_", " "),
         reverse=reverse,
-        # cleaner=cleaner.get_audit_logs if not verbose else None,
-        # cache_update_func=cli.cache.update_log_db if not verbose else None,
-        # caption=f"Use {_cmd_txt} to see details for a log.  Logs lacking an id don\'t have details.",
     )
 
 

@@ -481,7 +481,7 @@ class Session():
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
-                else:  # else
+                else:
                     break
             else:
                 if resp.rl.near_sec:
@@ -689,20 +689,22 @@ class Session():
 
     async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
         self.silent = True
+        m_resp = []
         _tot_start = time.perf_counter()
-        resp: Response = await api_calls[0].func(
-            *api_calls[0].args,
-            **api_calls[0].kwargs
-            )
-        if not resp or len(api_calls) == 1:
-            return [resp]
-
-        m_resp: List[Response] = [resp]
-
         chunked_calls = utils.chunker(api_calls, 7)
+        if not self.requests:  # only run vrfy first by itself if no calls have been made
+            resp: Response = await api_calls[0].func(
+                *api_calls[0].args,
+                **api_calls[0].kwargs
+                )
+            if not resp or len(api_calls) == 1:
+                return [resp]
 
-        # remove first call performed above from first chunk
-        chunked_calls[0] = chunked_calls[0][1:]
+            m_resp: List[Response] = [resp]
+
+            # remove first call performed above from first chunk
+            chunked_calls[0] = chunked_calls[0][1:]
+
 
         # Make calls 7 at a time ensuring timing so that 7 per second limit is not exceeded
         for chunk in chunked_calls:

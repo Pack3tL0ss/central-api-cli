@@ -19,3 +19,4 @@ jinja2
 fastapi
 uvicorn
 psutil
+pydantic
