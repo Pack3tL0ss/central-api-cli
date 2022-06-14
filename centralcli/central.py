@@ -3381,6 +3381,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
+        license_kwargs = []
 
         if license:
             license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
