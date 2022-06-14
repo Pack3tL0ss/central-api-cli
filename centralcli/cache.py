@@ -203,7 +203,7 @@ class Cache:
     ) -> None:
         """Central-API-CLI Cache object
         """
-        self.rl: str = ""  # TODO temp might refactor cache updates to return resp
+        # self.rl: str = ""  # TODO temp might refactor cache updates to return resp
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.responses = CacheResponses()
@@ -828,25 +828,23 @@ class Cache:
 
         return len(ret) == len(data)
 
-    # TODO have update methods return Response
+    # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     async def update_dev_db(self):
         resp = await self.central.get_all_devicesv2()
         if resp.ok:
-            self.rl = str(resp.rl)
-            resp.output = utils.listify(resp.output)
-            resp.output = cleaner.get_devices(resp.output)
-            self.responses.dev = resp
-            # resp.output = [
-            #     {
-            #         k: v if k != "type" else get_cencli_devtype(v) for k, v in r.items()
-            #     } for r in resp.output
-            # ]
+            # self.rl = str(resp.rl)
+            if resp.output:
+                resp.output = utils.listify(resp.output)
+                resp.output = cleaner.get_devices(resp.output)
+
+                self.DevDB.truncate()
+                update_res = self.DevDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during dev db update")
+
             # TODO change updated from  list of funcs to class with bool attributes or something
             self.updated.append(self.central.get_all_devicesv2)
-            self.DevDB.truncate()
-            update_res = self.DevDB.insert_multiple(resp.output)
-            if False in update_res:
-                log.error("Tiny DB returned an error during dev db update")
+            self.responses.dev = resp
         return resp
 
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
@@ -872,7 +870,7 @@ class Cache:
         else:
             resp = await self.central.get_all_sites()
             if resp.ok:
-                resp.output = utils.listify(resp.output)
+                resp.output = utils.listify(resp.output) if resp.output else []
                 resp.output = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
                 self.responses.site = resp
                 # TODO time this to see which is more efficient
