@@ -450,12 +450,16 @@ class CLICommon:
 
                 if self.raw_out:
                     tablefmt = "raw"
+
+                # if not r.output:
+                #     c = Console(record=True)
+                #     c.begin_capture()
+                #     c.print(f"  Status Code: [{fg}]{r.status}[/]")
+                #     c.print(f"  :warning: Empty Response.  This may be normal.")
+                #     r.output = c.end_capture()
                 if not r.output:
-                    c = Console(record=True)
-                    c.begin_capture()
-                    c.print(f"  Status Code: [{fg}]{r.status}[/]")
-                    c.print(f"  :warning: Empty Response.  This may be normal.")
-                    r.output = c.end_capture()
+                    print(f"  Status Code: [{fg}]{r.status}[/]")
+                    print(f"  :warning: Empty Response.  This may be normal.")
 
                 if not r or tablefmt in ["action", "raw"]:
 
