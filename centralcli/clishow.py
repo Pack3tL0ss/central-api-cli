@@ -799,7 +799,7 @@ def templates(
         log_name = name
         name = cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=group)
         if not name:
-            typer.secho(f"Unabled to find a match for {log_name}.  Listing all templates.", fg="red")
+            typer.secho(f"Unable to find a match for {log_name}.  Listing all templates.", fg="red")
 
     if not name:
         if not group:
@@ -838,7 +838,7 @@ def variables(
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
         help="Default: 'all'",
         autocompletion=lambda incomplete: [
-            m for m in [m for m in cli.cache.dev_completion(incomplete)]
+            m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ] or [],
         show_default=False,
@@ -861,6 +861,8 @@ def variables(
 
     if args and args != "all":
         args = cli.cache.get_dev_identifier(args)
+    else:
+        args = ""
 
     resp = central.request(central.get_variables, () if not args else args.serial)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
@@ -1851,7 +1853,7 @@ def last(
     )
 
 
-@app.command(short_help="Show Alerts/Notifications. (last 24h default)", help="Show Alerts/Notifications (for past 24 hours by default).  Notification must be Configured.")
+@app.command(help="Show configured webhooks")
 def webhooks(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
@@ -1862,11 +1864,8 @@ def webhooks(
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
-    verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
-    verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -1893,6 +1892,7 @@ def webhooks(
         tablefmt=tablefmt,
         title="WebHooks",
         pager=pager,
+        outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         fold_cols=["urls", "wid"],
