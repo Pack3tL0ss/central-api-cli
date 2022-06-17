@@ -371,13 +371,13 @@ def unassign(
     yes = yes_ if yes_ else yes
     devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
-    _msg = f"Unassign [bright_green]{license}[/bright_green] to"
+    _msg = f"Unassign [bright_green]{license}[/bright_green] from"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.summary_text}[/]' for dev in devices])
-        _msg = f"{_msg}:\n{_dev_msg}"
+        _dev_msg = '\n    '.join([dev.summary_text for dev in devices])
+        _msg = f"{_msg}:\n    {_dev_msg}"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.summary_text}[/]"
+        _msg = f"{_msg} {dev.summary_text}"
     print(_msg)
 
     if yes or typer.confirm("\nProceed?"):

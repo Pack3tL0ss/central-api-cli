@@ -148,9 +148,9 @@ class CentralObject:
         else:
             return str(self)
 
-        return "|".join(
+        return "[reset]" + "|".join(
             [
-                typer.style(p, fg="blue" if not idx % 2 == 0 else "cyan") for idx, p in enumerate(parts)
+                f"{'[cyan]' if idx > 0 else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
             ]
         )
 
