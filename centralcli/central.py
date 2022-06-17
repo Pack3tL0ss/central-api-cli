@@ -3357,7 +3357,7 @@ class CentralApi(Session):
         mac_address: str = None,
         serial_num: str = None,
         group: str = None,
-        site: str = None,
+        # site: str = None,
         part_num: str = None,
         license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
@@ -3371,7 +3371,7 @@ class CentralApi(Session):
             mac_address (str, optional): MAC address of device to be added
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
-            site (str, optional): Assign device to a site (additional API call is made)
+            site (str, optional): -- Not implemented -- Device needs to check in prior to site assignment
             part_num (str, optional): Part Number is required for Central On Prem.
             license (str|List(str), optional): The subscription license(s) to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
@@ -3459,10 +3459,6 @@ class CentralApi(Session):
             if to_group:
                 group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
-
-            # TODO add assign to site, need to determine if we know device type at this point
-            if site:
-                print("Assign device to site not implemented yet")
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
@@ -3688,14 +3684,36 @@ class CentralApi(Session):
         // Used indirectly by add device when --license <license> is provided. //
 
         Args:
-            serials (List[str]): List of serial number of device.
-            services (List[str]): List of service names. Call services/config API to get the list of
+            serials (str | List[str]): List of serial number of device.
+            services (str | List[str]): List of service names. Call services/config API to get the list of
                 valid service names.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/subscriptions/assign"
+        serials = utils.listify(serials)
+        services = utils.listify(services)
+
+        json_data = {
+            'serials': serials,
+            'services': services
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def unassign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
+        """Unassign subscription(s) from device(s).
+
+        Args:
+            serials (str | List[str]): List of serial number of device.
+            services (str | List[str]): List of service names. Call services/config API to get the list of
+                valid service names.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/subscriptions/unassign"
         serials = utils.listify(serials)
         services = utils.listify(services)
 
