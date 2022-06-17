@@ -381,7 +381,7 @@ def unassign(
     print(_msg)
 
     if yes or typer.confirm("\nProceed?"):
-        resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license)
+        resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license.name)
         cli.display_results(resp, tablefmt="action")
 
 
