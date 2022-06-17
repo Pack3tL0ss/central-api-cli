@@ -1081,9 +1081,9 @@ def config_(
     cli.display_results(resp, pager=pager, outfile=outfile)
 
 
-@app.command(short_help="Show current Tokens from cache", help="Show current Tokens from cache")
-def tokens(
-    refresh: bool = typer.Option(False, "-r", help="Refresh tokens first."),
+@app.command( help="Show current access token from cache")
+def token(
+    no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -1091,7 +1091,7 @@ def tokens(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    if refresh:
+    if not no_refresh:
         cli.central.refresh_token()
 
     tokens = cli.central.auth.getToken()
@@ -1120,7 +1120,7 @@ def routes(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion,),
 ) -> None:
-    device = device[-1]  # allow unnecessary keywork device
+    device = device[-1]  # allow unnecessary keyword "device"
     central = cli.central
     device = cli.cache.get_dev_identifier(device)
 
@@ -1213,7 +1213,7 @@ def clients(
         None,
         metavar=iden_meta.dev,
         help="Show clients for a specific device or multiple devices.",
-        autocompletion=cli.cache.dev_completion,
+        autocompletion=cli.cache.dev_client_completion,
     ),
     # os_type:
     # band:

@@ -26,7 +26,7 @@ tty = utils.tty
 
 
 @app.command(short_help="Refresh access token")
-def tokens(
+def token(
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
     account: str = typer.Option(
