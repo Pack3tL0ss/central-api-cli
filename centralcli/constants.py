@@ -306,6 +306,10 @@ class ArgToWhat:
         self.run = self.running = "run"
         self.routes = self.route = "routes"
         self.webhooks = self.webhook = "webhooks"
+        self.token = self.tokens = "token"
+
+    def _init_refresh(self):
+        self.token = self.tokens = "token"
 
     def _init_update(self):
         self.template = self.templates = "template"
