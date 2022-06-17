@@ -37,6 +37,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.central import CentralApi  # noqa
+from centralcli.cache import CentralObject
 from centralcli.constants import (
     BlinkArgs, BounceArgs, IdenMetaVars,
     KickArgs, LicenseTypes, RenameArgs, StartArgs
@@ -270,7 +271,7 @@ def bounce(
         raise typer.Abort()
 
 
-@app.command(short_help="Remove a device from a site.", help="Remove a device from a site.")
+@app.command(help="Remove a device from a site")
 def remove(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
     # _device: List[str] = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.completion),
@@ -351,6 +352,36 @@ def assign(
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
+        cli.display_results(resp, tablefmt="action")
+
+
+@app.command(help="unassign License from device(s)")
+def unassign(
+    license: LicenseTypes = typer.Argument(..., help="License type to unassign from device(s)."),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    yes = yes_ if yes_ else yes
+    devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
+
+    _msg = f"Unassign [bright_green]{license}[/bright_green] to"
+    if len(devices) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev.summary_text}[/]' for dev in devices])
+        _msg = f"{_msg}:\n{_dev_msg}"
+    else:
+        dev = devices[0]
+        _msg = f"{_msg} [cyan]{dev.summary_text}[/]"
+    print(_msg)
+
+    if yes or typer.confirm("\nProceed?"):
+        resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -616,7 +647,7 @@ def start(
             print(f"[{p.pid}] WebHook Proxy Started.")
 
 
-@app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
+@app.command(short_help="Stop WebHook Proxy", hidden=not hook_enabled)
 def stop(
     what: StartArgs = typer.Argument(
         ...,
@@ -631,10 +662,7 @@ def stop(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Start WebHook Proxy Service on this system in the background
-
-    Requires optional hook-proxy component 'pip3 install centralcli[hook-proxy]'
-
+    """Stop WebHook Proxy (background process).
     """
     yes = yes_ if yes_ else yes
     def terminate_process(pid):
