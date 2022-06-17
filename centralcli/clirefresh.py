@@ -25,11 +25,10 @@ app = typer.Typer()
 tty = utils.tty
 
 
-@app.command(hidden=True, help="Refresh Tokens", short_help="Refresh Tokens")
-def tokens(
+@app.command(short_help="Refresh access token")
+def token(
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
@@ -37,13 +36,16 @@ def tokens(
         autocompletion=cli.cache.account_completion
     ),
 ):
+    """Refresh Central API access/refresh tokens.
+
+    This is not necessary under normal circumstances as the cli will automatically refresh the tokens if they are expired.
+    """
     cli.central.refresh_token()
 
-@app.command(hidden=True, help="Refresh Cache", short_help="Refresh Cache")
+@app.command(short_help="Refresh local cache")
 def cache(
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
@@ -51,11 +53,18 @@ def cache(
         autocompletion=cli.cache.account_completion
     ),
 ):
+    """Refresh friendly identifier cache.
+
+    The cache is the data that is stored locally so you can reference a device by name, ip, or mac vs just serial number.
+
+    This is not necessary under normal circumstances as the cli will automatically refresh the cache if you provide an identifier
+    that doesn't have a match.
+    """
     cli.cache(refresh=True)
 
 
 # TODO add cache for webhooks
-@app.command(help="Refresh WebHook token", short_help="Refresh WebHook token")
+@app.command(short_help="Refresh (regenerate) webhook token")
 def webhook(
     wid: str = typer.Option(..., help="WebHook ID",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -64,10 +73,20 @@ def webhook(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ):
-    resp = cli.central.request(cli.central.refresh_webhook_token, wid)
+    """Refresh WebHook Token (generate a new token).
 
+    Use `cencli show webhooks` to get the required webhook id (wid).
+    """
+    resp = cli.central.request(cli.central.refresh_webhook_token, wid)
     cli.display_results(resp, tablefmt="action")
 
+
+@app.callback()
+def callback():
+    """
+    Refresh tokens / cache
+    """
+    pass
 
 if __name__ == "__main__":
     app()

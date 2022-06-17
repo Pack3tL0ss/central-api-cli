@@ -63,7 +63,7 @@ def device(
                                autocompletion=cli.cache.smg_kw_completion),
     _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
-    _site: str = typer.Option(None, "--site", autocompletion=cli.cache.site_completion, hidden=True),
+    # _site: str = typer.Option(None, "--site", autocompletion=cli.cache.site_completion, hidden=True),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -80,7 +80,7 @@ def device(
         "mac": None,
         "serial": None,
         "group": None,
-        "site": None,
+        # "site": None,
         "license": license
     }
 
@@ -94,7 +94,7 @@ def device(
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
-    kwargs["site"] = kwargs["site"] or _site
+    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
@@ -109,10 +109,10 @@ def device(
         _group = cli.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
-    if "site" in kwargs and kwargs["site"]:
-        _site = cli.cache.get_site_identifier(kwargs["site"])
-        kwargs["site"] = _site.id
-        _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
+    # if "site" in kwargs and kwargs["site"]:
+        # _site = cli.cache.get_site_identifier(kwargs["site"])
+        # kwargs["site"] = _site.id
+        # _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
@@ -123,7 +123,6 @@ def device(
 
     print("".join(_msg))
 
-    # if yes or typer.confirm(_msg, abort=True):
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")

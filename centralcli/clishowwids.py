@@ -381,7 +381,7 @@ def suspect(
 @app.callback()
 def callback():
     """
-    Show Firmware / compliance details
+    Show Wireless Intrusion Detection data
     """
     pass
 

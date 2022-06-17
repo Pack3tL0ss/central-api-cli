@@ -135,6 +135,7 @@ _short_value = {
     "0.0.0.0": "-",
     "free_ip_addr_percent": lambda x: f"{x}%",
     "cpu_utilization": lambda x: f"{x}%",
+    "AOS-CX": "cx",
 }
 
 _short_key = {
@@ -496,9 +497,7 @@ def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[d
 
     data = utils.listify(data)
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
-    # if sort and data and sort in data[-1]:
-    #     return sorted(data, key=sort)
-    # else:
+
     return data
 
 
