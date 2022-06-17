@@ -137,6 +137,25 @@ class CentralObject:
             ]
         )
 
+    @property
+    def summary_text(self):
+        if self.is_site:
+            parts = [a for a in [self.name, self.city, self.state, self.zipcode] if a]
+        elif self.is_dev:
+            parts = [p for p in [self.name, self.serial, self.mac, self.ip, self.site] if p]
+            if self.site:
+                parts[-1] = f"Site:{parts[-1]}"
+        else:
+            return str(self)
+
+        return "|".join(
+            [
+                typer.style(p, fg="blue" if not idx % 2 == 0 else "cyan") for idx, p in enumerate(parts)
+            ]
+        )
+
+
+
 # TODO Not used yet refactor to make consistent Response object available for when using contents of cache to avoid API call
 class CacheResponses:
     def __init__(
@@ -390,13 +409,13 @@ class Cache:
     def dev_switch_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = [],
     ):
         """Device completion for returning matches that are either switch or AP
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
-            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+            args (List[str], optional): The previous arguments/commands on CLI.
         """
         match = self.get_dev_identifier(incomplete, dev_type=["switch"], completion=True)
 
@@ -471,26 +490,79 @@ class Cache:
             for m in out:
                 yield m if isinstance(m, tuple) else (m, f"{ctx.info_name} ... {m}")
 
-    def dev_switch_ap_completion(
+    def dev_ap_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = [],
     ):
-        """Device completion for returning matches that are either switch or AP
+        """Completion for argument where only APs are valid.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
-        match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
+        dev_types = ["ap"]
+        match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
-            yield m[0], m[1]
+            yield m
+
+    def dev_client_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ):
+        """Completion for client output.
+
+        Returns only devices that apply based on filter provided in command, defaults to clients
+        on both APs and switches (wires/wireless), but returns applicable devices if "wireless" or
+        "wired" filter is used.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI.
+        """
+        gen = self.dev_switch_ap_completion
+
+        if args:
+            if args[-1].lower() == "wireless":
+                gen = self.dev_ap_completion
+            elif args[-1].lower() == "wired":
+                gen = self.dev_switch_completion
+            elif args[-1].lower() == "all":
+                return
+
+        for m in [dev for dev in gen(incomplete, args)]:
+            yield m
+
+    def dev_switch_ap_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ):
+        """Device completion for returning matches that are either switch or AP
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI.
+        """
+        match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
+
+        # TODO fancy map to ensure dev.name, dev.mac, dev.serial, dev.ip are all not in args
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
 
     def dev_ap_gw_completion(
         self,
@@ -553,8 +625,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
         dev_types = ["ap", "gw"]
-        dev_match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
-        match = [*self.get_group_identifier(incomplete, completion=True), *dev_match]
+        match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
         out = []
         if match:
