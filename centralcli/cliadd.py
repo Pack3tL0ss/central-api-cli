@@ -58,10 +58,10 @@ def device(
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion),
-    kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    val4: str = typer.Argument(None, metavar="site [SITE]", help="Assign newly added device to site",
-                               autocompletion=cli.cache.smg_kw_completion),
-    _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
+    # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
+    # val4: str = typer.Argument(None, metavar="site [SITE]", help="Assign newly added device to site",
+    #                            autocompletion=cli.cache.smg_kw_completion),
+    # _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, "--site", autocompletion=cli.cache.site_completion, hidden=True),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
@@ -74,8 +74,8 @@ def device(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     yes = yes_ if yes_ else yes
-    kwd_vars = [kw1, kw2, kw3, kw4]
-    vals = [val1, val2, val3, val4]
+    kwd_vars = [kw1, kw2, kw3]
+    vals = [val1, val2, val3]
     kwargs = {
         "mac": None,
         "serial": None,
@@ -84,8 +84,8 @@ def device(
         "license": license
     }
 
-    if _:
-        print("DEVELOPER NOTE Null completion item has value... being ignored.")
+    # if _:
+    #     print("DEVELOPER NOTE Null completion item has value... being ignored.")
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
             print(f"[bright_red][blink]Error[/bright_red]: {name} is invalid")
