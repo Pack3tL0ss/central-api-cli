@@ -975,15 +975,15 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_switch_poe_detail(
+    async def get_switch_poe_details(
         self,
         serial: str,
         port: str = None,
     ) -> Response:
-        """Get switch port poe info.
+        """Get switch poe info.
 
         Args:
-            serial (str): Filter by switch serial
+            serial (str): Switch serial
             port (str, optional): Filter by switch port
 
         Returns:
@@ -994,6 +994,10 @@ class CentralApi(Session):
         params = {
             'port': str(port)
         }
+
+        if not port:
+            url = f"{url}s"
+            params = {}
 
         return await self.get(url, params=params)
 
@@ -2214,7 +2218,7 @@ class CentralApi(Session):
     async def create_group(
         self,
         group: str,
-        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = ["ap", "gw", "cx", "sw"],
+        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = ["ap", "gw", "cx", "sw"],
         wired_tg: bool = False,
         wlan_tg: bool = False,
         aos10: bool = False,
@@ -2358,7 +2362,7 @@ class CentralApi(Session):
     async def update_group_properties(
         self,
         group: str,
-        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = None,
+        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = None,
         wired_tg: bool = None,
         wlan_tg: bool = None,
         aos10: bool = None,
