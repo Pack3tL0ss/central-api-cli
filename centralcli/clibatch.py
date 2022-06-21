@@ -23,7 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import BatchAddArgs, BatchRenameArgs, GatewayRole, GenericDevIdens, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
+from centralcli.constants import BatchAddArgs, BatchRenameArgs, GatewayRole, AllDevTypes, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
 
 iden_meta_vars = IdenMetaVars()
 tty = utils.tty
@@ -31,7 +31,7 @@ app = typer.Typer()
 
 class GroupImport(BaseModel):
     group: str
-    allowed_types: List[GenericDevIdens] = Field(["ap", "gw", "cx", "sw"], alias="types")
+    allowed_types: List[AllDevTypes] = Field(["ap", "gw", "cx", "sw"], alias="types")
     gw_role: GatewayRole = Field("branch", alias="gw-role")
     aos10: bool = False
     microbranch: bool = False
