@@ -52,7 +52,6 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
-# app.add_typer(clido.app, name="do",)
 app.add_typer(clidel.app, name="delete")
 app.add_typer(cliadd.app, name="add",)
 app.add_typer(cliclone.app, name="clone",)
