@@ -4,7 +4,6 @@
 Uses caas api to send commands to devices
 
 You can run the commands ad-hoc, or for more complex operations
-
 you can store them in a file and import.  The file takes a similar format
 as the command.  Default import file <config dir>/stored-tasks.yaml
 
@@ -21,8 +20,8 @@ addvlan10:
       - <ip>
       - <mask>
     options:
-      name: myname
-      description: mydescription
+      name: my_name
+      description: my_description
 
 Then run via
   cencli batch add-vlan addvlan10  [--file <alternate import file>]
