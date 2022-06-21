@@ -398,7 +398,7 @@ class CLICommon:
                 where the result is a simple success/error.
             title: (str, optional): Title of output table.
                 Only applies to "rich" tablefmt. Defaults to None.
-            caption: (str, optional): Caption displayed at bottome of table.
+            caption: (str, optional): Caption displayed at bottom of table.
                 Only applies to "rich" tablefmt. Defaults to None.
             pager (bool, optional): Page Output / or not. Defaults to True.
             outfile (Path, optional): path/file of output file. Defaults to None.
