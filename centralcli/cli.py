@@ -344,7 +344,7 @@ def assign(
     _msg = f"Assign [bright_green]{license}[/bright_green] to"
     if len(serial_nums) > 1:
         _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
-        _msg = f"{_msg}:\n{_dev_msg}"
+        _msg = f"{_msg}:\n    {_dev_msg}"
     else:
         dev = serial_nums[0]
         _msg = f"{_msg} [cyan]{dev}[/]"
