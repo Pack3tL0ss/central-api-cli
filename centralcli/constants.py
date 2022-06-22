@@ -237,6 +237,7 @@ class BatchApArgs(str, Enum):
 class BatchAddArgs(str, Enum):
     sites = "sites"
     groups = "groups"
+    devices = "devices"
 
 class BatchRenameArgs(str, Enum):
     sites = "sites"
