@@ -20,7 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import GenericDevIdens, lib_to_api, lib_to_gen_plural # noqa
+from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural # noqa
 
 app = typer.Typer()
 
@@ -106,7 +106,7 @@ def group(
         show_default=False,
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
-    dev_type: GenericDevIdens = typer.Option(..., help="Upgrade a specific device type",),
+    dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type",),
     model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),

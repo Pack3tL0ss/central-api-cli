@@ -31,7 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import (
     ClientArgs, InventorySortOptions, ShowInventoryArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
-    TemplateDevIdens, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
+    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
     DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, lib_to_api, what_to_pretty  # noqa
 )
 
@@ -420,7 +420,7 @@ def controllers(
 
 @app.command(short_help="Show interfaces/details")
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_gw_completion),
     slot: str = typer.Argument(None, help="Slot name of the ports to query (chassis only)",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
@@ -448,6 +448,34 @@ def interfaces(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+
+
+@app.command(help="Show (switch) poe details for an interface")
+def poe(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion),
+    port: str = typer.Argument(None,),
+    _port: str = typer.Option(None, "--port"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+):
+    port = _port if _port else port
+    dev = cli.cache.get_dev_identifier(device, dev_type="switch")
+    resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port)
+    resp.output = utils.unlistify(resp.output)
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -753,7 +781,7 @@ def templates(
         hidden=False,
         autocompletion=cli.cache.group_completion,
     ),
-    device_type: TemplateDevIdens = typer.Option(
+    device_type: DevTypes = typer.Option(
         None, "--dev-type",
         help="Filter by Device Type",
     ),

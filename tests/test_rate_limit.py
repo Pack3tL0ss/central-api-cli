@@ -36,7 +36,7 @@ import time
 
 def test_rate_limit():
     log._DEBUG = True
-    b_reqs = [central.BatchRequest(central.get_switch_poe_detail, "TW0BKNF063", port=f"1/1/{p}") for p in range(1, 24)]
+    b_reqs = [central.BatchRequest(central.get_switch_poe_details, "TW0BKNF063", port=f"1/1/{p}") for p in range(1, 24)]
     start = time.perf_counter()
     b_resp = central.batch_request(b_reqs)
     end = time.perf_counter() - start

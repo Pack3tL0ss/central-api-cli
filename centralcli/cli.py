@@ -52,7 +52,6 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
-# app.add_typer(clido.app, name="do",)
 app.add_typer(clidel.app, name="delete")
 app.add_typer(cliadd.app, name="add",)
 app.add_typer(cliclone.app, name="clone",)
@@ -369,7 +368,24 @@ def unassign(
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
-    devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    try:
+        devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    except typer.Exit:  # allows un-assignment of devices that never checked into Central
+        print("[bright_green]Checking full Inventory[/]")
+        inv = cli.central.request(cli.central.get_device_inventory)
+        serials_in_inventory = [i.get("serial", "ERROR") for i in inv.output]
+        class Device:
+            def __init__(self, serial):
+                self.serial = serial
+                self.summary_text = f"Device with serial {serial}"
+        dev_out = []
+        for dev in devices:
+            if dev.upper() not in serials_in_inventory:
+                print(f"{dev} not found in inventory.")
+                raise typer.Exit(1)
+            else:
+                dev_out += [Device(dev)]
+        devices = dev_out
 
     _msg = f"Unassign [bright_green]{license}[/bright_green] from"
     if len(devices) > 1:

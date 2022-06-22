@@ -569,9 +569,7 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
-        """Completion for argument that can be either group or device.
-
-        use lambda function to pass dev_type
+        """Device completion that returns only ap and gw.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
@@ -587,6 +585,29 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
+
+    def dev_switch_gw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        """Device completion that returns only switches and gateways.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+        """
+        dev_types = ["switch", "gw"]
+        match = [m for m in self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True) if m.generic_type in dev_types]
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if match not in args:
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
 
     def dev_gw_completion(
         self,
@@ -1208,7 +1229,7 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: Union[str, List[str], tuple],
-        dev_type: Union[str, List[str]] = None,
+        dev_type: Union[constants.GenericDevTypes, List[constants.GenericDevTypes]] = None,
         # ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
         retry: bool = True,
         # multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check

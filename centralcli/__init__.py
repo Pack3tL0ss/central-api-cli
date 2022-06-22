@@ -15,12 +15,6 @@ import click
 from rich.traceback import install
 install(show_locals=True, suppress=[click])
 
-# try:
-#     from icecream import ic
-# except Exception:
-#     def ic(*_, **__):
-#         pass
-
 # TODO after install if you --install-completion prior to configuration completion will freeze the terminal (first_run is running with no interactive prompt)
 # TODO first command after config is provided updates the cache but returns no output.  Bug.  Works fine from then on.
 
@@ -61,11 +55,15 @@ log_dir = config.base_dir / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / f"{__name__}.log"
 
-if '--debug' in str(sys.argv):
+if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in ["1", "true"]:
     config.debug = True  # for the benefit of the 2 log messages below
-# if '--debugv' in str(sys.argv):
-#     config.debugv = True
-#     _ = sys.argv.pop(sys.argv.index("--debugv"))
+if '--debugv' in str(sys.argv):
+    config.debug = config.debugv = True
+    try:
+        _ = sys.argv.pop(sys.argv.index("--debugv"))
+    except ValueError:
+        # handles vscode issue as arg parsing for vscode is below
+        sys.argv = [arg.replace("--debugv", "").rstrip().replace("  ", " ") for arg in sys.argv]
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
@@ -82,9 +80,9 @@ from .clicommon import CLICommon
 from . import cleaner
 
 # if no environ vars set for LESS command line options
-# set -X to retain scrollback after quiting less
+# set -X to retain scroll-back after quitting less
 #     -R for color output (default for the pager but defaults are not used if LESS is set)
-#     +G so (start with output scrolled to end) so scrollback contains all contents
+#     +G so (start with output scrolled to end) so scroll-back contains all contents
 # if not os.environ.get("LESS"):
 os.environ["LESS"] = "-RX +G"
 
@@ -106,6 +104,7 @@ if "--debug-limit" in sys.argv:
         print(f"Invalid Value ({sys.argv[_idx]}) for --debug-limit expected an int")
         sys.exit(1)
 
+# FIXME restore envvar functionality for account, verify debug
 central = CentralApi(config.account)
 cache = Cache(central)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)

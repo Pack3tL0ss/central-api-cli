@@ -23,7 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, TemplateDevIdens, GatewayRole
+from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole
 from centralcli import CentralObject
 
 
@@ -57,7 +57,7 @@ def template(
         help="The template group the template belongs to",
         autocompletion=cli.cache.group_completion
     ),
-    device_type: TemplateDevIdens = typer.Option(
+    device_type: DevTypes = typer.Option(
         None, "--dev-type",
         help="Filter by Device Type",
     ),

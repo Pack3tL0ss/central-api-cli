@@ -719,14 +719,14 @@ class Session():
             _elapsed = time.perf_counter() - _start
             log.debug(f"chunk of {len(chunk)} took {_elapsed:.2f}.")
 
-        # strip out the pause/limitter responses (None)
+        # strip out the pause/limiter responses (None)
         m_resp = utils.strip_none(m_resp)
 
         log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 
-        log.debug(f"API per sec ratelimit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+        log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
 
         return m_resp
 

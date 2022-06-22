@@ -975,15 +975,15 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_switch_poe_detail(
+    async def get_switch_poe_details(
         self,
         serial: str,
         port: str = None,
     ) -> Response:
-        """Get switch port poe info.
+        """Get switch poe info.
 
         Args:
-            serial (str): Filter by switch serial
+            serial (str): Switch serial
             port (str, optional): Filter by switch port
 
         Returns:
@@ -994,6 +994,10 @@ class CentralApi(Session):
         params = {
             'port': str(port)
         }
+
+        if not port:
+            url = f"{url}s"
+            params = {}
 
         return await self.get(url, params=params)
 
@@ -2214,7 +2218,7 @@ class CentralApi(Session):
     async def create_group(
         self,
         group: str,
-        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = ["ap", "gw", "cx", "sw"],
+        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = ["ap", "gw", "cx", "sw"],
         wired_tg: bool = False,
         wlan_tg: bool = False,
         aos10: bool = False,
@@ -2358,7 +2362,7 @@ class CentralApi(Session):
     async def update_group_properties(
         self,
         group: str,
-        allowed_types: Union[constants.GenericDevIdens, List[constants.GenericDevIdens]] = None,
+        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = None,
         wired_tg: bool = None,
         wlan_tg: bool = None,
         aos10: bool = None,
@@ -3352,6 +3356,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    # TODO make add_device actual func sep and make this an aggregator that calls it and anything else based on params
     async def add_devices(
         self,
         mac_address: str = None,
@@ -3365,7 +3370,7 @@ class CentralApi(Session):
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
-        // Used by add device //
+        // Used by add device and batch add devices //
 
         Args:
             mac_address (str, optional): MAC address of device to be added
@@ -3413,7 +3418,24 @@ class CentralApi(Session):
                 "part_num": "partNumber"
             }
 
-            json_data = [{_keys.get(k, k): v for k, v in d.items() if k != "group"} for d in device_list]
+            json_data = []
+            for d in device_list:
+                mac = d.get("mac", d.get("mac_address"))
+                if not mac:
+                    raise ValueError(f"No Mac Address found for entry {d}")
+                else:
+                    mac = utils.Mac(mac)
+                    if not mac:
+                        raise ValueError(f"Mac Address {mac} appears to be invalid.")
+                serial = d.get("serial", d.get("serial_num"))
+                _this_dict = {"mac": mac.cols, "serial": serial}
+                part_num = d.get("part_num", d.get("partNumber"))
+                if part_num:
+                    _this_dict["partNumber"] = part_num
+
+                json_data += [_this_dict]
+
+            # json_data = [{_keys.get(k, k): v for k, v in d.items() if k in  [*_keys.keys(), *_keys.values()]} for d in device_list]
 
             to_group = {d["group"]: [] for d in device_list if "group" in d}
             _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
@@ -3427,10 +3449,11 @@ class CentralApi(Session):
 
                 d["license"] = utils.listify(d["license"])
                 _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
+                _serial = d.get("serial_num", d.get("serial"))
+                if not _serial:
+                    raise ValueError(f"No serial found for device: {d}")
+
                 if _key in _lic_kwargs:
-                    _serial = d.get("serial_num", d.get("serial"))
-                    if not _serial:
-                        raise ValueError(f"No serial found for device: {d}")
                     _lic_kwargs[_key]["serials"] += utils.listify(_serial)
                 else:
                     _lic_kwargs[_key] = {
@@ -3681,7 +3704,7 @@ class CentralApi(Session):
     async def assign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
         """Assign subscription to a device.
 
-        // Used indirectly by add device when --license <license> is provided. //
+        // Used indirectly by add device when --license <license> is provided and batch add devices with license //
 
         Args:
             serials (str | List[str]): List of serial number of device.

@@ -10,7 +10,7 @@ lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
 
 
-class GenericDevIdens(str, Enum):
+class AllDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
     cx = "cx"
@@ -18,7 +18,13 @@ class GenericDevIdens(str, Enum):
     switch = "switch"
 
 
-class TemplateDevIdens(str, Enum):
+class GenericDevTypes(str, Enum):
+    ap = "ap"
+    gw = "gw"
+    switch = "switch"
+
+
+class DevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
     cx = "cx"
@@ -110,6 +116,7 @@ STRIP_KEYS = [
     "notifications",
     "settings",
     "items",
+    "poe_details",
 ]
 
 
@@ -230,6 +237,7 @@ class BatchApArgs(str, Enum):
 class BatchAddArgs(str, Enum):
     sites = "sites"
     groups = "groups"
+    devices = "devices"
 
 class BatchRenameArgs(str, Enum):
     sites = "sites"

@@ -381,7 +381,7 @@ class Utils:
     def do_pretty(key: str, value: str) -> str:
         """Apply coloring to tty output
 
-        Applies color to certian columns/values prior to formatting
+        Applies color to certain columns/values prior to formatting
         """
         color = "green" if value.lower() == "up" else "red"
         # return value if key != "status" else typer.style(value, fg=color)
@@ -465,10 +465,12 @@ class Utils:
                 }
 
         if tablefmt == "json":
+            outdata = self.unlistify(outdata)
             raw_data = json.dumps(outdata, indent=4)
             _lexer = lexers.JsonLexer
 
         elif tablefmt in ["yml", "yaml"]:
+            outdata = self.unlistify(outdata)
             raw_data = yaml.dump(outdata, sort_keys=False)
             _lexer = lexers.YamlLexer
 

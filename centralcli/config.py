@@ -4,9 +4,9 @@
 from typing import Optional
 
 import json
+import os
 import sys
 import time
-# import functools
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Union
@@ -286,10 +286,10 @@ class Config:
         elif "--account" in str(sys.argv):  # vscode debug workaround
             args = [a.split(" ") for a in sys.argv if "--account " in a][0]
             account = args[args.index("--account") + 1]
-        elif "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).endswith("-d"):
+        elif "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).rstrip("']").endswith("-d"):
             return "central_info"
         else:
-            account = "central_info"
+            account = "central_info" if not os.environ.get("ARUBACLI_ACCOUNT") else os.environ.get("ARUBACLI_ACCOUNT")
 
         if account in ["central_info", "default"]:
             if self.sticky_account_file.is_file():
