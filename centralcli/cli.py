@@ -590,7 +590,7 @@ def kick(
 
 
 # TODO get the account, port and process details (start_time, pid) cache
-# add cach.RunDB or InfoDB to use to store this kind of stuff
+# add cache.RunDB or InfoDB to use to store this kind of stuff
 @app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
@@ -651,7 +651,7 @@ def start(
             )
             sleep(2)
 
-        with console.status("Ensuring startup succes...", spinner="dots2"):
+        with console.status("Ensuring startup success...", spinner="dots2"):
             sleep(8)
 
         proc = psutil.Process(p.pid)
