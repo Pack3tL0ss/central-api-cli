@@ -58,8 +58,12 @@ log_file = log_dir / f"{__name__}.log"
 if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in ["1", "true"]:
     config.debug = True  # for the benefit of the 2 log messages below
 if '--debugv' in str(sys.argv):
-    config.debugv = True
-    _ = sys.argv.pop(sys.argv.index("--debugv"))
+    config.debug = config.debugv = True
+    try:
+        _ = sys.argv.pop(sys.argv.index("--debugv"))
+    except ValueError:
+        # handles vscode issue as arg parsing for vscode is below
+        sys.argv = [arg.replace("--debugv", "").rstrip().replace("  ", " ") for arg in sys.argv]
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
