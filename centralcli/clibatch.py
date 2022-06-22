@@ -2,28 +2,35 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import json
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import List, Tuple
+
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
-from rich.console import Console
 from rich import print
+from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, BatchRequest, caas, cleaner, cli, config, log, utils
+    from centralcli import (BatchRequest, Response, caas, cleaner, cli, config,
+                            log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, BatchRequest, caas, cleaner, cli, config, log, utils
+        from centralcli import (BatchRequest, Response, caas, cleaner, cli,
+                                config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import BatchAddArgs, BatchRenameArgs, GatewayRole, AllDevTypes, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
+from centralcli.constants import (AllDevTypes, BatchAddArgs, BatchRenameArgs,
+                                  GatewayRole, IdenMetaVars, LicenseTypes,
+                                  SendConfigDevIdens, SiteStates,
+                                  state_abbrev_to_pretty)
 
 iden_meta_vars = IdenMetaVars()
 tty = utils.tty
@@ -206,7 +213,7 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
         "s": "serial"
     }
 
-    req_list, name_list, shown_promt = [], [], False
+    req_list, name_list, shown_prompt = [], [], False
     if not ap_dict:
         log.error("Something went wrong, no ap_dict provided or empty", show=True)
         raise typer.Exit(1)
@@ -319,14 +326,14 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
                                         f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
                                         fg="red"
                                     )
-                                    if not shown_promt and typer.confirm(
+                                    if not shown_prompt and typer.confirm(
                                         f"{_e1}"
                                         f"\n\nResult will be \""
                                         f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
                                         " for this segment."
                                         "\nOK to continue?"
                                     ):
-                                        shown_promt = True
+                                        shown_prompt = True
                                         x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
                                         st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
                                     else:
@@ -341,7 +348,7 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
             except Exception as e:
                 log.exception(f"LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
                 print(f"\nThere Appears to be a problem with [red]{fstr}[/]: {e.__class__.__name__}")
-                if typer.confirm("Do you want to edit the fomat string and try again?", abort=True):
+                if typer.confirm("Do you want to edit the format string and try again?", abort=True):
                     fstr = _lldp_rename_get_fstr()
 
     print(f"[bright_green]Resulting AP names based on '{fstr}':")
@@ -493,7 +500,7 @@ def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, v
         return PreConfig(name=node, config=config_out, request=br(cli.central.replace_ap_config, node, clis=commands))
 
 
-# TODO update cache after succesful group add
+# TODO update cache after successful group add
 def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
     console = Console(emoji=False)
     br = cli.central.BatchRequest
@@ -590,15 +597,49 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
             cli.display_results(resp,  tablefmt="action")
 
 
+def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
+    data = config.get_file_data(import_file)
+    # TODO Import object class with consistent return.  Accept pydantic model as param
+    #      for validation...
+    warn = False
+    if hasattr(data, "headers"):
+        headers = data.headers
+        _reqd_cols = ["serial", "mac"]
+        for c in _reqd_cols:
+            if c not in data.headers:
+                print(f"[reset]::warning::[bright_red] !![/]Missing Required column header [cyan]{c}[/]")
+                print(f"\n.csv file is required to have the following headers:")
+                print("[cyan]serial[/], [cyan]mac[/]")
+                print(f"\nThe following headers/columns are optional:")
+                print("[cyan]group[/], [cyan]license[reset]")
+                # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
+                raise typer.Exit(1)
+        data = data.dict
+        if "license" in headers:
+            # Validate license types
+            for d in data:
+                if d["license"]:
+                    try:
+                        d["license"] = LicenseTypes(d["license"].lower().replace("_", "-")).name
+                    except ValueError:
+                        warn = True
+                        print(f"[bright_red]!![/] {d['license']} does not appear to be a valid license type")
+    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
+    if not warn or typer.confirm("Warnings exist proceed?", abort=True):
+        resp = cli.central.request(cli.central.add_devices, device_list=data)
+        return resp
+
 
 @app.command(short_help="Perform Batch Add from file")
 def add(
     what: BatchAddArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(..., exists=True),
+    import_file: Path = typer.Argument(None, exists=True),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
     ),
     debug: bool = typer.Option(
         False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -611,11 +652,48 @@ def add(
 ) -> None:
     """Perform batch Add operations using import data from file."""
     yes = yes_ if yes_ else yes
+    # TODO common string helpers
+    if not show_example and not import_file:
+        print("""
+Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE
+Try 'cencli batch add ?' for help.
+
+Error: Missing argument 'IMPORT_FILE'.
+        """)
+        raise typer.Exit(1)
     if what == "sites":
-        resp = batch_add_sites(import_file, yes)
-        cli.display_results(resp)
+        if show_example:
+            print("csv import with the following fields:")
+            print("If importing yaml or json the following fields can optionally be under a 'sites' key")
+            print("name,address,city,state,zipcode,country")
+            print("[italic]Note: Fields 'longitude,latitude' are also supported.")
+            print("[italic]      Central will calc long/lat if address is provided.[/]")
+            print("[italic]      but does not determine address from long/lat")
+            print("csv Example:")
+            print("name,address,city,state,zipcode,country")
+        else:
+            resp = batch_add_sites(import_file, yes)
+            cli.display_results(resp)
     elif what == "groups":
         batch_add_groups(import_file, yes)
+    elif what == "devices":
+        if show_example:
+            print("\nAccepts csv import with the following columns (headers row must be at top of csv):")
+            print("[cyan]serial[/],[cyan]mac[/],[cyan]group[/],[cyan]license[/]")
+            print("Where '[cyan]group[/]' (pre-provision device to group) and")
+            print("      '[cyan]license[/]' (apply license to device) are optional.")
+            print("\n[bright_green].csv example[reset]:\n")
+            print("serial,mac,group,license")
+            print("CN12345678,aabbccddeeff,phl-access,foundation_switch_6300")
+            print("CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap")
+            print("CN12345680,aabb-ccdd-8899,chi-access,advanced_ap")
+            print("\n[italic]Note: MAC Address can be nearly any format imaginable.[/]")
+            print("[italic]      yaml and json also supported (hint: list of dicts).[/]")
+            # TODO document examples and uncomment below
+            # print("See https://central-api-cli.readthedocs.io for full examples.")
+        else:
+            resp = batch_add_devices(import_file, yes)
+            cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
