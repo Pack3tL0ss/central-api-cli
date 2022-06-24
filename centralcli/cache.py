@@ -1412,22 +1412,24 @@ class Cache:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
+            # TODO change all get_*_identifier functions to continue to look for matches when match is found when
+            #       completion is True
             # Exact match
             if query_str == "":
                 match = self.groups
             else:
-            # case insensitive startswith
-                match = self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                )
-
-            if not match:
                 match = self.GroupDB.search((self.Q.name == query_str))
 
             # case insensitive
             if not match:
                 match = self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = self.GroupDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
@@ -1447,6 +1449,8 @@ class Cache:
                     )
                 )
 
+            # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
+            # fuzzy match
             if not match and retry and self.central.get_all_groups not in self.updated:
                 print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
@@ -1499,7 +1503,7 @@ class Cache:
 
         # TODO verify and remove
         if multi_ok:
-            log.error("depricated parameter multi_ok sent to get_template_identifier.")
+            log.error("deprecated parameter multi_ok sent to get_template_identifier.")
 
         match = None
         for _ in range(0, 2 if retry else 1):
