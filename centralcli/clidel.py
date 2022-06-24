@@ -213,7 +213,7 @@ def firmware(
             cli.display_results(resp, tablefmt="action")
 
 # TODO cache webhook name/id so they can be deleted by name
-@app.command(short_help="Delete WebHook")
+@app.command(help="Delete WebHook")
 def webhook(
     id_: str = typer.Argument(...,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -228,6 +228,38 @@ def webhook(
     if yes or typer.confirm(f"Delete Webhook?", abort=True):
         resp = cli.central.request(cli.central.delete_webhook, id_)
         cli.display_results(resp, tablefmt="action")
+
+
+@app.command(help="Delete a Template")
+def template(
+    template: str = typer.Argument(..., help="The name of the template", autocompletion=cli.cache.template_completion),
+    kw1: str = typer.Argument(None, metavar="[group GROUP]", autocompletion=lambda incomplete: ["group"]),
+    val1: str = typer.Argument(None, hidden=True, autocompletion=cli.cache.group_completion),
+    _group: str = typer.Option(None),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    group = kw1 if kw1 is None or kw1.lower.strip() != "group" else None
+    group = _group or group or val1
+
+    if group is not None:
+        group = cli.cache.get_group_identifier(group)
+        group = group.name
+    template = cli.cache.get_template_identifier(template, group=group)
+
+    print(
+        f"{'Delete' if not yes else 'Deleting'} Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
+    )
+    if yes or typer.confirm(f"Proceed?", abort=True):
+        resp = cli.central.request(cli.central.delete_template, template.group, template.name)
+        cli.display_results(resp, tablefmt="action")
+        # TODO update cache
 
 
 @app.callback()
