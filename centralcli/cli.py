@@ -344,7 +344,7 @@ def assign(
     _msg = f"Assign [bright_green]{license}[/bright_green] to"
     if len(serial_nums) > 1:
         _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
-        _msg = f"{_msg}:\n{_dev_msg}"
+        _msg = f"{_msg}:\n    {_dev_msg}"
     else:
         dev = serial_nums[0]
         _msg = f"{_msg} [cyan]{dev}[/]"
@@ -590,7 +590,7 @@ def kick(
 
 
 # TODO get the account, port and process details (start_time, pid) cache
-# add cach.RunDB or InfoDB to use to store this kind of stuff
+# add cache.RunDB or InfoDB to use to store this kind of stuff
 @app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
@@ -651,7 +651,7 @@ def start(
             )
             sleep(2)
 
-        with console.status("Ensuring startup succes...", spinner="dots2"):
+        with console.status("Ensuring startup success...", spinner="dots2"):
             sleep(8)
 
         proc = psutil.Process(p.pid)

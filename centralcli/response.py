@@ -31,10 +31,7 @@ DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
 }
-THROTTLE_BACKOFF = 0.5
 INIT_TS = time.monotonic()
-CENTRAL_MAX_CONNECTIONS = 7
-
 
 
 class BatchRequest:
@@ -127,7 +124,7 @@ class Response:
         - status (int): http status code returned from response
 
     Create instance by providing at minimum one of the following parameters:
-        - response (ClientResponse): all other paramaters ignored if providing response
+        - response (ClientResponse): all other parameters ignored if providing response
         - error (str): ok, output, status set to logical default if not provided
             OK / __bool__ is False if error is provided and ok is not.
         - output (Any): ok, error, status set to logical default if not provided
@@ -178,7 +175,7 @@ class Response:
             self.url = URL(url)
             self.status = status_code or 299 if self.ok else 418
 
-        if self.output and "error" in self.output and "error_description" in self.output and isinstance(self.output, dict):
+        if isinstance(self.output, dict) and "error" in self.output and "error_description" in self.output:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
     def __bool__(self):
@@ -372,7 +369,7 @@ class Session():
     def aio_session(self):
         if self._aio_session:
             if self._aio_session.closed:
-                # TODO finiish refactor
+                # TODO finish refactor
                 return ClientSession()
             return self._aio_session
         else:
@@ -436,7 +433,7 @@ class Session():
                 #  -- // RATE LIMIT TEST \\ --
                 self.spinner.start(spin_txt_run)
                 self.req_cnt += 1
-                # TODO move batch_request _bacth_request, get, put, etc into Session
+                # TODO move batch_request _batch_request, get, put, etc into Session
                 # change where client is instantiated to _request / _batch_requests pass in the client
                 # remove aio_session property call ClientSession() direct
                 async with self.aio_session as client:
@@ -592,6 +589,12 @@ class Session():
                     spin.text = spin.text + " retry"
                     spin.start()
                 token = auth.refreshToken(t)
+
+                # TODO make req_cnt a property that fetches len of requests
+                self.requests += [LoggedRequests("/oauth2/token", "POST")]
+                self.requests[-1].ok = True if token else False
+                self.req_cnt += 1
+
                 if token:
                     auth.storeToken(token)
                     auth.central_info["token"] = token
@@ -603,14 +606,12 @@ class Session():
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
             spin.succeed()
-            # spin.stop()
         else:
             spin.fail()
 
         return token is not None
 
     def refresh_token(self, token_data: dict = None) -> None:
-        # TODO update self.requests
         auth = self.auth
         if not token_data:
             token: Union[dict, None] = auth.central_info.get("token")

@@ -11,6 +11,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Tuple, Union
 from datetime import datetime, timedelta
+# buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
 
 # from aiohttp import ClientSession
 import aiohttp
@@ -725,6 +726,112 @@ class CentralApi(Session):
         url = f"/configuration/v1/groups/{group}/templates"
         return await self.get(url, params=params)
 
+    # FIXME # TODO # What the Absolute F?!  not able to send template as formdata properly with aiohttp
+    #       requests module works, but no luck after hours messing with form-data in aiohttp
+    async def add_template(
+        self,
+        name: str,
+        group: str,
+        template: Union[Path, str, bytes],
+        device_type: constants.DevTypes ="ap",
+        version: str = "ALL",
+        model: str = "ALL",
+    ) -> Response:
+        """Create new template.
+
+        // Used by add template ... //
+
+        Args:
+            name (str): Name of template.
+            group (str): Name of the group for which the template is to be created.
+            template (Union[Path, str, bytes]): Template File or encoded template content.
+                For sw (AOS-Switch) device_type, the template text should include the following
+                commands to maintain connection with central.
+                1. aruba-central enable.
+                2. aruba-central url https://<URL | IP>/ws.
+            device_type (str): Device type of the template.  Valid Values: ap, sw, cx, gw
+                Defaults to ap.
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For sw (AOS-Switch) device_type, part number (J number) can be used for the model
+                parameter. Example: 2920, J9727A, etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates"
+        formdata = aiohttp.FormData()
+        if isinstance(template, bytes):
+            # formdata.add_field("template", {"template": template}, filename="template.txt")
+            # files = aiohttp.FormData([("template", ("template.txt", template),)])
+            files = {'template': ('template.txt', template)}
+        else:
+            template = template if isinstance(template, Path) else Path(str(template))
+            if not template.exists():
+                raise FileNotFoundError
+
+            files = {'template': ('template.txt', template.read_bytes())}
+            # files = aiohttp.FormData([("template", ("template.txt", template.read_bytes()),)])
+            # formdata.add_field("template", template.read_bytes(), filename="template.txt")
+            # formdata.add_field("template", template.read_bytes())
+
+            # formdata.add_field(
+            #     "template",
+            #     template.read_text(),
+            #     filename="template.txt",
+            #     content_type="multipart/form-data"
+            # )
+
+        # wr = formdata()
+        # data = f'--{wr.boundary}\r\nContent-Disposition: form-data; name="template";filename="template.txt"{wr._parts[0][0]._value.decode()}\r\n--{wr.boundary}'.encode("utf-8")
+        device_type = device_type if not hasattr(device_type, "value") else device_type.value
+        device_type = constants.lib_to_api("template", device_type)
+
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
+        # WTF Missing formdata parameter 'template'
+        # return await self.post(url, params=params, payload=formdata,)  #
+
+
+        # No difference vs the above
+        # headers = {
+        #     "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+        #     'Accept': 'application/json',
+        #     "Content-Type": "multipart/form-data"
+        # }
+        # async with aiohttp.ClientSession(self.auth.central_info["base_url"]) as session:
+        #     resp = await session.post(url, params=params, data=formdata, headers=headers, ssl=True)
+        #     try:
+        #         output = await resp.content.read()
+        #         output = output.decode()
+        #         output = json.loads(output)
+        #     except Exception as e:
+        #         output = None
+        #         print(e)
+        # return Response(resp, output=output)
+
+        # HACK This works but prefer to get aiohttp sorted for consistency
+        import requests
+        headers = {
+            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            'Accept': 'application/json'
+        }
+        url=f"{self.auth.central_info['base_url']}{url}"
+        for _ in range(2):
+            resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
+            output = f"[{resp.reason}]" + " " + resp.text.lstrip('[\n "').rstrip('"\n]')
+            resp = Response(output=output, ok=resp.ok, url=url, elapsed=round(resp.elapsed.total_seconds(), 2), status_code=resp.status_code, rl_str="-")
+            if "invalid_token" in resp.output:
+                self.refresh_token()
+            else:
+                break
+        return resp
+
     async def update_existing_template(
         self,
         group: str,
@@ -811,6 +918,26 @@ class CentralApi(Session):
         resp = await self.get(url, params=params,)  # callback=cleaner._get_group_names)
         resp.output = cleaner._get_group_names(resp.output)
         return resp
+
+    async def delete_template(
+        self,
+        group: str,
+        template: str,
+    ) -> Response:
+        """Delete existing template.
+
+        // Used by delete template ... //
+
+        Args:
+            group (str): Name of the group for which the template is to be deleted.
+            template (str): Name of the template to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates/{template}"
+
+        return await self.delete(url)
 
     # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:

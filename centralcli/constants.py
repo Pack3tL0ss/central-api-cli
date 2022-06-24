@@ -335,6 +335,7 @@ class ArgToWhat:
         self.certificate = self.certs = self.certificates = self.cert = "certificate"
         self.wlan = self.wlans = "wlan"
         self.webhooks = self.webhook = "webhook"
+        self.template = self.templates = "template"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"
@@ -347,6 +348,7 @@ class ArgToWhat:
         self.wlan = self.wlans = "wlan"
         self.device = self.devices = self.dev = "device"
         self.webhooks = self.webhook = "webhook"
+        self.template = self.templates = "template"
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"

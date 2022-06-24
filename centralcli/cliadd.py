@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty
+from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty
 
 app = typer.Typer()
 color = utils.color
@@ -492,6 +492,42 @@ def webhook(
         cli.display_results(resp, tablefmt="action")
         if not resp:
             raise typer.Exit(1)
+
+
+@app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
+def template(
+    name: str = typer.Argument(..., ),
+    group: str = typer.Argument(..., help="Group to upload template to",),
+    template: Path = typer.Argument(None, exists=True),
+    dev_type: DevTypes = typer.Option("ap"),
+    model: str = typer.Option("ALL"),
+    version: str = typer.Option("ALL", "--ver"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+
+    group = cli.cache.get_group_identifier(group)
+    if not template:
+        print("[bright_green]No Template file provided[/].  Template content is required.")
+        print("Provide Template Content:")
+        template = utils.get_multiline_input()
+        template = template.encode("utf-8")
+
+    print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    print(f"[bright_green]Template will apply to[/]:")
+    print(f"    Device Types: [cyan]{dev_type}[/]")
+    print(f"    Model: [cyan]{model}[/]")
+    print(f"    Version: [cyan]{version}[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+        cli.display_results(resp, tablefmt="action")
+    # TODO update cache
 
 
 @app.callback()
