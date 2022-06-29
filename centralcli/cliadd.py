@@ -48,6 +48,7 @@ class AddGroupArgs(str, Enum):
 
 
 # TODO update completion with mac oui, serial prefix
+# TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
@@ -88,7 +89,7 @@ def device(
     #     print("DEVELOPER NOTE Null completion item has value... being ignored.")
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            print(f"[bright_red][blink]Error[/bright_red]: {name} is invalid")
+            print(f"[bright_red]Error[/]: {name} is invalid")
             raise typer.Exit(1)
         else:
             kwargs[name] = value
@@ -98,7 +99,7 @@ def device(
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
-        print("[bright_red][blink]Error[/bright_red]: both serial number and mac address are required.")
+        print("[bright_red]Error[/]: both serial number and mac address are required.")
         raise typer.Exit(1)
 
     api_kwd = {"serial": "serial_num", "mac": "mac_address"}
@@ -494,6 +495,7 @@ def webhook(
             raise typer.Exit(1)
 
 
+# TODO ?? add support for converting j2 template to central template
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
     name: str = typer.Argument(..., ),
