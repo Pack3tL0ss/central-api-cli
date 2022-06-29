@@ -443,19 +443,14 @@ class Cache:
             ctx (typer.Context): Provided automatically by typer
             incomplete (str): The incomplete word for autocompletion
             args (List[str], optional): The prev args passed into the command.
-            # TODO verify and remove
-                Ignore this param params are pulled from ctx.params provided by typer
 
         Yields:
             tuple: matching completion string, help text
         """
-        # print(f"b4 args {args}, incomplete: {incomplete}")
-        args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
-        args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
-        # print(f"after args {args}, incomplete: {incomplete}")
-        # print(f"ctx.params: {ctx.params}")
-        # p = ctx.params
-        # a = ctx.__dict__
+        if not args:  # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
+            args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
+            args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+
         if args and args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
