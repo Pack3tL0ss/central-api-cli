@@ -2865,7 +2865,7 @@ class CentralApi(Session):
             else:
                 groups = resp.output
         batch_reqs = []
-        for _groups in utils.chunker(groups, 20):  # This call allows a max of 20
+        for _groups in utils.chunker(utils.listify(groups), 20):  # This call allows a max of 20
             params = {"groups": ",".join(_groups)}
             batch_reqs += [self.BatchRequest(self.get, url, params=params)]
         batch_resp = await self._batch_request(batch_reqs)
