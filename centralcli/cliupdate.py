@@ -171,7 +171,6 @@ def variables(
 @app.command(
     short_help="Update group properties.",
     help="Update group properties.",
-    hidden=True,
 )
 def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
