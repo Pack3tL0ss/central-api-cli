@@ -334,12 +334,13 @@ class Cache:
             if m.startswith(incomplete):
                 yield m
 
-
-
     def smg_kw_completion(self, ctx: typer.Context, incomplete: str, args: List[str] = []):
         kwds = ["group", "mac", "serial"]
         out = []
-        args = [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+
+        if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
+            args = [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
