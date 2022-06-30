@@ -102,6 +102,7 @@ STRIP_KEYS = [
     "group",
     "clients",
     "sites",
+    "labels",
     "neighbors",
     "audit_logs",
     "vlans",
