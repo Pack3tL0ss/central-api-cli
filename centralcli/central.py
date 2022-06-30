@@ -2583,7 +2583,7 @@ class CentralApi(Session):
             elif "sw" in allowed_types:
                 allowed_switch_types += ["AOS_S"]
             elif "cx" in allowed_types:
-                allowed_switch_types += ["AOS_CX", "AOS_S"]
+                allowed_switch_types += ["AOS_CX"]
 
         # print("[DEBUG] ---- Current Properties of group")
         # utils.json_print(cur_group_props)
@@ -2651,10 +2651,10 @@ class CentralApi(Session):
             )
 
         grp_props = {
-            "AllowedDevTypes": allowed_types,
-            "Architecture": arch,
-            "AllowedSwitchTypes": allowed_switch_types,
-            "MonitorOnly": mon_only_switches
+            "AllowedDevTypes": combined_allowed,
+            "Architecture": arch or cur_group_props.get("Architecture"),
+            "AllowedSwitchTypes": allowed_switch_types or cur_group_props.get("AllowedSwitchTypes", []),
+            "MonitorOnly": mon_only_switches or cur_group_props.get("MonitorOnlySwitch")
         }
         grp_props = {k: v for k, v in grp_props.items() if v}
 
@@ -2675,24 +2675,31 @@ class CentralApi(Session):
         if tmplt_info:
             grp_attrs["template_info"] = tmplt_info
         if grp_props:
-            grp_attrs["group_properties"] = grp_props
+            grp_attrs["group_properties"] = {
+                **{k: v for k, v in cur_group_props.items() if k not in ["AOSVersion", "MonitorOnly"]},
+                **grp_props
+            }
+        json_data = grp_attrs
 
-        json_data = {"group": group}
-        if grp_attrs:
-            json_data["group_attributes"] = grp_attrs
+        # json_data = {"group": group}
+        # if grp_attrs:
+        #     json_data["group_attributes"] = grp_attrs
 
-        if len(json_data) == 1:
-            raise ValueError("No Changes Detected")
-        else:
-            if config.debugv:
-                print(f"[DEBUG] ---- Sending the following to {url}")
-                utils.json_print(json_data)
-                print("[DEBUG] ----")
-            return await self.patch(url, json_data=json_data)
-            # # FIXME remove debug prints
-            # print(url)
-            # from rich import print_json
-            # print_json(data=json_data)
+
+
+        # if len(json_data) == 1:
+        #     raise ValueError("No Changes Detected")
+        # else:
+        if config.debugv:
+            print(f"[DEBUG] ---- Sending the following to {url}")
+            utils.json_print(json_data)
+            print("[DEBUG] ----")
+
+        return await self.patch(url, json_data=json_data)
+        # # FIXME remove debug prints
+        # print(url)
+        # from rich import print_json
+        # print_json(data=json_data)
 
     async def update_group_name(self, group: str, new_group: str) -> Response:
         """Update group name for the given group.
@@ -3452,6 +3459,96 @@ class CentralApi(Session):
         }
 
         # NOTE: This method returns 200 when failures occur.
+        return await self.delete(url, json_data=json_data)
+
+    async def get_labels(
+        self,
+        calculate_total: bool = None,
+        category_id: int = None,
+        sort: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Labels.
+
+        Args:
+            calculate_total (bool, optional): Whether to calculate total Labels
+            category_id (int, optional): Label category ID
+            sort (str, optional): Sort parameter may be one of +label_name, -label_name,
+                +category_name, -category_name. Default is +label_name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/labels"
+
+        params = {
+            'calculate_total': calculate_total,
+            'category_id': category_id,
+            'sort': sort
+        }
+
+        return await self.get(url, params=params)
+
+    async def assign_label_to_devices(
+        self,
+        label_id: int,
+        device_type: constants.GenericDevTypes,
+        serial_nums: Union[str, List[str]],
+    ) -> Response:
+        """Associate Label to a list of devices.
+
+        Args:
+            label_id (int): Label ID
+            device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
+                ap, gw, switch
+            serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
+                has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v2/labels/associations"
+        serial_nums = utils.listify(serial_nums)
+        device_type = constants.lib_to_api("site", device_type)
+
+        json_data = {
+            'label_id': label_id,
+            'device_type': device_type,
+            'device_ids': serial_nums
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def remove_label_from_devices(
+        self,
+        label_id: int,
+        device_type: str,
+        serial_nums: List[str],
+    ) -> Response:
+        """unassign a label from a list of devices.
+
+        Args:
+            label_id (int): Label ID
+            device_type (str): Device type. One of ap, gw, switch
+            serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
+                has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v2/labels/associations"
+        serial_nums = utils.listify(serial_nums)
+        device_type = constants.lib_to_api("site", device_type)
+
+        json_data = {
+            'label_id': label_id,
+            'device_type': device_type,
+            'device_ids': serial_nums
+        }
+
         return await self.delete(url, json_data=json_data)
 
     async def get_device_ip_routes(
