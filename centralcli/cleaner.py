@@ -169,6 +169,9 @@ _short_key = {
     "vlan_id": "pvid",
     "free_ip_addr_percent": "free ip %",
     "events_details": "details",
+    "associated_device_count": "devices",
+    "label_id": "id",
+    "label_name": "name",
     # "acknowledged": "ack",
     "acknowledged_by": "ack by",
     "acknowledged_timestamp": "ack time",
@@ -277,6 +280,28 @@ def get_all_groups(
 ) -> list:
     _keys = {"group": "name", "template_details": "template group"}
     return [{_keys[k]: v for k, v in g.items()} for g in data]
+
+
+def get_labels(
+    data: List[
+        dict,
+    ]
+) -> list:
+    data = [
+        dict(
+            short_value(
+                k,
+                d.get(k),
+            )
+            for k in d.keys()
+            if not k.startswith("category_")
+        )
+        for d in data
+        if d["category_id"] == 1
+    ]
+    data = strip_no_value(data)
+
+    return data
 
 
 def _client_concat_associated_dev(
