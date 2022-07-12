@@ -24,14 +24,14 @@ import typer
 try:
     from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
                             clirefresh, clishow, clitest, cliupdate,
-                            cliupgrade, clitshoot, config, log, utils)
+                            cliupgrade, clitshoot, cliassign, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (cli, cliadd, clibatch, clicaas, cliclone,
                                 clidel, clirefresh, clishow, clitest,
-                                cliupdate, cliupgrade, clitshoot, config, log, utils)
+                                cliupdate, cliupgrade, clitshoot, cliassign, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -52,8 +52,9 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
-app.add_typer(clidel.app, name="delete")
+app.add_typer(clidel.app, name="delete",)
 app.add_typer(cliadd.app, name="add",)
+app.add_typer(cliassign.app, name="assign",)
 app.add_typer(cliclone.app, name="clone",)
 app.add_typer(cliupdate.app, name="update",)
 app.add_typer(cliupgrade.app, name="upgrade",)
@@ -315,42 +316,6 @@ def remove(
                 device_type=dev_type) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action")
-
-# TODO Add test
-# FIXME can unhide once adapt to query device inventory / devices not checked into central yet.
-@app.command(short_help="Assign License to device(s)", hidden=False)
-def assign(
-    license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
-    serial_nums: List[str] = typer.Argument(...,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    """Assign Licenses to devices by serial number.
-
-    Device must already be added to Central.  Use 'cencli show inventory' to see devices that have been added.
-    Use '--license' option with 'cencli add device ...' to add device and assign license in one command.
-    """
-    yes = yes_ if yes_ else yes
-    # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
-
-    # TODO add confirmation method builder to output class
-    _msg = f"Assign [bright_green]{license}[/bright_green] to"
-    if len(serial_nums) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = serial_nums[0]
-        _msg = f"{_msg} [cyan]{dev}[/]"
-    print(_msg)
-    if yes or typer.confirm("\nProceed?"):
-        resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
         cli.display_results(resp, tablefmt="action")
 
 
