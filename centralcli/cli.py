@@ -507,12 +507,12 @@ def rename(
 
 # TODO cache show clients get details for client make this easier
 # currently requires the serial of the device the client is connected to
-@app.command(short_help="Disconnect a client",)
+@app.command(help="Disconnect a WLAN client",)
 def kick(
     device: str = typer.Argument(
         ...,
         metavar=f"CONNECTED_DEVICE{iden.dev}",
-        autocompletion=cli.cache.dev_completion
+        autocompletion=cli.cache.dev_ap_completion
     ),
     what: KickArgs = typer.Argument(...,),
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
@@ -525,7 +525,12 @@ def kick(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Disconnect a client."""
+    """Disconnect a client.
+
+    This command currently only applies to APs
+    """
+    # TODO cache the client details so they don't have to specify the connected_device but can
+    # kick client by hostname/username/ip/mac/...
     yes = yes_ if yes_ else yes
     if device in ["all", "mac", "wlan"]:
         typer.secho(f"Missing device parameter required before keyword {device}", fg="red")
