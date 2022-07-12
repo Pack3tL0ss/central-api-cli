@@ -723,6 +723,30 @@ def groups(
     cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile)
 
 
+@app.command(short_help="Show labels/details")
+def labels(
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    central = cli.central
+    if central.get_labels not in cli.cache.updated:
+        resp = asyncio.run(cli.cache.update_label_db())
+    else:
+        resp = cli.cache.responses.labels
+
+    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
+    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile)
+
+
 @app.command(short_help="Show sites/details")
 def sites(
     site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
