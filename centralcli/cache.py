@@ -57,10 +57,10 @@ def get_cencli_devtype(dev_type: str) -> str:
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group"],
+        db: Literal["dev", "site", "template", "group", "label"],
         data: Union[list, Dict[str, Any]],
     ) -> Union[list, Dict[str, Any]]:
-        self.is_dev, self.is_template, self.is_group, self.is_site = False, False, False, False
+        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label = False, False, False, False, False
         data = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -105,8 +105,7 @@ class CentralObject:
         if "type" in self.data:
             return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
 
-    @property
-    def help_text(self):
+    def _get_help_text_parts(self):
         parts = []
         if self.cache == "site":
             parts = [
@@ -121,6 +120,7 @@ class CentralObject:
             ]
         elif self.cache == "dev":
             parts = [
+                self.name,
                 self.generic_type.upper(),
                 self.serial,
                 self.mac,
@@ -130,12 +130,31 @@ class CentralObject:
             parts = utils.strip_none(parts, strip_empty_obj=True)
             if self.site:
                 parts[-1] = f"s:{parts[-1]}"
+        elif self.cache == "group":
+            parts = ["Group", self.name]
+        elif self.cache == "label":
+            parts = [self.data.get("name"), f"id: {self.data.get('id', 'ERROR')}"]
 
+        return parts
+
+    @property
+    def help_text(self):
+        parts = self._get_help_text_parts()
         return "|".join(
             [
                 typer.style(p, fg="blue" if not idx % 2 == 0 else "cyan") for idx, p in enumerate(parts)
             ]
         )
+
+    @property
+    def rich_help_text(self):
+        parts = self._get_help_text_parts()
+        return "|".join(
+            [
+                f'{"[blue]" if not idx % 2 == 0 else "[cyan]"}{p}[/]' for idx, p in enumerate(parts)
+            ]
+        )
+
 
     @property
     def summary_text(self):
@@ -163,12 +182,14 @@ class CacheResponses:
         dev: Response = None,
         site: Response = None,
         template: Response = None,
-        group: Response = None
+        group: Response = None,
+        label: Response = None,
     ) -> None:
         self._dev = dev
         self._site = site
         self._template = template
         self._group = group
+        self._label = label
 
     def update_rl(self, resp: Response) -> Response:
         """Returns provided Response object with the RateLimit info from the most recent API call.
@@ -210,7 +231,13 @@ class CacheResponses:
     def group(self, resp: Response):
         self._group = resp
 
+    @property
+    def label(self):
+        return self.update_rl(self._label)
 
+    @group.setter
+    def label(self, resp: Response):
+        self._label = resp
 
 
 class Cache:
@@ -238,7 +265,8 @@ class Cache:
             self.EventDB = self.DevDB.table("events")
             self.HookConfigDB = self.DevDB.table("wh_config")
             self.HookDataDB = self.DevDB.table("wh_data")
-            self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB]
+            self.LabelDB = self.DevDB.table("labels")
+            self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB]
             self.Q = Query()
             if data:
                 self.insert(data)
@@ -266,6 +294,10 @@ class Cache:
         return self.GroupDB.all()
 
     @property
+    def labels(self) -> list:
+        return self.LabelDB.all()
+
+    @property
     def logs(self) -> list:
         return self.LogDB.all()
 
@@ -280,6 +312,10 @@ class Cache:
     @property
     def group_names(self) -> list:
         return [g["name"] for g in self.GroupDB.all()]
+
+    @property
+    def label_names(self) -> list:
+        return [g["name"] for g in self.LabelDB.all()]
 
     @property
     def templates(self) -> list:
@@ -630,6 +666,8 @@ class Cache:
         for m in out:
             yield m[0], m[1]
 
+    # FIXME not completing partial serial number is zsh get_dev_completion appears to return as expected
+    # works in BASH and powershell
     def group_dev_ap_gw_completion(
         self,
         incomplete: str,
@@ -641,16 +679,28 @@ class Cache:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
+        group_match = self.get_group_identifier(incomplete, completion=True)
+
         dev_types = ["ap", "gw"]
         match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+
+        match = group_match + match
+
 
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
+        if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
+            out += [("cencli", "show cencli configuration")]
+
+        # partial completion by serial: out appears to have list with expected tuple but does
+        # not appear in zsh
+
         for m in out:
-            yield m[0], m[1]
+            log.debug(f"yielding to completion {m}")  # DEBUG remove me serial completion yielding expected tuple but does not appear in zsh
+            yield m
 
     def group_dev_gw_completion(
         self,
@@ -692,7 +742,7 @@ class Cache:
             yield "commands"
         elif args[-1] in ["commands", "file"]:
             yield None
-        elif args[-1] not in ["group", "site", "devices"]:
+        elif args[-1] not in ["group", "site", "device"]:
             yield "commands"
         else:
             if args[-1] == "group":
@@ -726,6 +776,24 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def label_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        match = self.get_label_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name not in args:
+                    out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
 
         for m in out:
             yield m
@@ -997,6 +1065,32 @@ class Cache:
                     log.error("Tiny DB returned an error during group db update")
             return resp
 
+    async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
+        if data:
+            data = utils.listify(data)
+            if not remove:
+                return self.LabelDB.insert_multiple(data)
+            else:
+                doc_ids = []
+                for qry in data:
+                    if len(qry.keys()) > 1:
+                        raise ValueError(f"cache.update_label_db remove Should only have 1 query not {len(qry.keys())}")
+                    q = list(qry.keys())[0]
+                    doc_ids += [self.LabelDB.get((self.Q[q] == qry[q])).doc_id]
+                return self.LabelDB.remove(doc_ids=doc_ids)
+        else:
+            resp = await self.central.get_labels()
+            if resp.ok:
+                resp.output = cleaner.get_labels(resp.output)
+                resp.output = utils.listify(resp.output)
+                self.responses.label = resp
+                self.updated.append(self.central.get_labels)
+                self.LabelDB.truncate()
+                update_res = self.LabelDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during group db update")
+            return resp
+
     async def update_template_db(self):
         # groups = self.groups if self.central.get_all_groups in self.updated else None
         if self.central.get_all_groups not in self.updated:
@@ -1056,8 +1150,15 @@ class Cache:
             self.HookDataDB.truncate()
             return self.HookDataDB.insert_multiple(data)
 
-    # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all atributes
-    async def _check_fresh(self, dev_db: bool = False, site_db: bool = False, template_db: bool = False, group_db: bool = False):
+    # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
+    async def _check_fresh(
+        self,
+        dev_db: bool = False,
+        site_db: bool = False,
+        template_db: bool = False,
+        group_db: bool = False,
+        label_db: bool = False,
+        ):
         update_funcs, db_res = [], []
         if dev_db:
             update_funcs += [self.update_dev_db]
@@ -1067,6 +1168,8 @@ class Cache:
             update_funcs += [self.update_template_db]
         if group_db:
             update_funcs += [self.update_group_db]
+        if label_db:
+            update_funcs += [self.update_label_db]
         async with ClientSession() as self.central.aio_session:
             if update_funcs:
                 db_res += [await update_funcs[0]()]
@@ -1081,7 +1184,14 @@ class Cache:
                 if db_res[-1]:
                     db_res += [await self.update_dev_db()]  # dev_db separate as it uses asyncio.gather/central._batch_request
                     if db_res[-1]:
-                        db_res = [*db_res, *await asyncio.gather(self.update_site_db(), self.update_template_db())]
+                        db_res = [
+                            *db_res,
+                            *await asyncio.gather(
+                                self.update_site_db(),
+                                self.update_template_db(),
+                                self.update_label_db()
+                            )
+                        ]
         return db_res
 
     def check_fresh(
@@ -1091,8 +1201,9 @@ class Cache:
         dev_db: bool = False,
         template_db: bool = False,
         group_db: bool = False,
+        label_db: bool = False,
     ) -> None:
-        if True in [site_db, dev_db, group_db, template_db]:
+        if True in [site_db, dev_db, group_db, template_db, label_db]:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
@@ -1100,7 +1211,7 @@ class Cache:
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
             start = time.time()
-            db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db))
+            db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db))
 
             if not all([r.ok for r in db_res]):
                 res_map = ["dev_db", "site_db", "template_db", "group_db"]
@@ -1129,6 +1240,8 @@ class Cache:
         elif query_type == "group":
             fields = ("name",)
             set_width_cols = {"name": {"min": 20, "max": None}}
+        elif query_type == "label":
+            fields = ("name",)
         else:  # device
             fields = ("name", "serial", "mac", "type")
         out = utils.output(
@@ -1249,7 +1362,6 @@ class Cache:
                 | (self.Q.mac == utils.Mac(query_str).cols)
                 | (self.Q.serial == query_str)
             )
-
             # retry with case insensitive name match if no match with original query
             if not match:
                 match = self.DevDB.search(
@@ -1404,7 +1516,7 @@ class Cache:
         multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject:
+    ) -> List[CentralObject]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
@@ -1480,6 +1592,90 @@ class Cache:
             if not completion:
                 log.error(
                     f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent
+                )
+
+    def get_label_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CentralObject:
+        """Allows Case insensitive group match"""
+        retry = False if completion else retry
+        for _ in range(0, 2):
+            # TODO change all get_*_identifier functions to continue to look for matches when match is found when
+            #       completion is True
+            # Exact match
+            if query_str == "":
+                match = self.labels
+            else:
+                match = self.LabelDB.search((self.Q.name == query_str))
+
+            # case insensitive
+            if not match:
+                match = self.LabelDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = self.LabelDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive ignore -_
+            if not match:
+                if "_" in query_str or "-" in query_str:
+                    match = self.LabelDB.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                        )
+                    )
+
+            # case insensitive startswith ignore - _
+            if not match:
+                match = self.LabelDB.search(
+                    self.Q.name.test(
+                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
+                    )
+                )
+
+            # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
+            # fuzzy match
+            if not match and retry and self.central.get_labels not in self.updated:
+                print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.labels], limit=1)[0]
+                    if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
+                        match = self.LabelDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    typer.secho(f"No Match Found for {query_str}, Updating label Cache", fg="red")
+                    self.check_fresh(refresh=True, label_db=True)
+                _ += 1
+            if match:
+                match = [CentralObject("label", g) for g in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type="label",)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            valid_groups = "\n".join(self.label_names)
+            typer.secho(f"{query_str} appears to be invalid", fg="red")
+            typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
+            raise typer.Exit(1)
+        else:
+            if not completion:
+                log.error(
+                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
                 )
 
     def get_template_identifier(
