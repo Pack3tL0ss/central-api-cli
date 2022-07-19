@@ -6,6 +6,7 @@ import sys
 from typing import List
 import typer
 from rich import print
+from rich.console import Console
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -20,15 +21,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-app = typer.Typer()
+
 from centralcli.constants import LicenseTypes
+app = typer.Typer()
 
 
-# TODO Add test
-# FIXME can unhide once adapt to query device inventory / devices not checked into central yet.
 @app.command(short_help="Assign License to device(s)", hidden=False)
 def license(
-    # what: AssignArgs = typer.Argument(...,),
     license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
     serial_nums: List[str] = typer.Argument(...,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -64,7 +63,7 @@ def license(
 
 @app.command(help="Assign label to device(s)", hidden=False)
 def label(
-    label: str = typer.Argument(..., help="Label to assign to device", autocompletion=cli.cache.label_completion,),
+    label: str = typer.Argument(..., help="Label to assign to device(s)", autocompletion=cli.cache.label_completion,),
     devices: List[str] = typer.Argument(..., autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -86,7 +85,7 @@ def label(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.rich_help_text}"
-    print(_msg)
+    Console(emoji=False).print(_msg)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]
     switches = [dev for dev in devices if dev.generic_type == "switch"]
@@ -106,7 +105,7 @@ def label(
 @app.callback()
 def callback():
     """
-    Assign licenses / labels to devices
+    Assign licenses / labels
     """
     pass
 
