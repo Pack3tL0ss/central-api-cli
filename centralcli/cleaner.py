@@ -27,6 +27,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+from constants import DevTypes
 
 def epoch_convert(func):
     @functools.wraps(func)
@@ -136,6 +137,7 @@ _short_value = {
     "free_ip_addr_percent": lambda x: f"{x}%",
     "cpu_utilization": lambda x: f"{x}%",
     "AOS-CX": "cx",
+    "type": lambda t: t.lower(),
 }
 
 _short_key = {
@@ -180,6 +182,9 @@ _short_key = {
 
 
 def strip_outer_keys(data: dict) -> dict:
+    if not isinstance(data, dict):
+        return data
+
     _keys = [k for k in constants.STRIP_KEYS if k in data]
     if len(_keys) == 1:
         return data[_keys[0]]
@@ -283,10 +288,9 @@ def get_all_groups(
 
 
 def get_labels(
-    data: List[
-        dict,
-    ]
+    data: Union[List[dict,], Dict]
 ) -> list:
+    data = utils.listify(data)
     data = [
         dict(
             short_value(
@@ -949,20 +953,40 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
 
     return data
 
+def _inv_type(model: str, dev_type: str) -> DevTypes:
+    if dev_type == "SWITCH":
+        aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]
+        return "sw" if model[0:4] in aos_sw_models else "cx"
+
+    return "gw" if dev_type == "GATEWAY" else dev_type.lower()
+
 
 def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     field_order = [
-        "device_type",
+        "name",
+        "status",
+        # "device_type",
+        "type",
         "model",
         "aruba_part_no",
-        "imei",
+        # "imei",
+        "ip",
         "macaddr",
         "serial",
+        "group",
+        "site",
+        "version",
         "services",
-        # "tier_type"
+    ]
+    # common_keys = set.intersection(*map(set, data))
+    # combine type / device_type for verbose output, preferring type from cache
+
+    data = [
+        {"type": _inv_type(d["model"], d.get("type", d["device_type"])), **{key: val for key, val in d.items() if key != "device_type"}}
+        for d in data
     ]
     data = [
-        dict(short_value(k, d[k]) for k in field_order) for d in data
+        dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
     data = sorted(strip_no_value(data), key=lambda i: (i["type"], i["model"]))
 
