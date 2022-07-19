@@ -73,6 +73,10 @@ class CentralObject:
 
         self.data = data
 
+        # When building Central Object from Inventory this is necessary
+        if self.is_dev and self.data:
+            self.name = self.data["name"] = self.data.get("name", self.data.get("mac", ""))
+
     def __bool__(self):
         return bool(self.data)
 
@@ -180,12 +184,14 @@ class CacheResponses:
     def __init__(
         self,
         dev: Response = None,
+        inv: Response = None,
         site: Response = None,
         template: Response = None,
         group: Response = None,
         label: Response = None,
     ) -> None:
         self._dev = dev
+        self._inv = inv
         self._site = site
         self._template = template
         self._group = group
@@ -194,7 +200,7 @@ class CacheResponses:
     def update_rl(self, resp: Response) -> Response:
         """Returns provided Response object with the RateLimit info from the most recent API call.
         """
-        _last_rl = sorted([r.rl for r in [self._dev, self._site, self._template, self._group] if r is not None], key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group] if r is not None], key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -206,6 +212,14 @@ class CacheResponses:
     @dev.setter
     def dev(self, resp: Response):
         self._dev = resp
+
+    @property
+    def inv(self):
+        return self.update_rl(self._inv)
+
+    @inv.setter
+    def inv(self, resp: Response):
+        self._inv = resp
 
     @property
     def site(self):
@@ -249,15 +263,16 @@ class Cache:
     ) -> None:
         """Central-API-CLI Cache object
         """
-        # self.rl: str = ""  # TODO temp might refactor cache updates to return resp
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.responses = CacheResponses()
         if config.valid and config.cache_dir.exists():
             self.DevDB = TinyDB(config.cache_file)
+            self.InvDB = self.DevDB.table("inventory")
             self.SiteDB = self.DevDB.table("sites")
             self.GroupDB = self.DevDB.table("groups")
             self.TemplateDB = self.DevDB.table("templates")
+            self.LabelDB = self.DevDB.table("labels")
             # log db is used to provide simple index to get details for logs
             # vs the actual log id in form 'audit_trail_2021_2,...'
             # it is updated anytime show logs is ran.
@@ -265,8 +280,7 @@ class Cache:
             self.EventDB = self.DevDB.table("events")
             self.HookConfigDB = self.DevDB.table("wh_config")
             self.HookDataDB = self.DevDB.table("wh_data")
-            self.LabelDB = self.DevDB.table("labels")
-            self._tables = [self.DevDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB]
+            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB]
             self.Q = Query()
             if data:
                 self.insert(data)
@@ -284,6 +298,18 @@ class Cache:
     @property
     def devices(self) -> list:
         return self.DevDB.all()
+
+    @property
+    def devices_by_serial(self) -> dict:
+        return {d["serial"]: d for d in self.devices}
+
+    @property
+    def inventory(self) -> list:
+        return self.InvDB.all()
+
+    @property
+    def inventory_by_serial(self) -> dict:
+        return {d["serial"]: d for d in self.inventory}
 
     @property
     def sites(self) -> list:
@@ -345,6 +371,19 @@ class Cache:
         for a in config.defined_accounts:
             if a.lower().startswith(incomplete.lower()):
                 yield a
+
+    def get_devices_with_inventory(self) -> list:
+        res = self.check_fresh(dev_db=True, inv_db=True)
+        combined = [
+            {**self.inventory_by_serial[serial], **self.devices_by_serial.get(serial, {})}
+            for serial in self.inventory_by_serial
+
+        ]
+        res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
+        return res[-1]
+
+
+
 
     # TODO maybe build script to gather completion and help text and place in flat file
     def method_test_completion(self, incomplete: str, args: List[str] = []):
@@ -1003,6 +1042,24 @@ class Cache:
             self.responses.dev = resp
         return resp
 
+    async def update_inv_db(self):
+        resp = await self.central.get_device_inventory()
+        if resp.ok:
+            # self.rl = str(resp.rl)
+            if resp.output:
+                resp.output = utils.listify(resp.output)
+                resp.output = cleaner.get_device_inventory(resp.output)
+
+                self.InvDB.truncate()
+                update_res = self.InvDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during inv db update")
+
+            # TODO change updated from  list of funcs to class with bool attributes or something
+            self.updated.append(self.central.get_device_inventory)
+            self.responses.inv = resp
+        return resp
+
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
         if data:
@@ -1073,10 +1130,15 @@ class Cache:
             else:
                 doc_ids = []
                 for qry in data:
-                    if len(qry.keys()) > 1:
-                        raise ValueError(f"cache.update_label_db remove Should only have 1 query not {len(qry.keys())}")
-                    q = list(qry.keys())[0]
-                    doc_ids += [self.LabelDB.get((self.Q[q] == qry[q])).doc_id]
+                    # provided list of label_ids to remove
+                    if isinstance(qry, (int, str)) and str(qry).isdigit():
+                        doc_ids += [self.LabelDB.get((self.Q.id == qry)).doc_id]
+                    else:
+                        # list of dicts with {search_key: value_to_search_for}
+                        if len(qry.keys()) > 1:
+                            raise ValueError(f"cache.update_label_db remove Should only have 1 query not {len(qry.keys())}")
+                        q = list(qry.keys())[0]
+                        doc_ids += [self.LabelDB.get((self.Q[q] == qry[q])).doc_id]
                 return self.LabelDB.remove(doc_ids=doc_ids)
         else:
             resp = await self.central.get_labels()
@@ -1154,6 +1216,7 @@ class Cache:
     async def _check_fresh(
         self,
         dev_db: bool = False,
+        inv_db: bool = False,
         site_db: bool = False,
         template_db: bool = False,
         group_db: bool = False,
@@ -1162,6 +1225,8 @@ class Cache:
         update_funcs, db_res = [], []
         if dev_db:
             update_funcs += [self.update_dev_db]
+        if inv_db:
+            update_funcs += [self.update_inv_db]
         if site_db:
             update_funcs += [self.update_site_db]
         if template_db:
@@ -1187,6 +1252,7 @@ class Cache:
                         db_res = [
                             *db_res,
                             *await asyncio.gather(
+                                self.update_inv_db(),
                                 self.update_site_db(),
                                 self.update_template_db(),
                                 self.update_label_db()
@@ -1199,36 +1265,40 @@ class Cache:
         refresh: bool = False,
         site_db: bool = False,
         dev_db: bool = False,
+        inv_db: bool = False,
         template_db: bool = False,
         group_db: bool = False,
         label_db: bool = False,
-    ) -> None:
-        if True in [site_db, dev_db, group_db, template_db, label_db]:
+    ) -> List[Response]:
+        db_res = None
+        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db]:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
             _word = "Refreshing" if refresh else "Populating"
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
-            start = time.time()
-            db_res = asyncio.run(self._check_fresh(dev_db=dev_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db))
+            start = time.monotonic()
+            db_res = asyncio.run(self._check_fresh(
+                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db
+                )
+            )
 
             if not all([r.ok for r in db_res]):
-                res_map = ["dev_db", "site_db", "template_db", "group_db"]
+                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db"]
                 res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
-                # log.error(f"TinyDB returned error ({res_map}) during db update")
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
-                self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.time() - start, 2)} sec")
-            log.info(f"Cache Refreshed in {round(time.time() - start, 2)} seconds", show=False)
-            # typer.secho(f"-- Cache Refresh Completed in {round(time.time() - start, 2)} sec --", fg="cyan")
+                self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.monotonic() - start, 2)} sec")
+            log.info(f"Cache Refreshed in {round(time.monotonic() - start, 2)} seconds", show=False)
+
+        return db_res
 
     def handle_multi_match(
         self,
         match: List[CentralObject],
         query_str: str = None,
         query_type: str = "device",
-        # multi_ok: bool = False,
     ) -> List[Dict[str, Any]]:
         # typer.secho(f" -- Ambiguous identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         typer.echo()
@@ -1242,6 +1312,8 @@ class Cache:
             set_width_cols = {"name": {"min": 20, "max": None}}
         elif query_type == "label":
             fields = ("name",)
+        elif query_type == "inventory":
+            fields = ("serial", "mac")
         else:  # device
             fields = ("name", "serial", "mac", "type")
         out = utils.output(
@@ -1297,9 +1369,6 @@ class Cache:
         Returns:
             CentralObject or list[CentralObject, ...]
         """
-        # DEPRECATED remove multi_ok once verified refs are removed
-        if multi_ok:
-            log.warning("DEV NOTE: get_identifier called with deprecated kwarg mutli_ok", show=True)
         match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
@@ -1646,9 +1715,11 @@ class Cache:
             if not match and retry and self.central.get_labels not in self.updated:
                 print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.labels], limit=1)[0]
-                    if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
-                        match = self.LabelDB.search(self.Q.name == fuzz_match)
+                    fuzz_resp = process.extract(query_str, [g["name"] for g in self.labels], limit=1)
+                    if fuzz_resp:
+                        fuzz_match, fuzz_confidence = fuzz_resp[0]
+                        if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
+                            match = self.LabelDB.search(self.Q.name == fuzz_match)
                 if not match:
                     typer.secho(f"No Match Found for {query_str}, Updating label Cache", fg="red")
                     self.check_fresh(refresh=True, label_db=True)
@@ -1668,9 +1739,9 @@ class Cache:
 
         elif retry:
             log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
-            valid_groups = "\n".join(self.label_names)
+            valid_labels = "\n".join(self.label_names)
             typer.secho(f"{query_str} appears to be invalid", fg="red")
-            typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
+            typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
             raise typer.Exit(1)
         else:
             if not completion:
