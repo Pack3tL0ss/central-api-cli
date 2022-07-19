@@ -154,7 +154,7 @@ def method(
     )
 
     resp = central.request(getattr(central, method), *args, **kwargs)
-    if "should be str" in resp.output and "bool" in resp.output:
+    if isinstance(resp.output, str) and "should be str" in resp.output and "bool" in resp.output:
         c.log(f"{resp.output}.  LAME!  Converting to str!")
         args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
         kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
