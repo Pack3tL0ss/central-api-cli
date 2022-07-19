@@ -43,15 +43,25 @@ app.add_typer(clishowbranch.app, name="branch")
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
+def _build_caption(resp: Response, *, inventory: bool = False) -> str:
+    dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
+    _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
+    caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
+    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device type use [cyan]show <DEVICE TYPE>[/cyan]\n"
+    if inventory:
+        caption = f"{caption}  [italic dark_olive_green2]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+    return caption
 
 def show_devices(
-    dev_type: str, *args, serial: str = None, outfile: Path = None, update_cache: bool = False, group: str = None,
+    dev_type: str, *args, include_inventory: bool = False, serial: str = None, outfile: Path = None, update_cache: bool = False, group: str = None,
     status: str = None, state: str = None, label: Union[str, List[str]] = None, pub_ip: str = None, do_clients: bool = False,
     do_stats: bool = False, sort_by: str = None, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
 ) -> None:
     caption = None
     central = cli.central
+    if update_cache:
+        cli.cache.update_dev_db()
 
     _formatter = "yaml"
 
@@ -87,17 +97,16 @@ def show_devices(
 
     elif dev_type == "all":
         _formatter = "rich"
+        if include_inventory:
+            resp = cli.cache.get_devices_with_inventory()
+            caption = _build_caption(resp, inventory=True)
+            if len(params) > 2:
+                caption = f"{caption}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)"
         # if no params (expected result may differ) update cli.cache if not updated this session and return results from there
-        if len(params) == 2 and list(params.values()).count(False) == 2:
+        elif len(params) == 2 and list(params.values()).count(False) == 2:
             if central.get_all_devicesv2 not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db)
-
-                # resp = Response(output=cli.cache.devices)
-                # resp.rl = cli.cache.rl  # TODO temporary hack until cache update changed to return resp
-                dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
-                _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
-                caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-                caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device type use [cyan]show <DEVICE TYPE>[/cyan]\n "
+                caption = _build_caption(resp)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.
                 resp = cli.cache.responses.dev
@@ -119,7 +128,7 @@ def show_devices(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
     title_sfx = [
         f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details"] and v
-    ]
+    ] if not include_inventory else ["including Devices from Inventory"]
     cli.display_results(
         resp,
         tablefmt=tablefmt,
@@ -157,8 +166,23 @@ def inventory(
 ) -> None:
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = cli.central.request(cli.central.get_device_inventory, _type)
+    if verbose:
+        cache_devices = cli.cache.devices
+        for idx, dev in enumerate(resp.output):
+            from_cache = [d for d in cache_devices if d["serial"] == dev["serial"]]
+            if from_cache:
+                resp.output[idx] = {**dev, **from_cache[0]}
 
-    cli.display_results(resp, tablefmt=tablefmt, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_device_inventory, sub=sub)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Devices in Inventory",
+        sort_by=sort_by,
+        reverse=reverse,
+        caption="Inventory includes devices that have yet to connect to Central",
+        cleaner=cleaner.get_device_inventory,
+        sub=sub
+    )
 
 @app.command(short_help="Show All Devices")
 def all(
@@ -171,7 +195,7 @@ def all(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     sort_by: SortDevOptions = typer.Option(None, "--sort"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
@@ -180,6 +204,12 @@ def all(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    verbose: bool = typer.Option(
+        False,
+        "-v",
+        help="additional details (include devices in Inventory that have yet to connect)",
+        show_default=False,
+    ),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -192,8 +222,8 @@ def all(
     elif up:
         status = "Up"
     show_devices(
-        'all', outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, sort_by=sort_by,
+        'all', outfile=outfile, include_inventory=verbose, update_cache=update_cache, group=group, status=status,
+        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients, sort_by=sort_by,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -218,7 +248,7 @@ def devices(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     sort_by: SortDevOptions = typer.Option(None, "--sort"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
@@ -227,6 +257,13 @@ def devices(
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    verbose: bool = typer.Option(
+        False,
+        "-v",
+        help="additional details (include devices in Inventory that have yet to connect)",
+        show_default=False,
+        hidden=True,  # TODO show inventory devices
+    ),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -246,13 +283,14 @@ def devices(
         dev = cli.cache.get_dev_identifier(device)
         device = dev.name
         serial = dev.serial
-        dev_type = lib_to_api("monitoring", dev.type)
+        dev_type = lib_to_api("monitoring", dev.type)  # TODO I think this can be removed done in show_devices
 
     show_devices(
-        dev_type, device, serial=serial, outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_table=do_table)
+        dev_type, device, include_inventory=verbose, serial=serial, outfile=outfile, update_cache=update_cache,
+        group=group, status=status, state=state, label=label, pub_ip=pub_ip,
+        do_stats=do_stats, sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        do_table=do_table
+    )
 
 
 @app.command(short_help="Show APs/details")
@@ -266,7 +304,7 @@ def aps(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP"),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     sort_by: SortOptions = typer.Option(None, "--sort"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
@@ -289,7 +327,7 @@ def aps(
 
     show_devices(
         'aps', *args, outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
+        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats,
         sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -574,7 +612,6 @@ def dhcp(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
-    # verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False,),
     verbose2: bool = typer.Option(
         False,
         "-vv",
@@ -874,7 +911,7 @@ def templates(
             group = group or name.group  # if they provided group via --group we use it
             resp = central.request(central.get_template, group, name.name)
         else:
-            print(f"Something went wrong [bright_red blink]{name}")
+            print(f"Something went wrong [bright_red blink]{name}[reset]")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
