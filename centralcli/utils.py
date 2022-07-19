@@ -458,7 +458,7 @@ class Utils:
         # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs
         if tablefmt in ['json', 'yaml', 'yml']:
             outdata = self.listify(outdata)
-            if outdata and 'name' in outdata[0]:
+            if outdata and isinstance(outdata[0], dict) and 'name' in outdata[0]:
                 outdata: Dict[str, Dict[str, Any]] = {
                     item['name']: {k: v for k, v in item.items() if k != 'name'}
                     for item in outdata
