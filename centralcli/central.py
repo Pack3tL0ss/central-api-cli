@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
-from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils, constants
+from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils, constants, models
 from .response import Response, Session
 
 color = utils.color
@@ -1041,6 +1041,18 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     async def get_all_devicesv2(self, **kwargs) -> Response:
+        """Get all devices from Aruba Central
+
+        Args:
+            include_inventory (bool, optional): Include details from inventory including devices
+                                                that have yet to connect. Defaults to False.
+
+        Returns:
+            Response: CentralAPI Response object
+
+            raw attribute has all keys returned for the devices, the output attribute
+            includes only keys common across all device types in central.
+        """
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
         lib_dev_types = {
             "aps": "ap",
@@ -1074,8 +1086,8 @@ class CentralApi(Session):
             ]
             # return just the keys common across all device types
             common_keys = set.intersection(*map(set, dicts))
-
             _output = [{k: d[k] for k in common_keys} for d in dicts]
+
             resp.output = _output
 
         return resp
@@ -1228,6 +1240,7 @@ class CentralApi(Session):
 
         return await self.get(url, headers=headers)
 
+    # TODO change dev_type to use [gw, sw, cx, ap, switch]  make consistent for all calls
     async def get_devices(
         self,
         dev_type: Literal["switches", "aps", "gateways"],
@@ -2769,7 +2782,7 @@ class CentralApi(Session):
     ) -> Response:
         """Update an existing ap settings.
 
-        // Used by batch rename aps //
+        // Used by batch rename aps and rename ap //
 
         Args:
             serial_number (str, optional): AP Serial Number
@@ -3389,6 +3402,16 @@ class CentralApi(Session):
 
         return resp
 
+    async def get_default_group(self,) -> Response:
+        """Get default group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/groups/default_group"
+
+        return await self.get(url)
+
     async def move_devices_to_site(
         self,
         site_id: int,
@@ -3458,14 +3481,37 @@ class CentralApi(Session):
             'device_type': device_type
         }
 
-        # NOTE: This method returns 200 when failures occur.
+        # API-FLAW: This method returns 200 when failures occur.
         return await self.delete(url, json_data=json_data)
+
+    async def create_label(
+        self,
+        label_name: str,
+        category_id: int = 1,
+    ) -> Response:
+        """Create Label.
+
+        Args:
+            label_name (str): Label name
+            category_id (int, optional): Label category ID defaults to 1
+                1 = default label category, 2 = site
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/labels"
+
+        json_data = {
+            'category_id': category_id,
+            'label_name': label_name
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def get_labels(
         self,
         calculate_total: bool = None,
-        category_id: int = None,
-        sort: str = None,
+        reverse: bool = False,
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
@@ -3473,22 +3519,22 @@ class CentralApi(Session):
 
         Args:
             calculate_total (bool, optional): Whether to calculate total Labels
-            category_id (int, optional): Label category ID
-            sort (str, optional): Sort parameter may be one of +label_name, -label_name,
-                +category_name, -category_name. Default is +label_name
+            reverse (bool, optional): List labels in reverse alphabetical order. Defaults to False
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/central/v1/labels"
+        url = "/central/v2/labels"
 
         params = {
-            'calculate_total': calculate_total,
-            'category_id': category_id,
-            'sort': sort
+            "calculate_total": calculate_total,
+            "offset": offset,
+            "limit": limit
         }
+        if reverse:
+            params["sort"] = "-label_name"
 
         return await self.get(url, params=params)
 
@@ -3522,6 +3568,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # TODO make format of this and other label methods match site methods
     async def remove_label_from_devices(
         self,
         label_id: int,
@@ -3550,6 +3597,23 @@ class CentralApi(Session):
         }
 
         return await self.delete(url, json_data=json_data)
+
+    # API-FLAW returns empty payload / response on success 200
+    async def delete_label(
+        self,
+        label_id: int,
+    ) -> Response:
+        """Delete Label.
+
+        Args:
+            label_id (int): Label ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v1/labels/{label_id}"
+
+        return await self.delete(url)
 
     async def get_device_ip_routes(
         self,
@@ -3661,8 +3725,11 @@ class CentralApi(Session):
 
             # json_data = [{_keys.get(k, k): v for k, v in d.items() if k in  [*_keys.keys(), *_keys.values()]} for d in device_list]
 
-            to_group = {d["group"]: [] for d in device_list if "group" in d}
-            _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
+            to_group = {d.get("group"): [] for d in device_list if "group" in d}
+            for d in device_list:
+                if "group" in d:
+                    to_group[d["group"]].append(d.get("serial_num", d.get("serial")))
+            # _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
 
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
@@ -3715,6 +3782,55 @@ class CentralApi(Session):
             return await self._batch_request(reqs)
         else:
             return await self.post(url, json_data=json_data)
+
+    # TODO maybe helper method to delete_device that calls these
+    async def delete_gateway(
+        self,
+        serial: str,
+    ) -> Response:
+        """Delete Gateway.
+
+        Args:
+            serial (str): Serial Number of Gateway to be deleted
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}"
+
+        return await self.delete(url)
+
+    async def delete_switch(
+        self,
+        serial: str,
+    ) -> Response:
+        """Delete Switch.
+
+        Args:
+            serial (str): Serial number of switch to be deleted
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/switches/{serial}"
+
+        return await self.delete(url)
+
+    async def delete_ap(
+        self,
+        serial: str,
+    ) -> Response:
+        """Delete AP.
+
+        Args:
+            serial (str): Serial Number of AP to be deleted
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/aps/{serial}"
+
+        return await self.delete(url)
 
     async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
         """Assign devices to pre-provisioned group.
@@ -3775,7 +3891,7 @@ class CentralApi(Session):
 
     async def upload_certificate(
         self,
-        passphrase: str,
+        passphrase: str = "",
         cert_file: Union[str, Path] = None,
         cert_name: str = None,
         cert_format: Literal["PEM", "DER", "PKCS12"] = None,
