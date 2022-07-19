@@ -1,4 +1,4 @@
-from typing import List
+from typing import Union, List
 from pydantic import BaseModel
 
 # fields from Response.output after cleaner
@@ -8,4 +8,4 @@ class Inventory(BaseModel):
     mac: str
     model: str
     serial: str
-    services: List[str]
+    services: Union[List[str], str]
