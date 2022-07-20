@@ -986,7 +986,13 @@ class CentralApi(Session):
         template_groups = [g["name"] for g in groups if True in g["template group"].values()]
 
         if not template_groups:
-            return Response(ok=True, output="None of the configured groups are Template Groups.")
+            return Response(
+                url="No call performed",
+                ok=True,
+                output=[],
+                raw=[],
+                error="None of the configured groups are Template Groups.",
+            )
 
         reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
         # TODO maybe call the aggregator from _bath_request
