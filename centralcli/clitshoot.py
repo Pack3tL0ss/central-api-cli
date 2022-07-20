@@ -36,7 +36,7 @@ iden_meta = IdenMetaVars()
 # TODO AP only completion
 @app.command(short_help="Show AP Overlay details")
 def ap_overlay(
-    device: str = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -49,7 +49,7 @@ def ap_overlay(
     console = Console(emoji=False)
     dev = cli.cache.get_dev_identifier(device, dev_type=("ap"))
     commands = [201, 203, 218]
-    resp = resp = cli.central.request(cli.central.start_ts_session, dev.serial, dev_type="IAP", commands=commands)
+    resp = cli.central.request(cli.central.start_ts_session, dev.serial, dev_type="IAP", commands=commands)
     cli.display_results(resp, tablefmt="action")
 
     complete = False
@@ -70,7 +70,7 @@ def ap_overlay(
         if not complete:
             print(f'[dark_orange3]WARNING[/] Central is still waiting on response from [cyan]{dev.name}[/]')
             if not typer.confirm("Continue to wait/retry?"):
-                cli.display_results(ts_resp, tablefmt="action")
+                cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
 
 
