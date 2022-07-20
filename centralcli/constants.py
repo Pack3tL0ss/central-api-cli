@@ -219,6 +219,7 @@ class TemplateLevel1(str, Enum):
 
 class CacheArgs(str, Enum):
     devices = "devices"
+    inventory = "inventory"
     sites = "sites"
     templates = "templates"
     groups = "groups"
