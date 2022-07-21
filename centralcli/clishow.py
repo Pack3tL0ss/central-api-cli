@@ -514,6 +514,7 @@ def poe(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
+    # TODO output cleaner / sort & reverse options
 
 
 @app.command(short_help="Show VLANs for device or site")
@@ -708,7 +709,7 @@ def cache_(
     for arg in args:
         cache_out = getattr(cli.cache, arg)
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_table=do_table, default="yaml")
-        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {args[-1]}", pager=pager, outfile=outfile)
+        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {', '.join(args)}", pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Show groups/details")
