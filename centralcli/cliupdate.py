@@ -63,6 +63,8 @@ def template(
     ),
     version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
     model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -70,6 +72,7 @@ def template(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
+    yes = yes_ if yes_ else yes
     if group:
         group = cli.cache.get_group_identifier(group).name
 
@@ -113,6 +116,7 @@ def template(
         )
         payload = "\n".join(payload).encode()
 
+    # TODO add confirmation message
     _resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
     typer.secho(str(_resp), fg="green" if _resp else "red")
 
