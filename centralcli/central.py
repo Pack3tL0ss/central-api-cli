@@ -1049,10 +1049,6 @@ class CentralApi(Session):
     async def get_all_devicesv2(self, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
-        Args:
-            include_inventory (bool, optional): Include details from inventory including devices
-                                                that have yet to connect. Defaults to False.
-
         Returns:
             Response: CentralAPI Response object
 
@@ -1070,7 +1066,7 @@ class CentralApi(Session):
         res = await self._batch_request(reqs)
         _failures = [idx for idx, r in enumerate(res) if not (r)]
         if _failures:
-            return res[_failures[0]]
+            return res  # [_failures[0]]
 
         resp = res[-1]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
@@ -3660,7 +3656,7 @@ class CentralApi(Session):
         part_num: str = None,
         license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
-    ) -> Response:
+    ) -> Union[Response, List[Response]]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
@@ -3785,7 +3781,7 @@ class CentralApi(Session):
                 lic_reqs = [br(self.assign_licenses, **kwargs) for kwargs in license_kwargs]
                 reqs = [*reqs, *lic_reqs]
 
-            return await self._batch_request(reqs)
+            return await self._batch_request(reqs, continue_on_fail=True)
         else:
             return await self.post(url, json_data=json_data)
 
