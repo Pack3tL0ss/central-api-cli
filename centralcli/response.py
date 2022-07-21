@@ -227,6 +227,8 @@ class Response:
                     ) for k, v in self.output.items() if k != "status" and (v or v is False)
                 ]
             )
+        else:
+            r = f"  {self.output}"
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
@@ -470,6 +472,11 @@ class Session():
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
+                # TODO handle the following... pause/retry
+                # Request 3 [POST: /platform/licensing/v1/subscriptions/unassign]
+                #     Response:
+                #     status code: 503
+                #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
                 self.spinner.fail(fail_msg)
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
