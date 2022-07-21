@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+
+# TODO keep addl attributes from return in cache with key prefixed with _ or under another internal use key
+# device results include site_id which we strip out as it's not useful for display, but it is useful for
+# internally.  Currently the site_id is being looked up from the site cache
 from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
@@ -27,7 +31,7 @@ except Exception:
 
 TinyDB.default_table_name = "devices"
 
-DBType = Literal["dev", "site", "template", "group"]
+# DBType = Literal["dev", "site", "template", "group"]
 DEV_COMPLETION = ["move", "device", ""]
 SITE_COMPLETION = ["site"]
 GROUP_COMPLETION = ["group", "wlan"]
@@ -75,7 +79,8 @@ class CentralObject:
 
         # When building Central Object from Inventory this is necessary
         if self.is_dev and self.data:
-            self.name = self.data["name"] = self.data.get("name", self.data.get("mac", ""))
+            self.name = self.data["name"] = self.data.get("name", "not-connected")
+            self.status = self.data["status"] = self.data.get("status")
 
     def __bool__(self):
         return bool(self.data)
@@ -366,14 +371,27 @@ class Cache:
     async def get_hooks_by_serial(self, serial):
         return self.HookDataDB.get(self.Q.device_id == serial)
 
-    @staticmethod
-    def account_completion(incomplete: str,):
-        for a in config.defined_accounts:
-            if a.lower().startswith(incomplete.lower()):
-                yield a
 
-    def get_devices_with_inventory(self) -> list:
-        res = self.check_fresh(dev_db=True, inv_db=True)
+    def get_devices_with_inventory(self, no_refresh=False) -> List[Response]:
+        """Returns List of Response objects with data from Inventory and Monitoring
+
+        Args:
+            force_refresh (bool, optional): Force a refresh of cache. Defaults to True.
+                Refresh will only occur if cache was not updated during this session.
+                Setting force_refresh to False means it will not occur regardless.
+
+        Returns:
+            List[Response]: Response objects where output is list of dicts with
+                            data from Inventory and Monitoring.
+        """
+        kwargs = {
+            "dev_db": self.responses.dev is None,
+            "inv_db": self.responses.inv is None
+        }
+        if any(kwargs.values()) and not no_refresh:
+            res = self.check_fresh(**kwargs)
+        else:
+            res = [self.responses.dev or Response()]
         combined = [
             {**self.inventory_by_serial[serial], **self.devices_by_serial.get(serial, {})}
             for serial in self.inventory_by_serial
@@ -382,8 +400,11 @@ class Cache:
         res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
         return res[-1]
 
-
-
+    @staticmethod
+    def account_completion(incomplete: str,):
+        for a in config.defined_accounts:
+            if a.lower().startswith(incomplete.lower()):
+                yield a
 
     # TODO maybe build script to gather completion and help text and place in flat file
     def method_test_completion(self, incomplete: str, args: List[str] = []):
@@ -1010,6 +1031,7 @@ class Cache:
             dict,
         ],
     ) -> bool:
+        log.warning("DEV WARNING: Cache().insert() is being used.", show=True)
         _data = data
         if isinstance(data, list) and data:
             _data = data[1]
@@ -1024,41 +1046,134 @@ class Cache:
         return len(ret) == len(data)
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
-    async def update_dev_db(self):
-        resp = await self.central.get_all_devicesv2()
-        if resp.ok:
-            # self.rl = str(resp.rl)
-            if resp.output:
-                resp.output = utils.listify(resp.output)
-                resp.output = cleaner.get_devices(resp.output)
+    # TODO if we are updating inventory we only need to get those devices types
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False) -> Union[List[int], Response]:
+        """Update Device Database (local cache).
 
-                self.DevDB.truncate()
-                update_res = self.DevDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error("Tiny DB returned an error during dev db update")
+        Args:
+            data (Union[str, List[str]], List[dict] optional): serial number of list of serials numbers to add or remove. Defaults to None.
+            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
 
-            # TODO change updated from  list of funcs to class with bool attributes or something
-            self.updated.append(self.central.get_all_devicesv2)
-            self.responses.dev = resp
-        return resp
+        Raises:
+            ValueError: if provided data is of wrong type or does not appear to be a serial number
 
-    async def update_inv_db(self):
-        resp = await self.central.get_device_inventory()
-        if resp.ok:
-            # self.rl = str(resp.rl)
-            if resp.output:
-                resp.output = utils.listify(resp.output)
-                resp.output = cleaner.get_device_inventory(resp.output)
+        Returns:
+            Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
+                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+        """
+        if data:
+            data = utils.listify(data)
+            if not remove:
+                db_res = self.DevDB.insert_multiple(data)
+                if False in db_res:
+                    log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+            else:
+                doc_ids = []
+                for qry in data:
+                    # allow list of dicts with device data, only interested in serial
+                    if isinstance(qry, dict):
+                        qry = qry if "data" not in qry else qry["data"]
+                        if "serial" not in qry.keys():
+                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                        qry = qry["serial"]
 
-                self.InvDB.truncate()
-                update_res = self.InvDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error("Tiny DB returned an error during inv db update")
+                    if not isinstance(qry, str):
+                        raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
+                    if not utils.isserial(qry):
+                        raise ValueError("Provided str does not appear to be a serial number.")
+                    else:
+                        doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
 
-            # TODO change updated from  list of funcs to class with bool attributes or something
-            self.updated.append(self.central.get_device_inventory)
-            self.responses.inv = resp
-        return resp
+                if len(doc_ids) != len(data):
+                    log.error(
+                        f"Warning update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
+                        show=True
+                    )
+
+                db_res = self.DevDB.remove(doc_ids=doc_ids)
+                if False in db_res:
+                    log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
+        else:
+            # TODO update device inventory first then only get details for device types in inventory
+            resp = await self.central.get_all_devicesv2()
+            if resp.ok:
+                if resp.output:
+                    resp.output = utils.listify(resp.output)
+                    resp.output = cleaner.get_devices(resp.output)
+
+                    self.DevDB.truncate()
+                    update_res = self.DevDB.insert_multiple(resp.output)
+                    if False in update_res:
+                        log.error("Tiny DB returned an error during dev db update")
+
+                # TODO change updated from  list of funcs to class with bool attributes or something
+                self.updated.append(self.central.get_all_devicesv2)
+                self.responses.dev = resp
+            return resp
+
+    async def update_inv_db(self, data: Union[str, List[str]] = None, remove: bool = False) -> Union[List[int], Response]:
+        """Update Inventory Database (local cache).
+
+        Args:
+            data (Union[str, List[str]], optional): serial number of list of serials numbers to add or remove. Defaults to None.
+            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
+
+        Raises:
+            ValueError: if provided data is of wrong type or does not appear to be a serial number
+
+        Returns:
+            Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
+                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+        """
+        if data:
+            # provide serial or list of serials to remove
+            data = utils.listify(data)
+            if not remove:
+                db_res = self.InvDB.insert_multiple(data)
+                if False in db_res:
+                    log.error(f"TinyDB InvDB table update returned an error.  db_resp: {db_res}", show=True)
+            else:
+                doc_ids = []
+                for qry in data:
+                    # allow list of dicts with inventory data, only interested in serial
+                    if isinstance(qry, dict):
+                        qry = qry if "data" not in qry else qry["data"]
+                        if "serial" not in qry.keys():
+                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                        qry = qry["serial"]
+
+                    if not isinstance(qry, str):
+                        raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
+                    if not utils.isserial(qry):
+                        raise ValueError("Provided str does not appear to be a serial number.")
+                    else:
+                        doc_ids += [self.InvDB.get((self.Q.serial == qry)).doc_id]
+
+                if len(doc_ids) != len(data):
+                    log.error(
+                        f"Warning update_inv_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
+                        show=True
+                    )
+
+                db_res = self.InvDB.remove(doc_ids=doc_ids)
+                if False in db_res:
+                    log.error(f"Tiny DB returned an error during Inventory db update {db_res}", show=True)
+        else:
+            resp = await self.central.get_device_inventory()
+            if resp.ok:
+                if resp.output:
+                    resp.output = utils.listify(resp.output)
+                    resp.output = cleaner.get_device_inventory(resp.output)
+
+                    self.InvDB.truncate()
+                    db_res = self.InvDB.insert_multiple(resp.output)
+                    if False in db_res:
+                        log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
+
+                # TODO change updated from  list of funcs to class with bool attributes or something
+                self.updated.append(self.central.get_device_inventory)
+                self.responses.inv = resp
+            return resp
 
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
@@ -1080,7 +1195,7 @@ class Cache:
                         q = list(qry.keys())[0]
                         doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
                 return self.SiteDB.remove(doc_ids=doc_ids)
-        else:
+        else:  # update site cache
             resp = await self.central.get_all_sites()
             if resp.ok:
                 resp.output = utils.listify(resp.output) if resp.output else []
@@ -1093,7 +1208,7 @@ class Cache:
                 self.SiteDB.truncate()
                 update_res = self.SiteDB.insert_multiple(resp.output)
                 if False in update_res:
-                    log.error("Tiny DB returned an error during site db update")
+                    log.error(f"Tiny DB returned an error during site db update {update_res}", show=True)
             return resp
 
     async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
@@ -1413,6 +1528,7 @@ class Cache:
         # multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
         completion: bool = False,
         silent: bool = False,
+        include_inventory: bool = False,
     ) -> CentralObject:
 
         retry = False if completion else retry
@@ -1431,6 +1547,13 @@ class Cache:
                 | (self.Q.mac == utils.Mac(query_str).cols)
                 | (self.Q.serial == query_str)
             )
+            # Inventory must be exact match expecting full serial numbers but will allow MAC if exact match
+            if not match and include_inventory:
+                match = self.InvDB.search(
+                    (self.Q.serial == query_str)
+                    | (self.Q.mac == utils.Mac(query_str).cols)
+                )
+
             # retry with case insensitive name match if no match with original query
             if not match:
                 match = self.DevDB.search(
@@ -1459,11 +1582,21 @@ class Cache:
                         match = self.DevDB.search(
                             self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
                         )
+
+            # no match found initiate cache update
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating Device Cache", fg="red")
-                self.check_fresh(refresh=True, dev_db=True)
+                kwargs = {"dev_db": True}
+                if include_inventory:
+                    _word = " & Inventory "
+                    kwargs["inv_db"] = True
+                else:
+                    _word = " "
+                typer.secho(f"No Match Found for {query_str}, Updating Device{_word}Cache", fg="red")
+                self.check_fresh(refresh=True, **kwargs)
+
             if match:
                 match = [CentralObject("dev", dev) for dev in match]
+                break
 
         all_match = None
         if dev_type:
@@ -1477,15 +1610,15 @@ class Cache:
             return match or []
 
         if match:
+            # user selects which device if multiple matches returned
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str,)  # multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str,)
 
             return match[0]
 
         elif retry:
             log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
-                # all_match = all_match[-1]
                 all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
                 _dev_type_str = ", ".join(dev_type)
                 log.error(
@@ -1493,8 +1626,6 @@ class Cache:
                     show=True,
                 )
             raise typer.Exit(1)
-        # else:
-        #     log.error(f"Unable to gather device {ret_field} from provided identifier {query_str}", show=True)
 
     def get_site_identifier(
         self,
