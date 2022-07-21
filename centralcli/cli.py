@@ -66,11 +66,6 @@ app.add_typer(clitest.app, name="test",)
 app.add_typer(clitshoot.app, name="tshoot",)
 
 
-class MoveArgs(str, Enum):
-    site = "site"
-    group = "group"
-
-
 @app.command(
     help="Move device(s) to a defined group and/or site.",
 )
@@ -115,7 +110,7 @@ def move(
         False,
         "--reset-group",
         show_default=False,
-        help="Reset group membership.  (move to the default group)",
+        help="Reset group membership.  (move to the defined default group)",
     ),
     cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -154,6 +149,7 @@ def move(
         print(f"Warning [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
 
     site = site or _site
+    _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
         print("Missing Required Argument, group and/or site is required.")
@@ -161,7 +157,7 @@ def move(
 
     # TODO improve logic.  if they are moving to a group we can use inventory as backup
     # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
-    dev = [cli.cache.get_dev_identifier(d, retry=False) for d in device]
+    dev = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in device]
     if any([d is None for d in dev]):
         # cache lookup failed... will happen if device has not connected yet
         inv = cli.central.request(cli.central.get_device_inventory)
@@ -176,10 +172,7 @@ def move(
                     dev[idx] = CentralObject("dev", inv_dev[0].dict())
                     # TODO add Exit(1) if device has not connected and they try to move it to a site
 
-    devs_by_type = {
-    }
-    devs_by_site = {
-    }
+    devs_by_type, devs_by_site = {}, {}
     dev_all_names, dev_all_serials, = [], []
     for d in dev:
         if d.generic_type not in devs_by_type:
@@ -190,6 +183,9 @@ def move(
         dev_all_serials += [d.serial]
 
         if site and d.get("site"):
+            if d.site == _site.name:  # device is already in desired site
+                continue
+
             if f"{d.site}~|~{d.generic_type}" not in devs_by_site:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] = [d]
             else:
@@ -207,7 +203,7 @@ def move(
         if cx_retain_config:
             confirm_msg += f"  [italic]Config for CX switches will be preserved during move.[/]\n"
     if site:
-        _site = cli.cache.get_site_identifier(site)
+        # _site = cli.cache.get_site_identifier(site)
         confirm_msg += f"  To Site: [cyan]{_site.name}[/]\n"
         if devs_by_site:
             confirm_msg += "\n  [italic bright_red]Devices will be removed from current sites.[/]\n"
@@ -254,6 +250,9 @@ def move(
         ]
 
     # only moving site, potentially multiple calls (for each device_type)
+    # TODO this will issue the call even if the device is found to already be in the site
+    # the cache can get out of sync because this move op does not update the cache  Need to do that and part of that
+    # problem is solved.  partial workup to avoid in scratch, but cache update should be done first
     elif confirmed and _site:
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
@@ -266,7 +265,9 @@ def move(
     if site_rm_resp:
         resp = [*site_rm_resp, *resp]
 
-    cli.display_results(resp, tablefmt="action", ok_status=500)
+    cli.display_results(resp, tablefmt="action")  #, ok_status=500)
+    # TODO update cache when device succesfully moved
+    # TODO ok_status is not used in display_results anymore, impacted colorization I think?  Need to verify.
 
 
 @app.command(short_help="Bounce Interface or PoE on Interface")
