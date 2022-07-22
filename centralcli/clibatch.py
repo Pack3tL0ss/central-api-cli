@@ -635,7 +635,7 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
-        cli.cache.update_inv_db(data=_data)
+        asyncio.run(cli.cache.update_inv_db(data=_data))
         return resp
 
 
@@ -803,12 +803,6 @@ def add(
         cli.display_results(resp, tablefmt="action")
 
 
-# def delete_example_callback(ctx: typer.Context, show_example: bool):
-#     if ctx.resilient_parsing or not show_example:  # tab completion, return without validating
-#         return show_example
-
-#     if ctx.params.get("what", "") == "devices":
-
 def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
@@ -847,9 +841,6 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
         _msg += f"License [bright_green]{lic}[/bright_green] will be [bright_red]removed[/] from:\n"
         for serial in licenses_to_remove[lic]:
             this_inv = [i for i in combined_devs if i.serial == serial]
-            if not this_inv:
-                print("DEV NOTE: logic error building confirmation msg")
-                raise typer.Exit(1)
             this_inv = this_inv[0]
             _msg = f"{_msg}    {this_inv.summary_text}\n"
 
@@ -881,7 +872,11 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
 
     r_cnt = len(lic_reqs) + len(del_reqs)
     if not yes:
-        _msg += f"\n[italic dark_olive_green2]{r_cnt}-{r_cnt + 1} additional API calls will be perfomed[/]"
+        _call_cnt_msg = f"\n[italic dark_olive_green2]{r_cnt} additional API call{'s' if len(r_cnt) > 1 else ''} will be perfomed"
+        _call_cnt_msg += f". {r_cnt + 1} if there are any failures during deletion (to re-sync status with Central).[/]" if del_reqs else ".[/]"
+        _msg += _call_cnt_msg
+
+
 
     if r_cnt > 0:
         console.print(_msg)
