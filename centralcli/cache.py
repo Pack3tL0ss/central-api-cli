@@ -78,9 +78,12 @@ class CentralObject:
         self.data = data
 
         # When building Central Object from Inventory this is necessary
+        # TODO maybe pydantic model
         if self.is_dev and self.data:
-            self.name = self.data["name"] = self.data.get("name", "not-connected")
+            self.name = self.data["name"] = self.data.get("name", self.data["serial"])
             self.status = self.data["status"] = self.data.get("status")
+            self.ip = self.data["ip"] = self.data.get("ip")
+            self.site = self.data["site"] = self.data.get("site")
 
     def __bool__(self):
         return bool(self.data)
@@ -106,7 +109,7 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        log.exception(f"Cache LookUp Failure: 'CentralObject' object has no attribute '{name}'", show=True)
+        log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
         raise typer.Exit(1)
 
     @property
@@ -170,7 +173,7 @@ class CentralObject:
         if self.is_site:
             parts = [a for a in [self.name, self.city, self.state, self.zipcode] if a]
         elif self.is_dev:
-            parts = [p for p in [self.name, self.serial, self.mac, self.ip, self.site] if p]
+            parts = [p for p in utils.unique([self.name, self.serial, self.mac, self.ip, self.site]) if p]
             if self.site:
                 parts[-1] = f"Site:{parts[-1]}"
         else:
