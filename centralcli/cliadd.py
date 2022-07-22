@@ -8,25 +8,27 @@ import sys
 from typing import List, Tuple
 import typer
 from rich import print
+from rich.console import Console
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils
+    from centralcli import cli, utils, cleaner
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
+        from centralcli import cli, utils, cleaner
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty
+from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars
+
 
 app = typer.Typer()
 color = utils.color
-
+iden = IdenMetaVars()
 
 class AddWlanArgs(str, Enum):
     type = "type"
@@ -48,6 +50,7 @@ class AddGroupArgs(str, Enum):
 
 
 # TODO update completion with mac oui, serial prefix
+# TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
@@ -88,7 +91,7 @@ def device(
     #     print("DEVELOPER NOTE Null completion item has value... being ignored.")
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            print(f"[bright_red][blink]Error[/bright_red]: {name} is invalid")
+            print(f"[bright_red]Error[/]: {name} is invalid")
             raise typer.Exit(1)
         else:
             kwargs[name] = value
@@ -98,7 +101,7 @@ def device(
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
-        print("[bright_red][blink]Error[/bright_red]: both serial number and mac address are required.")
+        print("[bright_red]Error[/]: both serial number and mac address are required.")
         raise typer.Exit(1)
 
     api_kwd = {"serial": "serial_num", "mac": "mac_address"}
@@ -121,7 +124,8 @@ def device(
         ]
         kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
 
-    print("".join(_msg))
+    console = Console(emoji=False)
+    console.print("".join(_msg))
 
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
@@ -383,25 +387,47 @@ def site(
     #         Response: CentralAPI Response object
     #     """
 
+
+@app.command(help="Create a new label")
+def label(
+    name: str = typer.Argument(..., ),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    yes = yes_ if yes_ else yes
+    _msg = "Creating" if yes else "Create"
+    print(f"{_msg} new label [cyan]{name}[/]")
+    if yes or typer.confirm("Proceed?"):
+        resp = cli.central.request(cli.central.create_label, name)
+        cli.display_results(resp, cleaner=cleaner.get_labels)
+        if resp.ok:
+            asyncio.run(cli.cache.update_label_db(cleaner.get_labels(resp.output)))
+
+
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
 @app.command(help="Add/Upload a Certificate.", hidden=True)
 def certificate(
     cert_name: str = typer.Argument(...),
-    passphrase: str = typer.Argument(...,),
+    cert_file: Path = typer.Argument(None,),
+    passphrase: str = typer.Option(None,),
     # cert_type: CertTypes = typer.Argument(...),
     # cert_format: CertFormat = typer.Argument(None,),
-    pem: bool = typer.Option(False, "-pem"),
-    der: bool = typer.Option(False, "-der"),
-    pkcs12: bool = typer.Option(False, "-pkcs12"),
-    server_cert: bool = typer.Option(False, "-svr"),
-    ca_cert: bool = typer.Option(False, "-ca"),
-    crl: bool = typer.Option(False, "-crl"),
-    int_ca_cert: bool = typer.Option(False, "-int-ca"),
-    ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp"),
-    ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer",),
-    ssh_pub_key: bool = typer.Option(False, "-public",),
-    cert_data: Path = typer.Argument(None,),
+    pem: bool = typer.Option(False, "-pem", help="upload certificate in PEM format", show_default=False,),
+    der: bool = typer.Option(False, "-der", help="upload certificate in DER format", show_default=False,),
+    pkcs12: bool = typer.Option(False, "-pkcs12", help="upload certificate in pkcs12 format", show_default=False,),
+    server_cert: bool = typer.Option(False, "-svr", help="Type: Server Certificate", show_default=False,),
+    ca_cert: bool = typer.Option(False, "-ca", help="Type: CA", show_default=False,),
+    crl: bool = typer.Option(False, "-crl", help="Type: CRL", show_default=False,),
+    int_ca_cert: bool = typer.Option(False, "-int-ca", help="Type: Intermediate CA", show_default=False,),
+    ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp", help="Type: OCSP responder", show_default=False,),
+    ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer", help="Type: OCSP signer", show_default=False,),
+    ssh_pub_key: bool = typer.Option(False, "-public", help="Type: SSH Public cert", show_default=False, hidden=True,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -421,6 +447,7 @@ def certificate(
     This command is built but the API endpoint does not appear to work currently.
     """
     yes = yes_ if yes_ else yes
+    passphrase = "" if passphrase is None else passphrase
     cert_format_params = [pem, der, pkcs12]
     cert_formats = ["PEM", "DER", "PKCS12"]
     cert_format = None
@@ -429,7 +456,7 @@ def certificate(
         print("Error: Certificate Type must be provided using one of the options i.e. -svr")
         raise typer.Exit(1)
     elif not any(cert_format_params):
-        if cert_data is None:
+        if cert_file is None:
             print("Error: Cert format must be provided use one of '-pem'. '-der', or '-pkcs12'")
             raise typer.Exit(1)
     else:
@@ -450,15 +477,15 @@ def certificate(
 
     kwargs = {k: v for k, v in kwargs.items() if v}
 
-    if not cert_data:
+    if not cert_file:
         print("\n[bright_green]No Cert file specified[/]")
         print("Provide certificate content encoded in base64 format.")
-        cert_data = utils.get_multiline_input(return_type="str")
-        kwargs["cert_data"] = cert_data
-    elif cert_data.exists():
-        kwargs["cert_file"] = cert_data
+        cert_file = utils.get_multiline_input(return_type="str")
+        kwargs["cert_data"] = cert_file
+    elif cert_file.exists():
+        kwargs["cert_file"] = cert_file
     else:
-        print(f"ERROR: The specified certificate file [cyan]{cert_data.name}[/] not found.")
+        print(f"ERROR: The specified certificate file [cyan]{cert_file.name}[/] not found.")
         raise typer.Exit(1)
 
     print("[bright_green]Upload Certificate:")
@@ -494,6 +521,7 @@ def webhook(
             raise typer.Exit(1)
 
 
+# TODO ?? add support for converting j2 template to central template
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
     name: str = typer.Argument(..., ),

@@ -2,37 +2,42 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-import json
 import sys
-from enum import Enum
+from time import sleep
+
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Union
+from cache import CentralObject
 
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich import print
 from rich.console import Console
+from rich.progress import track
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (BatchRequest, Response, caas, cleaner, cli, config,
+    from centralcli import (BatchRequest, Response, caas, cleaner, models, cli, config,
                             log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (BatchRequest, Response, caas, cleaner, cli,
+        from centralcli import (BatchRequest, Response, caas, cleaner, models, cli,
                                 config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (AllDevTypes, BatchAddArgs, BatchRenameArgs,
-                                  GatewayRole, IdenMetaVars, LicenseTypes,
-                                  SendConfigDevIdens, SiteStates,
-                                  state_abbrev_to_pretty)
+from centralcli.constants import (
+    AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs,
+    GatewayRole, IdenMetaVars, LicenseTypes, SendConfigDevIdens,
+    SiteStates, state_abbrev_to_pretty, arg_to_what
+)
+from centralcli.strings import ImportExamples
+examples = ImportExamples()
 
-iden_meta_vars = IdenMetaVars()
+iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
 
@@ -75,11 +80,6 @@ class SiteImport(BaseModel):
             return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
         except ValueError:
             return SiteStates(v).value
-
-
-class BatchDelArgs(str, Enum):
-    sites = "sites"
-    # aps = "aps"
 
 
 class FstrInt:
@@ -614,7 +614,11 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
                 print("[cyan]group[/], [cyan]license[reset]")
                 # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
                 raise typer.Exit(1)
-        data = data.dict
+
+        data = data if not hasattr(data, "dict") else data.dict
+        if isinstance(data, dict) and "devices" in data:
+            data = data["devices"]
+
         if "license" in headers:
             # Validate license types
             for d in data:
@@ -622,13 +626,133 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
                     try:
                         d["license"] = LicenseTypes(d["license"].lower().replace("_", "-")).name
                     except ValueError:
+                        # TODO cache LicensTypes updating only when no match is found
                         warn = True
                         print(f"[bright_red]!![/] {d['license']} does not appear to be a valid license type")
+
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     if not warn or typer.confirm("Warnings exist proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
+        # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+        _data = None if not all([r.ok for r in resp]) else data
+        cli.cache.update_inv_db(data=_data)
         return resp
 
+
+@app.command(short_help="Validate a batch import")
+def verify(
+    what: BatchAddArgs = typer.Argument(...,),
+    import_file: Path = typer.Argument(..., exists=True),
+    no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
+    failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
+    passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
+    outfile: Path = typer.Option(None, "--out", help="Write output to a file (and display)"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Validate batch Add operations using import data from file.
+
+    The same file used to import can be used to validate.
+    """
+    if what != "devices":
+        print("Only devices and device assignments are supported at this time.")
+        raise typer.Exit(1)
+
+    # TODO add param to get_file_data to pull devices or similar key
+    # make get_file_data return consistent List of pydantic models
+    data = config.get_file_data(import_file)
+    data = data if not hasattr(data, "dict") else data.dict
+    if isinstance(data, dict) and "devices" in data:
+        data = data["devices"]
+
+    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
+
+    resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
+    if not resp.ok:
+        cli.display_results(resp, stash=False, exit_on_fail=True)
+    central_devs = [CentralObject("dev", data=r) for r in resp.output]
+
+    file_by_serial = {
+        d["serial"]: {
+            k: v if k != "license" else v.lower().replace("-", "_").replace(" ", "_") for k, v in d.items() if k != "serial"
+        } for d in data
+    }
+    central_by_serial = {
+        d.serial: {
+            k: v if k != "services" else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
+        }
+        for d in central_devs
+    }
+
+    validation = {}
+    for s in file_by_serial:
+        validation[s] = []
+        if s not in central_by_serial:
+            validation[s] += ["Device not in inventory"]
+            continue
+        _pfx = f"[cyan]{central_by_serial[s]['type'].upper()}[/] is in inventory, "
+        if file_by_serial[s].get("group"):
+            if not central_by_serial[s].get("status"):
+                validation[s] += [f"{_pfx}but has not connected to Central.  Not able to validate pre-provisioned group via API."]
+            elif not central_by_serial[s].get("group"):
+                validation[s] += [f"{_pfx}Group: [cyan]{file_by_serial[s]['group']}[/] from import != [italic]None[/] reflected in Central."]
+            elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
+                validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
+
+
+        if file_by_serial[s].get("license"):
+            _pfx = "" if _pfx in str(validation[s]) else _pfx
+            if file_by_serial[s]["license"] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s]['license']}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
+
+    ok_devs, not_ok_devs = [], []
+    for s in file_by_serial:
+        if not validation[s]:
+            ok_devs += [s]
+            _msg = "Added to Inventory: [bright_green]OK[/]"
+            for field in ["license", "group"]:
+                if field in file_by_serial[s] and file_by_serial[s][field]:
+                    _msg += f", {field.title()} [bright_green]OK[/]"
+            validation[s] += [_msg]
+        else:
+            not_ok_devs += [s]
+
+    caption = f"Out of {len(file_by_serial)} in {import_file.name} {len(not_ok_devs)} potentially have validation issue, and {len(ok_devs)} validate OK."
+    console = Console(emoji=False, record=True)
+    console.begin_capture()
+
+    if failed:
+        print("\n".join(not_ok_devs))
+    elif passed:
+        print("\n".join(ok_devs))
+    else:
+        console.rule("Validation Results")
+        for s in validation:
+            if s in ok_devs:
+                console.print(f"[bright_green]{s}[/]: {validation[s][0]}")
+            else:
+                _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
+                console.print(f"[bright_red]{s}[/]: {_msg}")
+        console.rule()
+        console.print(f"[italic dark_olive_green2]{caption}[/]")
+
+    outdata = console.end_capture()
+    typer.echo(outdata)
+
+    if outfile:
+        print(f"\n[cyan]Writing output to {outfile}... ", end="")
+        outfile.write_text(typer.unstyle(outdata))  # typer.unstyle(outdata) also works
+        print("[italic green]Done")
 
 @app.command(short_help="Perform Batch Add from file")
 def add(
@@ -652,54 +776,255 @@ def add(
 ) -> None:
     """Perform batch Add operations using import data from file."""
     yes = yes_ if yes_ else yes
-    # TODO common string helpers
-    if not show_example and not import_file:
-        print("""
-Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE
-Try 'cencli batch add ?' for help.
 
-Error: Missing argument 'IMPORT_FILE'.
-        """)
+    if show_example:
+        print(getattr(examples, f"add_{what}"))
+        return
+
+    if not import_file:
+        _msg = [
+            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE",
+            "Try 'cencli batch add ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
         raise typer.Exit(1)
+
     if what == "sites":
-        if show_example:
-            print("csv import with the following fields:")
-            print("If importing yaml or json the following fields can optionally be under a 'sites' key")
-            print("name,address,city,state,zipcode,country")
-            print("[italic]Note: Fields 'longitude,latitude' are also supported.")
-            print("[italic]      Central will calc long/lat if address is provided.[/]")
-            print("[italic]      but does not determine address from long/lat")
-            print("csv Example:")
-            print("name,address,city,state,zipcode,country")
-        else:
-            resp = batch_add_sites(import_file, yes)
-            cli.display_results(resp)
+        resp = batch_add_sites(import_file, yes)
+        cli.display_results(resp)
     elif what == "groups":
-        batch_add_groups(import_file, yes)
+        print(":warning: This flow is still in development.")
+        if typer.confirm("Are you sure you want to proceed?", abort=True):
+            batch_add_groups(import_file, yes)  # results displayed in batch_add_groups
     elif what == "devices":
-        if show_example:
-            print("\nAccepts csv import with the following columns (headers row must be at top of csv):")
-            print("[cyan]serial[/],[cyan]mac[/],[cyan]group[/],[cyan]license[/]")
-            print("Where '[cyan]group[/]' (pre-provision device to group) and")
-            print("      '[cyan]license[/]' (apply license to device) are optional.")
-            print("\n[bright_green].csv example[reset]:\n")
-            print("serial,mac,group,license")
-            print("CN12345678,aabbccddeeff,phl-access,foundation_switch_6300")
-            print("CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap")
-            print("CN12345680,aabb-ccdd-8899,chi-access,advanced_ap")
-            print("\n[italic]Note: MAC Address can be nearly any format imaginable.[/]")
-            print("[italic]      yaml and json also supported (hint: list of dicts).[/]")
-            # TODO document examples and uncomment below
-            # print("See https://central-api-cli.readthedocs.io for full examples.")
+        resp = batch_add_devices(import_file, yes)
+        cli.display_results(resp, tablefmt="action")
+
+
+# def delete_example_callback(ctx: typer.Context, show_example: bool):
+#     if ctx.resilient_parsing or not show_example:  # tab completion, return without validating
+#         return show_example
+
+#     if ctx.params.get("what", "") == "devices":
+
+def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
+    br = cli.central.BatchRequest
+    console = Console(emoji=False)
+    resp = None
+
+    data = data if "devices" not in data else data["devices"]
+
+    serials_in = []
+    for dev in data:
+        if isinstance(dev, dict) and "serial" in dev:
+            serials_in += [dev["serial"].upper()]
         else:
-            resp = batch_add_devices(import_file, yes)
-            cli.display_results(resp, tablefmt="action")
+            serials_in += [dev.upper()]
 
+    if not serials_in:
+        print(f":warning: Error No data resulted from parsing of import file.")
+        raise typer.Exit(1)
 
-@app.command()
+    resp = cli.cache.get_devices_with_inventory()
+    if not resp.ok:
+        cli.display_results(resp, stash=False, exit_on_fail=True)
+
+    combined_devs = [CentralObject("dev", data=r) for r in resp.output]
+
+    # build dictionary with {lic_name: [serial, ...]}
+    _msg = ""
+    licenses_to_remove = {}
+    for s in serials_in:
+        this_services = [i.get("services") for i in combined_devs if i["serial"] == s and i.get("services")]
+        for lic in this_services:
+            lic = lic.lower().replace(" ", "_")
+            licenses_to_remove[lic] = [*licenses_to_remove.get(lic, []), s]
+
+    # build confirmation msg and list of requests to remove the licenses
+    for lic in licenses_to_remove:
+        _msg += f"License [bright_green]{lic}[/bright_green] will be [bright_red]removed[/] from:\n"
+        for serial in licenses_to_remove[lic]:
+            this_inv = [i for i in combined_devs if i.serial == serial]
+            if not this_inv:
+                print("DEV NOTE: logic error building confirmation msg")
+                raise typer.Exit(1)
+            this_inv = this_inv[0]
+            _msg = f"{_msg}    {this_inv.summary_text}\n"
+
+    lic_reqs = [br(cli.central.unassign_licenses, serials=serials, services=services) for services, serials in licenses_to_remove.items()]
+    # TODO future... when we have the capability to remove device associations from GL
+    # inv_cache_delete_serials = [serial for v in licenses_to_remove.values() for serial in v]
+
+    # delete the devices from monitoring app.  Will have a "status" ('Up' or 'Down') in cache if they are in Monitoring
+    # devices will have status of None if in Inventory only
+    del_reqs = []
+    aps = [dev for dev in combined_devs if dev.generic_type == "ap" and dev.status and dev.serial in serials_in]
+    switches = [dev for dev in combined_devs if dev.generic_type == "switch" and dev.status and dev.serial in serials_in]
+    gws = [dev for dev in combined_devs if dev.generic_type == "gw" and dev.status and dev.serial in serials_in]
+    dev_cache_delete_serials = [d.serial for d in [*aps, *switches, *gws]]
+
+    _msg_del = ""
+    for dev_type, _devs in zip(["ap", "switch", "gateway"], [aps, switches, gws]):
+        if _devs:
+            func = getattr(cli.central, f"delete_{dev_type}")
+            del_reqs += [br(func, d.serial) for d in _devs]
+            _msg_del += "\n".join([f'    {d.summary_text}' for d in _devs])
+            _msg_del += "\n"
+
+    if _msg_del:
+        _msg = f"{_msg}The Following devices will be [bright_red]deleted[/] [italic](only applies to devices that have connected)[/]:\n"
+        _msg += f"{_msg_del}"
+        _msg += f"\n    [italic]**Devices will be deleted from Central Monitoring views."
+        _msg += f"\n    [italic]  Unassociating the device with Central in GreenLake currently must be done in GreenLake UI.\n"
+
+    r_cnt = len(lic_reqs) + len(del_reqs)
+    if not yes:
+        _msg += f"\n[italic dark_olive_green2]{r_cnt}-{r_cnt + 1} additional API calls will be perfomed[/]"
+
+    if r_cnt > 0:
+        console.print(_msg)
+    else:
+        print("Everything is as it should be, nothing to do.")
+        raise typer.Exit(0)
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        # unassign license, this causes dev to go down, reqd b4 you can remove from mon app
+        lic_resp, del_resp, resp = [], [], []
+        if lic_reqs:
+            lic_resp += cli.central.batch_request([*lic_reqs])
+
+        resp += lic_resp
+
+        # delay/try repeat x4 waiting for all devices to show as down
+        # APs usually show as down ~ 10s, sw ~ 20s sometimes more, ~ cx takes a while, often > 60s, gws ~ ??s
+        if (not lic_reqs or all([r.ok for r in lic_resp])) and del_reqs:
+            if lic_reqs:
+                print(":white_heavy_check_mark: [bright_green]All associated licenses removed.[/]")
+            del_reqs_try = del_reqs.copy()
+            del_reqs_devs = [*aps, *switches, *gws]
+            _delay = 15 if not switches else 40  # switches take longer to drop off
+            for _try in range(0,4):
+                if lic_reqs or _try > 0:
+                    _word = "more " if _try > 0 else ""
+                    _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+                    _delay -= (5 * _try) # reduce delay by 5 secs for each pass
+                    for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
+                        sleep(1)
+
+                performed_call = True
+
+                cli.central.request(cli.cache.update_dev_db)
+                dev_by_serial = cli.cache.devices_by_serial
+                del_reqs_serials = [d.serial for d in del_reqs_devs]
+                _now_status = {dev_by_serial[s]["name"]: dev_by_serial[s]["status"] for s in del_reqs_serials}
+                _up_now = list(_now_status.values()).count("Up")
+                if not _up_now or _try == 3:
+                    _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
+                    if _try == 3:  # attempts exausted dump the results including failures
+                        if not all([r.ok for r in _del_resp]):
+                            print("\n:warning: Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                        del_resp += _del_resp
+                    else:
+                        del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
+                else:
+                    print(f"{_up_now} out of {len(del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+                    performed_call = False
+
+                # attempts exausted dump the results including failures
+                # if _try == 3:
+                #     if not all([r.ok for r in _del_resp]):
+                #         print("\n:warning: Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                #     del_resp += _del_resp
+                # else:
+                #     del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
+                if performed_call:
+                    failed_idxs = [idx for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
+                    del_reqs_devs = [del_reqs_devs[idx] for idx in failed_idxs]
+                    del_reqs_try = [del_reqs_try[idx] for idx in failed_idxs]
+                # if del_reqs_try:
+                #     print(f"{len(del_reqs_try)} out of {len(del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+                if not del_reqs_try:
+                    break
+
+            resp += del_resp or _del_resp
+
+        if resp:
+            with console.status("Performing cache updates..."):
+                db_updates = []
+                if dev_cache_delete_serials:
+                    db_updates += [br(cli.cache.update_dev_db, data=dev_cache_delete_serials, remove=True)]
+                # if inv_cache_delete_serials:  # can't remove from inv_db until we have GL API to remove association
+                #     db_updates += [br(cli.cache.update_inv_db, data=dev_cache_delete_serials, remove=True)]
+                if all([r.ok for r in resp]):
+                    _ = cli.central.batch_request(db_updates)
+                else:
+                    # if any failed to delete do full update
+                    # TODO could save 1 API call if we track the index for devices that failed, the reqs list and serial list
+                    # should match up.
+                    _ = cli.central.request(cli.cache.update_dev_db)
+
+        return resp
+
+def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
+    central = cli.central
+    del_list = []
+    _msg_list = []
+    for i in data:
+        if isinstance(i, str) and isinstance(data[i], dict):
+            i = {"site_name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
+
+        if "site_id" not in i and "id" not in i:
+            if "site_name" in i or "name" in i:
+                _name = i.get("site_name", i.get("name"))
+                _id = cli.cache.get_site_identifier(_name).id
+                found = True
+                _msg_list += [_name]
+                del_list += [_id]
+        else:
+            found = False
+            for key in ["site_id", "id"]:
+                if key in i:
+                    del_list += [i[key]]
+                    _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
+                    found = True
+                    break
+
+        if not found:
+            if i.get("site_name", i.get("site", i.get("name"))):
+                site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
+                _msg_list += [site.name]
+                del_list += [site.id]
+                break
+            else:
+                typer.secho("Error getting site ids from import, unable to find required key", fg="red")
+                raise typer.Exit(1)
+
+    if len(_msg_list) > 7:
+        _msg_list = [*_msg_list[0:3], "...", *_msg_list[-3:]]
+    print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
+    print("\n".join([f"  [cyan]{m}[/]" for m in _msg_list]))
+    if yes or typer.confirm(f"Proceed?", abort=True):
+        resp = central.request(central.delete_site, del_list)
+        if resp:
+            cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
+            if len(cache_del_res) != len(del_list):
+                log.warning(
+                    f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
+                    f"but we tried to delete {len(del_list)} sites.",
+                    show=True
+                )
+
+@app.command(short_help="Delete devices.")
 def delete(
     what: BatchDelArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(..., exists=True, readable=True),
+    import_file: Path = typer.Argument(None, exists=True, readable=True),
+    show_example: bool = typer.Option(
+        False, "--example",
+        help="Show Example import file format.",
+        show_default=False,
+    ),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -708,69 +1033,63 @@ def delete(
     debug: bool = typer.Option(
         False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
     ),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Delete operations using import data from file."""
+    """Perform batch Delete operations using import data from file.
+
+    cencli delete devices <IMPORT_FILE>
+        will unassign any licenses associated to the device, and delete it from Central UI
+        if it has connected to central.  (sites, labels, groups are reset as a result)
+
+    cencli delete sites <IMPORT_FILE> and cencli delte groups <IMPORT_FILE>
+        Do what you'd expect.
+
+    NOTE: The Aruba Central API gateway currently does not have an API endpoint to remove
+    device assignments in GreenLake.
+    """
     yes = yes_ if yes_ else yes
-    central = cli.central
+    # TODO consider moving all example imports to cencli show import ...
+    if show_example:
+        print(getattr(examples, f"delete_{what}"))
+        return
+
+    # TODO common string helpers... started strings.py
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch delete [OPTIONS] ['devices'|'sites'|'groups'] IMPORT_FILE",
+            "Try 'cencli batch delete ?' for help.",
+            "",
+            "Error: Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE or --show-example"
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+
+    # TODO consistent model and structure for config.get_file_data (pass in a pydantic model)
+    data = config.get_file_data(import_file)
+    if hasattr(data, "dict"):  # csv
+        data = data.dict
+    if data and isinstance(data, dict) and "devices" in data:
+        data = data["devices"]
+
+    # -- // Gather data from import file \\ --
     data = config.get_file_data(import_file)
     if hasattr(data, "dict"):  # csv
         data = data.dict
 
-    resp = None
-    if what == "sites":
-        del_list = []
-        _msg_list = []
-        for i in data:
-            if isinstance(i, str) and isinstance(data[i], dict):
-                i = {"site_name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
-
-            if "site_id" not in i and "id" not in i:
-                if "site_name" in i or "name" in i:
-                    _name = i.get("site_name", i.get("name"))
-                    _id = cli.cache.get_site_identifier(_name).id
-                    found = True
-                    _msg_list += [_name]
-                    del_list += [_id]
-            else:
-                found = False
-                for key in ["site_id", "id"]:
-                    if key in i:
-                        del_list += [i[key]]
-                        _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
-                        found = True
-                        break
-
-            if not found:
-                if i.get("site_name", i.get("site", i.get("name"))):
-                    site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
-                    _msg_list += [site.name]
-                    del_list += [site.id]
-                    break
-                else:
-                    typer.secho("Error getting site ids from import, unable to find required key", fg="red")
-                    raise typer.Exit(1)
-
-        if len(_msg_list) > 7:
-            _msg_list = [*_msg_list[0:3], "...", *_msg_list[-3:]]
-        typer.secho("\nSites to delete:", fg="bright_green")
-        typer.echo("\n".join([f"  {m}" for m in _msg_list]))
-        if yes or typer.confirm(f"\n{typer.style('Delete', fg='red')} {len(del_list)} sites", abort=True):
-            resp = central.request(central.delete_site, del_list)
-            if resp:
-                cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
-                if len(cache_del_res) != len(del_list):
-                    log.warning(
-                        f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
-                        f"but we tried to delete {len(del_list)} sites.",
-                        show=True
-                    )
-
-    cli.display_results(resp)
+    if what == "devices":
+        resp = batch_delete_devices(data, yes=yes)
+        cli.display_results(resp, tablefmt="action")
+    elif what == "sites":
+        resp = batch_delete_sites(data, yes=yes)
+    elif what == "groups":
+        print("Batch Delete Groups is not implemented yet.")
+        raise typer.Exit(1)
 
 
 @app.command(help="Batch rename APs based on import file or site/LLDP info.")
@@ -778,10 +1097,10 @@ def rename(
     what: BatchRenameArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),  # TODO completion
     lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
-    ap: str = typer.Option(None, metavar=iden_meta_vars.dev, help="[LLDP rename] Perform on specified AP",),
+    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP",),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label",),
     group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group",),
-    site: str = typer.Option(None, metavar=iden_meta_vars.site, help="[LLDP rename] Perform on APs in specified site",),
+    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site",),
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model",),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),

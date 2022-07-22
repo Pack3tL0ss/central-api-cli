@@ -102,6 +102,7 @@ STRIP_KEYS = [
     "group",
     "clients",
     "sites",
+    "labels",
     "neighbors",
     "audit_logs",
     "vlans",
@@ -218,9 +219,11 @@ class TemplateLevel1(str, Enum):
 
 class CacheArgs(str, Enum):
     devices = "devices"
+    inventory = "inventory"
     sites = "sites"
     templates = "templates"
     groups = "groups"
+    labels = "labels"
     logs = "logs"
     events = "events"
 
@@ -234,15 +237,24 @@ class KickArgs(str, Enum):
 class BatchApArgs(str, Enum):
     rename = "rename"
 
+
 class BatchAddArgs(str, Enum):
     sites = "sites"
     groups = "groups"
     devices = "devices"
 
+
+class BatchDelArgs(str, Enum):
+    sites = "sites"
+    # groups = "groups"
+    devices = "devices"
+
+
 class BatchRenameArgs(str, Enum):
     sites = "sites"
     aps = "aps"
     groups = "groups"
+
 
 class RenameArgs(str, Enum):
     group = "group"
@@ -336,6 +348,7 @@ class ArgToWhat:
         self.wlan = self.wlans = "wlan"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
+        self.device = self.devices = self.dev = "device"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"

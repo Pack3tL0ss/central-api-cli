@@ -147,6 +147,29 @@ class Utils:
         [out.append(i) for i in _list if i not in out and i is not None]
         return out if not sort else sorted(out)
 
+
+    @staticmethod
+    def isserial(serial: Union[str, List[str]]) -> bool:
+        """Validate the provided str or list of strings appears to be a serial number.
+
+        Serial validation checks that the first 2 characters of the serial are letters,
+        all charachters are alpha-numeric, and that there are 9 or more characters.
+
+        Args:
+            serial (Union[str, List[str]]): single serial number of list of serial numbers
+
+        Returns:
+            bool: True if all provided strings appear to be serial numbers False if not.
+        """
+        serial = serial if isinstance(serial, list) else [serial]
+        ret = True
+        for s in serial:
+            if not all([char.isalpha() for char in s[0:2]]) or not all([char.isalnum() for char in s[2:]]) or len(s) < 8:
+                ret = False
+                break
+
+        return ret
+
     @staticmethod
     def is_reachable(host: str, port: Union[str, list], timeout: int = 3, silent: bool = False):
         s = socket.socket()
@@ -458,7 +481,7 @@ class Utils:
         # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs
         if tablefmt in ['json', 'yaml', 'yml']:
             outdata = self.listify(outdata)
-            if outdata and 'name' in outdata[0]:
+            if outdata and isinstance(outdata[0], dict) and 'name' in outdata[0]:
                 outdata: Dict[str, Dict[str, Any]] = {
                     item['name']: {k: v for k, v in item.items() if k != 'name'}
                     for item in outdata

@@ -23,15 +23,15 @@ import typer
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                            clirefresh, clishow, clitest, cliupdate,
-                            cliupgrade, clitshoot, config, log, utils)
+                            clirefresh, clishow, clitest, cliupdate, cliupgrade,
+                            clitshoot, cliassign, cliunassign, models, cleaner, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (cli, cliadd, clibatch, clicaas, cliclone,
-                                clidel, clirefresh, clishow, clitest,
-                                cliupdate, cliupgrade, clitshoot, config, log, utils)
+        from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
+                                clirefresh, clishow, clitest, cliupdate, cliupgrade,
+                                clitshoot, cliassign, cliunassign, models, cleaner, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -52,8 +52,10 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS)
 app.add_typer(clishow.app, name="show",)
-app.add_typer(clidel.app, name="delete")
+app.add_typer(clidel.app, name="delete",)
 app.add_typer(cliadd.app, name="add",)
+app.add_typer(cliassign.app, name="assign",)
+app.add_typer(cliunassign.app, name="unassign",)
 app.add_typer(cliclone.app, name="clone",)
 app.add_typer(cliupdate.app, name="update",)
 app.add_typer(cliupgrade.app, name="upgrade",)
@@ -64,17 +66,11 @@ app.add_typer(clitest.app, name="test",)
 app.add_typer(clitshoot.app, name="tshoot",)
 
 
-class MoveArgs(str, Enum):
-    site = "site"
-    group = "group"
-
-
 @app.command(
-    short_help="Move device(s) to a defined group and/or site",
     help="Move device(s) to a defined group and/or site.",
 )
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=f"[{iden.dev} ...]", autocompletion=cli.cache.dev_kwarg_completion),
+    device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion),
     kw1: str = typer.Argument(
         None,
         metavar="",
@@ -110,6 +106,12 @@ def move(
         hidden=True,
         autocompletion=cli.cache.site_completion,
     ),
+    reset_group: bool = typer.Option(
+        False,
+        "--reset-group",
+        show_default=False,
+        help="Reset group membership.  (move to the defined default group)",
+    ),
     cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -133,50 +135,75 @@ def move(
             device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site"]])
 
     # Don't think it's possible to hit this (typer or cache lookup will fail first)
-    if not device:
-        print("Missing Required argument '[[name|ip|mac|serial] ...]'.")
-        raise typer.Exit(1)
+    # if not device and not import_file:
+    #     print("Missing Required argument '[[name|ip|mac|serial] ...]'.")
+    #     raise typer.Exit(1)
 
     group = group or _group
+
+    if reset_group and not group:
+        default_group_resp = cli.central.request(cli.central.get_default_group)
+        default_group = default_group_resp.output
+        group = default_group
+    elif reset_group and group:
+        print(f"Warning [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
+
     site = site or _site
+    _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
         print("Missing Required Argument, group and/or site is required.")
         raise typer.Exit(1)
 
-    dev = [cli.cache.get_dev_identifier(d) for d in device]
-    devs_by_type = {
-    }
-    devs_by_site = {
-    }
+    # TODO improve logic.  if they are moving to a group we can use inventory as backup
+    # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
+    dev = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in device]
+    if any([d is None for d in dev]):
+        # cache lookup failed... will happen if device has not connected yet
+        inv = cli.central.request(cli.central.get_device_inventory)
+        inventory = [models.Inventory(**i) for i in cleaner.get_device_inventory(inv.output)]
+        for idx, (from_input, from_cache) in enumerate(zip(device, dev)):
+            if from_cache is None:
+                inv_dev = [d for d in inventory if d.serial == from_input.upper()]
+                if not inv_dev:
+                    print(f"Unable to find match for {from_input} Aborting.")
+                    raise typer.Exit(1)
+                else:
+                    dev[idx] = CentralObject("dev", inv_dev[0].dict())
+                    # TODO add Exit(1) if device has not connected and they try to move it to a site
+
+    devs_by_type, devs_by_site = {}, {}
     dev_all_names, dev_all_serials, = [], []
     for d in dev:
         if d.generic_type not in devs_by_type:
             devs_by_type[d.generic_type] = [d]
         else:
             devs_by_type[d.generic_type] += [d]
-        dev_all_names += [d.name]
+        dev_all_names += [f"[reset][cyan]{d.name}[/]|[cyan]{d.serial}[/]"]
         dev_all_serials += [d.serial]
 
-        if site and d.site:
+        if site and d.get("site"):
+            if d.site == _site.name:  # device is already in desired site
+                continue
+
             if f"{d.site}~|~{d.generic_type}" not in devs_by_site:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] = [d]
             else:
                 devs_by_site[f"{d.site}~|~{d.generic_type}"] += [d]
 
     if len(dev_all_names) > 2:
-        _msg_devs = ", ".join(f"[cyan]{n}[/]" for n in dev_all_names)
+        _msg_devs = ", ".join(dev_all_names)
     else:
-        _msg_devs = " & ".join(f"[cyan]{n}[/]" for n in dev_all_names)
+        _msg_devs = " & ".join(dev_all_names)
 
     confirm_msg = f"[bright_green]Move[/] {_msg_devs}\n"
     if group:
-        _group = cli.cache.get_group_identifier(group)
+        _group = CentralObject("group", {"name": "unprovisioned"}) if group.lower() == "unprovisioned" else cli.cache.get_group_identifier(group)
         confirm_msg += f"  To Group: [cyan]{_group.name}[/]\n"
         if cx_retain_config:
             confirm_msg += f"  [italic]Config for CX switches will be preserved during move.[/]\n"
     if site:
-        _site = cli.cache.get_site_identifier(site)
+        # _site = cli.cache.get_site_identifier(site)
         confirm_msg += f"  To Site: [cyan]{_site.name}[/]\n"
         if devs_by_site:
             confirm_msg += "\n  [italic bright_red]Devices will be removed from current sites.[/]\n"
@@ -223,6 +250,9 @@ def move(
         ]
 
     # only moving site, potentially multiple calls (for each device_type)
+    # TODO this will issue the call even if the device is found to already be in the site
+    # the cache can get out of sync because this move op does not update the cache  Need to do that and part of that
+    # problem is solved.  partial workup to avoid in scratch, but cache update should be done first
     elif confirmed and _site:
         for _type in devs_by_type:
             serials = [d.serial for d in devs_by_type[_type]]
@@ -235,7 +265,9 @@ def move(
     if site_rm_resp:
         resp = [*site_rm_resp, *resp]
 
-    cli.display_results(resp, tablefmt="action", ok_status=500)
+    cli.display_results(resp, tablefmt="action")  #, ok_status=500)
+    # TODO update cache when device succesfully moved
+    # TODO ok_status is not used in display_results anymore, impacted colorization I think?  Need to verify.
 
 
 @app.command(short_help="Bounce Interface or PoE on Interface")
@@ -317,91 +349,8 @@ def remove(
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
 
-# TODO Add test
-# FIXME can unhide once adapt to query device inventory / devices not checked into central yet.
-@app.command(short_help="Assign License to device(s)", hidden=False)
-def assign(
-    license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
-    serial_nums: List[str] = typer.Argument(...,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    """Assign Licenses to devices by serial number.
 
-    Device must already be added to Central.  Use 'cencli show inventory' to see devices that have been added.
-    Use '--license' option with 'cencli add device ...' to add device and assign license in one command.
-    """
-    yes = yes_ if yes_ else yes
-    # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
-
-    # TODO add confirmation method builder to output class
-    _msg = f"Assign [bright_green]{license}[/bright_green] to"
-    if len(serial_nums) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = serial_nums[0]
-        _msg = f"{_msg} [cyan]{dev}[/]"
-    print(_msg)
-    if yes or typer.confirm("\nProceed?"):
-        resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
-        cli.display_results(resp, tablefmt="action")
-
-
-@app.command(help="unassign License from device(s)")
-def unassign(
-    license: LicenseTypes = typer.Argument(..., help="License type to unassign from device(s)."),
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    yes = yes_ if yes_ else yes
-    try:
-        devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
-    except typer.Exit:  # allows un-assignment of devices that never checked into Central
-        print("[bright_green]Checking full Inventory[/]")
-        inv = cli.central.request(cli.central.get_device_inventory)
-        serials_in_inventory = [i.get("serial", "ERROR") for i in inv.output]
-        class Device:
-            def __init__(self, serial):
-                self.serial = serial
-                self.summary_text = f"Device with serial {serial}"
-        dev_out = []
-        for dev in devices:
-            if dev.upper() not in serials_in_inventory:
-                print(f"{dev} not found in inventory.")
-                raise typer.Exit(1)
-            else:
-                dev_out += [Device(dev)]
-        devices = dev_out
-
-    _msg = f"Unassign [bright_green]{license}[/bright_green] from"
-    if len(devices) > 1:
-        _dev_msg = '\n    '.join([dev.summary_text for dev in devices])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = devices[0]
-        _msg = f"{_msg} {dev.summary_text}"
-    print(_msg)
-
-    if yes or typer.confirm("\nProceed?"):
-        resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license.name)
-        cli.display_results(resp, tablefmt="action")
-
-
-@app.command(short_help="Reboot a device")
+@app.command(help="Reboot a device")
 def reboot(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -416,12 +365,15 @@ def reboot(
     yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     # TODO add swarm cache and support for central.send_command_to_swarm
-    reboot_msg = f"{typer.style('*reboot*', fg='red')} {typer.style(f'{dev.name}|{dev.serial}', fg='cyan')}"
-    if yes or typer.confirm(typer.style(f"Please Confirm: {reboot_msg}", fg="cyan")):
+
+    console = Console(emoji=False)
+    _msg = "Reboot" if not yes else "Rebooting"
+    _msg = f"{_msg} [cyan]{dev.rich_help_text}[/]"
+    console.print(_msg)
+
+    if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'reboot')
-        typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Blink LED")
@@ -443,12 +395,11 @@ def blink(
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
     cli.display_results(resp, tablefmt="action")
-    # typer.secho(str(resp), fg="green" if resp else "red")
 
 
-@app.command(short_help="Factory Default A Switch", help="Factory Default A Switch")
+@app.command(help="Factory Default A Switch (ArubaOS-SW only)")
 def nuke(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -464,7 +415,8 @@ def nuke(
         print(f"[bright_red]ERROR:[/] This command only applies to AOS-SW (switches), not {dev.type.upper()}")
         raise typer.Exit(1)
 
-    print(f"You are about to [bright_red blink]Factory Default[/] [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]")
+    _msg = "Factory Default" if not yes else "Factory Defaulting"
+    print(f"[bright_red blink]{_msg}[/] [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]")
     if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
         cli.display_results(resp, tablefmt="action")
@@ -482,7 +434,7 @@ def save(
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
-    typer.secho(str(resp), fg="green" if resp else "red")
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
@@ -497,7 +449,6 @@ def sync(
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
-    # typer.secho(str(resp), fg="green" if resp else "red")
     cli.display_results(resp, tablefmt="action")
 
 
@@ -524,7 +475,7 @@ def rename(
         if yes or typer.confirm("proceed?", abort=True):
             resp = cli.central.request(cli.central.update_group_name, group_ap.name, new_name)
 
-            # XXX Doesn't actually appear to be valid for any group type
+            # API-FLAW Doesn't actually appear to be valid for any group type
             if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
                 resp.output["description"] = f"{group_ap.name} is an AOS_10X group, " \
                     "rename only supported on AOS_8X groups. Use clone."
@@ -533,7 +484,7 @@ def rename(
 
     elif what == "ap":
         group_ap = cli.cache.get_dev_identifier(group_ap, dev_type="ap")
-        print(f"Please Confirm: rename ap [red]{group_ap.name}[/red] -> [bright_green]{new_name}[/bright_green]")
+        print(f"Please Confirm: rename ap [bright_red]{group_ap.name}[/] -> [bright_green]{new_name}[/]")
         print("    [italic]Will result in 2 API calls[/italic]\n")
         if yes or typer.confirm("Proceed?", abort=True):
             resp = cli.central.request(cli.central.update_ap_settings, group_ap.serial, new_name)
@@ -542,12 +493,12 @@ def rename(
 
 # TODO cache show clients get details for client make this easier
 # currently requires the serial of the device the client is connected to
-@app.command(short_help="Disconnect a client",)
+@app.command(help="Disconnect a WLAN client",)
 def kick(
     device: str = typer.Argument(
         ...,
         metavar=f"CONNECTED_DEVICE{iden.dev}",
-        autocompletion=cli.cache.dev_completion
+        autocompletion=cli.cache.dev_ap_completion
     ),
     what: KickArgs = typer.Argument(...,),
     who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
@@ -560,7 +511,12 @@ def kick(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Disconnect a client."""
+    """Disconnect a client.
+
+    This command currently only applies to APs
+    """
+    # TODO cache the client details so they don't have to specify the connected_device but can
+    # kick client by hostname/username/ip/mac/...
     yes = yes_ if yes_ else yes
     if device in ["all", "mac", "wlan"]:
         typer.secho(f"Missing device parameter required before keyword {device}", fg="red")

@@ -227,6 +227,8 @@ class Response:
                     ) for k, v in self.output.items() if k != "status" and (v or v is False)
                 ]
             )
+        else:
+            r = f"  {self.output}"
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
@@ -470,6 +472,11 @@ class Session():
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
+                # TODO handle the following... pause/retry
+                # Request 3 [POST: /platform/licensing/v1/subscriptions/unassign]
+                #     Response:
+                #     status code: 503
+                #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
                 self.spinner.fail(fail_msg)
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
@@ -688,7 +695,7 @@ class Session():
         log.debug("PAUSE {_pause:.2f}s...")
         time.sleep(_pause)
 
-    async def _batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+    async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False,) -> List[Response]:
         self.silent = True
         m_resp = []
         _tot_start = time.perf_counter()
@@ -698,7 +705,7 @@ class Session():
                 *api_calls[0].args,
                 **api_calls[0].kwargs
                 )
-            if not resp or len(api_calls) == 1:
+            if (not resp and not continue_on_fail) or len(api_calls) == 1:
                 return [resp]
 
             m_resp: List[Response] = [resp]
@@ -733,7 +740,7 @@ class Session():
 
     # TODO return a BatchResponse object (subclass Response) where OK indicates all OK
     # and method that returns merged output from all resp...
-    def batch_request(self, api_calls: List[BatchRequest],) -> List[Response]:
+    def batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False) -> List[Response]:
         """non async to async wrapper for multiple parallel API calls
 
         First entry is ran alone, if successful the remaining calls
@@ -741,11 +748,13 @@ class Session():
 
         Args:
             api_calls (List[BatchRequest]): List of BatchRequest objects.
+            continue_on_fail (bool, optional): Continue with subsequent requests if first request fails.
+                defaults to False.  Only the first request is validated for success.
 
         Returns:
             List[Response]: List of centralcli.response.Response objects.
         """
-        return asyncio.run(self._batch_request(api_calls))
+        return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = self.auth.central_info["base_url"] + url

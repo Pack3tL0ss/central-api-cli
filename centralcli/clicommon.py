@@ -378,7 +378,7 @@ class CLICommon:
         stash: bool = True,
         pad: int = None,
         exit_on_fail: bool = False,
-        ok_status: Union[int, List[int], Dict[int, str]] = None,
+        # ok_status: Union[int, List[int], Dict[int, str]] = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -430,7 +430,9 @@ class CLICommon:
                 caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
 
             for idx, r in enumerate(resp):
-                # Multi request url line
+                # Multi request url line (example below)
+                # Request 1 [POST: /platform/device_inventory/v1/devices]
+                #  Response:
                 m_colors = {
                     "GET": "bright_green",
                     "DELETE": "red",
@@ -451,38 +453,37 @@ class CLICommon:
                 if self.raw_out:
                     tablefmt = "raw"
 
-                # if not r.output:
-                #     c = Console(record=True)
-                #     c.begin_capture()
-                #     c.print(f"  Status Code: [{fg}]{r.status}[/]")
-                #     c.print(f"  :warning: Empty Response.  This may be normal.")
-                #     r.output = c.end_capture()
+                # Nothing returned in response payload
                 if not r.output:
                     print(f"  Status Code: [{fg}]{r.status}[/]")
                     print(f"  :warning: Empty Response.  This may be normal.")
 
                 if not r or tablefmt in ["action", "raw"]:
 
+                    # raw output (unformatted response from Aruba Central API GW)
                     if tablefmt == "raw":
-                        # dots = f"[{fg}]{'.' * 16}[/{fg}]"
                         status_code = f"[{fg}]status code: {r.status}[/{fg}]"
                         print(r.url)
                         print(status_code)
                         if not r.ok:
                             print(r.error)
-                        # print(f"{dots}\n{status_code}\n{dots}")
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         print(r.raw)
 
                         if outfile:
                             self.write_file(outfile, r.raw)
 
+                    # prints the Response objects __str__ method which includes status_code
+                    # and formatted contents of any payload. example below
+                    # status code: 201
+                    # Success
                     else:
-                        print(f"[{fg}]{r}")
+                        console.print(f"[{fg}]{r}")
 
                     if idx + 1 == len(resp):
                         console.print(f"\n{rl_str}")
 
+                # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
                 else:
                     self._display_results(
                         r.output,
