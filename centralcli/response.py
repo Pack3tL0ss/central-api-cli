@@ -366,6 +366,7 @@ class Session():
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
+        self.running_spinners = []
 
     @property
     def aio_session(self):
@@ -423,18 +424,19 @@ class Session():
             try:
                 req_log = LoggedRequests(_url.path_qs, method)
 
-                # -- // THE API REQUEST \\ --
-                #  -- // RATE LIMIT TEST \\ --
-                # await self.wait_for_token()
                 _start = time.monotonic()
                 now = time.monotonic() - INIT_TS
+
                 _try_cnt = [u.url for u in self.requests].count(_url.path_qs) + 1
                 self.rl_log += [
                     f'{now:.2f} [{method}]{_url.path_qs} Try: {_try_cnt}'
                 ]
-                #  -- // RATE LIMIT TEST \\ --
+
+                # TODO spinner steps on each other during long running requests
+                # need to check store prev msg when updating then restore it if that thread is still running
                 self.spinner.start(spin_txt_run)
-                self.req_cnt += 1
+                self.running_spinners += [spin_txt_run]
+                self.req_cnt += 1  # TODO may have deprecated now that logging requests
                 # TODO move batch_request _batch_request, get, put, etc into Session
                 # change where client is instantiated to _request / _batch_requests pass in the client
                 # remove aio_session property call ClientSession() direct
@@ -478,6 +480,7 @@ class Session():
                 #     status code: 503
                 #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
                 self.spinner.fail(fail_msg)
+                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
@@ -496,7 +499,12 @@ class Session():
                     self.rl_log += [
                         f"{time.monotonic() - INIT_TS:.2f} [[bright_green]{resp.error}[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
                     ]
-                self.spinner.stop()
+                # This handles long running API calls where subsequent calls finish before the previous...
+                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
+                if self.running_spinners:
+                    self.spinner.text = self.running_spinners[-1]
+                else:
+                    self.spinner.stop()
                 break
 
         return resp
