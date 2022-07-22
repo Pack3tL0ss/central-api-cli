@@ -633,8 +633,9 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     if not warn or typer.confirm("Warnings exist proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
-        if all([r.ok for r in resp]):
-            cli.cache.update_inv_db(data=data)
+        # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+        _data = None if not all([r.ok for r in resp]) else data
+        cli.cache.update_inv_db(data=_data)
         return resp
 
 
@@ -642,6 +643,10 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
 def verify(
     what: BatchAddArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(..., exists=True),
+    no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
+    failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
+    passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
+    outfile: Path = typer.Option(None, "--out", help="Write output to a file (and display)"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
         callback=cli.default_callback,
@@ -671,12 +676,17 @@ def verify(
         data = data["devices"]
 
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
-    resp = cli.cache.get_devices_with_inventory()
+
+    resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         cli.display_results(resp, stash=False, exit_on_fail=True)
     central_devs = [CentralObject("dev", data=r) for r in resp.output]
 
-    file_by_serial = {d["serial"]: {k: v for k, v in d.items() if k != "serial"} for d in data}
+    file_by_serial = {
+        d["serial"]: {
+            k: v if k != "license" else v.lower().replace("-", "_").replace(" ", "_") for k, v in d.items() if k != "serial"
+        } for d in data
+    }
     central_by_serial = {
         d.serial: {
             k: v if k != "services" else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
@@ -684,41 +694,65 @@ def verify(
         for d in central_devs
     }
 
-    ok_devs, not_ok_devs = [], []
+    validation = {}
     for s in file_by_serial:
+        validation[s] = []
         if s not in central_by_serial:
-            not_ok_devs += [{"serial": s, "validation": "Device not in inventory"}]
+            validation[s] += ["Device not in inventory"]
             continue
+        _pfx = f"[cyan]{central_by_serial[s]['type'].upper()}[/] is in inventory, "
         if file_by_serial[s].get("group"):
             if not central_by_serial[s].get("status"):
-                not_ok_devs += [{"serial": s, "validation": "Device not connected yet, not able to validate pre-provisioned group via API."}]
+                validation[s] += [f"{_pfx}but has not connected to Central.  Not able to validate pre-provisioned group via API."]
             elif not central_by_serial[s].get("group"):
-                not_ok_devs += [{"serial": s, "validation": f"Group: [cyan]{file_by_serial[s]['group']}[/] from import != [italic]None[/] reflected in Central."}]
+                validation[s] += [f"{_pfx}Group: [cyan]{file_by_serial[s]['group']}[/] from import != [italic]None[/] reflected in Central."]
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
-                not_ok_devs += [{"serial": s, "validation": f"Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."}]
+                validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
 
         if file_by_serial[s].get("license"):
-            if file_by_serial[s]["license"] != central_by_serial[s]["services"]:
-                not_ok_devs += [{"serial": s, "validation": f"Group: [bright_red]{file_by_serial[s]['license']}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."}]
+            _pfx = "" if _pfx in str(validation[s]) else _pfx
+            if file_by_serial[s]["license"] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s]['license']}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
 
-        if s not in str(not_ok_devs):
-            _kv = "\n".join([f"{k}: {v}" for k, v in central_by_serial[s].items()])
-            ok_devs += [{"serial": s, "validation": _kv}]
+    ok_devs, not_ok_devs = [], []
+    for s in file_by_serial:
+        if not validation[s]:
+            ok_devs += [s]
+            _msg = "Added to Inventory: [bright_green]OK[/]"
+            for field in ["license", "group"]:
+                if field in file_by_serial[s] and file_by_serial[s][field]:
+                    _msg += f", {field.title()} [bright_green]OK[/]"
+            validation[s] += [_msg]
+        else:
+            not_ok_devs += [s]
 
+    caption = f"Out of {len(file_by_serial)} in {import_file.name} {len(not_ok_devs)} potentially have validation issue, and {len(ok_devs)} validate OK."
     console = Console(emoji=False, record=True)
-    for d in [not_ok_devs, ok_devs]:
-        for row in d:
-            console.begin_capture()
-            console.print(row["validation"])
-            row["validation"] = console.end_capture()
+    console.begin_capture()
 
-    caption = f"Out of {len(file_by_serial)} in {import_file.name}. {len(not_ok_devs)} potentially has validation issue, and {len(ok_devs)} validate OK."
-    if not_ok_devs:
-        cli.display_results(data=not_ok_devs, title="Devices with potential validation issues", caption=None if ok_devs else caption)
-    if ok_devs:
-        cli.display_results(data=ok_devs, title="Devices passing validation", caption=caption)
+    if failed:
+        print("\n".join(not_ok_devs))
+    elif passed:
+        print("\n".join(ok_devs))
+    else:
+        console.rule("Validation Results")
+        for s in validation:
+            if s in ok_devs:
+                console.print(f"[bright_green]{s}[/]: {validation[s][0]}")
+            else:
+                _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
+                console.print(f"[bright_red]{s}[/]: {_msg}")
+        console.rule()
+        console.print(f"[italic dark_olive_green2]{caption}[/]")
 
+    outdata = console.end_capture()
+    typer.echo(outdata)
+
+    if outfile:
+        print(f"\n[cyan]Writing output to {outfile}... ", end="")
+        outfile.write_text(typer.unstyle(outdata))  # typer.unstyle(outdata) also works
+        print("[italic green]Done")
 
 @app.command(short_help="Perform Batch Add from file")
 def add(
