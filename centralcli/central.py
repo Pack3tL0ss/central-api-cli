@@ -3725,13 +3725,10 @@ class CentralApi(Session):
 
                 json_data += [_this_dict]
 
-            # json_data = [{_keys.get(k, k): v for k, v in d.items() if k in  [*_keys.keys(), *_keys.values()]} for d in device_list]
-
             to_group = {d.get("group"): [] for d in device_list if "group" in d}
             for d in device_list:
                 if "group" in d:
                     to_group[d["group"]].append(d.get("serial_num", d.get("serial")))
-            # _ = [to_group[d["group"]].append(d.get("serial_num", d.get("serial"))) for d in device_list]
 
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
@@ -3764,6 +3761,7 @@ class CentralApi(Session):
             raise ValueError("mac_address and serial_num or device_list is required")
 
         # Perform API call(s) to Central API GW
+        # TODO break out the add device call into it's own method.
         if to_group or license_kwargs:
             # Add devices to central.  1 API call for 1 or many devices.
             br = self.BatchRequest
