@@ -7,7 +7,6 @@ from time import sleep
 
 from pathlib import Path
 from typing import List, Tuple, Union
-from cache import CentralObject
 
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
@@ -36,6 +35,7 @@ from centralcli.constants import (
 )
 from centralcli.strings import ImportExamples
 examples = ImportExamples()
+from centralcli.cache import CentralObject
 
 iden = IdenMetaVars()
 tty = utils.tty

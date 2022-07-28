@@ -27,7 +27,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from constants import DevTypes
+from centralcli.constants import DevTypes
 
 def epoch_convert(func):
     @functools.wraps(func)
