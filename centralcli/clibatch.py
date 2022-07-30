@@ -872,7 +872,7 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
 
     r_cnt = len(lic_reqs) + len(del_reqs)
     if not yes:
-        _call_cnt_msg = f"\n[italic dark_olive_green2]{r_cnt} additional API call{'s' if len(r_cnt) > 1 else ''} will be perfomed"
+        _call_cnt_msg = f"\n[italic dark_olive_green2]{r_cnt} additional API call{'s' if r_cnt > 1 else ''} will be perfomed"
         _call_cnt_msg += f". {r_cnt + 1} if there are any failures during deletion (to re-sync status with Central).[/]" if del_reqs else ".[/]"
         _msg += _call_cnt_msg
 
