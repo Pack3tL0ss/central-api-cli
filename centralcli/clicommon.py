@@ -436,7 +436,7 @@ class CLICommon:
                 m_colors = {
                     "GET": "bright_green",
                     "DELETE": "red",
-                    "PATH": "dark_orange3",
+                    "PATCH": "dark_orange3",
                     "PUT": "dark_orange3",
                     "POST": "dark_orange3"
                 }
