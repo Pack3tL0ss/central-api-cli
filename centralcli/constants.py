@@ -118,6 +118,8 @@ STRIP_KEYS = [
     "settings",
     "items",
     "poe_details",
+    "trails",
+    "servers",
 ]
 
 
