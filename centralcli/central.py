@@ -432,6 +432,42 @@ class CentralApi(Session):
 
         return resp
 
+    async def get_client_roaming_history(
+        self,
+        macaddr: str,
+        calculate_total: bool = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Wireless Client Mobility Trail.
+
+        Args:
+            macaddr (str): MAC address of the Wireless Client to be queried
+            calculate_total (bool, optional): Whether to calculate total transitions
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
+
+        params = {
+            'calculate_total': calculate_total,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
     async def get_wireless_clients(
         self,
         group: str = None,
@@ -1242,6 +1278,57 @@ class CentralApi(Session):
 
         return await self.get(url, headers=headers)
 
+    async def get_bssids(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        cluster_id: str = None,
+        calculate_total: bool = None,
+        sort: str = None,
+        offset: int = 0,
+        limit: int = 1000,
+    ) -> Response:
+        """List BSSIDs.
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by AP MAC address
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            calculate_total (bool, optional): Whether to calculate total APs
+            sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
+                +swarm_id, -swarm_id.Default is '+serial'
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/bssids"
+
+        params = {
+            'serial': serial,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            'macaddr': macaddr,
+            'cluster_id': cluster_id,
+            'calculate_total': calculate_total,
+            'sort': sort,
+            "offset": offset,
+            "limit": limit,
+        }
+
+        return await self.get(url, params=params)
+
     # TODO change dev_type to use [gw, sw, cx, ap, switch]  make consistent for all calls
     async def get_devices(
         self,
@@ -1718,19 +1805,6 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_ap_neighbors(self, device_serial: str) -> Response:
-        """Get neighbor details reported by AP via LLDP.
-
-        Args:
-            device_serial (str): Device serial number.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/topology_external_api/apNeighbors/{device_serial}"
-
-        return await self.get(url)
-
     async def get_site_vlans(self, site_id: int, search: str = None, offset: int = 0, limit: int = 100) -> Response:
         """Get vlan list of a site.
 
@@ -2019,7 +2093,16 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
+        """Get neighbor details reported by AP via LLDP.
+
+        Args:
+            device_serial (str): Device serial number.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/topology_external_api/apNeighbors/{device_serial}"
+
         return await self.get(url)
 
     async def do_multi_group_snapshot(
