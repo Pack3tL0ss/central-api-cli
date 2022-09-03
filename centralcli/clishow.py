@@ -1531,7 +1531,7 @@ def roaming(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
-        # autocompletion=cli.cache.account_completion,
+        autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
     """Show wireless client roaming history.
