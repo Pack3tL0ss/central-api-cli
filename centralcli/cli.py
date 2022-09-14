@@ -24,14 +24,14 @@ import typer
 try:
     from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
                             clirefresh, clishow, clitest, cliupdate, cliupgrade,
-                            clitshoot, cliassign, cliunassign, models, cleaner, config, log, utils)
+                            clitshoot, cliassign, cliunassign, models, cleaner, Response, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
                                 clirefresh, clishow, clitest, cliupdate, cliupgrade,
-                                clitshoot, cliassign, cliunassign, models, cleaner, config, log, utils)
+                                clitshoot, cliassign, cliunassign, models, cleaner, Response, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -124,6 +124,7 @@ def move(
 ) -> None:
     yes = yes_ if yes_ else yes
     central = cli.central
+    console = Console()
 
     group, site, = None, None
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
@@ -184,6 +185,11 @@ def move(
 
         if site and d.get("site"):
             if d.site == _site.name:  # device is already in desired site
+                console.print(f"[dark_orange]:warning:[/] {d.rich_help_text} is already in Site: {_site.summary_text}")
+                if not group:  # remove serial from devs_by_type if already in desired site, and site move is the only operation
+                    _ = devs_by_type[d.generic_type].pop(len(devs_by_type[d.generic_type]) - 1)
+                    if not devs_by_type[d.generic_type]:  # if type list is empty remove the type
+                        del devs_by_type[d.generic_type]
                 continue
 
             if f"{d.site}~|~{d.generic_type}" not in devs_by_site:
@@ -210,12 +216,14 @@ def move(
 
     print(confirm_msg)
     confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
+    # TODO currently will ask to confirm even if it will result in no calls (dev already in site) Need to build reqs list
+    #      Then ask for confirmation if there are reqs to perform...  Need to refactor/simplify
 
     # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
     # If devices are associated with a site currently remove them from that site first
     # FIXME moving 3 devices from one site to another no longer works correctly (disassociated 2 then 1, (2 calls) then added 1)
     # FIXME completion flaw  cencli move barn--ap ... given barn- -ap was the completion [barn-303p.2c30-ap, barn-518.2816-ap]
-    resp, site_rm_resp = None, None
+    resp, site_rm_resp, reqs = None, None, []
     if confirmed and _site and devs_by_site:
         site_remove_reqs = []
         for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
@@ -255,12 +263,13 @@ def move(
     # problem is solved.  partial workup to avoid in scratch, but cache update should be done first
     elif confirmed and _site:
         for _type in devs_by_type:
-            serials = [d.serial for d in devs_by_type[_type]]
-            reqs = [
-                central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
-            ]
+            serials = [d.serial for d in devs_by_type[_type] if d.site != _site.name]
+            if serials:
+                reqs = [
+                    central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
+                ]
 
-        resp = central.batch_request(reqs)
+        resp = Response(url="Error", error=f"These devices are already in site {_site.name}") if not reqs else central.batch_request(reqs)
 
     if site_rm_resp:
         resp = [*site_rm_resp, *resp]
