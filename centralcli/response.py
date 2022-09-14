@@ -242,7 +242,7 @@ class Response:
             self.output[name] = value
 
     def __len__(self):
-        return(len(self.output))
+        return(len(self.output)) if not isinstance(self.output, str) else 0
 
     def __getitem__(self, key):
         return self.output[key]

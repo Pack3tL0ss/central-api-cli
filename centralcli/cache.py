@@ -1281,13 +1281,14 @@ class Cache:
         groups = self.groups
         resp = await self.central.get_all_templates(groups=groups)
         if resp.ok:
-            resp.output = utils.listify(resp.output)
-            self.updated.append(self.central.get_all_templates)
-            self.responses.template = resp
-            self.TemplateDB.truncate()
-            update_res = self.TemplateDB.insert_multiple(resp.output)
-            if False in update_res:
-                log.error("Tiny DB returned an error during template db update")
+            if len(resp) > 0: # handles initial cache population when none of the groups are template groups
+                resp.output = utils.listify(resp.output)
+                self.updated.append(self.central.get_all_templates)
+                self.responses.template = resp
+                self.TemplateDB.truncate()
+                update_res = self.TemplateDB.insert_multiple(resp.output)
+                if False in update_res:
+                    log.error("Tiny DB returned an error during template db update")
         return resp
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
