@@ -1034,7 +1034,7 @@ class CentralApi(Session):
         # TODO maybe call the aggregator from _bath_request
         responses = await self._batch_request(reqs)
         failed = [r for r in responses if not r]
-        if failed:  # TODO may be able to return list
+        if failed:
             return failed[-1]
 
         # combine result for all calls into 1
