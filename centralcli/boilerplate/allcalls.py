@@ -14026,8 +14026,13 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}"
 
-        return await self.delete(url)
+        params = {
+            'session_id': session_id
+        }
 
+        return await self.delete(url, params=params)
+
+    # API-FLAW returns 404 if there are no sessions running
     async def troubleshooting_get_session_id(
         self,
         serial: str,
@@ -14060,7 +14065,11 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}/export"
 
-        return await self.get(url)
+        params = {
+            'session_id': session_id
+        }
+
+        return await self.get(url, params=params)
 
     async def tools_send_enroll_pki_certificate_switch(
         self,
