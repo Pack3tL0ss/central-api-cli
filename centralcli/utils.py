@@ -360,6 +360,15 @@ class Utils:
             return item in self.file
 
         def sanitize_strings(self, strings: str, config=None) -> str:
+            """Sanitize Output for demos
+
+            Args:
+                strings (str): Unsanitized command output.
+                config (Config, optional): Pass in cencli.Config object.
+
+            Returns:
+                str: Sanitized str output with sensitive data redacted.
+            """
             config = config or self.config
             if config and config.sanitize and config.sanatize_file.is_file():
                 sanitize_data = config.get_file_data(config.sanatize_file)
@@ -398,7 +407,8 @@ class Utils:
 
         @property
         def file(self):
-            return typer.unstyle(self._file)
+            return "" if not self._file else typer.unstyle(self._file)
+
 
     @staticmethod
     def do_pretty(key: str, value: str) -> str:

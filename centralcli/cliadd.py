@@ -349,7 +349,7 @@ def site(
         "address": address,
         "city": city,
         "state": state,
-        "zipcode": str(zipcode),
+        "zipcode": zipcode if zipcode is None else str(zipcode),
         "country": country,
         "latitude": lat,
         "longitude": lon

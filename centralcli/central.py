@@ -432,6 +432,42 @@ class CentralApi(Session):
 
         return resp
 
+    async def get_client_roaming_history(
+        self,
+        macaddr: str,
+        calculate_total: bool = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Wireless Client Mobility Trail.
+
+        Args:
+            macaddr (str): MAC address of the Wireless Client to be queried
+            calculate_total (bool, optional): Whether to calculate total transitions
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
+
+        params = {
+            'calculate_total': calculate_total,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
     async def get_wireless_clients(
         self,
         group: str = None,
@@ -998,7 +1034,7 @@ class CentralApi(Session):
         # TODO maybe call the aggregator from _bath_request
         responses = await self._batch_request(reqs)
         failed = [r for r in responses if not r]
-        if failed:  # TODO may be able to return list
+        if failed:
             return failed[-1]
 
         # combine result for all calls into 1
@@ -1064,9 +1100,9 @@ class CentralApi(Session):
 
         reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
-        _failures = [idx for idx, r in enumerate(res) if not (r)]
+        _failures = [idx for idx, r in enumerate(res) if not r]
         if _failures:
-            return res  # [_failures[0]]
+            return _failures[-1]
 
         resp = res[-1]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
@@ -1086,6 +1122,8 @@ class CentralApi(Session):
                     }
                 } for k, v in _output.items() for inner_dict in v
             ]
+            # TODO keep all fields in output dict, let cleaner define field for normal and verbose options
+            #      if user selects --json or --yaml keep all fields
             # return just the keys common across all device types
             common_keys = set.intersection(*map(set, dicts))
             _output = [{k: d[k] for k in common_keys} for d in dicts]
@@ -1241,6 +1279,57 @@ class CentralApi(Session):
         headers = {"Accept": "multipart/form-data"}
 
         return await self.get(url, headers=headers)
+
+    async def get_bssids(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        cluster_id: str = None,
+        calculate_total: bool = None,
+        sort: str = None,
+        offset: int = 0,
+        limit: int = 1000,
+    ) -> Response:
+        """List BSSIDs.
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by AP MAC address
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            calculate_total (bool, optional): Whether to calculate total APs
+            sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
+                +swarm_id, -swarm_id.Default is '+serial'
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/bssids"
+
+        params = {
+            'serial': serial,
+            "group": group,
+            "swarm_id": swarm_id,
+            "label": label,
+            "site": site,
+            'macaddr': macaddr,
+            'cluster_id': cluster_id,
+            'calculate_total': calculate_total,
+            'sort': sort,
+            "offset": offset,
+            "limit": limit,
+        }
+
+        return await self.get(url, params=params)
 
     # TODO change dev_type to use [gw, sw, cx, ap, switch]  make consistent for all calls
     async def get_devices(
@@ -1718,19 +1807,6 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_ap_neighbors(self, device_serial: str) -> Response:
-        """Get neighbor details reported by AP via LLDP.
-
-        Args:
-            device_serial (str): Device serial number.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/topology_external_api/apNeighbors/{device_serial}"
-
-        return await self.get(url)
-
     async def get_site_vlans(self, site_id: int, search: str = None, offset: int = 0, limit: int = 100) -> Response:
         """Get vlan list of a site.
 
@@ -1969,7 +2045,7 @@ class CentralApi(Session):
         self,
         serial: str,
         dev_type: str,
-        commands: list,
+        commands: Union[int, list, dict],
     ) -> Response:
         """Start Troubleshooting Session.
 
@@ -1977,19 +2053,26 @@ class CentralApi(Session):
             serial (str): Serial of device
             dev_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
                 switches, CX Switches, MAS switches and controllers respectively.
-            commands (List[int | dict]): List of int or dict.  int maps to command_id, use dict to
-                specify both the command_id and arguments. [command_id, {command_id: (argument1, argument2)}]
+            commands (int, List[int | dict], dict): a single command_id, or a List of command_ids (For commands with no arguments)
+                OR a dict {command_id: {argument1_name: argument1_value, argument2_name: argument2_value}}
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/troubleshooting/v1/devices/{serial}"
+        commands = utils.listify(commands)
         cmds = []
         for cmd in commands:
             if isinstance(cmd, int):
                 cmds += [{"command_id": cmd}]
             elif isinstance(cmd, dict):
-                cmds += [{"command_id": cmd, "arguments": cmds[cmd]}]
+                cmds += [
+                    {
+                        "command_id": cid,
+                        "arguments": [{"name": k, "value": v} for k, v in cmd[cid].items()]
+                    }
+                    for cid in cmd
+                ]
 
         json_data = {
             'device_type': dev_type,
@@ -1998,19 +2081,65 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        params = {"session_id": ts_id}
+    async def get_ts_output(
+        self,
+        serial: str,
+        session_id: int,
+    ) -> Response:
+        """Get Troubleshooting Output.
+
+        Args:
+            serial (str): Serial of device
+            session_id (int): Unique ID for troubleshooting session
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+
+        params = {
+            'session_id': session_id
+        }
+
         return await self.get(url, params=params)
 
-    async def clear_ts_session(self, device_serial: str, ts_id: int) -> Response:
-        # returns a str
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        params = {"session_id": ts_id}
-        return await self.get(url, params=params)
+    async def clear_ts_session(
+        self,
+        serial: str,
+        session_id: int,
+    ) -> Response:
+        """Clear Troubleshooting Session and output for device.
 
-    async def get_ts_id_by_serial(self, device_serial: str) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}/session"
+        Args:
+            serial (str): Serial of device
+            session_id (int): Unique ID for each troubleshooting session
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+
+        params = {
+            'session_id': session_id
+        }
+
+        return await self.delete(url, params=params)
+
+    # API-FLAW returns 404 if there are no sessions running
+    async def get_ts_session_id(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get Troubleshooting Session ID for a device.
+
+        Args:
+            serial (str): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}/session"
+
         return await self.get(url)
 
     async def get_sdwan_dps_policy_compliance(self, time_frame: str = "last_week", order: str = "best") -> Response:
@@ -2019,7 +2148,16 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
+        """Get neighbor details reported by AP via LLDP.
+
+        Args:
+            device_serial (str): Device serial number.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/topology_external_api/apNeighbors/{device_serial}"
+
         return await self.get(url)
 
     async def do_multi_group_snapshot(

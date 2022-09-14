@@ -178,6 +178,7 @@ _short_key = {
     "acknowledged_by": "ack by",
     "acknowledged_timestamp": "ack time",
     "aruba_part_no": "sku",
+    "network": "ssid",
 }
 
 
@@ -185,6 +186,7 @@ def strip_outer_keys(data: dict) -> dict:
     if not isinstance(data, dict):
         return data
 
+    data = data if "result" not in data else data["result"]
     _keys = [k for k in constants.STRIP_KEYS if k in data]
     if len(_keys) == 1:
         return data[_keys[0]]
@@ -995,5 +997,28 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
             data = [{k: v for k, v in d.items()} for d in data if d["services"]]
         else:
             data = [{k: v for k, v in d.items()} for d in data if not d["services"]]
+
+    return data
+
+
+def get_client_roaming_history(data: List[dict]) -> List[dict]:
+    # field order is b4 key conversion _short_key
+    field_order = [
+        "previous_ap_name",
+        "ap_name",
+        "ap_serial",
+        "network",
+        "bssid",
+        "band",
+        "channel",
+        "roaming_type",
+        "rssi",
+        "ts",
+    ]
+    data = sorted(data, key=lambda i: i.get("ts", ""))
+    data = [
+        dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
+    ]
+    data = strip_no_value(data)
 
     return data

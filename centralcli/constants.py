@@ -118,6 +118,8 @@ STRIP_KEYS = [
     "settings",
     "items",
     "poe_details",
+    "trails",
+    "servers",
 ]
 
 
@@ -457,6 +459,12 @@ class LibToAPI:
             "sw": "SWITCH",
             "client": "CLIENT",
             "clients": "CLIENT",
+        }
+        self.tshoot_to_api = {
+            "gw": "CONTROLLER",
+            "ap": "IAP",
+            "cx": "CX",
+            "sw": "SWITCH"
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:

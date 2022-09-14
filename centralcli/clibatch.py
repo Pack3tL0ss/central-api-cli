@@ -1011,6 +1011,9 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
                     show=True
                 )
 
+# TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
+# need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
+# FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 @app.command(short_help="Delete devices.")
 def delete(
     what: BatchDelArgs = typer.Argument(...,),
