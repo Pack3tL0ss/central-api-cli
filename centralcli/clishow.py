@@ -9,6 +9,7 @@ import sys
 from typing import List, Union
 from pathlib import Path
 from rich import print
+from rich.console import Console
 
 try:
     import psutil
@@ -1579,6 +1580,74 @@ def roaming(
         raise typer.Exit(1)
     resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
     cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt="rich", cleaner=cleaner.get_client_roaming_history)
+
+
+@app.command(short_help="Show Troubleshooting output")
+def tshoot(
+    device: str = typer.Argument(
+        ...,
+        metavar=iden_meta.dev,
+        help="Aruba Central Device",
+        autocompletion=cli.cache.dev_completion,
+    ),
+    session_id: str = typer.Argument(
+        None,
+        help="The troubleshooting session id.",
+    ),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+    ),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show Troubleshooting results from an existing session.
+
+    Use cencli tshoot ... to start a troubleshooting session.
+
+    """
+    central = cli.central
+    con = Console(emoji=False)
+    dev = cli.cache.get_dev_identifier(device)
+
+    # Fetch session ID if not provided
+    if not session_id:
+        resp = central.request(central.get_ts_session_id, dev.serial)
+        if resp.ok and "session_id" in resp.output:
+            session_id = resp.output["session_id"]
+        else:
+            print(f"No session id provided, unable to find active session id for {dev.name}")
+            cli.display_results(resp)
+            raise typer.Exit(1)
+
+    title = f"Troubleshooting output for {dev.name} session {session_id}"
+    resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
+    if not resp or resp.output.get("status", "") != "COMPLETED":
+        cli.display_results(resp, title=title, tablefmt="rich",)
+    else:
+        con.print(resp)
+        con.print(f"\n   {resp.rl}")
+
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
