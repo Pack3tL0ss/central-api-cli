@@ -1100,9 +1100,9 @@ class CentralApi(Session):
 
         reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
-        _failures = [idx for idx, r in enumerate(res) if not (r)]
+        _failures = [idx for idx, r in enumerate(res) if not r]
         if _failures:
-            return res  # [_failures[0]]
+            return _failures[-1]
 
         resp = res[-1]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
@@ -1122,6 +1122,8 @@ class CentralApi(Session):
                     }
                 } for k, v in _output.items() for inner_dict in v
             ]
+            # TODO keep all fields in output dict, let cleaner define field for normal and verbose options
+            #      if user selects --json or --yaml keep all fields
             # return just the keys common across all device types
             common_keys = set.intersection(*map(set, dicts))
             _output = [{k: d[k] for k in common_keys} for d in dicts]
@@ -2043,7 +2045,7 @@ class CentralApi(Session):
         self,
         serial: str,
         dev_type: str,
-        commands: list,
+        commands: Union[int, list, dict],
     ) -> Response:
         """Start Troubleshooting Session.
 
@@ -2051,19 +2053,26 @@ class CentralApi(Session):
             serial (str): Serial of device
             dev_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
                 switches, CX Switches, MAS switches and controllers respectively.
-            commands (List[int | dict]): List of int or dict.  int maps to command_id, use dict to
-                specify both the command_id and arguments. [command_id, {command_id: (argument1, argument2)}]
+            commands (int, List[int | dict], dict): a single command_id, or a List of command_ids (For commands with no arguments)
+                OR a dict {command_id: {argument1_name: argument1_value, argument2_name: argument2_value}}
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/troubleshooting/v1/devices/{serial}"
+        commands = utils.listify(commands)
         cmds = []
         for cmd in commands:
             if isinstance(cmd, int):
                 cmds += [{"command_id": cmd}]
             elif isinstance(cmd, dict):
-                cmds += [{"command_id": cmd, "arguments": cmds[cmd]}]
+                cmds += [
+                    {
+                        "command_id": cid,
+                        "arguments": [{"name": k, "value": v} for k, v in cmd[cid].items()]
+                    }
+                    for cid in cmd
+                ]
 
         json_data = {
             'device_type': dev_type,
@@ -2072,19 +2081,65 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def get_ts_output(self, device_serial: str, ts_id: int) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        params = {"session_id": ts_id}
+    async def get_ts_output(
+        self,
+        serial: str,
+        session_id: int,
+    ) -> Response:
+        """Get Troubleshooting Output.
+
+        Args:
+            serial (str): Serial of device
+            session_id (int): Unique ID for troubleshooting session
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+
+        params = {
+            'session_id': session_id
+        }
+
         return await self.get(url, params=params)
 
-    async def clear_ts_session(self, device_serial: str, ts_id: int) -> Response:
-        # returns a str
-        url = f"/troubleshooting/v1/devices/{device_serial}"
-        params = {"session_id": ts_id}
-        return await self.get(url, params=params)
+    async def clear_ts_session(
+        self,
+        serial: str,
+        session_id: int,
+    ) -> Response:
+        """Clear Troubleshooting Session and output for device.
 
-    async def get_ts_id_by_serial(self, device_serial: str) -> Response:
-        url = f"/troubleshooting/v1/devices/{device_serial}/session"
+        Args:
+            serial (str): Serial of device
+            session_id (int): Unique ID for each troubleshooting session
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}"
+
+        params = {
+            'session_id': session_id
+        }
+
+        return await self.delete(url, params=params)
+
+    # API-FLAW returns 404 if there are no sessions running
+    async def get_ts_session_id(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get Troubleshooting Session ID for a device.
+
+        Args:
+            serial (str): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/devices/{serial}/session"
+
         return await self.get(url)
 
     async def get_sdwan_dps_policy_compliance(self, time_frame: str = "last_week", order: str = "best") -> Response:
