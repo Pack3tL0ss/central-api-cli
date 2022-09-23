@@ -345,6 +345,13 @@ def site(
 ) -> None:
     """Perform batch Add operations using import data from file."""
     yes = yes_ if yes_ else yes
+
+    # These conversions just make the fields match what is used if done via GUI
+    if state and len(state) == 2:
+        state = state_abbrev_to_pretty.get(state, state)
+    if country and country.upper() in ["US", "USA"]:
+        country = "United States"
+
     kwargs = {
         "address": address,
         "city": city,
