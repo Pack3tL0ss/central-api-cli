@@ -443,11 +443,12 @@ class LibToAPI:
             "cx": "CX",
             "sw": "ArubaSwitch"
         }
-        self.upgrade_to_api = {
+        # TODO once cx is actually supported add it
+        self.firmware_to_api = {
             "gw": "CONTROLLER",
             "ap": "IAP",
             "switch": "HP",
-            "cx": "HP",
+            "cx": "CX",
             "sw": "HP"
         }
         # Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
@@ -471,6 +472,7 @@ class LibToAPI:
         if isinstance(key, Enum):
             key = key.value
 
+        # TODO lose the _to_api in the attributes
         if hasattr(self, f"{method}_to_api"):
             self.method_iden = method
             return getattr(self, f"{method}_to_api").get(key.lower(), default or key)
