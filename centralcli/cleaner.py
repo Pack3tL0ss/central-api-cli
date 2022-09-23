@@ -46,9 +46,14 @@ def _convert_datestring(date_str: str) -> str:
     return pendulum.from_format(date_str.rstrip("Z"), "YYYYMMDDHHmmss").to_formatted_date_string()
 
 
+# show fw list
+def _convert_iso_to_words(iso_date: str) -> str:
+    return pendulum.parse(iso_date).to_formatted_date_string()
+
+
 @epoch_convert
 def _convert_epoch(epoch: float) -> str:
-    # return time.strftime('%x %X',  time.localtime(epoch/1000))
+    # Thu, May 7, 2020 3:49 AM
     return pendulum.from_timestamp(epoch, tz="local").to_day_datetime_string()
 
 
@@ -59,19 +64,19 @@ def _duration_words(secs: Union[int, str]) -> str:
 
 @epoch_convert
 def _time_diff_words(epoch: float) -> str:
-    # if len(str(int(epoch))) > 10:
-    #     epoch = epoch / 1000
     return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
 @epoch_convert
 def _log_timestamp(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
-    # DEBUG return f'{epoch} | {pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")}'
 
-# show fw list
-def _convert_iso_to_words(iso_date: str) -> str:
-    return pendulum.parse(iso_date).to_formatted_date_string()
+
+@epoch_convert
+def _mdyt_timestamp(epoch: float) -> str:
+    # May 07, 2020 3:49:24 AM
+    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD, YYYY h:mm:ss A")
+
 
 
 def _short_connection(value: str) -> str:
@@ -143,7 +148,10 @@ _short_value = {
     "cpu_utilization": lambda x: f"{x}%",
     "AOS-CX": "cx",
     "type": lambda t: t.lower(),
-    "release_status": lambda v: u"\u2705" if "beta" in v.lower() else ""
+    "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
+    "start_date": _mdyt_timestamp,
+    "end_date": _mdyt_timestamp,
+
 }
 
 _short_key = {
@@ -186,6 +194,9 @@ _short_key = {
     "aruba_part_no": "sku",
     "network": "ssid",
     "release_status": "beta",
+    "license_type": "name",
+    "subscription_key": "key",
+    "subscription_type": "type",
 }
 
 
@@ -1040,5 +1051,22 @@ def get_fw_version_list(data: List[dict], format: str = "rich") -> List[dict]:
             {k: v.replace("\u2705", "True") for k, v in d.items()}
             for d in data
         ]
+
+    return data
+
+def get_subscriptions(data: List[dict],) -> List[dict]:
+    field_order = [
+        "license_type",
+        "sku",
+        "status",
+        "subscription_type",
+        "subscription_key",
+        "start_date",
+        "end_date",
+        "status"
+    ]
+    data = [
+        dict(short_value(k, d[k]) for k in field_order) for d in data
+    ]
 
     return data

@@ -120,6 +120,7 @@ STRIP_KEYS = [
     "poe_details",
     "trails",
     "servers",
+    "subscriptions",
 ]
 
 
@@ -650,6 +651,17 @@ class SortClientOptions(str, Enum):
     site = "site"
     group = "group"
     last_connected = "last_connected"
+
+
+class SortSubscriptionOptions(str, Enum):
+    name = "name"
+    sku = "sku"
+    status = "status"
+    type = "type"
+    key = "key"
+    network = "network"
+    start_date = "start_date"
+    end_date = "end_date"
 
 
 class StatusOptions(str, Enum):
