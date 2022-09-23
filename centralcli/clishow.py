@@ -1644,6 +1644,8 @@ def tshoot(
     resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
     if not resp or resp.output.get("status", "") != "COMPLETED":
         cli.display_results(resp, title=title, tablefmt="rich",)
+    elif verbose2:
+        cli.display_results(resp)
     else:
         con.print(resp)
         con.print(f"\n   {resp.rl}")

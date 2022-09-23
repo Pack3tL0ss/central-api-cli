@@ -8,6 +8,7 @@ from time import sleep
 import typer
 from rich import print
 from rich.console import Console
+from rich.progress import track
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -75,9 +76,16 @@ def ping(
     device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to ping from", autocompletion=cli.cache.dev_completion),
     host: str = typer.Argument(..., help="host to ping (IP of FQDN)"),
     mgmt: bool = typer.Option(None, "-m", help="ping using VRF mgmt, (only applies to cx)"),
-    repititions: int = typer.Option(3, "-r", help="repititions (only applies to switches)"),
+    repititions: int = typer.Option(None, "-r", help="repititions (only applies to switches)"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        is_flag=True,
+    ),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -97,9 +105,10 @@ def ping(
     cmd_args = {"Host": host}
 
     if dev.generic_type == "switch":
-        cmd_args["Repititions"] = str(repititions)
+        if repititions:
+            cmd_args["Repetitions"] = str(repititions)
         if dev.type == "cx" and mgmt:
-            cmd_args["Is_Mgmt"] = True
+            cmd_args["Is_Mgmt"] = str(mgmt)
 
     commands = {cmd_id: cmd_args}
     dev_type = lib_to_api("tshoot", dev.type)
@@ -110,12 +119,17 @@ def ping(
     complete = False
     while not complete:
         for x in range(3):
-            with console.status("Waiting for Troubleshooting Response..."):
-                sleep(10)
+            _delay = 15 if dev.type == "cx" else 10
+            for _ in track(range(_delay), description=f"[green]Allowing time for commands to complete[/]..."):
+                sleep(1)
             ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
 
             if ts_resp.output.get("status", "") == "COMPLETED":
-                print(ts_resp.output["output"])
+                # if not verbose2:  # FIXME is verbose2 not working on any of these???
+                if not cli.raw_out:
+                    print(ts_resp.output["output"])
+                else:
+                    cli.display_results(resp)
                 complete = True
                 break
             else:
