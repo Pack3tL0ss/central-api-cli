@@ -749,7 +749,7 @@ class Utils:
 
             config_out = template.render(config_data)
         else:
-            config_out = template.read_text()
+            config_out = template_file.read_text()
 
         return config_out
 
