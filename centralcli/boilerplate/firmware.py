@@ -1,8 +1,8 @@
+# -*- coding: utf-8 -*-
+
 import sys
-import asyncio
-import json
 from pathlib import Path
-from typing import Literal, Union, List
+from typing import Union, List
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -66,7 +66,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # API-NOTE valie for switches and controllers
     async def firmware_get_devices_details(
         self,
         device_type: str,
@@ -93,7 +92,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # API-NOTE valie for switches and controllers
     async def firmware_get_device_details(
         self,
         serial: str,
@@ -178,14 +176,14 @@ class AllCalls(CentralApi):
 
     async def firmware_upgrade_firmware(
         self,
-        firmware_scheduled_at: int = None,
-        swarm_id: str = None,
-        serial: str = None,
-        group: str = None,
-        device_type: str = None,
-        firmware_version: str = None,
-        reboot: bool = False,
-        model: str = None,
+        firmware_scheduled_at: int,
+        swarm_id: str,
+        serial: str,
+        group: str,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        model: str,
     ) -> Response:
         """Firmware Upgrade.
 
