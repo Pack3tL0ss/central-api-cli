@@ -1060,10 +1060,10 @@ def get_subscriptions(data: List[dict],) -> List[dict]:
         "sku",
         "status",
         "subscription_type",
+        "quantity",
         "subscription_key",
         "start_date",
         "end_date",
-        "status"
     ]
     data = [
         dict(short_value(k, d[k]) for k in field_order) for d in data
