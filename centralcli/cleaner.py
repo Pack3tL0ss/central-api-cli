@@ -69,6 +69,10 @@ def _log_timestamp(epoch: float) -> str:
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
     # DEBUG return f'{epoch} | {pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")}'
 
+# show fw list
+def _convert_iso_to_words(iso_date: str) -> str:
+    return pendulum.parse(iso_date).to_formatted_date_string()
+
 
 def _short_connection(value: str) -> str:
     return value.replace("802.11", "")
@@ -116,6 +120,7 @@ _short_value = {
     "last_modified": _convert_epoch,
     "lease_start_ts": _log_timestamp,
     "lease_end_ts": _log_timestamp,
+    "create_date": _convert_iso_to_words,
     "acknowledged_timestamp": _log_timestamp,
     "lease_time": _duration_words,
     "lease_time_left": _duration_words,
@@ -138,6 +143,7 @@ _short_value = {
     "cpu_utilization": lambda x: f"{x}%",
     "AOS-CX": "cx",
     "type": lambda t: t.lower(),
+    "release_status": lambda v: u"\u2705" if "beta" in v.lower() else ""
 }
 
 _short_key = {
@@ -179,6 +185,7 @@ _short_key = {
     "acknowledged_timestamp": "ack time",
     "aruba_part_no": "sku",
     "network": "ssid",
+    "release_status": "beta",
 }
 
 
@@ -1020,5 +1027,18 @@ def get_client_roaming_history(data: List[dict]) -> List[dict]:
         dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
     data = strip_no_value(data)
+
+    return data
+
+def get_fw_version_list(data: List[dict], format: str = "rich") -> List[dict]:
+    data = [
+        dict(short_value(k, d[k]) for k in d) for d in data
+    ]
+    data = strip_no_value(data)
+    if format != "rich" and data and "beta" in data[-1].keys():
+        data = [
+            {k: v.replace("\u2705", "True") for k, v in d.items()}
+            for d in data
+        ]
 
     return data

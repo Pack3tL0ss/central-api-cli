@@ -3079,6 +3079,55 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_fw_version_list(
+        self,
+        device_type: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+    ) -> Response:
+        """List Firmware Version.
+
+        Args:
+            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER/CX"
+            swarm_id (str, optional): Swarm ID
+            serial (str, optional): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/versions"
+
+        params = {
+            'device_type': device_type,
+            'swarm_id': swarm_id,
+            'serial': serial
+        }
+
+        return await self.get(url, params=params)
+
+    # Not used in a command yet
+    async def check_image_available(
+        self,
+        device_type: str,
+        firmware_version: str,
+    ) -> Response:
+        """Firmware Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): firmware version
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/versions/{firmware_version}"
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
     async def send_command_to_swarm(
         self,
         swarm_id: str,
@@ -3383,6 +3432,8 @@ class CentralApi(Session):
 
     # TODO changte to use consistent dev tpe ap gw cx sw
     # convert to the stuff apigw wants inside method
+    # API-FLAW no API to upgrade cluster, Not functional on CX
+    # device_type CX is not valid
     async def upgrade_firmware(
         self,
         scheduled_at: int = None,
@@ -3430,6 +3481,7 @@ class CentralApi(Session):
         return await self.post(url, json_data=json_data)
 
     # API-FLAW only accepts swarm id for IAP, AOS10 show as IAP but no swarm id.  serial is rejected.
+    # CX will return resp like it works, but nothing ever happens
     async def get_upgrade_status(self, swarm_id: str = None, serial: str = None) -> Response:
         """Get firmware upgrade status.
 
