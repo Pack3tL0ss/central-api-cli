@@ -142,6 +142,7 @@ def move(
 
     group = group or _group
 
+    # TODO can likely remove reset-group option
     if reset_group and not group:
         default_group_resp = cli.central.request(cli.central.get_default_group)
         default_group = default_group_resp.output
@@ -150,7 +151,8 @@ def move(
         print(f"Warning [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
 
     site = site or _site
-    _site = cli.cache.get_site_identifier(site)
+    if site:
+        _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
         print("Missing Required Argument, group and/or site is required.")
