@@ -1100,9 +1100,11 @@ class CentralApi(Session):
 
         reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
-        _failures = [idx for idx, r in enumerate(res) if not r]
-        if _failures:
-            return _failures[-1]
+        _failure_idxs = [idx for idx, r in enumerate(res) if not r]
+        if _failure_idxs:
+            resp = res[_failure_idxs[-1]]
+            resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
+            return resp
 
         resp = res[-1]
         _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
