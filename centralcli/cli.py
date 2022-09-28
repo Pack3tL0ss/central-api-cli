@@ -720,7 +720,7 @@ def archive(
 
 
 
-@app.command(help="un-archive devices", hidden=False)
+@app.command(help="un-archive devices", hidden=True)
 def unarchive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -730,6 +730,12 @@ def unarchive(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Waning.  This API endpoint does not appear to do anything.
+
+    Archiving unassigns any license/subscriptions from the device and removes it from the inventory.
+    To "unarchive" you would use cencli add device serial <serail> mac <mac> --license <license>
+
+    """
     devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
