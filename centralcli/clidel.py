@@ -287,22 +287,10 @@ def template(
         cli.display_results(resp, tablefmt="action")
         # TODO update cache
 
-
+# TODO simplify do not allow batch delete via this command, only via batch delete
 @app.command(short_help="Delete devices.")
 def device(
-    devices: List[str] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    import_file: Path = typer.Option(
-        None,
-        "--from-file",
-        exists=True,
-        readable=True,
-        help="Provide devices via import file"
-    ),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -315,14 +303,14 @@ def device(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
     """Delete devices.
 
-    This command will unassign any licenses associated to the device, along with reseting any
-    group, site, labels.
+    This command will unassign any licenses associated to the device, and will delete the
+    device from the monitoring views after waiting for it to disconnect.
 
-    Use --retain-group, --retain-site, --retain-labels to skip any of those steps.
     `cencli unassign license <LICENSE> <DEVICES>` can also be used to unassign a specific license
     from a device(s).
 
@@ -330,69 +318,17 @@ def device(
     the device assignment in GreenLake.
     """
     yes = yes_ if yes_ else yes
-    if show_example:
-        print("\nAccepts the following keys (include as header row for csv import):")
-        print("[cyan]serial[/],[cyan]license[/]")
-        print("Where '[cyan]license[/]' (remove only a specified license from device) are optional.")
-        print("\n[italic]Note: if license is not specified, any license(s) currently assigned will be unassigned.[/]")
-        print("\n[bright_green].csv example[reset]:\n")
-        print("serial,license")
-        print("CN12345678,foundation_switch_6300")
-        print("CN12345679,advanced_ap")
-        print("CN12345680,advanced_ap")
-        print("\nAny other keys that exist in the file will be ignored")
-        print("\n[italic]Note: yaml and json also supported (hint: list of dicts, optionally under a devices key).[/]")
-        # print("          [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]")  # TODO implement this
-        # TODO document examples and uncomment below.  provide examples for all format/types
-        # print("See https://central-api-cli.readthedocs.io for full examples.")
-        return
+
 
     # TODO common string helpers
-    if  not devices and not import_file:
-        print("""
-Usage: cencli delete device [OPTIONS] [DEVICES]
-Try 'cencli delete device ?' for help.
 
-Error: Invalid combination of arguments / options.
-Either provide --import-file <path to file> option or devices argument OR
-provide --show_example for example import_file format
-        """)
-        raise typer.Exit(1)
-    if devices and import_file:
-        print("""
-Usage: cencli delete device [OPTIONS] [DEVICES]
-Try 'cencli delete device ?' for help.
-
-Error: Invalid combination of arguments / options.
-providing devices on the command line
-[bright_red]OR[/] the [cyan]--import-file[/] option
-Not both.
-        """)
-        raise typer.Exit(1)
 
     br = cli.central.BatchRequest
     console = Console(emoji=False)
     resp = None
 
-    cache_devs = []
-    serials_in = []
-
-    if import_file:
-        data = config.get_file_data(import_file)
-        if hasattr(data, "dict"):  # csv
-            data = data.dict
-        data = data if "devices" not in data else data["devices"]
-
-        for dev in data:
-            if isinstance(dev, dict) and "serial" in dev:
-                serials_in += [dev["serial"].upper()]
-            else:
-                serials_in += [dev.upper()]
-        devices = serials_in
-        cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True) for d in serials_in]
-    else:
-        cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True) for d in devices]
-        serials_in = [d.serial for d in cache_devs]
+    cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True) for d in devices]
+    serials_in = [d.serial for d in cache_devs]
 
     resp = cli.cache.get_devices_with_inventory(no_refresh=False)
     if not resp.ok:

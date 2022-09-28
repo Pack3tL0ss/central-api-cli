@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import (
     ClientArgs, InventorySortOptions, ShowInventoryArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
-    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions,
+    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions,
     DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, lib_to_api, what_to_pretty  # noqa
 )
 
@@ -78,7 +78,6 @@ def show_devices(
         "public_ip_address": pub_ip,
         "calculate_client_count": do_clients,
         "show_resource_details": do_stats,
-        # "sort": None if not sort_by else sort_by._value_
     }
 
     # status and state keywords both allowed
@@ -185,6 +184,49 @@ def inventory(
         caption="Inventory includes devices that have yet to connect to Central",
         cleaner=cleaner.get_device_inventory,
         sub=sub
+    )
+
+
+# TODO --sort option for date fields sorts converted value, needs to be sorted by epoch before conversion
+@app.command()
+def subscriptions(
+    _type: str = typer.Argument(None, metavar="[TYPE]", help="license type"),
+    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", show_default=False),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+    verbose: bool = typer.Option(False, "-v", help="Gather additional details about device from cache.", show_default=False, hidden=True),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting) (vertically)",
+        show_default=False,
+    ),
+) -> None:
+    """Show subscription/license details
+    """
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = cli.central.request(cli.central.get_subscriptions, _type)
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Subscriptions",
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.get_subscriptions,
     )
 
 @app.command(short_help="Show All Devices")
@@ -1644,6 +1686,8 @@ def tshoot(
     resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
     if not resp or resp.output.get("status", "") != "COMPLETED":
         cli.display_results(resp, title=title, tablefmt="rich",)
+    elif verbose2:
+        cli.display_results(resp)
     else:
         con.print(resp)
         con.print(f"\n   {resp.rl}")

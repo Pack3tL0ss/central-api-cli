@@ -1,10 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Generated from Aruba Central 2.5.4 Schemas
 
-Code programatically generated.  May need tweaks
-"""
 import sys
 from pathlib import Path
 from typing import Union, List
@@ -13,14 +8,14 @@ from typing import Union, List
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import Response
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import Response
     else:
         print(pkg_dir.parts)
-        raise
+        raise e
 
 from centralcli.central import CentralApi
 
@@ -2492,7 +2487,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def configuration_get_full_wlan_list(
+    async def configuration_get_wlan_list(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2509,7 +2504,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_full_wlan_template(
+    async def configuration_get_wlan_template(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2526,7 +2521,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_full_wlan_protocol_map(
+    async def configuration_get_protocol_map(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2543,7 +2538,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def configuration_get_full_wlan_access_rule_services(
+    async def configuration_get_access_rule_services(
         self,
         group_name_or_guid: str,
     ) -> Response:
@@ -2824,7 +2819,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def configuration_delete_full_wlan(
+    async def configuration_delete_wlan(
         self,
         group_name_or_guid: str,
         wlan_name: str,
@@ -3089,7 +3084,7 @@ class AllCalls(CentralApi):
         Args:
             group_name_or_guid (str): Group name of the group or guid of the swarm.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            clis (List[str]): Whole configuration List in CLI format.
+            clis (List[str]): Whole configuration List in CLI format
 
         Returns:
             Response: CentralAPI Response object
@@ -3184,7 +3179,7 @@ class AllCalls(CentralApi):
         self,
         group_name_or_guid: str,
         offset: int = 0,
-        limit: int = 20,
+        limit: int = 100,
     ) -> Response:
         """Get dirty diff.
 
@@ -3194,7 +3189,7 @@ class AllCalls(CentralApi):
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
             limit (int, optional): Maximum number of group config_mode records to be returned.
-                Max 20 Default 20.
+                Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -3536,7 +3531,7 @@ class AllCalls(CentralApi):
 
         Returns:
             Response: CentralAPI Response object
-        """  # noqa
+        """
         url = "/configuration/v1/switch/cx/lags"
 
         params = {
@@ -3833,8 +3828,8 @@ class AllCalls(CentralApi):
                 documentation for more information.<br>An example for ipv6 allowed pattern is
                 provided.
             admin_username (str): Pattern: "^(admin)$"
-            admin_password (str): admin_username should be provided with this field.
-                Pattern: "^[^"? ]*$"
+            admin_password (str): admin_username should be provided with this field.<br>Pattern:
+                "^[^"? ]*$"
             device_serial (str, optional): Device serial number.
                 Mandatory for device level configuration.
             group_name (str, optional): Group name.
@@ -4016,7 +4011,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data, params=params)
 
-    # API-NOTE grabs group level sys info password is masked
     async def configuration_get_system_config(
         self,
         group_name_or_guid: str,
@@ -4029,23 +4023,11 @@ class AllCalls(CentralApi):
 
         Returns:
             Response: CentralAPI Response object
-        # [
-        #     {
-        #         "dns_server": "",
-        #         "ntp_server": [
-        #             "10.0.30.101",
-        #             "10.0.30.52"
-        #         ],
-        #         "password": "********",
-        #         "username": "admin"
-        #     }
-        # ]
         """
         url = f"/configuration/v1/system_config/{group_name_or_guid}"
 
         return await self.get(url)
 
-    # API-NOTE Update group level pass for APs??
     async def configuration_update_system_config(
         self,
         group_name_or_guid: str,

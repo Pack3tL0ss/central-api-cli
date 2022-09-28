@@ -80,7 +80,6 @@ def device(
                                    firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
 
-
 @app.command(short_help="Upgrade firmware by group",)
 def group(
     group: str = typer.Argument(
@@ -118,6 +117,9 @@ def group(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 ),
 ) -> None:
+    if dev_type == "cx":
+        print("[dark_orange]:warning:[/] CX is not currently supported by firmware API endpoint.")
+        raise typer.Exit(1)
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
     at = None if not at else int(round(at.timestamp()))
@@ -127,7 +129,7 @@ def group(
         if dev_type == "ap":
             reboot = True
         ver_msg += [lib_to_gen_plural(dev_type)]
-        dev_type = lib_to_api("upgrade", dev_type)
+        dev_type = lib_to_api("firmware", dev_type)
 
     if model:
         ver_msg += [f"model {typer.style(f'{model}', fg='bright_green')}"]

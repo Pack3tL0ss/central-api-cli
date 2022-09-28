@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import sys
 from pathlib import Path
 from typing import Union, List
@@ -285,12 +287,7 @@ class AllCalls(CentralApi):
         """
         url = "/aiops/v2/insights/global/list"
 
-        params = {
-            "from": from_ms,
-            "to": to
-        }
-
-        return await self.get(url, params=params)
+        return await self.get(url)
 
     async def get_aiops_v2_insights_site_list(
         self,
@@ -561,7 +558,6 @@ class AllCalls(CentralApi):
             'offset': offset,
             'limit': limit
         }
-        print(params)
 
         return await self.get(url, params=params)
 
@@ -2767,7 +2763,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def iot_operations_delete_by_id(
+    async def iot_operations_deleteusingdelete(
         self,
         transportProfileId: str,
         collectorId: str = None,
@@ -3844,7 +3840,7 @@ class AllCalls(CentralApi):
     async def monitoring_get_mc_v2(
         self,
         serial: str,
-        stats_metric: bool = None,
+        stats_metric: bool = False,
     ) -> Response:
         """Mobility Controller Details.
 
@@ -5078,7 +5074,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # TODO PoE details works for both sw and cx specify port for port level details
     async def monitoring_get_switch_poe_detail(
         self,
         serial: str,
@@ -5101,7 +5096,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # port is required output seems same as above
     async def monitoring_get_cx_switch_poe_detail(
         self,
         serial: str,
@@ -5124,7 +5118,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # TODO 1 call gets PoE details for all ports
     async def monitoring_get_switch_poe_details_for_all_ports(
         self,
         serial: str,
@@ -6011,13 +6004,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # TODO ADD TO CLI
     async def branchhealth_get_sites_(
         self,
         name: str = None,
         column: int = None,
-        reverse: bool = False,
-        filters: dict = {},
+        order: int = None,
+        Site_properties_used_with_thresholds: str = None,
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
@@ -6026,11 +6018,11 @@ class AllCalls(CentralApi):
         Args:
             name (str, optional): site / label name or part of its name
             column (int, optional): Column to sort on
-            reverse (bool, optional): Sort in reverse order:
+            order (int, optional): Sort order:
                 * asc - Ascending, from A to Z.
                 * desc - Descending, from Z to A.
                 Valid Values: asc, desc
-            filters (str, optional): Site thresholds
+            Site_properties_used_with_thresholds (str, optional): Site thresholds
                 * All properties of a site can be used as filter parameters with a threshold
                 * The range filters can be combined with the column names with "\__"  # noqa
                 * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in  # noqa
@@ -6049,32 +6041,20 @@ class AllCalls(CentralApi):
         """
         url = "/branchhealth/v1/site"
 
-        params = {
-            "name": name,
-            # "column": column,
-            "order": "asc" if not reverse else "desc",
-            "wan_tunnels_down\__gt": "0",
-            "wan_uplinks_down\__gt": "0",
-            # **filters,
-            "offset": offset,
-            "limit": limit,
-        }
+        return await self.get(url)
 
-        return await self.get(url, params=params)
-
-    # API-NOTE appears to show alert types
     async def central_get_types_(
         self,
         calculate_total: bool = None,
         offset: int = 0,
-        limit: int = 1000,
+        limit: int = 100,
     ) -> Response:
         """List Types.
 
         Args:
             calculate_total (bool, optional): Whether to count total items in the response
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 1000 and max is 1000.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -6089,7 +6069,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # API-NOTE returns alert/notification settings not used by any command yet
     async def central_get_settings_(
         self,
         search: str = None,
@@ -6098,7 +6077,6 @@ class AllCalls(CentralApi):
         limit: int = 100,
     ) -> Response:
         """List Settings.
-
 
         Args:
             search (str, optional): term used to search in name, category of the alert
@@ -6201,7 +6179,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # API-NOTE Use This Add sites to mute
     async def central_update_customer_settings_(
         self,
         add_sites_to_mute: List[str],
@@ -6276,7 +6253,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # TODO ADD TO CLI ... ALERTS DEVICE/Tunnel Down alerts etc.
     async def central_get_notifications_(
         self,
         customer_id: str = None,
@@ -6333,7 +6309,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # API-NOTE ack notifications
     async def central_acknowledge_notifications(
         self,
         NoName: List[str] = None,
@@ -6350,7 +6325,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
-    # API-NOTE ack notifications
     async def central_acknowledge_notification(
         self,
         notification_id: str,
@@ -6493,24 +6467,19 @@ class AllCalls(CentralApi):
 
     async def platform_delete_device(
         self,
-        device: Union[str, List[str]],
+        NoName: list = None,
     ) -> Response:
         """Delete devices using Serial number.
-        Valid only for Central On Prem
 
         Args:
-            devices (List[str]): ...
+            NoName (list, optional): ...
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
-        devices = [devices] if not isinstance(devices, list) else devices
-        params = [
-            {"serial": s} for s in devices
-        ]
 
-        return await self.delete(url, params=params)
+        return await self.delete(url)
 
     async def platform_get_devices_stats(
         self,
@@ -6593,7 +6562,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # API-NOTE cencli show archive
     async def platform_get_archive_devices(
         self,
         offset: int = 0,
@@ -6617,7 +6585,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    # API-NOTE cencli archive [devices]
     async def platform_archive_devices(
         self,
         serials: List[str],
@@ -6638,7 +6605,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    # API-NOTE cencli remove archive [devices]
     async def platform_unarchive_devices(
         self,
         serials: List[str],
@@ -6801,42 +6767,6 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        # [
-        #     {
-        #         "available": 6108,
-        #         "expiring": 0,
-        #         "license_usage_by_services": {
-        #             "advance_70xx": 0,
-        #             "advance_72xx": 0,
-        #             "advance_90xx_sec": 3,
-        #             "advance_base_7005": 0,
-        #             "advanced_ap": 11,
-        #             "advanced_switch_6100": 0,
-        #             "advanced_switch_6200": 0,
-        #             "advanced_switch_6300": 0,
-        #             "advanced_switch_6400": 0,
-        #             "dm": 0,
-        #             "foundation_70xx": 3,
-        #             "foundation_72xx": 0,
-        #             "foundation_90xx_sec": 0,
-        #             "foundation_ap": 0,
-        #             "foundation_base_7005": 0,
-        #             "foundation_base_90xx_sec": 0,
-        #             "foundation_switch_6100": 6,
-        #             "foundation_switch_6200": 2,
-        #             "foundation_switch_6300": 0,
-        #             "foundation_switch_6400": 0,
-        #             "foundation_wlan_gw": 0,
-        #             "vgw2g": 0,
-        #             "vgw4g": 0,
-        #             "vgw500m": 0
-        #         },
-        #         "non_subscribed_devices": 0,
-        #         "total": 6133,
-        #         "total_devices": 25,
-        #         "used": 25
-        #     }
-        # ]
         url = "/platform/licensing/v1/subscriptions/stats"
 
         params = {
@@ -6873,11 +6803,6 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        # [
-        #     {
-        #         "services": []
-        #     }
-        # ]
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
         return await self.get(url)
@@ -7056,7 +6981,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    # Show all available licenses [{"services": {"services": [foundation_70xx, ...]}] <-- wtf
     async def platform_gw_get_customer_enabled_services(
         self,
     ) -> Response:
@@ -7065,30 +6989,10 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        # [
-        #     {
-        #         "services": {
-        #             "services": [
-        #                 "foundation_70xx",
-        #                 "cloud_guest",
-        #                 "dm",
-        #                 "foundation_switch_6100",
-        #                 "advance_90xx_sec",
-        #                 "pa",
-        #                 "ucc",
-        #                 "airgroup",
-        #                 "advanced_ap",
-        #                 "clarity",
-        #                 "foundation_switch_6200"
-        #             ]
-        #         }
-        #     }
-        # ]
         url = "/platform/licensing/v1/services/enabled"
 
         return await self.get(url)
 
-    # TODO useful shows list of license types
     async def platform_get_services_config(
         self,
         service_category: str = None,
@@ -8059,7 +7963,7 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/api/sdwan-mon-api/external/noc/reports/wan/policy-compliance"
+        url = "//sdwan-mon-api/external/noc/reports/wan/policy-compliance"
 
         params = {
             'period': period,
@@ -8142,7 +8046,7 @@ class AllCalls(CentralApi):
         marker: str = None,
         limit: int = 100,
     ) -> Response:
-        """List of routes learned from a BGP neighbor.
+        """List of routes learned form a BGP neighbor.
 
         Args:
             device (str): Device serial number
@@ -8199,7 +8103,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # TODO useful.  Verify marker param
     async def get_routing_v1_overlay_connection(
         self,
         device: str,
@@ -8242,7 +8145,6 @@ class AllCalls(CentralApi):
 
         return await self.put(url)
 
-    # TODO Useful show OAP tunnels
     async def get_routing_v1_overlay_interface(
         self,
         device: str,
@@ -8261,13 +8163,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/interface"
 
-        params = {
-            'device': device,
-            'marker': marker,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
+        return await self.get(url)
 
     async def get_routing_v1_overlay_route_learned(
         self,
@@ -8287,13 +8183,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/learned"
 
-        params = {
-            'device': device,
-            'marker': marker,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
+        return await self.get(url)
 
     async def get_routing_v1_overlay_route_learned_best(
         self,
@@ -8379,13 +8269,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/interface"
 
-        params = {
-            'device': device,
-            'marker': marker,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
+        return await self.get(url)
 
     async def get_routing_v1_ospf_neighbor(
         self,
@@ -8562,11 +8446,2191 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v0/route"
 
-        params = {
-            'device': device,
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_dial_id16(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_dial_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
         }
 
-        return await self.get(url, params=params)
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_dial_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_dial_id16(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_standard_services_id17(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve standard_services.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_standard_services_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create standard_services.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_standard_services_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update standard_services.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_standard_services_id17(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete standard_services.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id15(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id15(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for dial.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_airplay_id4(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_airplay_id4(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_airplay_id4(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_airplay_id4(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete airplay.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_amazon_tv_id14(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve amazon_tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_amazon_tv_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create amazon_tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_amazon_tv_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update amazon_tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_amazon_tv_id14(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete amazon_tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_general_settings_id2(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve general_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_general_settings_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+    ) -> Response:
+        """Create general_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        json_data = {
+            'airgroup_status': airgroup_status
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_general_settings_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+    ) -> Response:
+        """Create/Update general_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        json_data = {
+            'airgroup_status': airgroup_status
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_general_settings_id2(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete general_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_airprint_id6(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_airprint_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_airprint_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_airprint_id6(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_config_id18(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_config_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'airgroup_status': airgroup_status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_config_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'airgroup_status': airgroup_status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_config_id18(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_googlecast_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_googlecast_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_googlecast_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_googlecast_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id13(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for amazon tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for amazon tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for amazon tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id13(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for amazon tv.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_node_list_id19(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve node_list by identifier node-type node-id.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_airgroup_status_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_airgroup_status_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+    ) -> Response:
+        """Create airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        json_data = {
+            'airgroup_status': airgroup_status
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_airgroup_status_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+    ) -> Response:
+        """Create/Update airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        json_data = {
+            'airgroup_status': airgroup_status
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_airgroup_status_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id7(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id7(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for googlecast.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_dlnaprint_id12(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_dlnaprint_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_dlnaprint_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_dlnaprint_id12(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id9(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id9(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for airprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_dlnamedia_id10(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_dlnamedia_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_dlnamedia_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        status: bool,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+        desc: str,
+    ) -> Response:
+        """Create/Update dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            status (bool): Indicates whether service is enabled or disabled
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+            desc (str): Few line description of the service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+
+        json_data = {
+            'status': status,
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'desc': desc
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_dlnamedia_id10(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete dlnamedia.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_id11(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve disallowed for dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create disallowed for dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        disallowed_vlans: List[str],
+        disallowed_roles: List[str],
+    ) -> Response:
+        """Create/Update disallowed for dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
+            disallowed_roles (List[str]): list of disallowed user/server Roles
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'disallowed_roles': disallowed_roles
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_id11(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete disallowed for dlnaprint.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+
+        return await self.delete(url)
+
+    async def airmatch_config_get_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def airmatch_config_post_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        deploy_hour: int,
+        quality_threshold: int,
+        schedule: bool,
+    ) -> Response:
+        """Create config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                Range 0-100. Default: 8
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'schedule': schedule
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airmatch_config_put_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        deploy_hour: int,
+        quality_threshold: int,
+        schedule: bool,
+    ) -> Response:
+        """Create/Update config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                Range 0-100. Default: 8
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'schedule': schedule
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airmatch_config_delete_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.delete(url)
+
+    async def airmatch_config_get_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        return await self.get(url)
+
+    async def airmatch_config_post_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        deploy_hour: int,
+        quality_threshold: int,
+        schedule: bool,
+    ) -> Response:
+        """Create system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                Range 0-100. Default: 8
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        json_data = {
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'schedule': schedule
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airmatch_config_put_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        deploy_hour: int,
+        quality_threshold: int,
+        schedule: bool,
+    ) -> Response:
+        """Create/Update system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                Range 0-100. Default: 8
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        json_data = {
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'schedule': schedule
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airmatch_config_delete_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        return await self.delete(url)
+
+    async def airmatch_config_get_aruba_node_list_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve node_list by identifier node-type node-id.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/"
+
+        return await self.get(url)
 
     async def cloud_security_config_get_aruba_security_config_id2(
         self,
@@ -9578,12 +11642,12 @@ class AllCalls(CentralApi):
 
     async def overlay_wlan_config_get_aruba_wlan_gw_cluster_list_id1(
         self,
-        # node_type: str = "GROUP",
+        node_type: str,
         node_id: str,
-        profile: str = None,
-        profile_type: str = None,
-        cluster_redundancy_type: str = None,
-        cluster_group_name: str = None,
+        profile: str,
+        profile_type: str,
+        cluster_redundancy_type: str,
+        cluster_group_name: str,
     ) -> Response:
         """Retrieve gw_cluster_list by identifier cluster_redundancy_type cluster_group_name.
 
@@ -9604,9 +11668,7 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        node_type = "GROUP"
-        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/" \
-            "config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
+        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
         return await self.get(url)
 
@@ -10196,7 +12258,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # This API is supported on ['Microbranch Group'].
     async def sdwan_config_get_aruba_hub_clusters_id16(
         self,
         node_type: str,
@@ -10820,7 +12881,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # valid for GW group returns list of dicts {"Identifier": <vpnc-serial-num>}
     async def sdwan_config_get_aruba_hubs_id14(
         self,
         node_type: str,
@@ -13974,7 +16034,7 @@ class AllCalls(CentralApi):
             serial (str): Serial of device
             device_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
                 switches, CX Switches, MAS switches and controllers respectively.
-            commands (list): List of command ids use get_command_list to get command to id map.
+            commands (list): List of commands
 
         Returns:
             Response: CentralAPI Response object
@@ -14026,13 +16086,8 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}"
 
-        params = {
-            'session_id': session_id
-        }
+        return await self.delete(url)
 
-        return await self.delete(url, params=params)
-
-    # API-FLAW returns 404 if there are no sessions running
     async def troubleshooting_get_session_id(
         self,
         serial: str,
@@ -14065,11 +16120,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}/export"
 
-        params = {
-            'session_id': session_id
-        }
-
-        return await self.get(url, params=params)
+        return await self.get(url)
 
     async def tools_send_enroll_pki_certificate_switch(
         self,
@@ -14647,7 +16698,7 @@ class AllCalls(CentralApi):
         url = f"/platform/rbac/v1/users/{user_id}"
 
         params = {
-            'system_user': str(system_user).lower()
+            'system_user': system_user
         }
 
         return await self.get(url, params=params)
@@ -14669,7 +16720,7 @@ class AllCalls(CentralApi):
         url = f"/platform/rbac/v1/users/{user_id}"
 
         params = {
-            'system_user': str(system_user).lower()
+            'system_user': system_user
         }
 
         return await self.delete(url, params=params)
@@ -14758,21 +16809,19 @@ class AllCalls(CentralApi):
 
     async def platform_delete_bulk_users_account(
         self,
-        user_list: List[str],
+        NoName: List[str] = None,
     ) -> Response:
         """Delete multiple users account. The max no of accounts that can be deleted at once is 10.
 
         Args:
-            user_list (List[str], optional): List of user id's to be deleted.
+            NoName (List[str], optional): List of user id's to be deleted.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/rbac/v1/bulk_users"
 
-        json_data = user_list
-
-        return await self.delete(url, json_data=json_data)
+        return await self.delete(url)
 
     async def platform_bulk_users_get_cookie_status(
         self,

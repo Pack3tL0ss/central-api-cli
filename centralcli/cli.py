@@ -142,6 +142,7 @@ def move(
 
     group = group or _group
 
+    # TODO can likely remove reset-group option
     if reset_group and not group:
         default_group_resp = cli.central.request(cli.central.get_default_group)
         default_group = default_group_resp.output
@@ -150,7 +151,8 @@ def move(
         print(f"Warning [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
 
     site = site or _site
-    _site = cli.cache.get_site_identifier(site)
+    if site:
+        _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
         print("Missing Required Argument, group and/or site is required.")
@@ -687,7 +689,7 @@ def stop(
         raise typer.Exit(0)
 
 # TODO Unhide once impact of archive is known post GreenLake... still licensed and shows in device list.
-@app.command(help="Archive devices", hidden=True)
+@app.command(help="Archive devices", hidden=False)
 def archive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -700,21 +702,55 @@ def archive(
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
     yes = yes_ if yes_ else yes
-    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
-    _dev_str = "\n".join([f"- [cyan]{str(dev).lstrip()}[/]" for dev in devices])
-    _msg = f"[bright_green]Archive Devices[/]:"
+    # TODO Check if one of the properties in CentralObject will work for the dev text below.
+    _msg = f"[bright_green]Archive devices[/]:"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.name}|{dev.serial}|{dev.mac}[/]' for dev in devices])
-        _msg = f"{_msg}:\n{_dev_msg}"
+        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}|{dev.serial}|{dev.mac}[/]"
+        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]\n"
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
         cli.display_results(resp, tablefmt="action")
+
+
+
+@app.command(help="un-archive devices", hidden=True)
+def unarchive(
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Waning.  This API endpoint does not appear to do anything.
+
+    Archiving unassigns any license/subscriptions from the device and removes it from the inventory.
+    To "unarchive" you would use cencli add device serial <serail> mac <mac> --license <license>
+
+    """
+    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+
+    # TODO add confirmation method builder to output class
+    # TODO Check if one of the properties in CentralObject will work for the dev text below.
+    _msg = f"[bright_green]Unarchive devices[/]:"
+    if len(devices) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _msg = f"{_msg}\n    {_dev_msg}\n"
+    else:
+        dev = devices[0]
+        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]\n"
+    print(_msg)
+
+    resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in devices])
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="convert j2 templates")
