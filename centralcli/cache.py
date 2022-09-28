@@ -395,9 +395,13 @@ class Cache:
             res = self.check_fresh(**kwargs)
         else:
             res = [self.responses.dev or Response()]
+
+        _inv_by_ser = self.inventory_by_serial
+        _dev_by_ser = self.devices_by_serial
+        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
         combined = [
-            {**self.inventory_by_serial[serial], **self.devices_by_serial.get(serial, {})}
-            for serial in self.inventory_by_serial
+            {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
+            for serial in _all_serials
 
         ]
         res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
