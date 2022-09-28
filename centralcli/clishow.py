@@ -78,7 +78,6 @@ def show_devices(
         "public_ip_address": pub_ip,
         "calculate_client_count": do_clients,
         "show_resource_details": do_stats,
-        # "sort": None if not sort_by else sort_by._value_
     }
 
     # status and state keywords both allowed
