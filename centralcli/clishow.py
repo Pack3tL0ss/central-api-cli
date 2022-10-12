@@ -1394,7 +1394,7 @@ def wlans(
 # FIXME show clients wireless <tab completion> does not filter based on type of device
 # FIXME show clients wireless AP-NAME does not filter only devices on that AP
 # Same applies for wired
-@app.command(short_help="Show clients/details")
+@app.command(help="Show clients/details")
 def clients(
     filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
     device: List[str] = typer.Argument(
@@ -1403,9 +1403,6 @@ def clients(
         help="Show clients for a specific device or multiple devices.",
         autocompletion=cli.cache.dev_client_completion,
     ),
-    # os_type:
-    # band:
-    # _: str = typer.Argument(None, hidden=True, autocompletion=cli.cache.null_completion),
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", ),
