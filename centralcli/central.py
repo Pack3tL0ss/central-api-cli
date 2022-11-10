@@ -611,7 +611,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # This logic is here because Central has both methods, but given a wlan client mac
+        # API-FLAW This logic is here because Central has both methods, but given a wlan client mac
         # central will return the client details even when using the wired url
 
         # Mac match logic is jacked in central
