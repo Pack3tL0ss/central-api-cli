@@ -33,8 +33,9 @@ from centralcli.constants import (
     GatewayRole, IdenMetaVars, LicenseTypes, SendConfigDevIdens,
     SiteStates, state_abbrev_to_pretty, arg_to_what
 )
-from centralcli.strings import ImportExamples
+from centralcli.strings import ImportExamples, LongHelp
 examples = ImportExamples()
+help_text = LongHelp()
 from centralcli.cache import CentralObject
 
 iden = IdenMetaVars()
@@ -754,6 +755,7 @@ def verify(
         outfile.write_text(typer.unstyle(outdata))  # typer.unstyle(outdata) also works
         print("[italic green]Done")
 
+# FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
 @app.command(short_help="Perform Batch Add from file")
 def add(
     what: BatchAddArgs = typer.Argument(...,),
@@ -808,159 +810,118 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
     console = Console(emoji=False)
     resp = None
 
-    data = data if "devices" not in data else data["devices"]
-
-    serials_in = []
-    for dev in data:
-        if isinstance(dev, dict) and "serial" in dev:
-            serials_in += [dev["serial"].upper()]
-        else:
-            serials_in += [dev.upper()]
+    serials_in = [dev["serial"].upper() for dev in data]
 
     if not serials_in:
-        print(f":warning: Error No data resulted from parsing of import file.")
+        print(f"[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
         raise typer.Exit(1)
 
-    resp = cli.cache.get_devices_with_inventory()
-    if not resp.ok:
-        cli.display_results(resp, stash=False, exit_on_fail=True)
+    # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
+    # to avoid duplication ... # FIXME update clidel with corrections made below
+    cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]
+    not_in_inventory = [d for d, c in zip(serials_in, cache_devs) if c is None]
+    cache_devs = [c for c in cache_devs if c]
+    _all_in_inventory = cli.cache.inventory_by_serial
+    inv_del_serials = [s for s in serials_in if s in _all_in_inventory]
 
-    combined_devs = [CentralObject("dev", data=r) for r in resp.output]
+    # Devices in monitoring (have a status)
+    aps = [dev for dev in cache_devs if dev.generic_type == "ap" and dev.status]
+    switches = [dev for dev in cache_devs if dev.generic_type == "switch" and dev.status]
+    gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
+    devs_in_monitoring = [*aps, *switches, *gws]
 
-    # build dictionary with {lic_name: [serial, ...]}
-    _msg = ""
-    licenses_to_remove = {}
-    for s in serials_in:
-        this_services = [i.get("services") for i in combined_devs if i["serial"] == s and i.get("services")]
-        for lic in this_services:
-            lic = lic.lower().replace(" ", "_")
-            licenses_to_remove[lic] = [*licenses_to_remove.get(lic, []), s]
+    reqs = [] if not inv_del_serials else [
+        br(cli.central.archive_devices, (inv_del_serials,)),
+        br(cli.central.unarchive_devices, (inv_del_serials,)),
+    ]
 
-    # build confirmation msg and list of requests to remove the licenses
-    for lic in licenses_to_remove:
-        _msg += f"License [bright_green]{lic}[/bright_green] will be [bright_red]removed[/] from:\n"
-        for serial in licenses_to_remove[lic]:
-            this_inv = [i for i in combined_devs if i.serial == serial]
-            this_inv = this_inv[0]
-            _msg = f"{_msg}    {this_inv.summary_text}\n"
-
-    lic_reqs = [br(cli.central.unassign_licenses, serials=serials, services=services) for services, serials in licenses_to_remove.items()]
-    # TODO future... when we have the capability to remove device associations from GL
-    # inv_cache_delete_serials = [serial for v in licenses_to_remove.values() for serial in v]
-
-    # delete the devices from monitoring app.  Will have a "status" ('Up' or 'Down') in cache if they are in Monitoring
-    # devices will have status of None if in Inventory only
-    del_reqs = []
-    aps = [dev for dev in combined_devs if dev.generic_type == "ap" and dev.status and dev.serial in serials_in]
-    switches = [dev for dev in combined_devs if dev.generic_type == "switch" and dev.status and dev.serial in serials_in]
-    gws = [dev for dev in combined_devs if dev.generic_type == "gw" and dev.status and dev.serial in serials_in]
-    dev_cache_delete_serials = [d.serial for d in [*aps, *switches, *gws]]
-
-    _msg_del = ""
+    # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
+    mon_del_reqs, delayed_mon_del_reqs = [], []
     for dev_type, _devs in zip(["ap", "switch", "gateway"], [aps, switches, gws]):
         if _devs:
-            func = getattr(cli.central, f"delete_{dev_type}")
-            del_reqs += [br(func, d.serial) for d in _devs]
-            _msg_del += "\n".join([f'    {d.summary_text}' for d in _devs])
-            _msg_del += "\n"
+            down_now =  [d.serial for d in _devs if d.status.lower() == "down"]
+            up_now =  [d.serial for d in _devs if d.status.lower() == "up"]
+            if [*down_now, *up_now]:
+                func = getattr(cli.central, f"delete_{dev_type}")
+                if down_now:
+                    mon_del_reqs += [br(func, s) for s in down_now]
+                if up_now:
+                    delayed_mon_del_reqs += [br(func, s) for s in up_now]
 
-    if _msg_del:
-        _msg = f"{_msg}The Following devices will be [bright_red]deleted[/] [italic](only applies to devices that have connected)[/]:\n"
-        _msg += f"{_msg_del}"
-        _msg += f"\n    [italic]**Devices will be deleted from Central Monitoring views."
-        _msg += f"\n    [italic]  Unassociating the device with Central in GreenLake currently must be done in GreenLake UI.\n"
+    # warn about devices that were not found
+    if not_in_inventory:
+        if len(not_in_inventory) == 1:
+            console.print(f"\n[dark_orange]Warning[/]: Skipping [cyan]{not_in_inventory[0]}[/] as it was not found in inventory.")
+        else:
+            console.print(f"\n[dark_orange]Warning[/]: Skipping the following as they were not found in inventory.")
+            _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
+        print("")
 
-    r_cnt = len(lic_reqs) + len(del_reqs)
-    if not yes:
-        _call_cnt_msg = f"\n[italic dark_olive_green2]{r_cnt} additional API call{'s' if r_cnt > 1 else ''} will be perfomed"
-        _call_cnt_msg += f". {r_cnt + 1} if there are any failures during deletion (to re-sync status with Central).[/]" if del_reqs else ".[/]"
-        _msg += _call_cnt_msg
-
-
-
-    if r_cnt > 0:
-        console.print(_msg)
-    else:
+    # None of the provided devices were found in cache or inventory
+    if not [*reqs, *mon_del_reqs, *delayed_mon_del_reqs]:
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
+    # construnct confirmation msg
+    # TODO need to break this up into inv del / mon del as it was prior, could have mon del w/ no inv del
+    _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
+    if len(cache_devs) > 1:
+        _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
+    _msg += f"\n\n[italic dark_olive_green2]Will result in {len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs])} additional API Calls."
+
+    # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
+    console.print(_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
-        # unassign license, this causes dev to go down, reqd b4 you can remove from mon app
-        lic_resp, del_resp, resp = [], [], []
-        if lic_reqs:
-            lic_resp += cli.central.batch_request([*lic_reqs])
+        batch_resp = cli.central.batch_request([*reqs, *mon_del_reqs])
+        if not all([r.ok for r in batch_resp]):
+            console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
+            cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.")
 
-        resp += lic_resp
+    if not delayed_mon_del_reqs:
+        cli.display_results(batch_resp, tablefmt="action")
+        raise typer.Exit(0)
 
-        # delay/try repeat x4 waiting for all devices to show as down
-        # APs usually show as down ~ 10s, sw ~ 20s sometimes more, ~ cx takes a while, often > 60s, gws ~ ??s
-        if (not lic_reqs or all([r.ok for r in lic_resp])) and del_reqs:
-            if lic_reqs:
-                print(":white_heavy_check_mark: [bright_green]All associated licenses removed.[/]")
-            del_reqs_try = del_reqs.copy()
-            del_reqs_devs = [*aps, *switches, *gws]
-            _delay = 15 if not switches else 40  # switches take longer to drop off
-            for _try in range(0,4):
-                if lic_reqs or _try > 0:
-                    _word = "more " if _try > 0 else ""
-                    _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
-                    _delay -= (5 * _try) # reduce delay by 5 secs for each pass
-                    for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
-                        sleep(1)
+    del_resp = []
+    del_reqs_try = delayed_mon_del_reqs.copy()
+    _delay = 10 if not switches else 30  # switches take longer to drop off
+    for _try in range(4):
+        _word = "more " if _try > 0 else ""
+        _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+        _delay -= (5 * _try) # reduce delay by 5 secs for each request
+        for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
+            sleep(1)
 
-                performed_call = True
+        _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
+        if _try == 3:
+            if not all([r.ok for r in _del_resp]):
+                print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+            del_resp += _del_resp
+        else:
+            del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
 
-                cli.central.request(cli.cache.update_dev_db)
-                dev_by_serial = cli.cache.devices_by_serial
-                del_reqs_serials = [d.serial for d in del_reqs_devs]
-                _now_status = {dev_by_serial[s]["name"]: dev_by_serial[s]["status"] for s in del_reqs_serials}
-                _up_now = list(_now_status.values()).count("Up")
-                if not _up_now or _try == 3:
-                    _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
-                    if _try == 3:  # attempts exausted dump the results including failures
-                        if not all([r.ok for r in _del_resp]):
-                            print("\n:warning: Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-                        del_resp += _del_resp
-                    else:
-                        del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-                else:
-                    print(f"{_up_now} out of {len(del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-                    performed_call = False
+        del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
+        if del_reqs_try:
+            print(f"{len(del_reqs_try)} out of {len(*mon_del_reqs, *delayed_mon_del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+        else:
+            break
 
-                # attempts exausted dump the results including failures
-                # if _try == 3:
-                #     if not all([r.ok for r in _del_resp]):
-                #         print("\n:warning: Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-                #     del_resp += _del_resp
-                # else:
-                #     del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-                if performed_call:
-                    failed_idxs = [idx for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
-                    del_reqs_devs = [del_reqs_devs[idx] for idx in failed_idxs]
-                    del_reqs_try = [del_reqs_try[idx] for idx in failed_idxs]
-                # if del_reqs_try:
-                #     print(f"{len(del_reqs_try)} out of {len(del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-                if not del_reqs_try:
-                    break
+    batch_resp += del_resp or _del_resp
 
-            resp += del_resp or _del_resp
+    if batch_resp:
+        with console.status("Performing cache updates..."):
+            db_updates = []
+            if devs_in_monitoring:  # Prepare db updates
+                db_updates += [br(cli.cache.update_dev_db, data=[d.serial for d in devs_in_monitoring], remove=True)]
+            if all([r.ok for r in batch_resp]):
+                _ = cli.central.batch_request(db_updates)
+            else:
+                # if any failed to delete do full update
+                # TODO could save 1 API call if we track the index for devices that failed, the reqs list and serial list
+                # should match up.
+                _ = cli.central.request(cli.cache.update_dev_db)
+        cli.display_results(batch_resp, tablefmt="action")
 
-        if resp:
-            with console.status("Performing cache updates..."):
-                db_updates = []
-                if dev_cache_delete_serials:
-                    db_updates += [br(cli.cache.update_dev_db, data=dev_cache_delete_serials, remove=True)]
-                # if inv_cache_delete_serials:  # can't remove from inv_db until we have GL API to remove association
-                #     db_updates += [br(cli.cache.update_inv_db, data=dev_cache_delete_serials, remove=True)]
-                if all([r.ok for r in resp]):
-                    _ = cli.central.batch_request(db_updates)
-                else:
-                    # if any failed to delete do full update
-                    # TODO could save 1 API call if we track the index for devices that failed, the reqs list and serial list
-                    # should match up.
-                    _ = cli.central.request(cli.cache.update_dev_db)
 
-        return resp
 
 def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
     central = cli.central
@@ -1014,7 +975,7 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
-@app.command(short_help="Delete devices.")
+@app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
 def delete(
     what: BatchDelArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(None, exists=True, readable=True),
@@ -1038,18 +999,6 @@ def delete(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Delete operations using import data from file.
-
-    cencli delete devices <IMPORT_FILE>
-        will unassign any licenses associated to the device, and delete it from Central UI
-        if it has connected to central.  (sites, labels, groups are reset as a result)
-
-    cencli delete sites <IMPORT_FILE> and cencli delte groups <IMPORT_FILE>
-        Do what you'd expect.
-
-    NOTE: The Aruba Central API gateway currently does not have an API endpoint to remove
-    device assignments in GreenLake.
-    """
     yes = yes_ if yes_ else yes
     # TODO consider moving all example imports to cencli show import ...
     if show_example:
@@ -1078,7 +1027,7 @@ def delete(
     # -- // Gather data from import file \\ --
     data = config.get_file_data(import_file)
     if hasattr(data, "dict"):  # csv
-        data = data.dict
+        data = [dict(d) for d in data.dict]  # adapts from OrderedDict to dict
 
     if what == "devices":
         resp = batch_delete_devices(data, yes=yes)

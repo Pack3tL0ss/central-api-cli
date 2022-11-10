@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from rich.console import Console
 from centralcli import log
 
 # [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]  # TODO implement this device del
@@ -135,6 +136,31 @@ name\nphl-access\nsan-dc-tor\ncom-branches
 {common_add_delete_end}
 """
 
+clibatch_delete_devices_help = f"""
+[bright_green]Perform batch Delete operations using import data from file.[/]
+
+[cyan]cencli batch delete devices <IMPORT_FILE>[/]
+
+    will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
+
+    Note: devices can only be removed from monitoring views if they are in a down state.  This command will delay/wait for any Up devices to go Down after the subscriptions/assignment to Central is removed, but it can also be ran again.  It will pick up where it left off, skipping any steps that have already been performed.
+
+cencli delete sites <IMPORT_FILE> and cencli delte groups <IMPORT_FILE>
+    Do what you'd expect.
+
+NOTE: The Aruba Central API gateway currently does not have an API endpoint to remove
+device assignments in GreenLake.
+"""
+
+
+def do_capture(text: str) -> str:
+    con = Console()
+    con.begin_capture()
+    con.print(text)
+    ret = con.end_capture()
+    return ret
+
+
 class ImportExamples:
     def __init__(self):
         self.add_devices = clibatch_add_devices
@@ -148,3 +174,19 @@ class ImportExamples:
         if not hasattr(self, key):
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: Error no str defined  ImportExamples.{key}"
+
+class LongHelp:
+    def __init__(self):
+        self.batch_delete_devices = do_capture(clibatch_delete_devices_help)
+
+    def __getattr__(self, key: str):
+        if not hasattr(self, key):
+            log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
+            return f":warning: Error no str defined  ImportExamples.{key}"
+        else:  # FIXME This doesn't seem to hit changed to using do_capture at init
+            con = Console()
+            attr = getattr(self, key)
+            con.begin_capture()
+            con.print(attr)
+            ret = con.end_capture()
+            return ret

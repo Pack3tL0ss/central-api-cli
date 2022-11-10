@@ -689,7 +689,7 @@ def stop(
         raise typer.Exit(0)
 
 # TODO Unhide once impact of archive is known post GreenLake... still licensed and shows in device list.
-@app.command(help="Archive devices", hidden=False)
+@app.command(short_help="Archive devices", hidden=False)
 def archive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -701,6 +701,16 @@ def archive(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
+
+    cencli archive <devices>, followed by cencli unarchive <devices> removes any subscriptions
+    and the devices assignment to the Aruba Central App in GreenLake.
+
+    Archive removes the GreenLake assignment, but the device can't be added to a different account
+    until it's unarchived.
+
+    Just use cencli deleve device ... or cencli batch delete devices
+    """
     yes = yes_ if yes_ else yes
     devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
@@ -712,7 +722,7 @@ def archive(
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]\n"
+        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
@@ -746,7 +756,7 @@ def unarchive(
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]\n"
+        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
     print(_msg)
 
     resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in devices])

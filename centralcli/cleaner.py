@@ -32,8 +32,6 @@ from centralcli.constants import DevTypes
 def epoch_convert(func):
     @functools.wraps(func)
     def wrapper(epoch):
-        # FIXME don't know why started getting ValueError: invalid literal for int() with base 10: '24 minutes 20 seconds'
-        # appears show all was hitting the cleaner 2x
         if str(epoch).isdigit() and len(str(int(epoch))) > 10:
             epoch = epoch / 1000
         return func(epoch)
@@ -200,8 +198,17 @@ _short_key = {
 }
 
 
-def strip_outer_keys(data: dict) -> dict:
-    if not isinstance(data, dict):
+def strip_outer_keys(data: dict) -> Union[list, dict]:
+    """strip unnecessary wrapping key from API response payload
+
+    Args:
+        data (dict): The response payload (aiohttp.Response.json())
+
+    Returns:
+        Union[list, dict]: typically list of dicts
+    """
+    # return unaltered payload if payload is not a dict, or if it has > 5 keys (wrapping typically has 2 sometimes 3)
+    if not isinstance(data, dict) or len(data.keys()) > 5:
         return data
 
     data = data if "result" not in data else data["result"]
@@ -343,12 +350,17 @@ def _client_concat_associated_dev(
         "interface mac",
         "gateway serial",
     ]
+
+    # FIXME get_dev_identifier can fail if client is connected to device that is not in the cache.
+    # even with a cache update.  doing show all is fine, but update cache for whatever reason with this method
+    # is causing some kind of SSL error, which results in cache lookup failure.
+    # silent=True, retry=False, resolves.  Would need no_match OK as get_dev_identifier fails if no match.
     dev, _gw, data["gateway"] = "", "", {}
     if data.get("associated_device"):
-        dev = cache.get_dev_identifier(data["associated_device"],)
+        dev = cache.get_dev_identifier(data["associated_device"])
 
     if data.get("gateway_serial"):
-        _gw = cache.get_dev_identifier(data["gateway_serial"],)
+        _gw = cache.get_dev_identifier(data["gateway_serial"])
         _gateway = {
             "name": _gw.name,
             "serial": data.get("gateway_serial", ""),
@@ -358,7 +370,7 @@ def _client_concat_associated_dev(
         else:
             data["gateway"] = _gw.name or data["gateway_serial"]
     _connected = {
-        "name": None if not hasattr(dev, "name") else dev.name,
+        "name": data.get("associated_device") if not hasattr(dev, "name") else dev.name,
         "type": data.get("connected_device_type"),
         "serial": data.get("associated_device"),
         "mac": data.get("associated_device_mac"),

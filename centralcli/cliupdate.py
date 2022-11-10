@@ -108,6 +108,7 @@ def template(
         typer.secho("template file not provided.", fg="cyan")
         do_prompt = True
 
+    # TODO specify CTRL-Z / CTRL-D based on os
     payload = None
     if do_prompt:
         payload = utils.get_multiline_input(

@@ -378,7 +378,6 @@ class CLICommon:
         stash: bool = True,
         pad: int = None,
         exit_on_fail: bool = False,
-        # ok_status: Union[int, List[int], Dict[int, str]] = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -417,7 +416,6 @@ class CLICommon:
             full_cols (list): columns to ensure are displayed at full length (no wrap no truncate)
             cleaner (callable, optional): The Cleaner function to use.
         """
-        # TODO remove ok_status, and handle in CentralAPI method (set resp.ok = True)
         if pad:
             log.error("Deprecated pad parameter referenced in display_results", show=True)
 

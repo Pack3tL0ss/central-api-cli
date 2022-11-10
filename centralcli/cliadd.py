@@ -61,20 +61,18 @@ def device(
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion),
-    # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    # val4: str = typer.Argument(None, metavar="site [SITE]", help="Assign newly added device to site",
-    #                            autocompletion=cli.cache.smg_kw_completion),
-    # _: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.null_completion),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
-    # _site: str = typer.Option(None, "--site", autocompletion=cli.cache.site_completion, hidden=True),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
 ) -> None:
     yes = yes_ if yes_ else yes
     kwd_vars = [kw1, kw2, kw3]
@@ -83,21 +81,22 @@ def device(
         "mac": None,
         "serial": None,
         "group": None,
-        # "site": None,
         "license": license
     }
 
-    # if _:
-    #     print("DEVELOPER NOTE Null completion item has value... being ignored.")
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            print(f"[bright_red]Error[/]: {name} is invalid")
-            raise typer.Exit(1)
+            dev = cli.cache.get_dev_identifier(name, silent=True)
+            if dev:  # allow user to put dev name for rare case where dev is in cache but not in inventory  # TESTME
+                kwargs["serial"] = dev.serial
+                kwargs["mac"] = dev.mac
+            else:
+                print(f"[bright_red]Error[/]: {name} is invalid")
+                raise typer.Exit(1)
         else:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
-    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:

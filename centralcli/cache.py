@@ -379,9 +379,11 @@ class Cache:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
-            force_refresh (bool, optional): Force a refresh of cache. Defaults to True.
+            no_refresh(bool, optional): Used currently cached data, skip refresh of cache.
+                Defaults to False.
+
                 Refresh will only occur if cache was not updated during this session.
-                Setting force_refresh to False means it will not occur regardless.
+                Setting no_refresh to True means it will not occur regardless.
 
         Returns:
             List[Response]: Response objects where output is list of dicts with
@@ -1531,12 +1533,11 @@ class Cache:
         self,
         query_str: Union[str, List[str], tuple],
         dev_type: Union[constants.GenericDevTypes, List[constants.GenericDevTypes]] = None,
-        # ret_field: str = "serial",       # TODO ret_field believe to be deprecated, now returns an object with all attributes
         retry: bool = True,
-        # multi_ok: bool = True,          # TODO multi_ok also believe to be deprecated check
         completion: bool = False,
         silent: bool = False,
         include_inventory: bool = False,
+        exit_on_fail: bool = True,
     ) -> CentralObject:
 
         retry = False if completion else retry
@@ -1633,7 +1634,10 @@ class Cache:
                     f"The Following devices matched {all_match_msg} excluded as device type != [{_dev_type_str}]",
                     show=True,
                 )
-            raise typer.Exit(1)
+            if exit_on_fail:
+                raise typer.Exit(1)
+            else:
+                return None
 
     def get_site_identifier(
         self,
@@ -1994,18 +1998,18 @@ class Cache:
             return [x["id"] for x in self.events]
 
         try:
-
-            match = self.EventDB.search(self.Q.id == int(query))
+            match = self.EventDB.search(self.Q.id == str(query))
             if not match:
                 log.warning(f"Unable to gather event details from short index query {query}", show=True)
-                typer.echo("Short event_id aliases are built each time 'show events' is ran.")
-                typer.echo("  You can verify the cache by running (hidden command) 'show cache events'")
-                typer.echo("  run 'show events [OPTIONS]' then use the short index for details")
+                print("Short event_id aliases are built each time [cyan]'show events'[/] is ran.")
+                print("  You can verify the cache by running (hidden command) [cyan]'show cache events'[/]")
+                print("  run [cyan]'show events [OPTIONS]'[/] then use the short index for details")
                 raise typer.Exit(1)
             else:
                 return match[-1]["details"]
 
         except ValueError as e:
-            log.exception(f"Exception in get_event_identifier {e.__class__.__name__}\n{e}")
-            typer.secho(f"Exception in get_event_identifier {e.__class__.__name__}", fg="red")
+            log.error(f"Exception in get_event_identifier {e.__class__.__name__}")
+            log.exception(e)
+            print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)

@@ -267,7 +267,7 @@ class Utils:
     # TODO deprecated validate not used, moved to Response
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
-                            return_type: str = None, abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
+                            return_type: str = "str", abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
         def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
             prompt = prompt or \
                 "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
