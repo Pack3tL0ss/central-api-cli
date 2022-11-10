@@ -198,8 +198,17 @@ _short_key = {
 }
 
 
-def strip_outer_keys(data: dict) -> dict:
-    if not isinstance(data, dict):
+def strip_outer_keys(data: dict) -> Union[list, dict]:
+    """strip unnecessary wrapping key from API response payload
+
+    Args:
+        data (dict): The response payload (aiohttp.Response.json())
+
+    Returns:
+        Union[list, dict]: typically list of dicts
+    """
+    # return unaltered payload if payload is not a dict, or if it has > 5 keys (wrapping typically has 2 sometimes 3)
+    if not isinstance(data, dict) or len(data.keys()) > 5:
         return data
 
     data = data if "result" not in data else data["result"]
