@@ -137,11 +137,14 @@ class CentralObject:
                 self.serial,
                 self.mac,
                 self.ip,
+                self.group,
                 self.site,
             ]
             parts = utils.strip_none(parts, strip_empty_obj=True)
             if self.site:
                 parts[-1] = f"s:{parts[-1]}"
+            if self.group:
+                parts[-2 if self.site else -1] = f"g:{parts[-2 if self.site else -1]}"
         elif self.cache == "group":
             parts = ["Group", self.name]
         elif self.cache == "label":
@@ -161,9 +164,9 @@ class CentralObject:
     @property
     def rich_help_text(self):
         parts = self._get_help_text_parts()
-        return "|".join(
+        return "[reset]|".join(
             [
-                f'{"[blue]" if not idx % 2 == 0 else "[cyan]"}{p}[/]' for idx, p in enumerate(parts)
+                f'{"[green]" if not idx % 2 == 0 else "[cyan]"}{p}[/]' for idx, p in enumerate(parts)
             ]
         )
 
