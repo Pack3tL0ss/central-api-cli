@@ -5,3 +5,6 @@ class ArubaCentralException(Exception):
 
 class DevException(ArubaCentralException):
     pass
+
+class TimeoutException(ArubaCentralException):
+    pass
