@@ -339,6 +339,7 @@ class ArgToWhat:
         self.variables = self.variable = "variables"
         self.group = self.groups = "group"
         self.webhooks = self.webhook = "webhook"
+        self.sites = self.site = "site"
 
     def _init_rename(self):
         self.group = self.groups = "group"
