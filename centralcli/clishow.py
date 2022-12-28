@@ -349,7 +349,7 @@ def devices(
 
 @app.command(short_help="Show APs/details")
 def aps(
-    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_ap_completion),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
