@@ -210,22 +210,6 @@ class CLICommon:
     def normalize_tokens(token: str) -> str:
         return token.lower() if token not in CASE_SENSITIVE_TOKENS else token
 
-    # DEPRECATED
-    def dev_completion(
-        self,
-        ctx: typer.Context,
-        args: List[str],
-        incomplete: str,
-    ) -> str:
-        # devs = cli.cache.devices
-        # _completion = [dev["name"] for dev in devs if incomplete.lower() in dev["name"].lower()]
-        # _completion += [dev["serial"] for dev in devs if incomplete.lower() in dev["serial"].lower()]
-        # _completion += [dev["mac"] for dev in devs if utils.Mac(incomplete).cols.lower() in dev["mac"].lower()]
-        # print(args)
-        # ["site", "group"]
-        # return [k for k in [*_completion, "site", "group"] if incomplete in k]
-        return self.cache.completion(incomplete, cache="dev")
-
     @staticmethod
     def get_format(
         do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_table: bool = False, default: str = "rich"
@@ -292,7 +276,6 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         stash: bool = True,
-        pad: int = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -376,7 +359,6 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         stash: bool = True,
-        pad: int = None,
         exit_on_fail: bool = False,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
@@ -416,9 +398,6 @@ class CLICommon:
             full_cols (list): columns to ensure are displayed at full length (no wrap no truncate)
             cleaner (callable, optional): The Cleaner function to use.
         """
-        if pad:
-            log.error("Deprecated pad parameter referenced in display_results", show=True)
-
         if resp is not None:
             resp = utils.listify(resp)
 
@@ -493,7 +472,6 @@ class CLICommon:
                         sort_by=sort_by,
                         reverse=reverse,
                         stash=stash,
-                        pad=pad,
                         set_width_cols=set_width_cols,
                         full_cols=full_cols,
                         fold_cols=fold_cols,
@@ -519,7 +497,6 @@ class CLICommon:
                 sort_by=sort_by,
                 reverse=reverse,
                 stash=stash,
-                pad=pad,
                 set_width_cols=set_width_cols,
                 full_cols=full_cols,
                 fold_cols=fold_cols,
