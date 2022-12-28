@@ -147,9 +147,24 @@ clibatch_delete_devices_help = f"""
 
 cencli delete sites <IMPORT_FILE> and cencli delte groups <IMPORT_FILE>
     Do what you'd expect.
+"""
 
-NOTE: The Aruba Central API gateway currently does not have an API endpoint to remove
-device assignments in GreenLake.
+_site_common = """
+[cyan]Provide geo-loc or address details, (Google Maps "Plus Codes" are supported) not both.
+Can provide both in subsequent calls, but api does not allow both in same call.[reset]
+"""
+
+cliupdate_site_help = f"""
+[bright_green]Update details for an existing site.[/]
+
+{_site_common}
+"""
+
+cliadd_site_help = f"""
+[bright_green]Add a site.[/]
+
+Use '[dark_olive_green2]cencli batch add sites <IMPORT_FILE>[/]' to add multiple sites.
+{_site_common}
 """
 
 
@@ -169,6 +184,7 @@ class ImportExamples:
         self.delete_devices = clibatch_delete_devices
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
+        self.add_site = cliadd_site_help
 
     def __getattr__(self, key: str):
         if not hasattr(self, key):
@@ -178,7 +194,10 @@ class ImportExamples:
 class LongHelp:
     def __init__(self):
         self.batch_delete_devices = do_capture(clibatch_delete_devices_help)
+        self.update_site = do_capture(cliupdate_site_help)
+        self.add_site = do_capture(cliadd_site_help)
 
+    # FIXME this is a recurssion error
     def __getattr__(self, key: str):
         if not hasattr(self, key):
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
