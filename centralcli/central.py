@@ -419,16 +419,21 @@ class CentralApi(Session):
             self.BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
             self.BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
         ]
+        # FIXME if wireless clients call passes but wired fails there is no indication in cencli show clients output
         resp = await self._batch_request(reqs)
-        if len(resp) == 2 and all(x.ok for x in resp):
-            out = [*resp[0].output, *resp[1].output]
+        if len(resp) == 2:  # and all(x.ok for x in resp):
+            out = []
+            for r in resp:
+                if r.ok:
+                    out += r.output
             raw = [
                 {"raw_wireless_response": resp[0].raw},
                 {"raw_wired_response": resp[1].raw}
             ]
-            resp = resp[1]
+            resp = resp[1] if resp[1].ok else resp[0]
             resp.output = out
             resp.raw = raw
+            # TODO need Response to have an attribute that stores failed calls so cli commands can display output of passed calls and details on errors (when some calls fail)
 
         return resp
 
@@ -2422,7 +2427,7 @@ class CentralApi(Session):
         Can provide both in subsequent calls, but apigw does not
         allow both in same call.
 
-        # TODO Used by cencli update site [name|id|address]'
+        // Used by cencli update site [name|id|address] OR --lat <lat> --lon <lon> //
 
         Args:
             site_id (int): Site ID
