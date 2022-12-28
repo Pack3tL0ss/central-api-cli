@@ -178,8 +178,9 @@ class Config:
 
         self.data = self.get_file_data(self.file) or {}
         self.forget: Union[int, None] = self.data.get("forget_account_after")
-        self.debug = self.data.get("debug", False)
-        self.debugv = self.data.get("debugv", False)
+        self.debug: bool = self.data.get("debug", False)
+        self.debugv: bool = self.data.get("debugv", False)
+        self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
         self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
 
