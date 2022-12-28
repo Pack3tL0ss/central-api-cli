@@ -24,6 +24,8 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars
+from centralcli.strings import LongHelp
+help_text = LongHelp()
 
 
 app = typer.Typer()
@@ -309,10 +311,10 @@ def wlan(
         raise typer.Abort()
 
 
-@app.command(short_help="Add a site.")
+@app.command(short_help="Add a site.", help=help_text.add_site)
 def site(
     site_name: str = typer.Argument(...),
-    address: str = typer.Argument(None, help="street address"),
+    address: str = typer.Argument(None, help="street address, (enclose in quotes)"),
     city: str = typer.Argument(None,),
     state: str = typer.Argument(
         None,
@@ -326,8 +328,8 @@ def site(
     ),
     zipcode: int = typer.Argument(None,),
     country: str = typer.Argument(None,),
-    lat: str = typer.Option(None,),
-    lon: str = typer.Option(None,),
+    lat: str = typer.Option(None, metavar="LATITUDE"),
+    lon: str = typer.Option(None, metavar="LONGITUDE"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -342,7 +344,6 @@ def site(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Add operations using import data from file."""
     yes = yes_ if yes_ else yes
 
     # These conversions just make the fields match what is used if done via GUI
