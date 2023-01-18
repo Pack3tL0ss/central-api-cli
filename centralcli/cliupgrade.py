@@ -20,8 +20,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural # noqa
+from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural, IdenMetaVars # noqa
 
+iden = IdenMetaVars()
 app = typer.Typer()
 
 # TODO reboot flag Applicable only on MAS, aruba switches and controller since IAP reboots automatically after firmware download.
@@ -31,7 +32,7 @@ app = typer.Typer()
 def device(
     device: str = typer.Argument(
         ...,
-        metavar="Device: [serial #|name|ip address|mac address]",
+        metavar=iden.dev, show_default=False,
         autocompletion=cli.cache.dev_completion,
     ),
     version: str = typer.Argument(
@@ -84,7 +85,7 @@ def device(
 def group(
     group: str = typer.Argument(
         ...,
-        metavar="[GROUP NAME]",
+        metavar=iden.group,
         help="Upgrade devices by group",
         autocompletion=cli.cache.group_completion,
     ),
