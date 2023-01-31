@@ -805,7 +805,7 @@ def add(
         cli.display_results(resp, tablefmt="action")
 
 
-def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
+def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
     resp = None
@@ -830,7 +830,7 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
     gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
     devs_in_monitoring = [*aps, *switches, *gws]
 
-    reqs = [] if not inv_del_serials else [
+    reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
     ]
@@ -862,12 +862,27 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
+
+
     # construnct confirmation msg
     # TODO need to break this up into inv del / mon del as it was prior, could have mon del w/ no inv del
     _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs])} additional API Calls."
+
+    _total_reqs = len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
+
+    if ui_only:
+        if delayed_mon_del_reqs:
+            print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
+            delayed_mon_del_reqs = []
+        if not mon_del_reqs:
+            print("No devices found to remove from UI... Exiting")
+            raise typer.Exit(1)
+        else:
+            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
+
+    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
 
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
@@ -907,6 +922,7 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
 
     batch_resp += del_resp or _del_resp
 
+    # TODO need to update cache after ui-only delete
     if batch_resp:
         with console.status("Performing cache updates..."):
             db_updates = []
@@ -979,6 +995,7 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 def delete(
     what: BatchDelArgs = typer.Argument(...,),
     import_file: Path = typer.Argument(None, exists=True, readable=True),
+    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1030,7 +1047,7 @@ def delete(
         data = [dict(d) for d in data.dict]  # adapts from OrderedDict to dict
 
     if what == "devices":
-        resp = batch_delete_devices(data, yes=yes)
+        resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
         cli.display_results(resp, tablefmt="action")
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)

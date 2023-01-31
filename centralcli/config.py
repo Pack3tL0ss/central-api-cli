@@ -262,6 +262,7 @@ class Config:
                         with import_file.open('r') as fh:
                             # TODO return consistent data type list/dict
                             # tough given csv etc dictates a flat structure
+                            # TODO ignore lines starting with # in csv import
                             return tablib.Dataset().load(fh)
                     elif text_ok:
                         return [line.rstrip() for line in import_file.read_text().splitlines()]

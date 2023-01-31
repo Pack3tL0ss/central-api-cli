@@ -291,6 +291,7 @@ def template(
 @app.command(short_help="Delete devices.")
 def device(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed."),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -335,11 +336,12 @@ def device(
     gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
     devs_in_monitoring = [*aps, *switches, *gws]
 
-    reqs = [] if not inv_del_serials else [
+    reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
     ]
 
+    # deteremine what devices are currently in an Up state, so the request to del from UI can be delayed
     delayed_reqs = []
     for dev_type, _devs in zip(["ap", "switch", "gateway"], [aps, switches, gws]):
         if _devs:
@@ -361,16 +363,32 @@ def device(
             _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
         print("")
 
-    # None of the provided devices were found in cache or inventory
-    if not [*reqs, *delayed_reqs]:
-        print("Everything is as it should be, nothing to do.")
-        raise typer.Exit(0)
 
     # construnct confirmation msg
     _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {len(reqs) + len(delayed_reqs)} additional API Calls."
+
+    _total_reqs = len(reqs) + len(delayed_reqs) if not ui_only else len(reqs)
+
+    if ui_only:
+        if delayed_reqs:
+            print(f"{len(delayed_reqs)} of the {len(devices)} provided are currently online, devices can only be removed from UI if they are offline.")
+            delayed_reqs = []
+        if not reqs:
+            print("No devices found to remove from UI... Exiting")
+            raise typer.Exit(1)
+        else:
+            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
+
+    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
+
+
+    # None of the provided devices were found in cache or inventory
+    if not _total_reqs > 0:
+        print("Everything is as it should be, nothing to do.")
+        raise typer.Exit(0)
+
 
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
