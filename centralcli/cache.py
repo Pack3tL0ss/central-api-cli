@@ -1110,11 +1110,11 @@ class Cache:
             resp = await self.central.get_all_devicesv2()
             if resp.ok:
                 if resp.output:
-                    resp.output = utils.listify(resp.output)
-                    resp.output = cleaner.get_devices(resp.output)
+                    _update_data = utils.listify(resp.output)
+                    _update_data = cleaner.get_devices(_update_data)
 
                     self.DevDB.truncate()
-                    update_res = self.DevDB.insert_multiple(resp.output)
+                    update_res = self.DevDB.insert_multiple(_update_data)
                     if False in update_res:
                         log.error("Tiny DB returned an error during dev db update")
 
