@@ -195,6 +195,9 @@ _short_key = {
     "license_type": "name",
     "subscription_key": "key",
     "subscription_type": "type",
+    "capture_url": "url",
+    "register_accept_email": "accept email",
+    "register_accept_phone": "accept phone",
 }
 
 
@@ -1080,5 +1083,35 @@ def get_subscriptions(data: List[dict],) -> List[dict]:
     data = [
         dict(short_value(k, d[k]) for k in field_order) for d in data
     ]
+
+def get_portals(data: List[dict],) -> List[dict]:
+    field_order = [
+        "name",
+        "id",
+        "auth_type",
+        # "auth_type_num",
+        "capture_url",
+        # "is_aruba_cert",
+        # "is_default",
+        # "is_editable",
+        # "is_shared",
+        "register_accept_email",
+        "register_accept_phone",
+        # "scope"
+    ]
+    short_auth_types = {
+        "Username/Password": "user/pass",
+        "Self-Registration": "self-reg",
+        "Anonymous": "anon",
+    }
+    for d in data:
+        for k, v in short_auth_types.items():
+            if k in d["auth_type"]:
+                d["auth_type"] = d["auth_type"].replace(k, v)
+
+    data = [
+        dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
+    ]
+    data = strip_no_value(data)
 
     return data
