@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import sys
 from pathlib import Path
 from typing import Union, List
@@ -24,11 +22,11 @@ class AllCalls(CentralApi):
     def __init__(self):
         super().__init__()
 
-    async def platform_get_idp_metadata(
+    async def platform_get_metadata(
         self,
         domain: str,
     ) -> Response:
-        """SAML Metadata for the given domain.
+        """Get saml metadata.
 
         Args:
             domain (str): domain name
@@ -36,168 +34,166 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/platform/aaa_config/v1/authentication/profiles/metadata/{domain}"
+        url = f"/platform/aaa_config/v2/authentication/profiles/metadata/{domain}"
 
         return await self.get(url)
 
-    async def platform_get_idp_source(
+    async def platform_get_domain_list(
         self,
-        domain: str = 'None',
-        offset: int = 0,
-        limit: int = 100,
     ) -> Response:
-        """List IDP Authentication Sources.
-
-        Args:
-            domain (str, optional): Domain name. Defaults to None
-            offset (int, optional): Zero based offset to start from. Defaults to 0
-            limit (int, optional): Maximum number of items to return. Defaults to 100
+        """Get domain list.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/platform/aaa_config/v1/authentication/idp/source"
+        url = "/platform/aaa_config/v2/authentication/idp/source"
 
-        params = {
-            'domain': domain,
-            'offset': offset,
-            'limit': limit
-        }
+        return await self.get(url)
 
-        return await self.get(url, params=params)
-
-    async def platform_add_idp_source(
+    async def platform_add_authentication_source(
         self,
-        domain: str,
-        login_url: str,
-        logout_url: str,
-        public_cert: str,
-        entity_id: str,
+        domain: str = None,
+        entity_id: str = None,
+        login_url: str = None,
+        logout_url: str = None,
+        signing_certificate: str = None,
+        email: str = None,
+        first_name: str = 'fn_not_configured',
+        last_name: str = 'ln_not_configured',
+        idle_session_timeout: int = 15,
+        hpe_ccs_attribute: str = None,
+        username: str = None,
+        password: str = None,
+        recovery_email: str = None,
     ) -> Response:
-        """Add IDP Authentication Source.
+        """Add IDP config.
 
         Args:
-            domain (str): Domain name to Federate
-            login_url (str): URL for IDP's login page
-            logout_url (str): URL for IDP's logout page
-            public_cert (str): IDP's public certificate
-            entity_id (str): Entity ID
+            domain (str, optional): Name of the domain
+            entity_id (str, optional): Entity ID of the SAML configuration
+            login_url (str, optional): Login URL of the IDP
+            logout_url (str, optional): Logout url of the IDP
+            signing_certificate (str, optional): X.509 signing certificate
+            email (str, optional): Email field attribute
+            first_name (str, optional): First name field attribute
+            last_name (str, optional): Last name field attribute
+            idle_session_timeout (int, optional): Idle session timeout for the federated users
+            hpe_ccs_attribute (str, optional): IDP attribute that maps to HPE's custom attribute
+            username (str, optional): username of Recovery/fallback user
+            password (str, optional): password of Recovery/fallback user
+            recovery_email (str, optional): An email to reset password of recovery user
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/platform/aaa_config/v1/authentication/idp/source"
+        url = "/platform/aaa_config/v2/authentication/idp/source"
 
         json_data = {
             'domain': domain,
+            'entity_id': entity_id,
             'login_url': login_url,
             'logout_url': logout_url,
-            'public_cert': public_cert,
-            'entity_id': entity_id
+            'signing_certificate': signing_certificate,
+            'email': email,
+            'first_name': first_name,
+            'last_name': last_name,
+            'idle_session_timeout': idle_session_timeout,
+            'hpe_ccs_attribute': hpe_ccs_attribute,
+            'username': username,
+            'password': password,
+            'recovery_email': recovery_email
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def platform_update_idp_source(
+    async def platform_update_idp_config(
         self,
-        domain: str,
-        login_url: str,
-        logout_url: str,
-        public_cert: str,
-        entity_id: str,
+        domain: str = None,
+        entity_id: str = None,
+        login_url: str = None,
+        logout_url: str = None,
+        signing_certificate: str = None,
+        email: str = None,
+        first_name: str = 'fn_not_configured',
+        last_name: str = 'ln_not_configured',
+        idle_session_timeout: int = 15,
+        hpe_ccs_attribute: str = None,
+        username: str = None,
+        password: str = None,
+        recovery_email: str = None,
     ) -> Response:
-        """Update IDP Authentication Source.
+        """Update IDP configuration.
 
         Args:
-            domain (str): Update IDP Authentication source for given domain
-            login_url (str): URL for IDP's login page
-            logout_url (str): URL for IDP's logout page
-            public_cert (str): IDP's public certificate
-            entity_id (str): Entity ID
+            domain (str, optional): Name of the domain
+            entity_id (str, optional): Entity ID of the SAML configuration
+            login_url (str, optional): Login URL of the IDP
+            logout_url (str, optional): Logout url of the IDP
+            signing_certificate (str, optional): X.509 signing certificate
+            email (str, optional): Email field attribute
+            first_name (str, optional): First name field attribute
+            last_name (str, optional): Last name field attribute
+            idle_session_timeout (int, optional): Idle session timeout for the federated users
+            hpe_ccs_attribute (str, optional): IDP attribute that maps to HPE's custom attribute
+            username (str, optional): username of Recovery/fallback user
+            password (str, optional): password of Recovery/fallback user
+            recovery_email (str, optional): An email to reset password of recovery user
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/platform/aaa_config/v1/authentication/idp/source"
-
-        params = {
-            'domain': domain
-        }
+        url = "/platform/aaa_config/v2/authentication/idp/source"
 
         json_data = {
+            'domain': domain,
+            'entity_id': entity_id,
             'login_url': login_url,
             'logout_url': logout_url,
-            'public_cert': public_cert,
-            'entity_id': entity_id
+            'signing_certificate': signing_certificate,
+            'email': email,
+            'first_name': first_name,
+            'last_name': last_name,
+            'idle_session_timeout': idle_session_timeout,
+            'hpe_ccs_attribute': hpe_ccs_attribute,
+            'username': username,
+            'password': password,
+            'recovery_email': recovery_email
         }
 
-        return await self.patch(url, params=params, json_data=json_data)
+        return await self.put(url, json_data=json_data)
 
-    async def platform_delete_idp_source(
+    async def platform_delete_domain(
         self,
         domain: str,
     ) -> Response:
-        """Delete IDP Authentication Source.
+        """Un-claim domain.
 
         Args:
-            domain (str): Delete IDP Authentication source for given domain
+            domain (str): domain name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/platform/aaa_config/v1/authentication/idp/source"
+        url = f"/platform/aaa_config/v2/authentication/idp/source/{domain}"
 
-        params = {
-            'domain': domain
-        }
+        return await self.delete(url)
 
-        return await self.delete(url, params=params)
-
-    async def platform_upload_metadata(
+    async def platform_extract_metadata(
         self,
-        domain: str,
         saml_meta_data: Union[Path, str],
     ) -> Response:
-        """Upload IDP Authentication Source.
+        """Extract Saml metadata from file.
 
         Args:
-            domain (str): Domain for which metadata configurations are being added
-            saml_meta_data (Union[Path, str]): File with XML metadata
+            saml_meta_data (Union[Path, str]): file object
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/platform/aaa_config/v1/authentication/idp/source/upload/metadata"
+        url = "/platform/aaa_config/v2/authentication/idp/source/extract/metadata"
         saml_meta_data = saml_meta_data if isinstance(saml_meta_data, Path) else Path(str(saml_meta_data))
 
-        params = {
-            'domain': domain
-        }
-
-        return await self.post(url, params=params)
-
-    async def platform_upload_certificate(
-        self,
-        domain: str,
-        saml_certificate: Union[Path, str],
-    ) -> Response:
-        """Upload IDP Authentication Source Certificate.
-
-        Args:
-            domain (str): Domain for which certificate is being uploaded.
-            saml_certificate (Union[Path, str]): File with IDP certificate
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/platform/aaa_config/v1/authentication/idp/source/upload/certificate"
-        saml_certificate = saml_certificate if isinstance(saml_certificate, Path) else Path(str(saml_certificate))
-
-        params = {
-            'domain': domain
-        }
-
-        return await self.post(url, params=params)
+        return await self.post(url)
 
     async def get_aiops_v1_connectivity_global_stage_export(
         self,
@@ -246,7 +242,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v1/connectivity/site/{site_id}/stage/{stage}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v1_connectivity_group_stage_export(
         self,
@@ -269,7 +270,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v1/connectivity/group/{group}/stage/{stage}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_global_list(
         self,
@@ -287,7 +293,12 @@ class AllCalls(CentralApi):
         """
         url = "/aiops/v2/insights/global/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_site_list(
         self,
@@ -307,7 +318,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/site/{site_id}/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_ap_list(
         self,
@@ -327,7 +343,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/ap/{ap_serial}/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_client_list(
         self,
@@ -347,7 +368,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/client/{sta_mac}/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_gateway_list(
         self,
@@ -367,7 +393,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/gateway/{gw_serial}/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_switch_list(
         self,
@@ -387,7 +418,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/switch/{sw_serial}/list"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_global_id_export(
         self,
@@ -407,7 +443,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/global/id/{insight_id}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_site_id_export(
         self,
@@ -429,7 +470,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/site/{site_id}/id/{insight_id}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_ap_id_export(
         self,
@@ -451,7 +497,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/ap/{ap_serial}/id/{insight_id}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_client_id_export(
         self,
@@ -473,7 +524,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/client/{sta_mac}/id/{insight_id}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_gateway_id_export(
         self,
@@ -495,7 +551,12 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/gateway/{gw_serial}/id/{insight_id}/export"
 
-        return await self.get(url)
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
 
     async def get_aiops_v2_insights_switch_id_export(
         self,
@@ -516,6 +577,1869 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = f"/aiops/v2/insights/switch/{sw_serial}/id/{insight_id}/export"
+
+        params = {
+            'from_ms': from_ms,
+            'to': to
+        }
+
+        return await self.get(url, params=params)
+
+    async def airgroup_get_traffic_summary(
+        self,
+        start_time: int,
+        end_time: int,
+        label: str = None,
+    ) -> Response:
+        """Get AirGroup Traffic Summary in terms of Packets.
+
+        Args:
+            start_time (int): start time in epoch
+            end_time (int): stop time in epoch
+            label (str, optional): Label to filter the output. Default is 'all'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/traffic"
+
+        params = {
+            'start_time': start_time,
+            'end_time': end_time,
+            'label': label
+        }
+
+        return await self.get(url, params=params)
+
+    async def airgroup_get_trends(
+        self,
+        start_time: int,
+        end_time: int,
+        trend_type: str,
+        label: str = None,
+    ) -> Response:
+        """Get temporal data about AirGroup based on the parameter passed.
+
+        Args:
+            start_time (int): start time in epoch
+            end_time (int): stop time in epoch
+            trend_type (str): suppressed_serviced_traffic or service_traffic
+            label (str, optional): Label to filter the output. Default is 'all'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/trend"
+
+        params = {
+            'start_time': start_time,
+            'end_time': end_time,
+            'trend_type': trend_type,
+            'label': label
+        }
+
+        return await self.get(url, params=params)
+
+    async def airgroup_get_device_summary(
+        self,
+    ) -> Response:
+        """Retrieves device summary.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/devices"
+
+        return await self.get(url)
+
+    async def airgroup_get_label_list_by_cid(
+        self,
+    ) -> Response:
+        """Retrieves list of labels.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/labels"
+
+        return await self.get(url)
+
+    async def airgroup_get_service_query_summary(
+        self,
+        start_time: int,
+        end_time: int,
+        label: str = None,
+    ) -> Response:
+        """Retrieves a summary of all the services queried for.
+
+        Args:
+            start_time (int): start time in epoch
+            end_time (int): stop time in epoch
+            label (str, optional): Label ID to filter the output. Default is 'all'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/distribution/services"
+
+        params = {
+            'start_time': start_time,
+            'end_time': end_time,
+            'label': label
+        }
+
+        return await self.get(url, params=params)
+
+    async def airgroup_get_server_distribution(
+        self,
+        start_time: int,
+        end_time: int,
+        label: str = None,
+    ) -> Response:
+        """Retrieves a summary of the servers connected to AirGroup.
+
+        Args:
+            start_time (int): start time in epoch
+            end_time (int): stop time in epoch
+            label (str, optional): Label to filter the output. Default is 'all'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/distribution/servers"
+
+        params = {
+            'start_time': start_time,
+            'end_time': end_time,
+            'label': label
+        }
+
+        return await self.get(url, params=params)
+
+    async def airgroup_get_uncached_serviceid(
+        self,
+    ) -> Response:
+        """Get all the uncached services encountered by AirGroup.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/uncached_services"
+
+        return await self.get(url)
+
+    async def airgroup_get_hostname(
+        self,
+    ) -> Response:
+        """Retrieves a list of all hostnames.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/hostnames"
+
+        return await self.get(url)
+
+    async def airgroup_get_suppression_factor(
+        self,
+    ) -> Response:
+        """Retrieves the suppression factor.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup/v1/stats/suppression"
+
+        return await self.get(url)
+
+    async def airmatch_get_rep_radio_by_radio_mac(
+        self,
+        radio_mac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get reporting_radio of a specific Radio MAC.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/reporting_radio/{radio_mac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_rep_radio(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All reporting_radio for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/reporting_radio_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_ap_info_by_eth_mac(
+        self,
+        ap_eth_mac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get ap_info of a specific AP Ethernet MAC.
+
+        Args:
+            ap_eth_mac (str): AP Ethernet MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/ap_info/{ap_eth_mac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_ap_info(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get ap_info for all APs.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/ap_info_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_nbr_pathloss_by_nbr_band(
+        self,
+        radio_mac: str,
+        nbr_mac: str,
+        band: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get nbr_pathloss of a Neighbor Mac heard by a specific Radio Mac.
+
+        Args:
+            radio_mac (str): Heard Radio MAC address
+            nbr_mac (str): Neighbor's MAC address
+            band (str): Band of the Heard's Radio Mac
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/nbr_pathloss/{radio_mac}/{nbr_mac}/{band}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_nbr_pathloss(
+        self,
+        band: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All nbr_pathloss for a Customer and Band.
+
+        Args:
+            band (str): Heard on a specific Band
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/nbr_pathloss_all/{band}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_rf_events_by_radio_mac(
+        self,
+        radio_mac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get rf_events of a specific Radio MAC.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/rf_events/{radio_mac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_priority_rf_events_by_radio_mac(
+        self,
+        radio_mac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get radar and noise RF events of a specific Radio MAC.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/priority_rf_events/{radio_mac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_history_by_radio_mac(
+        self,
+        radio_mac: str,
+        band: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get history of a specific Radio MAC.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            band (str): Heard on a specific Band
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/history/{radio_mac}/{band}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_radio_all_nbr_pathloss(
+        self,
+        radio_mac: str,
+        band: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All nbr_pathloss for a Customer and Radio-Mac.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            band (str): Heard on a specific Band
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/telemetry/v1/nbr_pathloss_radio/{radio_mac}/{band}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_static_radios(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All Static Radios for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/static_radio_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_advanced_stat_ap(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get Number of APs and AP Models.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/adv_ap_stats"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_advanced_stat_eirp(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get EIRP Distribution.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/adv_eirp_distrubution"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_advanced_stat_eirp_reason(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get EIRP Reasons.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/adv_eirp_reason"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_advanced_stat_radio(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get Information about Radio.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/adv_stat_radio"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_adv_stat_nbr(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get Neighbor stats information.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/adv_stat_nbr"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_rf_events(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get all rf_events of a tenant-id.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/rf_events_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_priority_rf_events(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get all radar and noise RF events of a tenant.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/priority_rf_events_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_bootstrap(
+        self,
+        bootstrap_type: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Bootstrap.
+
+        Args:
+            bootstrap_type (str): Bootstrap type
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/bootstrap"
+
+        params = {
+            'bootstrap_type': bootstrap_type,
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_purge(
+        self,
+        purge_type: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Purge.
+
+        Args:
+            purge_type (str): Purge type
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/telemetry/v1/purge"
+
+        params = {
+            'purge_type': purge_type,
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_optimization_get_req(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get optimizations for tenant.
+
+        Args:
+            tenant_id (str, optional): tenant to get the solution
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/solver/v1/optimization"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_optimization_post_req(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """run the algorithm for the solution.
+
+        Args:
+            tenant_id (str, optional): tenant to run the solution
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/solver/v1/optimization"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_get_radio_plan_by_radio_mac(
+        self,
+        radio_mac: str,
+        tenant_id: str = None,
+        debug: bool = None,
+    ) -> Response:
+        """Get solution of a specific Radio MAC.
+
+        Args:
+            radio_mac (str): Radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+            debug (bool, optional): Trigger to switch between debug level and Nondebug level
+                information
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/solver/v1/radio_plan/{radio_mac}"
+
+        params = {
+            'tenant_id': tenant_id,
+            'debug': debug
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_radio_plan(
+        self,
+        tenant_id: str = None,
+        band: str = None,
+        debug: bool = None,
+    ) -> Response:
+        """Get All solutions for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+            band (str, optional): Radio Frequency Band Filter  Valid Values: 2.4ghz, 5ghz
+            debug (bool, optional): Trigger to switch between debug level and Nondebug level
+                information
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/solver/v1/radio_plan"
+
+        params = {
+            'tenant_id': tenant_id,
+            'band': band,
+            'debug': debug
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_optimization_per_partition(
+        self,
+        rf_id: str,
+        partition_id: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get optimizations for tenant's requested partition.
+
+        Args:
+            rf_id (str): RF Domain Id
+            partition_id (str): Partition number
+            tenant_id (str, optional): tenant to get the solution
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/solver/v1/optimization_partition/{rf_id}/{partition_id}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_adv_state_deployment(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Gets Radios Deployment Status.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/solver/v1/advanced_deployment_stats"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_tenant_svc_config_update(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """RMQ message triggers a recompute of the schedule due to change in tenant timezone/deploy
+        hour details.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/svc-config-update"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_trigger_runnow(
+        self,
+        runnow_type: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """RMQ message triggers a runnow job for a certain tenant.
+
+        Args:
+            runnow_type (str): Runnow type
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/runnow"
+
+        params = {
+            'runnow_type': runnow_type,
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_get_schedule(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """get the schedule of all jobs computed by the scheduler.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/schedule"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_get_deploy_jobs(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """get the jobs to be sent to deployer for airmatch solution deployment.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/deploy-jobs"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_get_job_list(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get the list of jobs generated by Scheduler.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/job-list"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_get_tenant_tz_deploy_hr_info(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get the list of unique timezone and deploy hours per tenant.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/tenant-tz-deploy-hr-info"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_trigger_solver_job(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Trigger - RMQ message with on-demand compute for a provided tenant-id.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/scheduler/v1/trigger-solver-job"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_update_feasibility(
+        self,
+        radio_mac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Trigger update of radio feasibility.
+
+        Args:
+            radio_mac (str): Update a single radio feasibility
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/receiver/v1/radio_feasibility_update/{radio_mac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.put(url, params=params)
+
+    async def airmatch_get_radio_feas_by_radio_mac(
+        self,
+        radioMac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get radio_feasibility of a specific radio MAC.
+
+        Args:
+            radioMac (str): radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/receiver/v1/radio_feasibility/{radioMac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_radio_feas(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All radio_feasibility for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/receiver/v1/radio_feasibility_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_device_config(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Returns all Device (AP) Running Configuration for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/receiver/v1/devices_config_all"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_device_config(
+        self,
+        ap_serial: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Returns Device (AP) Running Configuration.
+
+        Args:
+            ap_serial (str): AP Serial Num
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/receiver/v1/device_config/{ap_serial}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_set_device_config(
+        self,
+        ap_serial: str,
+        device_mac: str,
+        static_chan: int,
+        static_pwr: int,
+        opmodes: List[str],
+        tenant_id: str = None,
+        CBW20: List[int] = None,
+        CBW40: List[int] = None,
+    ) -> Response:
+        """Change a device Running Config.
+
+        Args:
+            ap_serial (str): AP Serial Num
+            device_mac (str): Device MAC Address
+            static_chan (int): Static Channel
+            static_pwr (int): Static Power
+            opmodes (List[str]): opmodes
+            tenant_id (str, optional): Customer(Tenant) ID
+            CBW20 (List[int], optional): CBW20
+            CBW40 (List[int], optional): CBW40
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/receiver/v1/device_config_set/{ap_serial}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        json_data = {
+            'device_mac': device_mac,
+            'static_chan': static_chan,
+            'static_pwr': static_pwr,
+            'opmodes': opmodes,
+            'CBW20': CBW20,
+            'CBW40': CBW40
+        }
+
+        return await self.put(url, json_data=json_data, params=params)
+
+    async def airmatch_get_all_service_config(
+        self,
+    ) -> Response:
+        """Returns All Device (AP) Running Configuration for all customers.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/receiver/v1/service_config_all"
+
+        return await self.get(url)
+
+    async def airmatch_get_service_config(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Returns Device (AP) Running Configuration.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/receiver/v1/service_config"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_advanced_stat_eirp_feasible_range(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get EIRP Reasons.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/receiver/v1/adv_eirp_range"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_radio_feas_by_radio_mac(
+        self,
+        radioMac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get radio_feasibility of a specific radio MAC.
+
+        Args:
+            radioMac (str): radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/radio_feasibility/{radioMac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_all_radio_feas(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get All radio_feasibility for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/feasibility/v1/radio_feasibility"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_device_config(
+        self,
+        ap_serial: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Returns Device (AP) Running Configuration.
+
+        Args:
+            ap_serial (str): AP Serial Num
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/device_config/{ap_serial}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_set_device_config(
+        self,
+        ap_serial: str,
+        device_mac: str,
+        static_chan: int,
+        static_pwr: int,
+        opmodes: List[str],
+        tenant_id: str = None,
+        CBW20: List[int] = None,
+        CBW40: List[int] = None,
+    ) -> Response:
+        """Change a device Running Config.
+
+        Args:
+            ap_serial (str): AP Serial Num
+            device_mac (str): Device MAC Address
+            static_chan (int): Static Channel
+            static_pwr (int): Static Power
+            opmodes (List[str]): opmodes
+            tenant_id (str, optional): Customer(Tenant) ID
+            CBW20 (List[int], optional): CBW20
+            CBW40 (List[int], optional): CBW40
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/device_config/{ap_serial}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        json_data = {
+            'device_mac': device_mac,
+            'static_chan': static_chan,
+            'static_pwr': static_pwr,
+            'opmodes': opmodes,
+            'CBW20': CBW20,
+            'CBW40': CBW40
+        }
+
+        return await self.put(url, json_data=json_data, params=params)
+
+    async def airmatch_get_all_device_config(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Returns all Device (AP) Running Configuration for a Customer.
+
+        Args:
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/feasibility/v1/device_config"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_ap_info_by_serial(
+        self,
+        ap_serial: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get feasibility ap_info of a specific AP Ethernet MAC.
+
+        Args:
+            ap_serial (str): AP Serial
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/ap_info/{ap_serial}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_feas_radio_info(
+        self,
+        radioMac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get Feasibility Radio info of a specific radio MAC.
+
+        Args:
+            radioMac (str): radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/radio_info/{radioMac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_get_radio_board_limit(
+        self,
+        radioMac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get board limits of a specific radio MAC.
+
+        Args:
+            radioMac (str): radio MAC address
+            tenant_id (str, optional): Customer(Tenant) ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/feasibility/v1/board_limit/{radioMac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_get_pending_deployments(
+        self,
+        tenant_id: str = None,
+        deploy_hour: int = None,
+    ) -> Response:
+        """get a list of pending deployments for a tenant-id.
+
+        Args:
+            tenant_id (str, optional): tenant id
+            deploy_hour (int, optional): deploy Hour
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/deployer/v1/pending_deployments"
+
+        params = {
+            'tenant_id': tenant_id,
+            'deploy_hour': deploy_hour
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_triger_computation_complete(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Trigger Computation complete message.
+
+        Args:
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/deployer/v1/trigger_computation_complete"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_test_action_msg(
+        self,
+        mac: str,
+        opmode: str,
+        cbw: str,
+        chan: int,
+        eirp: int,
+        tenant_id: str = None,
+    ) -> Response:
+        """RMQ message generates southbound test action-msg.
+
+        Args:
+            mac (str): Radio MAC ID
+            opmode (str): AP operational Mode
+            cbw (str): Radio Channel Bandwidth
+            chan (int): Radio Channel
+            eirp (int): Radio EIRP (power)
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/deployer/v1/trigger_test_action_msg"
+
+        params = {
+            'mac': mac,
+            'opmode': opmode,
+            'cbw': cbw,
+            'chan': chan,
+            'eirp': eirp,
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_test_config(
+        self,
+        disallow_action_msg: bool,
+        tenant_id: str = None,
+    ) -> Response:
+        """Trigger test-config update.
+
+        Args:
+            disallow_action_msg (bool): Disallow sending southbound action msg
+            tenant_id (str, optional): tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/deployer/v1/test_config_update"
+
+        params = {
+            'disallow_action_msg': disallow_action_msg,
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def airmatch_process_ap_neighbors_get_req(
+        self,
+        apserialnum: str,
+        tenant_id: str = None,
+        count: int = None,
+        max_pathloss: int = None,
+        ap_mac: bool = None,
+    ) -> Response:
+        """Get AP neighbor list.
+
+        Args:
+            apserialnum (str): AP Serial Number to get Neighbors for
+            tenant_id (str, optional): ID to look up AP list
+            count (int, optional): Number of AP serial numbers to get
+            max_pathloss (int, optional): Neighbors up to this max pathloss
+            ap_mac (bool, optional): Return ap mac along with ap serial
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/ap_nbr_graph/v1/Ap/NeighborList/{apserialnum}"
+
+        params = {
+            'tenant_id': tenant_id,
+            'count': count,
+            'max_pathloss': max_pathloss,
+            'ap_mac': ap_mac
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_radio_neighbors_get_req(
+        self,
+        radiomac: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Get Radio neighbor list.
+
+        Args:
+            radiomac (str): Radio Mac to look up list of Neighbors
+            tenant_id (str, optional): ID to look up Radio list
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch/ap_nbr_graph/v1/Radio/NeighborList/{radiomac}"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_ap_upgrade_sampling_get_req(
+        self,
+        aplist: List[str],
+        tenant_id: str = None,
+    ) -> Response:
+        """Get AP neighbor list.
+
+        Args:
+            aplist (List[str]): List of Aps to be partitioned
+            tenant_id (str, optional): ID to look up AP list
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/ap_nbr_graph/v1/Ap/LiveUpgrade/Sampling"
+
+        params = {
+            'aplist': aplist,
+            'tenant_id': tenant_id
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_partition_get_req(
+        self,
+        tenant_id: str = None,
+        band: str = None,
+        ptype: str = None,
+    ) -> Response:
+        """Get partition information.
+
+        Args:
+            tenant_id (str, optional): customer ID
+            band (str, optional): Radio Frequency Band Filter  Valid Values: 2.4ghz, 5ghz
+            ptype (str, optional): partition type  Valid Values: normal, eirp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/ap_nbr_graph/v1/partition"
+
+        params = {
+            'tenant_id': tenant_id,
+            'band': band,
+            'ptype': ptype
+        }
+
+        return await self.get(url, params=params)
+
+    async def airmatch_process_partition_post_req(
+        self,
+        tenant_id: str = None,
+    ) -> Response:
+        """Start partition process.
+
+        Args:
+            tenant_id (str, optional): customer ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airmatch/ap_nbr_graph/v1/partition"
+
+        params = {
+            'tenant_id': tenant_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def apprf_top_n_stats_iap_get(
+        self,
+        count: int = None,
+        group: str = None,
+        site: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        ssids: List[str] = None,
+        user_role: List[str] = None,
+        details: bool = None,
+    ) -> Response:
+        """Gets Top N Apprf Statistics.
+
+        Args:
+            count (int, optional): Required top N count. Default is 5 and maximum is 500
+            group (str, optional): Filter by group name
+            site (str, optional): Filter by site name
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            details (bool, optional): Flag deciding if apprf data details shall be shown
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/topstats"
+
+        params = {
+            'count': count,
+            'group': group,
+            'site': site,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'ssids': ssids,
+            'user_role': user_role,
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_get_top_n_stats_v2(
+        self,
+        count: int = None,
+        group: str = None,
+        group_id: str = None,
+        cluster_id: str = None,
+        label_id: str = None,
+        site: str = None,
+        metrics: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        metric_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+    ) -> Response:
+        """Gets Top N Apprf Statistics (V2 Version).
+
+        Args:
+            count (int, optional): Required top N count. Default is 5 and maximum is 500
+            group (str, optional): Filter by group name
+            group_id (str, optional): Filter by group id
+            cluster_id (str, optional): Filter by gateway serial number
+            label_id (str, optional): Filter by label id
+            site (str, optional): Filter by site name
+            metrics (str, optional): Group by one or multiple params[app_id, web_id, web_rep,
+                app_cat, uplink_id, policy_id]
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            metric_id (str, optional): If metrics filter is uplink_id or policy_id, this will
+                provide value for id.
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/datapoints/v2/topn_stats"
+
+        params = {
+            'count': count,
+            'group': group,
+            'group_id': group_id,
+            'cluster_id': cluster_id,
+            'label_id': label_id,
+            'site': site,
+            'metrics': metrics,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'metric_id': metric_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_applications_get(
+        self,
+        count: int = None,
+        group: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        ssids: List[str] = None,
+        user_role: List[str] = None,
+        details: bool = None,
+    ) -> Response:
+        """Gets Top N Applications.
+
+        Args:
+            count (int, optional): Required top N count. Default is 5 and maximum is 500
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            details (bool, optional): Flag deciding if apprf data details shall be shown
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/applications"
+
+        params = {
+            'count': count,
+            'group': group,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'ssids': ssids,
+            'user_role': user_role,
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_webcategories_get(
+        self,
+        count: int = None,
+        group: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        ssids: List[str] = None,
+        user_role: List[str] = None,
+        details: bool = None,
+    ) -> Response:
+        """Gets Top N Web categories.
+
+        Args:
+            count (int, optional): Required top N count. Default is 5 and maximum is 500
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            details (bool, optional): Flag deciding if apprf data details shall be shown
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/webcategories"
+
+        params = {
+            'count': count,
+            'group': group,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'ssids': ssids,
+            'user_role': user_role,
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_appcategories_get(
+        self,
+        count: int = None,
+        group: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        ssids: List[str] = None,
+        user_role: List[str] = None,
+        details: bool = None,
+    ) -> Response:
+        """Gets Top N App categories.
+
+        Args:
+            count (int, optional): Required top N count. Default is 5 and maximum is 500
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            details (bool, optional): Flag deciding if apprf data details shall be shown
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/appcategories"
+
+        params = {
+            'count': count,
+            'group': group,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'ssids': ssids,
+            'user_role': user_role,
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_webreputations_get(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+        macaddr: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        ssids: List[str] = None,
+        user_role: List[str] = None,
+        details: bool = None,
+    ) -> Response:
+        """Gets Top Web Reputations.
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID
+            serial (str, optional): Filter by AP serial number
+            macaddr (str, optional): Filter by Client MAC address e.g. 01:23:45:67:89:ab
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+                applied at customer/group/swarm levels)
+            details (bool, optional): Flag deciding if apprf data details shall be shown
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/webreputations"
+
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'ssids': ssids,
+            'user_role': user_role,
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def apprf_webreputation_mapping_get(
+        self,
+    ) -> Response:
+        """Gets Web Reputation id to name mapping.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/metainfo/iap/webreputation/id_to_name"
+
+        return await self.get(url)
+
+    async def apprf_application_mapping_get(
+        self,
+    ) -> Response:
+        """Gets Application id to name mapping.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/metainfo/iap/application/id_to_name"
+
+        return await self.get(url)
+
+    async def apprf_appcategory_mapping_get(
+        self,
+    ) -> Response:
+        """Gets Application Category id to name mapping.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/metainfo/iap/appcategory/id_to_name"
+
+        return await self.get(url)
+
+    async def apprf_webcategory_mapping_get(
+        self,
+    ) -> Response:
+        """Gets Web Category id to name mapping.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/apprf/v1/metainfo/iap/webcategory/id_to_name"
 
         return await self.get(url)
 
@@ -646,6 +2570,429 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    async def bbs_retrieve_desire_beacon(
+        self,
+        profile_id: str,
+        ap_mac: str = None,
+        iot_radio_mac: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Retrieve ble configured beacons.
+
+        Args:
+            profile_id (str): Id of profile for which to retrieve device beacon
+            ap_mac (str, optional): ap mac address for which to retrieve device beacon
+            iot_radio_mac (str, optional): ble radio mac address for which to retrieve device beacon
+            offset (int, optional): Offset of first item in response. Defaults to 0.
+            limit (int, optional): Maximum number of items in response. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/ble_cfg_beacons/{profile_id}"
+
+        params = {
+            'ap_mac': ap_mac,
+            'iot_radio_mac': iot_radio_mac,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def bbs_retrieve_actual_beacon(
+        self,
+        profile_id: str,
+        ap_mac: str = None,
+        iot_radio_mac: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Retrieve ble running beacons.
+
+        Args:
+            profile_id (str): Id of profile for which to retrieve device beacon
+            ap_mac (str, optional): ap mac address for which to retrieve device beacon
+            iot_radio_mac (str, optional): ble radio mac address for which to retrieve device beacon
+            offset (int, optional): Offset of first item in response. Defaults to 0.
+            limit (int, optional): Maximum number of items in response. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/ble_run_beacons/{profile_id}"
+
+        params = {
+            'ap_mac': ap_mac,
+            'iot_radio_mac': iot_radio_mac,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def bbs_retrieve_beacon_profile(
+        self,
+        profile_id: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Retrieve ble beacon profiles.
+
+        Args:
+            profile_id (str, optional): Id of profile for which to retrieve device beacon
+            offset (int, optional): Offset of first item in response. Defaults to 0.
+            limit (int, optional): Maximum number of items in response. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/bbs/v1/ble_beacon_profiles"
+
+        params = {
+            'profile_id': profile_id,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def bbs_update_device_beacon(
+        self,
+        iot_radio_mac: str,
+        profile_id: str,
+        adv_format: str,
+        major: str,
+        minor: str,
+        uuid: str,
+        payload: str,
+        interval: str,
+    ) -> Response:
+        """Update one device beacon config.
+
+        Args:
+            iot_radio_mac (str): ap mac address used to identify which device change beacon
+            profile_id (str): Id of profile for which to retrieve device beacon
+            adv_format (str): this field is advertisement beacon type  Valid Values: ibeacon, custom
+            major (str): major value for ibeacon, range is 0-65535
+            minor (str): minor value for ibeacon, range is 0-65535
+            uuid (str): uuid value for ibeacon included 36 charachters,
+                eg:4152554E-F99B-4A3B-86D0-947070693A78
+            payload (str): payload value for custom beacon, length is 3-31 bytes and each bytes
+                include 2 ASCII characters
+            interval (str): interval value for beacon advertised , length is 100-30000 ms and
+                increment in multiples of 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/ble_beacon/{iot_radio_mac}/{profile_id}"
+
+        json_data = {
+            'adv_format': adv_format,
+            'major': major,
+            'minor': minor,
+            'uuid': uuid,
+            'payload': payload,
+            'interval': interval
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def bbs_delete_device_beacon(
+        self,
+        iot_radio_mac: str,
+        profile_id: str,
+    ) -> Response:
+        """Delete one device beacon config.
+
+        Args:
+            iot_radio_mac (str): The field used to identify which device change beacon
+            profile_id (str): the ble beacon profile name that ap used
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/ble_beacon/{iot_radio_mac}/{profile_id}"
+
+        return await self.delete(url)
+
+    async def get_cm_cm_enabled_v1(
+        self,
+        tenant_id: str,
+    ) -> Response:
+        """Get the status of Client Match for a tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/cm-enabled/v1/{tenant_id}"
+
+        return await self.get(url)
+
+    async def post_cm_cm_enabled_v1(
+        self,
+        tenant_id: str,
+        enable: bool,
+    ) -> Response:
+        """Enable or disable Client Match for a particular tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+            enable (bool): State of Client Match.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/cm-enabled/v1/{tenant_id}"
+
+        json_data = {
+            'enable': enable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def get_cm_loadbal_enable_v1(
+        self,
+        tenant_id: str,
+    ) -> Response:
+        """Get the status of Client Match Load Balancer for a tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/loadbal-enable/v1/{tenant_id}"
+
+        return await self.get(url)
+
+    async def post_cm_loadbal_enable_v1(
+        self,
+        tenant_id: str,
+        enable: bool,
+    ) -> Response:
+        """Enable or disable Client Match Load Balancer for a particular tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+            enable (bool): State of Client Match Load Balancer.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/loadbal-enable/v1/{tenant_id}"
+
+        json_data = {
+            'enable': enable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def get_cm_bandsteer_6ghz_enable_v1(
+        self,
+        tenant_id: str,
+    ) -> Response:
+        """Get the status of Client Match Band Steer to 6GHz for a tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/bandsteer-6ghz-enable/v1/{tenant_id}"
+
+        return await self.get(url)
+
+    async def post_cm_bandsteer_6ghz_enable_v1(
+        self,
+        tenant_id: str,
+        enable: bool,
+    ) -> Response:
+        """Enable or disable Client Match Band Steer to 6GHz for a particular tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+            enable (bool): State of Client Match Band Steer to 6GHz.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/bandsteer-6ghz-enable/v1/{tenant_id}"
+
+        json_data = {
+            'enable': enable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def get_cm_unsteerable_v1(
+        self,
+        tenant_id: str,
+    ) -> Response:
+        """Get all unsteerable entries for a tenant.
+
+        Args:
+            tenant_id (str): Tenant ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/unsteerable/v1/{tenant_id}"
+
+        return await self.get(url)
+
+    async def get_cm_unsteerable_v1(
+        self,
+        tenant_id: str,
+        client_mac: str,
+    ) -> Response:
+        """Get the unsteerable state of a client.
+
+        Args:
+            tenant_id (str): Tenant ID
+            client_mac (str): MAC address of client
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
+
+        return await self.get(url)
+
+    async def post_cm_unsteerable_v1(
+        self,
+        tenant_id: str,
+        client_mac: str,
+        type: str = None,
+        duration: int = None,
+    ) -> Response:
+        """Set the unsteerable state of a client.
+
+        Args:
+            tenant_id (str): Tenant ID
+            client_mac (str): MAC address of client
+            type (str, optional): Type of the steer.
+            duration (int, optional): Duration (in minutes) for which client is unsteerable.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
+
+        json_data = {
+            'type': type,
+            'duration': duration
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def delete_cm_unsteerable_v1(
+        self,
+        tenant_id: str,
+        client_mac: str,
+    ) -> Response:
+        """Delete the unsteerable state of a client.
+
+        Args:
+            tenant_id (str): Tenant ID
+            client_mac (str): MAC address of client
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
+
+        return await self.delete(url)
+
+    async def cloudauth_read_auth_air_pass_list(
+        self,
+        cursor: str = None,
+        from_time: str = None,
+        time_window: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Fetch list of authentications using Aruba Air Pass.
+
+        Args:
+            cursor (str, optional): Cursor to iterate over the next set of authentication records.
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.
+            time_window (str, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed
+                range is 1 to 1000. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/auth/air_pass/list"
+
+        params = {
+            'cursor': cursor,
+            'from_time': from_time,
+            'time_window': time_window,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_read_auth_cloud_identity_list(
+        self,
+        cursor: str = None,
+        from_time: str = None,
+        time_window: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Fetch list of authentications using Cloud Identity.
+
+        Args:
+            cursor (str, optional): Cursor to iterate over the next set of authentication records.
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.
+            time_window (str, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed
+                range is 1 to 1000. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/auth/cloud_identity/list"
+
+        params = {
+            'cursor': cursor,
+            'from_time': from_time,
+            'time_window': time_window,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_read_auth_details_record(
+        self,
+        request_id: str,
+    ) -> Response:
+        """Fetch details of a specific authentication using either Cloud Identity or Aruba Air Pass.
+
+        Args:
+            request_id (str): The authentication request ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v1/auth/{request_id}"
+
+        return await self.get(url)
+
     async def cloudauth_read_client_policy(
         self,
     ) -> Response:
@@ -660,15 +3007,17 @@ class AllCalls(CentralApi):
 
     async def cloudauth_update_client_policy(
         self,
+        default_role: str,
+        dpp_wlan_network: str,
         rules: list,
-        unprofiled_client_role: str,
     ) -> Response:
         """Configure or update network access policy for registered clients.
 
         Args:
+            default_role (str): Client Role for clients with tags that are not specified in the
+                Rules. Must be a valid role, cannot be empty.
+            dpp_wlan_network (str): WLAN network for clients that use dpp provisoning.
             rules (list): Mapping rules of Client Profile Tags to Client Roles.
-            unprofiled_client_role (str): Client Role for clients that are not profiled or do not
-                have any Client Profile Tag.
 
         Returns:
             Response: CentralAPI Response object
@@ -676,8 +3025,9 @@ class AllCalls(CentralApi):
         url = "/cloudAuth/api/v1/client_policy"
 
         json_data = {
-            'rules': rules,
-            'unprofiled_client_role': unprofiled_client_role
+            'default_role': default_role,
+            'dpp_wlan_network': dpp_wlan_network,
+            'rules': rules
         }
 
         return await self.put(url, json_data=json_data)
@@ -783,6 +3133,164 @@ class AllCalls(CentralApi):
 
         return await self.patch(url, json_data=json_data)
 
+    async def cloudauth_dppclientregistrationread(
+        self,
+        cursor: str = None,
+        id: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Fetch list of registered clients.
+
+        Args:
+            cursor (str, optional): Number of dpp clients to be skipped before returning the data,
+                useful for pagination.
+            id (str, optional): Search for entries with specific dpp client id
+            limit (int, optional): Maximum number of registered dpp clients to be returned. Allowed
+                range is 1 to 20. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/dpp_registration"
+
+        params = {
+            'cursor': cursor,
+            'id': id,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_dppclientregistrationadd(
+        self,
+        id: str,
+        uri: str,
+    ) -> Response:
+        """Register a client.
+
+        Args:
+            id (str): DPP client Id.
+            uri (str): DPP URI
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/dpp_registration"
+
+        json_data = {
+            'id': id,
+            'uri': uri
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloudauth_dppclientregistrationupdate(
+        self,
+        id: str,
+        new_id: str,
+        uri: str,
+    ) -> Response:
+        """Update registered client with bootstrapping key.
+
+        Args:
+            id (str): The unique identifier of the client.
+            new_id (str): DPP client Id.
+            uri (str): DPP URI
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v1/dpp_registration/{id}"
+
+        json_data = {
+            'new_id': new_id,
+            'uri': uri
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloudauth_dppclientregistrationdelete(
+        self,
+        id: str,
+    ) -> Response:
+        """Delete registered client.
+
+        Args:
+            id (str): The unique identifier of the client.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v1/dpp_registration/{id}"
+
+        return await self.delete(url)
+
+    async def cloudauth_read_session_air_pass_list(
+        self,
+        cursor: str = None,
+        from_time: str = None,
+        time_window: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Fetch list of sessions using Aruba Air Pass.
+
+        Args:
+            cursor (str, optional): Cursor to iterate over the next set of session records.
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.
+            time_window (str, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            limit (int, optional): Maximum number of session records to be returned. Allowed range
+                is 1 to 1000. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/session/air_pass/list"
+
+        params = {
+            'cursor': cursor,
+            'from_time': from_time,
+            'time_window': time_window,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_read_cloud_identity_session_list(
+        self,
+        cursor: str = None,
+        from_time: str = None,
+        time_window: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Fetch list of sessions using Cloud Identity.
+
+        Args:
+            cursor (str, optional): Cursor to iterate over the next set of session records.
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.
+            time_window (str, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            limit (int, optional): Maximum number of session records to be returned. Allowed range
+                is 1 to 1000. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v1/session/cloud_identity/list"
+
+        params = {
+            'cursor': cursor,
+            'from_time': from_time,
+            'time_window': time_window,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
     async def cloudauth_read_user_policy(
         self,
     ) -> Response:
@@ -797,6 +3305,7 @@ class AllCalls(CentralApi):
 
     async def cloudauth_update_user_policy(
         self,
+        default_role: str,
         administrator_email: str,
         auth_provider_x509_cert_url: str,
         auth_uri: str,
@@ -813,6 +3322,7 @@ class AllCalls(CentralApi):
         token_uri: str,
         type: str,
         tenant_id: str,
+        mpsk: list,
         organization_name: str,
         rules: list,
         wlan_network: str,
@@ -820,6 +3330,8 @@ class AllCalls(CentralApi):
         """Configure policy to allow wireless network access for users.
 
         Args:
+            default_role (str): Client roles for any user groups that are not specified in the
+                Rules. If left empty all unspecified user group will be denied access.
             administrator_email (str): Administrator Email
             auth_provider_x509_cert_url (str): Copy attribute with same name from JSON file
                 downloaded from Google Workspace
@@ -846,9 +3358,11 @@ class AllCalls(CentralApi):
             type (str): Copy attribute with same name from JSON file downloaded from Google
                 Workspace
             tenant_id (str): Tenant ID
+            mpsk (list): SSID names for the MPSK ssids that need to be configured.
             organization_name (str): Organization name
             rules (list): Mapping rules of User Groups to Client Roles.
             wlan_network (str): WLAN network for clients that do not support Passpoint profiles.
+                Empty or missing WLAN network would mean wired-only provisioning.
 
         Returns:
             Response: CentralAPI Response object
@@ -856,6 +3370,7 @@ class AllCalls(CentralApi):
         url = "/cloudAuth/api/v1/user_policy"
 
         json_data = {
+            'default_role': default_role,
             'administrator_email': administrator_email,
             'auth_provider_x509_cert_url': auth_provider_x509_cert_url,
             'auth_uri': auth_uri,
@@ -872,6 +3387,7 @@ class AllCalls(CentralApi):
             'token_uri': token_uri,
             'type': type,
             'tenant_id': tenant_id,
+            'mpsk': mpsk,
             'organization_name': organization_name,
             'rules': rules,
             'wlan_network': wlan_network
@@ -890,6 +3406,4948 @@ class AllCalls(CentralApi):
         url = "/cloudAuth/api/v1/user_policy"
 
         return await self.delete(url)
+
+    async def configuration_get_groups_v2(
+        self,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all groups.
+
+        Args:
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of group records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_create_group_v2(
+        self,
+        group: str,
+        Wired: bool = True,
+        Wireless: bool = None,
+    ) -> Response:
+        """Create new group.
+
+        Args:
+            group (str): Group Name
+            Wired (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            Wireless (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups"
+
+        json_data = {
+            'group': group,
+            'Wired': Wired,
+            'Wireless': Wireless
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_create_group_v3(
+        self,
+        group: str,
+        Wired: bool = True,
+        Wireless: bool = None,
+    ) -> Response:
+        """Create new group with specified properties.
+
+        Args:
+            group (str): Group Name
+            Wired (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            Wireless (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v3/groups"
+
+        json_data = {
+            'group': group,
+            'Wired': Wired,
+            'Wireless': Wireless
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_clone_group(
+        self,
+        group: str,
+        clone_group: str,
+        upgrade_architecture: bool = False,
+    ) -> Response:
+        """Clone and create new group.
+
+        Args:
+            group (str): Name of group to be created.
+            clone_group (str): Group to be cloned.
+            upgrade_architecture (bool, optional): Upgrade group architecture during clone.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups/clone"
+
+        json_data = {
+            'group': group,
+            'clone_group': clone_group,
+            'upgrade_architecture': upgrade_architecture
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_groups_template_data(
+        self,
+        groups: List[str],
+    ) -> Response:
+        """Get configuration mode set per device type for groups.
+
+        Args:
+            groups (List[str]): Group list to fetch template information.
+                Maximum 20 comma separated group names allowed.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/groups/template_info"
+
+        params = {
+            'groups': groups
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_groups_properties(
+        self,
+        groups: List[str],
+    ) -> Response:
+        """Get properties set for groups.
+
+        Args:
+            groups (List[str]): Group list to fetch properties.
+                Maximum 20 comma separated group names allowed.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/groups/properties"
+
+        params = {
+            'groups': groups
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_group_properties_v2(
+        self,
+        group: str,
+        AllowedDevTypes: List[str] = None,
+        Architecture: str = None,
+        ApNetworkRole: str = None,
+        GwNetworkRole: str = None,
+        AllowedSwitchTypes: List[str] = None,
+        MonitorOnly: List[str] = None,
+        NewCentral: bool = None,
+        Wired: bool = True,
+        Wireless: bool = None,
+    ) -> Response:
+        """Update properties for the given group.
+
+        Args:
+            group (str): Group for which properties need to be updated.
+            AllowedDevTypes (List[str], optional): - Devices types which are allowed to be parked in
+                the group.                                                    - The allowed device
+                types are 'AccessPoints', 'Gateways' and 'Switches'
+            Architecture (str, optional): - Architecture for access points and gateways in the
+                group.                                           - Applicable only when access
+                points and gateways are allowed in the group.
+                Valid Values: Instant, AOS10
+            ApNetworkRole (str, optional): - Network role of the access points in the group.
+                - Applicable only when access points are allowed in the group.
+                - Standard network role is applicable for both AOS10 and Instant architecture.
+                - Microbranch network role for access points is applicable only for AOS10
+                architecture.                                              Valid Values: Standard,
+                Microbranch
+            GwNetworkRole (str, optional): - Network role of the gateways in the group.
+                - Applicable only when gateways are allowed in the group.
+                - BranchGateway and VPNConcentrator network role are applicable for both AOS10 and
+                Instant architecture.                                            - WLANGateway
+                network role is applicable only for AOS10 architecture.
+                Valid Values: BranchGateway, VPNConcentrator, WLANGateway
+            AllowedSwitchTypes (List[str], optional): - Switch types which are allowed to be parked
+                in the group.                                                       - This is
+                applicable only when switches are allowed to be parked in the group.
+                - The allowed switch types are 'AOS_S' and 'AOS_CX'
+            MonitorOnly (List[str], optional): - Device types for which monitor only mode is to be
+                enabled                                                - Currently, this is
+                available only for AOS_S and AOS_CX switches in groups where switches are
+                managed using UI mode of configuration.
+            NewCentral (bool, optional): - Flag to specify that the group is compatible with New
+                Central workflows.
+            Wired (bool, optional): Set to true if wired(Switch) configuration in a group is managed
+                using templates.
+            Wireless (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
+                group is managed using templates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/groups/{group}/properties"
+
+        json_data = {
+            'AllowedDevTypes': AllowedDevTypes,
+            'Architecture': Architecture,
+            'ApNetworkRole': ApNetworkRole,
+            'GwNetworkRole': GwNetworkRole,
+            'AllowedSwitchTypes': AllowedSwitchTypes,
+            'MonitorOnly': MonitorOnly,
+            'NewCentral': NewCentral,
+            'Wired': Wired,
+            'Wireless': Wireless
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_update_group_name(
+        self,
+        group: str,
+        new_group: str,
+    ) -> Response:
+        """Update group name for the given group.
+
+        Args:
+            group (str): Group for which name need to be updated.
+            new_group (str): group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/name"
+
+        json_data = {
+            'new_group': new_group
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_get_cust_default_group(
+        self,
+    ) -> Response:
+        """Get default group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/groups/default_group"
+
+        return await self.get(url)
+
+    async def configuration_set_cust_default_group(
+        self,
+        group: str,
+    ) -> Response:
+        """Set default group.
+
+        Args:
+            group (str): group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/groups/default_group"
+
+        json_data = {
+            'group': group
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_delete_group(
+        self,
+        group: str,
+    ) -> Response:
+        """Delete existing group.
+
+        Args:
+            group (str): Name of the group that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}"
+
+        return await self.delete(url)
+
+    async def configuration_pre_provision_group(
+        self,
+        device_id: List[str],
+        group_name: str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Pre Provision a group to the device.
+
+        Args:
+            device_id (List[str]): device_id
+            group_name (str): Group name
+            tenant_id (str): Tenant id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/preassign"
+
+        json_data = {
+            'device_id': device_id,
+            'group_name': group_name,
+        }
+
+        if tenant_id is not None:
+            json_data["tenant_id"] = str(tenant_id)
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_templates(
+        self,
+        group: str,
+        template: str = None,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+        q: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all templates in group.
+
+        Args:
+            group (str): Name of the group for which the templates are being queried.
+            template (str, optional): Filter on provided name as template.
+            device_type (str, optional): Filter on device_type.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: ALL, 2920, J9727A etc.
+            q (str, optional): Search for template OR version OR model, q will be ignored if any of
+                filter parameters are provided.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of template records to be returned. Defaults to
+                100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates"
+
+        params = {
+            'template': template,
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_create_template(
+        self,
+        group: str,
+        name: str,
+        device_type: str,
+        version: str,
+        model: str,
+        template: Union[Path, str],
+    ) -> Response:
+        """Create new template.
+
+        Args:
+            group (str): Name of the group for which the template is to be created.
+            name (str): Name of template.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+            template (Union[Path, str]): Template text.
+                For 'ArubaSwitch' device_type, the template text should include the following
+                commands to maintain connection with central.
+                1. aruba-central enable.                                          2. aruba-central
+                url https://<URL | IP>/ws.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates"
+        template = template if isinstance(template, Path) else Path(str(template))
+
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
+
+        return await self.post(url, params=params)
+
+    async def configuration_update_template(
+        self,
+        group: str,
+        name: str,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+        template: Union[Path, str] = None,
+    ) -> Response:
+        """Update existing template.
+
+        Args:
+            group (str): Name of the group for which the template is to be updated.
+            name (str): Name of template.
+            device_type (str, optional): Device type of the template.  Valid Values: IAP,
+                ArubaSwitch, CX, MobilityController
+            version (str, optional): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: 2920, J9727A etc.
+            template (Union[Path, str], optional): Template text.
+                For 'ArubaSwitch' device_type, the template text should include the following
+                commands to maintain connection with central.
+                1. aruba-central enable.                                                    2.
+                aruba-central url https://<URL | IP>/ws.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates"
+        template = template if isinstance(template, Path) else Path(str(template))
+
+        params = {
+            'name': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
+
+        return await self.patch(url, params=params)
+
+    async def configuration_get_template(
+        self,
+        group: str,
+        template: str,
+    ) -> Response:
+        """Get template text for a template in group.
+
+        Args:
+            group (str): Name of the group for which the templates are being queried.
+            template (str): Name of template.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates/{template}"
+
+        return await self.get(url)
+
+    async def configuration_delete_template(
+        self,
+        group: str,
+        template: str,
+    ) -> Response:
+        """Delete existing template.
+
+        Args:
+            group (str): Name of the group for which the template is to be deleted.
+            template (str): Name of the template to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates/{template}"
+
+        return await self.delete(url)
+
+    async def configuration_create_snapshot_for_group(
+        self,
+        group: str,
+        name: str,
+        do_not_delete: bool,
+    ) -> Response:
+        """Create new configuration backup for group.
+
+        Args:
+            group (str): Name of the group for which the configuration backup is being created.
+            name (str): name
+            do_not_delete (bool): Flag to represent if the snapshot can be deleted automatically by
+                system when creating new snapshot or not.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/snapshot/{group}"
+
+        json_data = {
+            'name': name,
+            'do_not_delete': do_not_delete
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_create_snapshots_for_multiple_groups(
+        self,
+        backup_name: str,
+        do_not_delete: bool,
+        include_groups: List[str],
+        exclude_groups: List[str],
+    ) -> Response:
+        """Create new configuration backup for multiple groups.
+
+        Args:
+            backup_name (str): backup_name
+            do_not_delete (bool): Flag to represent if the snapshot can be deleted automatically by
+                system when creating new snapshot or not.
+            include_groups (List[str]): List of group names to be included,
+                Example: ["Group1", "Group2"].
+                If include_groups list is specified then exclude_groups list must be empty or must
+                not be specified.
+            exclude_groups (List[str]): List of group names to be excluded,
+                Example: ["Group1", "Group2"].
+                If exclude_groups list is specified then include_groups list must be empty or must
+                not be specified.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/groups/snapshot/backups"
+
+        json_data = {
+            'backup_name': backup_name,
+            'do_not_delete': do_not_delete,
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_snapshots_for_group(
+        self,
+        group: str,
+    ) -> Response:
+        """Get all configuration backups for the given group.
+
+        Args:
+            group (str): Name of the group to list configuration backups.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots"
+
+        return await self.get(url)
+
+    async def configuration_update_do_not_delete(
+        self,
+        group: str,
+        data: list,
+    ) -> Response:
+        """Update do-not-delete flag for list of configuration backups for the given group.
+
+        Args:
+            group (str): Name of the group.
+            data (list): data
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots"
+
+        json_data = {
+            'data': data
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_get_last_restore_logs_for_group(
+        self,
+        group: str,
+    ) -> Response:
+        """Get last restore logs for the given group.
+
+        Args:
+            group (str): Name of the group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/last_restore_log"
+
+        return await self.get(url)
+
+    async def configuration_get_backup_log_for_snapshot(
+        self,
+        group: str,
+        snapshot: str,
+    ) -> Response:
+        """Get backup-log for the given configuration backup for the given group.
+
+        Args:
+            group (str): Name of the group.
+            snapshot (str): Name of the configuration backup.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/backup_log"
+
+        return await self.get(url)
+
+    async def configuration_get_backup_status_for_snapshot(
+        self,
+        group: str,
+        snapshot: str,
+    ) -> Response:
+        """Get status of configuration backup for the given group.
+
+        Args:
+            group (str): Name of the group.
+            snapshot (str): Name of the configuration backup.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/backup_status"
+
+        return await self.get(url)
+
+    async def configuration_get_restore_status_for_snapshot(
+        self,
+        group: str,
+        snapshot: str,
+    ) -> Response:
+        """Get status of configuration restore for the given group.
+
+        Args:
+            group (str): Name of the group.
+            snapshot (str): Name of the configuration backup.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/restore_status"
+
+        return await self.get(url)
+
+    async def configuration_restore_snapshot_for_group(
+        self,
+        group: str,
+        snapshot: str,
+        device_type: str,
+    ) -> Response:
+        """Restore configuration backup of a group.
+
+        Args:
+            group (str): Name of the group.
+            snapshot (str): Name of the configuration backup to be restored.
+            device_type (str): Device type to restore from given backup.  Valid Values: IAP, CX,
+                ArubaSwitch, MobilityController, ALL
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/restore"
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.post(url, params=params)
+
+    async def configuration_move_devices(
+        self,
+        group: str,
+        serials: List[str],
+        preserve_config_overrides: List[str],
+    ) -> Response:
+        """Move devices to a group.
+
+        Args:
+            group (str): group
+            serials (List[str]): serials
+            preserve_config_overrides (List[str]): The configuration of devices of type mentioned in
+                this list will be preserved when the device is moved to a UI group.
+                The device configuration will not be reset completely with the group level
+                configuration.
+                This is supported only for AOS_CX devices.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/move"
+
+        json_data = {
+            'group': group,
+            'serials': serials,
+            'preserve_config_overrides': preserve_config_overrides
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_device_template_variables(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+
+        return await self.get(url)
+
+    async def configuration_create_device_template_variables(
+        self,
+        device_serial: str,
+        total: int,
+        _sys_serial: str,
+        _sys_lan_mac: str,
+    ) -> Response:
+        """Create template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+            total (int): total
+            _sys_serial (str): _sys_serial
+            _sys_lan_mac (str): _sys_lan_mac
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_update_device_template_variables(
+        self,
+        device_serial: str,
+        total: int,
+        _sys_serial: str,
+        _sys_lan_mac: str,
+    ) -> Response:
+        """Update template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+            total (int): total
+            _sys_serial (str): _sys_serial
+            _sys_lan_mac (str): _sys_lan_mac
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_replace_device_template_variables(
+        self,
+        device_serial: str,
+        total: int,
+        _sys_serial: str,
+        _sys_lan_mac: str,
+    ) -> Response:
+        """Replace all or delete some of the template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+            total (int): total
+            _sys_serial (str): _sys_serial
+            _sys_lan_mac (str): _sys_lan_mac
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+
+        json_data = {
+            'total': total,
+            '_sys_serial': _sys_serial,
+            '_sys_lan_mac': _sys_lan_mac
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_delete_device_template_variables(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Delete all of the template variables for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+
+        return await self.delete(url)
+
+    async def configuration_get_device_group(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get group for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/group"
+
+        return await self.get(url)
+
+    async def configuration_get_device_configuration(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get last known running configuration for a device.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/configuration"
+
+        return await self.get(url)
+
+    async def configuration_get_device_details(
+        self,
+        device_serial: str,
+        details: bool = True,
+    ) -> Response:
+        """Get configuration details for a device (only for template groups).
+
+        Args:
+            device_serial (str): Serial number of the device.
+            details (bool, optional): Usually pass false to get only the summary of a device's
+                configuration status.
+                Pass true only if detailed response of a device's configuration status is required.
+                Passing true might result in slower API response and performance effect
+                comparatively.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/config_details"
+
+        params = {
+            'details': details
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_devices_template_details(
+        self,
+        device_serials: List[str],
+    ) -> Response:
+        """Get templates for a list of devices.
+
+        Args:
+            device_serials (List[str]): Serial numbers of the devices.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template"
+
+        params = {
+            'device_serials': device_serials
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_groups_template_details(
+        self,
+        device_type: str,
+        include_groups: List[str] = None,
+        exclude_groups: List[str] = None,
+        all_groups: bool = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get templates of devices present in the given list of groups.
+
+        Args:
+            device_type (str): Fetch device templates of the given device_type.  Valid Values: IAP,
+                ArubaSwitch, CX, MobilityController
+            include_groups (List[str], optional): Fetch devices templates for list of groups.
+            exclude_groups (List[str], optional): Fetch devices templates not in list of groups
+                (Only allowed for user having all_groups access or admin).
+            all_groups (bool, optional): Fetch devices templates details for all the groups (Only
+                allowed for user having all_groups access or admin)
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/groups/template"
+
+        params = {
+            'device_type': device_type,
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups,
+            'all_groups': all_groups,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_hash_template_details(
+        self,
+        template_hash: str,
+        exclude_hash: bool,
+        device_type: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get templates of devices for given template hash (Only allowed for user having all_groups
+        access or admin).
+
+        Args:
+            template_hash (str): Template_hash of the template for which list of devices needs to be
+                populated.
+            exclude_hash (bool): Fetch devices template details not matching with provided hash.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{template_hash}/template"
+
+        params = {
+            'exclude_hash': exclude_hash,
+            'device_type': device_type,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_all_devices_template_variables(
+        self,
+        format: str = 'JSON',
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get template variables for all devices, Response is sorted by device serial.
+
+        Args:
+            format (str, optional): Format in which output is desired.  Valid Values: JSON
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+
+        params = {
+            'format': format,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_create_all_devices_template_variables(
+        self,
+        variables: Union[Path, str],
+        format: str = 'JSON',
+    ) -> Response:
+        """Create template variables for all devices.
+
+        Args:
+            variables (Union[Path, str]):  File with variables to be applied for device.
+                - {"AB0011111": {"_sys_serial": "AB0011111", "_sys_lan_mac": "11:12:AA:13:14:BB",
+                "SSID_A": "Z-Employee"}, "AB0022222": {"_sys_serial": "AB0022222", "_sys_lan_mac":
+                "21:22:AA:23:24:BB", "vc_name": "Instant-23:24:BB"}}
+            format (str, optional): Format in which input is provided.  Valid Values: JSON
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+        variables = variables if isinstance(variables, Path) else Path(str(variables))
+
+        params = {
+            'format': format
+        }
+
+        return await self.post(url, params=params)
+
+    async def configuration_replace_all_devices_template_variables(
+        self,
+        variables: Union[Path, str],
+        format: str = 'JSON',
+    ) -> Response:
+        """Replace all or delete some of the template variables for all devices.
+
+        Args:
+            variables (Union[Path, str]):  File with variables to be applied for device.
+                - {"AB0011111": {"_sys_serial": "AB0011111", "_sys_lan_mac": "11:12:AA:13:14:BB",
+                "SSID_A": "Z-Employee"}, "AB0022222": {"_sys_serial": "AB0022222", "_sys_lan_mac":
+                "21:22:AA:23:24:BB", "vc_name": "Instant-23:24:BB"}}
+            format (str, optional): Format in which input is provided.  Valid Values: JSON
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+        variables = variables if isinstance(variables, Path) else Path(str(variables))
+
+        params = {
+            'format': format
+        }
+
+        return await self.put(url, params=params)
+
+    async def configuration_update_all_devices_template_variables(
+        self,
+        variables: Union[Path, str],
+    ) -> Response:
+        """Update template variables for all devices (Only JSON Payload).
+
+        Args:
+            variables (Union[Path, str]):  File with variables to be applied for device.
+                - {"AB0011111": {"_sys_serial": "AB0011111", "_sys_lan_mac": "11:12:AA:13:14:BB",
+                "SSID_A": "Z-Employee"}, "AB0022222": {"_sys_serial": "AB0022222", "_sys_lan_mac":
+                "21:22:AA:23:24:BB", "vc_name": "Instant-23:24:BB"}}
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+        variables = variables if isinstance(variables, Path) else Path(str(variables))
+
+        return await self.patch(url)
+
+    async def configuration_get_device_variabilised_template(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get variablised template for an Aruba Switch.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/variablised_template"
+
+        return await self.get(url)
+
+    async def configuration_recover_md_device(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Trigger Mobility Device recovery by resetting (delete and add) Device configuration.
+
+        Args:
+            device_serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/recover_device"
+
+        return await self.post(url)
+
+    async def configuration_get_certificates(
+        self,
+        q: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get Certificates details uploaded.
+
+        Args:
+            q (str, optional): Search for a particular certificate by its name, md5 hash or
+                sha1_hash
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/certificates"
+
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_upload_certificate(
+        self,
+        cert_name: str,
+        cert_type: str,
+        cert_format: str,
+        passphrase: str,
+        cert_data: str,
+    ) -> Response:
+        """Upload a certificate.
+
+        Args:
+            cert_name (str): cert_name
+            cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+                OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+            cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+            passphrase (str): passphrase
+            cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/certificates"
+
+        json_data = {
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_certificate(
+        self,
+        certificate: str,
+    ) -> Response:
+        """Delete existing certificate.
+
+        Args:
+            certificate (str): Name of the certificate that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/certificates/{certificate}"
+
+        return await self.delete(url)
+
+    async def configuration_msp_update_certificate(
+        self,
+        cert_name: str,
+        cert_type: str,
+        cert_format: str,
+        passphrase: str,
+        cert_data: str,
+    ) -> Response:
+        """Update a certificate.
+
+        Args:
+            cert_name (str): cert_name
+            cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+                OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+            cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+            passphrase (str): passphrase
+            cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/msp/certificate"
+
+        json_data = {
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_cp_logos(
+        self,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get Captive Portal Logos uploaded.
+
+        Args:
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/cplogo"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_upload_cp_logo(
+        self,
+        cp_logo_filename: str,
+        cp_logo_data: str,
+    ) -> Response:
+        """Upload a captive portal logo.
+
+        Args:
+            cp_logo_filename (str): Filename of logo with extension.
+            cp_logo_data (str): Captive Portal Logo encoded in base64.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/cplogo"
+
+        json_data = {
+            'cp_logo_filename': cp_logo_filename,
+            'cp_logo_data': cp_logo_data
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_cp_logo(
+        self,
+        checksum: str,
+    ) -> Response:
+        """Delete existing captive portal logo.
+
+        Args:
+            checksum (str): MD5 checksum of the logo that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/cplogo/{checksum}"
+
+        return await self.delete(url)
+
+    async def configuration_update_ssh_connection_info(
+        self,
+        device_serial: str,
+        username: str,
+        password: str,
+    ) -> Response:
+        """Set Username, password required for establishing SSH connection to switch.
+
+        Args:
+            device_serial (str): Serial number of the device.
+            username (str): username
+            password (str): password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_msp_customer_templates(
+        self,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get MSP customer level template details.
+
+        Args:
+            device_type (str, optional): Filter on device_type.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: 2920, J9727A etc.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of template records to be returned. Defaults to
+                100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/msp/templates"
+
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_msp_customer_template_text(
+        self,
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Get MSP customer level template text.
+
+        Args:
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/{device_type}/{version}/{model}"
+
+        return await self.get(url)
+
+    async def configuration_delete_msp_customer_template(
+        self,
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Delete MSP customer template.
+
+        Args:
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/{device_type}/{version}/{model}"
+
+        return await self.delete(url)
+
+    async def configuration_set_msp_customer_template(
+        self,
+        device_type: str,
+        version: str,
+        model: str,
+        template: Union[Path, str],
+    ) -> Response:
+        """Update MSP customer level template.
+
+        Args:
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+            template (Union[Path, str]): Template text
+                For HP Switches, the template text should include the following commands to enable
+                RCS connection with central.
+                1. Provide include-credential command in template text.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v2/msp/templates"
+        template = template if isinstance(template, Path) else Path(str(template))
+
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
+
+        return await self.put(url, params=params)
+
+    async def configuration_get_end_customer_templates(
+        self,
+        cid: str,
+        device_type: str = None,
+        version: str = None,
+        model: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get end customer level template details.
+
+        Args:
+            cid (str): Customer id where template has to be provided.
+            device_type (str, optional): Filter on device_type.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: 2920, J9727A etc.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of template records to be returned. Defaults to
+                100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/customer/{cid}"
+
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_end_customer_template_text(
+        self,
+        cid: str,
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Get end customer level template text.
+
+        Args:
+            cid (str): Customer id where template has to be provided.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/customer/{cid}/{device_type}/{version}/{model}"
+
+        return await self.get(url)
+
+    async def configuration_delete_end_customer_template(
+        self,
+        cid: str,
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Delete end customer template.
+
+        Args:
+            cid (str): Customer id where template has to be provided.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/customer/{cid}/{device_type}/{version}/{model}"
+
+        return await self.delete(url)
+
+    async def configuration_set_end_customer_template(
+        self,
+        cid: str,
+        device_type: str,
+        version: str,
+        model: str,
+        template: Union[Path, str],
+    ) -> Response:
+        """Update end customer level template.
+
+        Args:
+            cid (str): Customer id where template has to be provided.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+            template (Union[Path, str]): Template text.
+                For HP Switches, the template text should include the
+                following commands to enable RCS connection with central.
+                1) Provide include-credential command in template text.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/msp/templates/customer/{cid}"
+        template = template if isinstance(template, Path) else Path(str(template))
+
+        params = {
+            'device_type': device_type,
+            'version': version,
+            'model': model
+        }
+
+        return await self.put(url, params=params)
+
+    async def configuration_get_msp_tmpl_differ_custs_groups(
+        self,
+        device_type: str,
+        version: str,
+        model: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get customers and groups where given MSP level template is not applied.
+
+        Args:
+            device_type (str): Template device_type.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Template version.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+            offset (int, optional): Number of customers to be skipped before returning the data,
+                useful for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of customer records to be returned.
+                If limit is 50, records for 50 customers will be returned.
+                If limit is not provided, records for a maximum of 100 customers will be returned.
+                Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/differences/{device_type}/{version}/{model}"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_msp_tmpl_end_cust_differ_groups(
+        self,
+        cid: str,
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Get groups for given end customer where MSP Level template is not applied.
+
+        Args:
+            cid (str): End customer id.
+            device_type (str): Template device_type.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Template version.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/msp/templates/differences/customer/{cid}/{device_type}/{version}/{model}"
+
+        return await self.get(url)
+
+    async def configuration_apply_msp_customer_template(
+        self,
+        include_customers: List[str],
+        exclude_customers: List[str],
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Apply MSP customer level template to end customers.  This would not apply template to
+        template groups at end customer. .
+
+        Args:
+            include_customers (List[str]): List of customers  IDs to be included while applying
+                template,
+                Example: ["111111", "111112"].
+                If include_customers list is specified then exclude_customers must not be specified.
+            exclude_customers (List[str]): List of customers IDs to be excluded while applying
+                template,
+                Example: ["111111", "111112"].
+                If exclude_customers list is specified then include_customers must not be specified.
+                If exclude_customers is [] then template would be applied to all end customers.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/msp/templates/end_customers/{device_type}/{version}/{model}"
+
+        json_data = {
+            'include_customers': include_customers,
+            'exclude_customers': exclude_customers
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_apply_end_customer_template(
+        self,
+        cid: str,
+        include_groups: List[str],
+        exclude_groups: List[str],
+        device_type: str,
+        version: str,
+        model: str,
+    ) -> Response:
+        """Apply end customer template to template groups at end customer.
+
+        Args:
+            cid (str): End customer id.
+            include_groups (List[str]): List of group names to be included while applying template,
+                Example: ["G1", "G2"].
+                If include_groups list is specified then exclude_groups must not be specified.
+                Special value ["ALL_GROUPS"] can be specified in include_groups list so that given
+                template can be copied to ALL template groups under given tenant.
+            exclude_groups (List[str]): List of group names to be excluded while applying template,
+                Example: ["G1", "G2"].
+                If exclude_groups list is specified then include_groups must not be specified.
+            device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
+                MobilityController
+            version (str): Firmware version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str): Model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.                                                    Example: 2920, J9727A
+                etc.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/msp/templates/end_customers/{cid}/{device_type}/{version}/{model}/groups"
+
+        json_data = {
+            'include_groups': include_groups,
+            'exclude_groups': exclude_groups
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_cust_config_mode(
+        self,
+    ) -> Response:
+        """Get configuration mode as either Monitor or Managed mode at customer level.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode"
+
+        return await self.get(url)
+
+    async def configuration_set_cust_config_mode(
+        self,
+        config_mode: str,
+    ) -> Response:
+        """Set configuration mode as either Monitor or Manage at customer level.
+
+        Args:
+            config_mode (str): config_mode  Valid Values: Monitor, Manage
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode"
+
+        json_data = {
+            'config_mode': config_mode
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_group_config_mode(
+        self,
+        q: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get configuration mode for devices as either Monitor or Managed mode at group level.
+
+        Args:
+            q (str, optional): Search for group.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of group config_mode records to be returned.
+                Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode/group"
+
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_set_group_config_mode(
+        self,
+        groups: List[str],
+        config_mode: str,
+    ) -> Response:
+        """Set configuration mode as either Monitor or Manage at group level.
+
+        Args:
+            groups (List[str]): groups
+            config_mode (str): config_mode  Valid Values: Monitor, Manage
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode/group"
+
+        json_data = {
+            'groups': groups,
+            'config_mode': config_mode
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_device_config_mode(
+        self,
+        group: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get configuration mode as either Monitor or Managed mode at device level.
+
+        Args:
+            group (str): Configuration mode of devices for group.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of devices config_mode records to be returned.
+                Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode/device"
+
+        params = {
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_set_device_config_mode(
+        self,
+        serials: List[str],
+        config_mode: str,
+    ) -> Response:
+        """Set configuration mode as either Monitor or Manage for given devices.
+
+        Args:
+            serials (List[str]): serials
+            config_mode (str): config_mode  Valid Values: Monitor, Manage
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode/device"
+
+        json_data = {
+            'serials': serials,
+            'config_mode': config_mode
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_device_serials_config_mode(
+        self,
+        device_serials: List[str],
+    ) -> Response:
+        """Get configuration mode as either Monitor or Managed mode for device serials.
+
+        Args:
+            device_serials (List[str]): List of device serials to fetch configuration mode:
+                Maximum 50 comma separated serials allowed.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/mode/devices"
+
+        params = {
+            'device_serials': device_serials
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_vfw_groups(
+        self,
+    ) -> Response:
+        """Get whitelisted groups in Variables Firewall.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/variables_firewall/groups"
+
+        return await self.get(url)
+
+    async def configuration_update_vfw_groups(
+        self,
+        groups: List[str],
+    ) -> Response:
+        """Add groups to Variables Firewall whitelist.
+
+        Args:
+            groups (List[str]): groups
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/variables_firewall/groups"
+
+        json_data = {
+            'groups': groups
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_vfw_group(
+        self,
+        group: str,
+    ) -> Response:
+        """Delete group from Variables Firewall whitelist.
+
+        Args:
+            group (str): Name of the group that needs to be deleted from Variables Firewall.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/variables_firewall/groups/{group}"
+
+        return await self.delete(url)
+
+    async def configuration_get_vfw_variables(
+        self,
+    ) -> Response:
+        """Get whitelisted variables in Variables Firewall.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/variables_firewall/variables"
+
+        return await self.get(url)
+
+    async def configuration_update_vfw_variables(
+        self,
+        variables: List[str],
+    ) -> Response:
+        """Add variables to Variables Firewall whitelist.
+
+        Args:
+            variables (List[str]): variables
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/variables_firewall/variables"
+
+        json_data = {
+            'variables': variables
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_vfw_variable(
+        self,
+        variable: str,
+    ) -> Response:
+        """Delete variable from Variables Firewall whitelist.
+
+        Args:
+            variable (str): Name of the variable that needs to be deleted from Variables Firewall.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/variables_firewall/variables/{variable}"
+
+        return await self.delete(url)
+
+    async def configuration_set_group_config_country_code(
+        self,
+        groups: List[str],
+        country: str,
+    ) -> Response:
+        """Set country code at group level (For UI groups only, not supported for template groups).
+        Note: IAP's need to be rebooted for changes to take effect. .
+
+        Args:
+            groups (List[str]): groups
+            country (str): country
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/country"
+
+        json_data = {
+            'groups': groups,
+            'country': country
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_group_country(
+        self,
+        group: str,
+    ) -> Response:
+        """Get country code set for group (For UI groups only, not supported for template groups).
+
+        Args:
+            group (str): Name of the group for which the country code is being queried.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/{group}/country"
+
+        return await self.get(url)
+
+    async def configuration_get_groups_auto_commit_state(
+        self,
+        q: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get auto commit state as either On or Off at group level.
+
+        Args:
+            q (str, optional): Search for group.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of group records to be returned. Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/auto_commit_state/groups"
+
+        params = {
+            'q': q,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_set_groups_auto_commit_state(
+        self,
+        groups: List[str],
+        auto_commit_state: str,
+    ) -> Response:
+        """Set auto commit state as either On or Off at group level.
+
+        Args:
+            groups (List[str]): groups
+            auto_commit_state (str): auto_commit_state  Valid Values: On, Off
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/auto_commit_state/groups"
+
+        json_data = {
+            'groups': groups,
+            'auto_commit_state': auto_commit_state
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_device_serials_auto_commit_state(
+        self,
+        device_serials: List[str],
+    ) -> Response:
+        """Get auto commit state as either On or Off for device serials.
+
+        Args:
+            device_serials (List[str]): List of device serials to fetch auto commit state:
+                Maximum 50 comma separated serials allowed.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/auto_commit_state/devices"
+
+        params = {
+            'device_serials': device_serials
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_set_device_serials_auto_commit_state(
+        self,
+        serials: List[str],
+        auto_commit_state: str,
+    ) -> Response:
+        """Set auto commit state as either On or Off for given devices.
+
+        Args:
+            serials (List[str]): serials
+            auto_commit_state (str): auto_commit_state  Valid Values: On, Off
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/auto_commit_state/devices"
+
+        json_data = {
+            'serials': serials,
+            'auto_commit_state': auto_commit_state
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_commit_group_config(
+        self,
+        groups: List[str],
+    ) -> Response:
+        """Commit configurations for given groups.
+
+        Args:
+            groups (List[str]): groups
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/commit/groups"
+
+        json_data = {
+            'groups': groups
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_commit_device_config(
+        self,
+        serials: List[str],
+    ) -> Response:
+        """Commit configurations for given devices.
+
+        Args:
+            serials (List[str]): serials
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/commit/devices"
+
+        json_data = {
+            'serials': serials
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_blacklist_clients(
+        self,
+        device_id: str,
+    ) -> Response:
+        """Get all denylist client mac address in device.
+
+        Args:
+            device_id (str): Device id of virtual controller or C2C ap.
+                Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/swarm/{device_id}/blacklisting"
+
+        return await self.get(url)
+
+    async def configuration_add_blacklist_clients(
+        self,
+        device_id: str,
+        blacklist: List[str],
+    ) -> Response:
+        """Add denylist clients.
+
+        Args:
+            device_id (str): Device id of virtual controller or C2C ap.
+                Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5.
+            blacklist (List[str]): blacklist
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/swarm/{device_id}/blacklisting"
+
+        json_data = {
+            'blacklist': blacklist
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_blacklist_clients(
+        self,
+        device_id: str,
+        blacklist: List[str],
+    ) -> Response:
+        """Delete denylist clients.
+
+        Args:
+            device_id (str): Device id of virtual controller or C2C ap.
+                Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5.
+            blacklist (List[str]): blacklist
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/swarm/{device_id}/blacklisting"
+
+        json_data = {
+            'blacklist': blacklist
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def configuration_get_wlan_list(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN list of an UI group.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Name of the group or guid of the swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_get_wlan_template(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN default configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Name of the group or guid of the swarm or
+                serial number of 10x AP. Example:Group_1 or
+                6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/template"
+
+        return await self.get(url)
+
+    async def configuration_get_protocol_map(
+        self,
+        group_name_or_guid: str,
+    ) -> Response:
+        """Get WLAN access rule protocol map.
+
+        Args:
+            group_name_or_guid (str): Name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group_name_or_guid}/protocol_map"
+
+        return await self.get(url)
+
+    async def configuration_get_access_rule_services(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN access rule services.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Name of the group or guid of the swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/access_rule_services"
+
+        return await self.get(url)
+
+    async def configuration_delete_wlan(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+    ) -> Response:
+        """Delete an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN to be deleted.
+                Example:wlan_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        return await self.delete(url)
+
+    async def configuration_get_wlan_v2(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+    ) -> Response:
+        """Get the information of an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        return await self.get(url)
+
+    async def configuration_create_wlan_v2(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+        essid: str,
+        type: str,
+        hide_ssid: bool,
+        vlan: str,
+        zone: str,
+        wpa_passphrase: str,
+        wpa_passphrase_changed: bool,
+        is_locked: bool,
+        captive_profile_name: str,
+        bandwidth_limit_up: str,
+        bandwidth_limit_down: str,
+        bandwidth_limit_peruser_up: str,
+        bandwidth_limit_peruser_down: str,
+        access_rules: list,
+    ) -> Response:
+        """Create a new WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN to create.                              Example:wlan_1.
+            essid (str): essid
+            type (str): type  Valid Values: employee, guest
+            hide_ssid (bool): hide_ssid
+            vlan (str): vlan
+            zone (str): zone
+            wpa_passphrase (str): wpa_passphrase
+            wpa_passphrase_changed (bool): wpa_passphrase_changed
+            is_locked (bool): is_locked
+            captive_profile_name (str): captive_profile_name
+            bandwidth_limit_up (str): bandwidth_limit_up
+            bandwidth_limit_down (str): bandwidth_limit_down
+            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
+            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
+            access_rules (list): access_rules
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        json_data = {
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_clean_up_and_update_wlan_v2(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+        essid: str,
+        type: str,
+        hide_ssid: bool,
+        vlan: str,
+        zone: str,
+        wpa_passphrase: str,
+        wpa_passphrase_changed: bool,
+        is_locked: bool,
+        captive_profile_name: str,
+        bandwidth_limit_up: str,
+        bandwidth_limit_down: str,
+        bandwidth_limit_peruser_up: str,
+        bandwidth_limit_peruser_down: str,
+        access_rules: list,
+    ) -> Response:
+        """Update an existing WLAN and clean up unsupported fields.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+            essid (str): essid
+            type (str): type  Valid Values: employee, guest
+            hide_ssid (bool): hide_ssid
+            vlan (str): vlan
+            zone (str): zone
+            wpa_passphrase (str): wpa_passphrase
+            wpa_passphrase_changed (bool): wpa_passphrase_changed
+            is_locked (bool): is_locked
+            captive_profile_name (str): captive_profile_name
+            bandwidth_limit_up (str): bandwidth_limit_up
+            bandwidth_limit_down (str): bandwidth_limit_down
+            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
+            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
+            access_rules (list): access_rules
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        json_data = {
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
+        }
+
+        return await self.patch(url, json_data=json_data)
+
+    async def configuration_update_wlan_v2(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+        essid: str,
+        type: str,
+        hide_ssid: bool,
+        vlan: str,
+        zone: str,
+        wpa_passphrase: str,
+        wpa_passphrase_changed: bool,
+        is_locked: bool,
+        captive_profile_name: str,
+        bandwidth_limit_up: str,
+        bandwidth_limit_down: str,
+        bandwidth_limit_peruser_up: str,
+        bandwidth_limit_peruser_down: str,
+        access_rules: list,
+    ) -> Response:
+        """Update an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+            essid (str): essid
+            type (str): type  Valid Values: employee, guest
+            hide_ssid (bool): hide_ssid
+            vlan (str): vlan
+            zone (str): zone
+            wpa_passphrase (str): wpa_passphrase
+            wpa_passphrase_changed (bool): wpa_passphrase_changed
+            is_locked (bool): is_locked
+            captive_profile_name (str): captive_profile_name
+            bandwidth_limit_up (str): bandwidth_limit_up
+            bandwidth_limit_down (str): bandwidth_limit_down
+            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
+            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
+            access_rules (list): access_rules
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        json_data = {
+            'essid': essid,
+            'type': type,
+            'hide_ssid': hide_ssid,
+            'vlan': vlan,
+            'zone': zone,
+            'wpa_passphrase': wpa_passphrase,
+            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'is_locked': is_locked,
+            'captive_profile_name': captive_profile_name,
+            'bandwidth_limit_up': bandwidth_limit_up,
+            'bandwidth_limit_down': bandwidth_limit_down,
+            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
+            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
+            'access_rules': access_rules
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_wlan_list(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN list of an UI group.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_get_wlan_template(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN default configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/template"
+
+        return await self.get(url)
+
+    async def configuration_get_protocol_map(
+        self,
+        group_name_or_guid: str,
+    ) -> Response:
+        """Get WLAN access rule protocol map.
+
+        Args:
+            group_name_or_guid (str): Group name of the group or guid of the swarm.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid}/protocol_map"
+
+        return await self.get(url)
+
+    async def configuration_get_access_rule_services(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN access rule services.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/access_rule_services"
+
+        return await self.get(url)
+
+    async def configuration_get_wlan(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+    ) -> Response:
+        """Get the information of an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        return await self.get(url)
+
+    async def configuration_create_wlan(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+        value: str,
+    ) -> Response:
+        """Create a new WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN to create.                              Example:wlan_1.
+            value (str): "wlan": {                            "a_max_tx_rate": "54",
+                "a_min_tx_rate": "6",                            "access_type": "unrestricted",
+                "accounting_server1": "",                            "accounting_server2": "",
+                "air_time_limit": "",                            "air_time_limit_cb": false,
+                "auth_cache_timeout": 24,                            "auth_req_threshold": 0,
+                "auth_server1": "as1",                            "auth_server2": "",
+                "auth_survivability": false,                            "bandwidth_limit": "",
+                "bandwidth_limit_cb": false,                            "blacklist": true,
+                "broadcast_filter": "arp",                            "called_station_id_deli": 0,
+                "called_station_id_incl_ssid": false,
+                "called_station_id_type": "macaddr",                            "captive_exclude":
+                [],                            "captive_portal": "disable",
+                "captive_portal_proxy_ip": "",
+                "captive_portal_proxy_port": "",                            "captive_profile_name":
+                "",                            "cloud_guest": false,
+                "cluster_name": "",                            "content_filtering": false,
+                "deny_intra_vlan_traffic": false,                            "disable_ssid": false,
+                "dmo_channel_util_threshold": 90,                            "dot11k": false,
+                "dot11r": false,                            "dot11v": false,
+                "download_role": false,                            "dtim_period": 1,
+                "dynamic_multicast_optimization": false,                            "dynamic_vlans":
+                [],                            "enforce_dhcp": false,
+                "essid": "wlan1",                            "explicit_ageout_client": false,
+                "g_max_tx_rate": "54",                            "g_min_tx_rate": "1",
+                "gw_profile_name": "",                            "hide_ssid": false,
+                "high_efficiency_disable": true,
+                "high_throughput_disable": true,                            "inactivity_timeout":
+                1000,                            "index": 1,
+                "l2_auth_failthrough": false,                            "l2switch_mode": false,
+                "leap_use_session_key": false,
+                "local_probe_req_threshold": 0,                            "mac_authentication":
+                false,                            "mac_authentication_delimiter": "",
+                "mac_authentication_upper_case": false,
+                "management_frame_protection": false,
+                "max_auth_failures": 0,                            "max_clients_threshold": 64,
+                "mdid": "",                            "multicast_rate_optimization": false,
+                "name": "wlan1",                            "okc_disable": false,
+                "oos_def": "vpn-down",                            "oos_name": "none",
+                "oos_time": 30,                            "opmode": "wpa3-aes-ccm-128",
+                "opmode_transition_disable": true,                            "per_user_limit": "",
+                "per_user_limit_cb": false,                            "radius_accounting": false,
+                "radius_accounting_mode": "user-authentication",
+                "radius_interim_accounting_interval": 0,
+                "reauth_interval": 0,                            "rf_band": "all",
+                "roles": [],                            "server_load_balancing": false,
+                "set_role_mac_auth": "",
+                "set_role_machine_auth_machine_only": "",
+                "set_role_machine_auth_user_only": "",
+                "set_role_pre_auth": "",                            "ssid_encoding": "utf8",
+                "strict_svp": false,                            "termination": false,
+                "time_range_profiles_status": [],                            "tspec": false,
+                "tspec_bandwidth": 2000,                            "type": "employee",
+                "use_ip_for_calling_station": false,                            "user_bridging":
+                false,                            "very_high_throughput_disable": true,
+                "vlan": "",                            "wep_index": 0,
+                "wep_key": "",                            "wispr": false,
+                "wmm_background_dscp": "",                            "wmm_background_share": 0,
+                "wmm_best_effort_dscp": "",                            "wmm_best_effort_share": 0,
+                "wmm_uapsd": true,                            "wmm_video_dscp": "",
+                "wmm_video_share": 0,                            "wmm_voice_dscp": "",
+                "wmm_voice_share": 0,                            "work_without_uplink": false,
+                "wpa_passphrase": "",                            "zone": "",
+                "hotspot_profile": ""                          },
+                "access_rule": {                            "action": "allow",
+                "app_rf_mv_info": "",                            "blacklist": false,
+                "classify_media": false,                            "disable_scanning": false,
+                "dot1p_priority": "",                            "eport": "any",
+                "ipaddr": "any",                            "log": false,
+                "match": "match",                            "nat_ip": "",
+                "nat_port": 0,                            "netmask": "any",
+                "protocol": "any",                            "protocol_id": "",
+                "service_name": "",                            "service_type": "network",
+                "source": "default",                            "sport": "any",
+                "throttle_downstream": "",                            "throttle_upstream": "",
+                "time_range": "",                            "tos": "",
+                "vlan": 0                          }
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        json_data = {
+            'value': value
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_update_wlan(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+        value: str,
+    ) -> Response:
+        """Update an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
+            value (str): "wlan": {                            "a_max_tx_rate": "54",
+                "a_min_tx_rate": "6",                            "access_type": "unrestricted",
+                "accounting_server1": "",                            "accounting_server2": "",
+                "air_time_limit": "",                            "air_time_limit_cb": false,
+                "auth_cache_timeout": 24,                            "auth_req_threshold": 0,
+                "auth_server1": "as1",                            "auth_server2": "",
+                "auth_survivability": false,                            "bandwidth_limit": "",
+                "bandwidth_limit_cb": false,                            "blacklist": true,
+                "broadcast_filter": "arp",                            "called_station_id_deli": 0,
+                "called_station_id_incl_ssid": false,
+                "called_station_id_type": "macaddr",                            "captive_exclude":
+                [],                            "captive_portal": "disable",
+                "captive_portal_proxy_ip": "",
+                "captive_portal_proxy_port": "",                            "captive_profile_name":
+                "",                            "cloud_guest": false,
+                "cluster_name": "",                            "content_filtering": false,
+                "deny_intra_vlan_traffic": false,                            "disable_ssid": false,
+                "dmo_channel_util_threshold": 90,                            "dot11k": false,
+                "dot11r": false,                            "dot11v": false,
+                "download_role": false,                            "dtim_period": 1,
+                "dynamic_multicast_optimization": false,                            "dynamic_vlans":
+                [],                            "enforce_dhcp": false,
+                "essid": "wlan1",                            "explicit_ageout_client": false,
+                "g_max_tx_rate": "54",                            "g_min_tx_rate": "1",
+                "gw_profile_name": "",                            "hide_ssid": false,
+                "high_efficiency_disable": true,
+                "high_throughput_disable": true,                            "inactivity_timeout":
+                1000,                            "index": 1,
+                "l2_auth_failthrough": false,                            "l2switch_mode": false,
+                "leap_use_session_key": false,
+                "local_probe_req_threshold": 0,                            "mac_authentication":
+                false,                            "mac_authentication_delimiter": "",
+                "mac_authentication_upper_case": false,
+                "management_frame_protection": false,
+                "max_auth_failures": 0,                            "max_clients_threshold": 64,
+                "mdid": "",                            "multicast_rate_optimization": false,
+                "name": "wlan1",                            "okc_disable": false,
+                "oos_def": "vpn-down",                            "oos_name": "none",
+                "oos_time": 30,                            "opmode": "wpa3-aes-ccm-128",
+                "opmode_transition_disable": true,                            "per_user_limit": "",
+                "per_user_limit_cb": false,                            "radius_accounting": false,
+                "radius_accounting_mode": "user-authentication",
+                "radius_interim_accounting_interval": 0,
+                "reauth_interval": 0,                            "rf_band": "all",
+                "roles": [],                            "server_load_balancing": false,
+                "set_role_mac_auth": "",
+                "set_role_machine_auth_machine_only": "",
+                "set_role_machine_auth_user_only": "",
+                "set_role_pre_auth": "",                            "ssid_encoding": "utf8",
+                "strict_svp": false,                            "termination": false,
+                "time_range_profiles_status": [],                            "tspec": false,
+                "tspec_bandwidth": 2000,                            "type": "employee",
+                "use_ip_for_calling_station": false,                            "user_bridging":
+                false,                            "very_high_throughput_disable": true,
+                "vlan": "",                            "wep_index": 0,
+                "wep_key": "",                            "wispr": false,
+                "wmm_background_dscp": "",                            "wmm_background_share": 0,
+                "wmm_best_effort_dscp": "",                            "wmm_best_effort_share": 0,
+                "wmm_uapsd": true,                            "wmm_video_dscp": "",
+                "wmm_video_share": 0,                            "wmm_voice_dscp": "",
+                "wmm_voice_share": 0,                            "work_without_uplink": false,
+                "wpa_passphrase": "",                            "zone": "",
+                "hotspot_profile": ""                          },
+                "access_rule": {                            "action": "allow",
+                "app_rf_mv_info": "",                            "blacklist": false,
+                "classify_media": false,                            "disable_scanning": false,
+                "dot1p_priority": "",                            "eport": "any",
+                "ipaddr": "any",                            "log": false,
+                "match": "match",                            "nat_ip": "",
+                "nat_port": 0,                            "netmask": "any",
+                "protocol": "any",                            "protocol_id": "",
+                "service_name": "",                            "service_type": "network",
+                "source": "default",                            "sport": "any",
+                "throttle_downstream": "",                            "throttle_upstream": "",
+                "time_range": "",                            "tos": "",
+                "vlan": 0                          }
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        json_data = {
+            'value': value
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_delete_wlan(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        wlan_name: str,
+    ) -> Response:
+        """Delete an existing WLAN.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            wlan_name (str): Name of WLAN to be deleted.
+                Example:wlan_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
+
+        return await self.delete(url)
+
+    async def configuration_get_hotspot_list(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get hotspot list of an UI group or swarm or device.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_get_hotspot_list_by_mode_name(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        mode_name: str,
+    ) -> Response:
+        """Get hotspot list of an UI group or swarm or device with mode name.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{mode_name}"
+
+        return await self.get(url)
+
+    async def configuration_get_hotspot_templates(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get hotspot default configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/template"
+
+        return await self.get(url)
+
+    async def configuration_get_hotspot(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        hotspot_name: str,
+        mode_name: str,
+    ) -> Response:
+        """Get the information of an existing hotspot.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            hotspot_name (str): Name of Hotspot selected.
+                Example:hotspot_1.
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
+
+        return await self.get(url)
+
+    async def configuration_create_hotspot(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        hotspot_name: str,
+        mode_name: str,
+        value: str,
+    ) -> Response:
+        """Create a new hotspot.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            hotspot_name (str): Name of Hotspot to create.
+                Example:hotspot_1.
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+            value (str): "hotspot": {                            "name": "aruba-passpoint",
+                "mode": "HS2",                            "enable": false,
+                "comeback_mode": false,                            "gas_comeback_delay": 0,
+                "release_number": 0,                            "asra": false,
+                "internet": false,                            "osen": false,
+                "query_response_length_limit": 127,
+                "access_network_type": "private",                            "roam_cons_len_1": 0,
+                "roam_cons_oi_1": "",                            "roam_cons_len_2": "",
+                "roam_cons_oi_2": "",                            "roam_cons_len_3": 0,
+                "roam_cons_oi_3": "",                            "addtl_roam_cons_ois": 0,
+                "venue_group": "business",                            "venue_type": "research-and-
+                dev-facility",                            "pame_bi": false,
+                "group_frame_block": false,                            "p2p_dev_mgmt": false,
+                "p2p_cross_connect": false,                            "osu_nai": "",
+                "osu_ssid": "",                            "qos_map_range": "",
+                "qos_map_excp": "",                            "anqp_nai_realm": "",
+                "anqp_venue_name": "",                            "anqp_nwk_auth": "",
+                "anqp_roam_cons": "",                            "anqp_3gpp": "",
+                "anqp_ip_addr_avail": "",                            "anqp_domain_name": "",
+                "h2qp_oper_name": "",                            "h2qp_wan_metrics": "",
+                "h2qp_conn_cap": "",                            "h2qp_oper_class": "",
+                "h2qp_osu_provider": ""                          }
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
+
+        json_data = {
+            'value': value
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_update_hotspot(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        hotspot_name: str,
+        mode_name: str,
+        value: str,
+    ) -> Response:
+        """Update an existing hotspot.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            hotspot_name (str): Name of Hotspot selected.
+                Example:hotspot_1.
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+            value (str): "hotspot": {                            "name": "aruba-passpoint",
+                "mode": "HS2",                            "enable": false,
+                "comeback_mode": false,                            "gas_comeback_delay": 0,
+                "release_number": 0,                            "asra": false,
+                "internet": false,                            "osen": false,
+                "query_response_length_limit": 127,
+                "access_network_type": "private",                            "roam_cons_len_1": 0,
+                "roam_cons_oi_1": "",                            "roam_cons_len_2": "",
+                "roam_cons_oi_2": "",                            "roam_cons_len_3": 0,
+                "roam_cons_oi_3": "",                            "addtl_roam_cons_ois": 0,
+                "venue_group": "business",                            "venue_type": "research-and-
+                dev-facility",                            "pame_bi": false,
+                "group_frame_block": false,                            "p2p_dev_mgmt": false,
+                "p2p_cross_connect": false,                            "osu_nai": "",
+                "osu_ssid": "",                            "qos_map_range": "",
+                "qos_map_excp": "",                            "anqp_nai_realm": "",
+                "anqp_venue_name": "",                            "anqp_nwk_auth": "",
+                "anqp_roam_cons": "",                            "anqp_3gpp": "",
+                "anqp_ip_addr_avail": "",                            "anqp_domain_name": "",
+                "h2qp_oper_name": "",                            "h2qp_wan_metrics": "",
+                "h2qp_conn_cap": "",                            "h2qp_oper_class": "",
+                "h2qp_osu_provider": ""                          }
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
+
+        json_data = {
+            'value': value
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_delete_hotspot(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        hotspot_name: str,
+        mode_name: str,
+    ) -> Response:
+        """Delete an existing hotspot.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            hotspot_name (str): Name of Hotspot to be deleted.
+                Example:hotspot_1.
+            mode_name (str): Hotspot mode name.                              Example:HS2.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
+
+        return await self.delete(url)
+
+    async def configuration_get_clis(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        version: str = None,
+    ) -> Response:
+        """Get AP configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            version (str, optional): Version of AP.                                      Defalut is
+                AP max version.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_cli/{group_name_or_guid_or_serial_number}"
+
+        params = {
+            'version': version
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_clis(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        clis: List[str],
+    ) -> Response:
+        """Replace AP configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            clis (List[str]): Whole configuration List in CLI format
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_cli/{group_name_or_guid_or_serial_number}"
+
+        json_data = {
+            'clis': clis
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_ap_settings_clis(
+        self,
+        serial_number: str,
+    ) -> Response:
+        """Get per AP setting.
+
+        Args:
+            serial_number (str): Hotspot mode name.                                  Example:HS2.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_settings_cli/{serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_update_ap_settings_clis(
+        self,
+        serial_number: str,
+        clis: List[str],
+    ) -> Response:
+        """Replace per AP setting.
+
+        Args:
+            serial_number (str): Hotspot mode name.                                  Example:HS2.
+            clis (List[str]): Whole per AP setting List in CLI format
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/ap_settings_cli/{serial_number}"
+
+        json_data = {
+            'clis': clis
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_swarm_variables(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get variables config.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/iap_variables/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_update_swarm_variables(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        variables: list,
+    ) -> Response:
+        """Replace AP variables.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            variables (list): Variable List
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/iap_variables/{group_name_or_guid_or_serial_number}"
+
+        json_data = {
+            'variables': variables
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_dirty_diff(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get dirty diff.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of group config_mode records to be returned.
+                Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dirty_diff/{group_name_or_guid_or_serial_number}"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_get_ap_settings_v2(
+        self,
+        serial_number: str,
+    ) -> Response:
+        """Get an existing ap settings.
+
+        Args:
+            serial_number (str): Hotspot mode name.                                  Example:HS2.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/ap_settings/{serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_update_ap_settings_v2(
+        self,
+        serial_number: str,
+        hostname: str,
+        ip_address: str,
+        zonename: str,
+        achannel: str,
+        atxpower: str,
+        gchannel: str,
+        gtxpower: str,
+        dot11a_radio_disable: bool,
+        dot11g_radio_disable: bool,
+        usb_port_disable: bool,
+    ) -> Response:
+        """Update an existing ap settings.
+
+        Args:
+            serial_number (str): Hotspot mode name.                                  Example:HS2.
+            hostname (str): hostname
+            ip_address (str): ip_address
+            zonename (str): zonename
+            achannel (str): achannel
+            atxpower (str): atxpower
+            gchannel (str): gchannel
+            gtxpower (str): gtxpower
+            dot11a_radio_disable (bool): dot11a_radio_disable
+            dot11g_radio_disable (bool): dot11g_radio_disable
+            usb_port_disable (bool): usb_port_disable
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/ap_settings/{serial_number}"
+
+        json_data = {
+            'hostname': hostname,
+            'ip_address': ip_address,
+            'zonename': zonename,
+            'achannel': achannel,
+            'atxpower': atxpower,
+            'gchannel': gchannel,
+            'gtxpower': gtxpower,
+            'dot11a_radio_disable': dot11a_radio_disable,
+            'dot11g_radio_disable': dot11g_radio_disable,
+            'usb_port_disable': usb_port_disable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_swarm_config_v2(
+        self,
+        guid: str,
+    ) -> Response:
+        """Get an existing swarm config.
+
+        Args:
+            guid (str): GUID of SWARM selected.
+                Example:6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/swarm_config/{guid}"
+
+        return await self.get(url)
+
+    async def configuration_update_swarm_config_v2(
+        self,
+        guid: str,
+        name: str,
+        ip_address: str,
+        timezone_name: str,
+        timezone_hr: int,
+        timezone_min: int,
+    ) -> Response:
+        """Update an existing swarm config.
+
+        Args:
+            guid (str): guid of Swarm selected.
+                Example:6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            name (str): name
+            ip_address (str): ip_address
+            timezone_name (str): List of timezone names,                                  ["none",
+                "International-Date-Line-West", "Coordinated-Universal-Time-11", "Hawaii", "Alaska",
+                "Baja-California", "Pacific-Time", "Arizona", "Chihuahua", "La-Paz", "Mazatlan",
+                "Mountain-Time",                                   "Central-America", "Central-
+                Time", "Guadalajara", "Mexico-City", "Monterrey", "Saskatchewan",
+                "Bogota", "Lima", "Quito", "Eastern-Time", "Indiana(East)", "Caracas", "Asuncion",
+                "Atlantic-Time(Canada)",                                   "Cuiaba", "Georgetown",
+                "Manaus", "San-Juan", "Santiago", "Newfoundland", "Brasilia", "Buenos-Aires",
+                "Cayenne", "Fortaleza", "Greenland", "Montevideo", "Salvador", "Coordinated-
+                Universal-Time-02",                                   "Mid-Atlantic", "Azores",
+                "Cape-Verde-Is", "Casablanca", "Coordinated-Universal-Time", "Dublin",
+                "Edinburgh", "Lisbon", "London", "Monrovia", "Reykjavik", "Amsterdam", "Berlin",
+                "Bern", "Rome",                                   "Stockholm", "Vienna", "Belgrade",
+                "Bratislava", "Budapest", "Ljubljana", "Prague", "Brussels",
+                "Copenhagen", "Madrid", "Paris", "Sarajevo", "Skopje", "Warsaw", "Zagreb", "West-
+                Central-Africa",                                   "Windhoek", "Amman", "Athens",
+                "Bucharest", "Beirut", "Cairo", "Damascus", "East-Europe", "Harare",
+                "Pretoria", "Helsinki", "Istanbul", "Kyiv", "Riga", "Sofia", "Tallinn", "Vilnius",
+                "Jerusalem",                                   "Baghdad", "Minsk", "Kuwait",
+                "Riyadh", "Nairobi", "Tehran", "Abu-Dhabi", "Muscat", "Baku", "Moscow",
+                "St.Petersburg", "Volgograd", "Port-Louis", "Tbilisi", "Yerevan", "Kabul",
+                "Islamabad", "Karachi",                                   "Tashkent", "Chennai",
+                "Kolkata", "Mumbai", "New-Delhi", "Sri-Jayawardenepura", "Kathmandu", "Astana",
+                "Dhaka", "Ekaterinburg", "Yangon", "Bangkok", "Hanoi", "Jakarta", "Novosibirsk",
+                "Beijing", "Chongqing",                                   "HongKong", "Krasnoyarsk",
+                "Kuala-Lumpur", "Perth", "Singapore", "Taipei", "Urumqi", "Ulaanbaatar",
+                "Irkutsk", "Osaka", "Sapporo", "Tokyo", "Seoul", "Adelaide", "Darwin", "Brisbane",
+                "Canberra", "Melbourne",                                   "Sydney", "Guam", "Port-
+                Moresby", "Hobart", "Yakutsk", "Solomon-Is.", "New-Caledonia","Vladivostok",
+                "Auckland", "Wellington", "Coordinated-Universal-Time+12", "Fiji", "Magadan",
+                "Nukualofa", "Samoa"].
+            timezone_hr (int): Range value is -12 to 14.
+            timezone_min (int): Range value is 0 to 60.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/swarm_config/{guid}"
+
+        json_data = {
+            'name': name,
+            'ip_address': ip_address,
+            'timezone_name': timezone_name,
+            'timezone_hr': timezone_hr,
+            'timezone_min': timezone_min
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_interfaces(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get Interfaces.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/interfaces"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_interfaces(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+        name: str = None,
+        description: str = None,
+        admin_status: bool = None,
+        speed_duplex: str = None,
+        routing: bool = None,
+        lag_name: str = None,
+        vlan_mode: str = None,
+        native_vlan_id: int = None,
+        access_vlan_id: int = None,
+        allowed_vlan_list: List[str] = None,
+        ip_address_assignment: str = None,
+        ip_address: List[str] = None,
+    ) -> Response:
+        """Update Interfaces.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            name (str, optional): Pattern: "^1/1/([1-9]|[1-4][0-9]|5[0-6])$|^OOBM$"
+            description (str, optional): Pattern: "^([\x20-\x21\x23-\x3E\x40-\x7F])*$"
+            admin_status (bool, optional): admin_status
+            speed_duplex (str, optional): Please refer device specific documentation for valid
+                speed_duplex values for each interface.<br>  Valid Values: 10-Full, 10-Half,
+                100-Full, 100-Half, 1000-Full, Auto, Auto 10M, Auto 100M, Auto 1G, Auto 2.5G, Auto
+                5G, Auto 10G, Auto 25G, Auto 40G, Auto 50G, Auto 100G
+            routing (bool, optional): routing
+            lag_name (str, optional): Pattern: "^(lag[
+                ]?([1-9]|[1-9][0-9]|[1-4][0-9][0-9]|5[0-1][0-9]|520))*$"
+            vlan_mode (str, optional): vlan_mode  Valid Values: access, trunk
+            native_vlan_id (int, optional): native_vlan_id
+            access_vlan_id (int, optional): access_vlan_id
+            allowed_vlan_list (List[str], optional): Configure VLAN to trunk-allowed mode in
+                interfaces.<br>Pattern for VLAN: "(^([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-
+                9]|409[0-4])(-([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4]))?$)|(^all$)"
+            ip_address_assignment (str, optional): Only configurable at device-
+                level.<br>ip_address_assignment field is associated with ip_address. Configure
+                interface with static or dhcp mode ipv4/v6 address  Valid Values: DHCP, Static, None
+            ip_address (List[str], optional): Only configurable at device-level.<br>ipv4/ipv6
+                address with subnet are valid entries<br>Please refer to device specific
+                documentation for more information.<br>An example for ipv6 allowed pattern is
+                provided.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/interfaces"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'name': name,
+            'description': description,
+            'admin_status': admin_status,
+            'speed_duplex': speed_duplex,
+            'routing': routing,
+            'lag_name': lag_name,
+            'vlan_mode': vlan_mode,
+            'native_vlan_id': native_vlan_id,
+            'access_vlan_id': access_vlan_id,
+            'allowed_vlan_list': allowed_vlan_list,
+            'ip_address_assignment': ip_address_assignment,
+            'ip_address': ip_address
+        }
+
+        return await self.post(url, params=params, json_data=json_data)
+
+    async def configuration_get_lag(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get LAGs.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/lags"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_crud_lag(
+        self,
+        delete: List[str],
+        device_serial: str = None,
+        group_name: str = None,
+        name: str = None,
+        description: str = None,
+        admin_status: bool = False,
+        port_members: List[str] = None,
+        speed_duplex: str = None,
+        aggregation_mode: str = 'None',
+        routing: bool = False,
+        ip_address: List[str] = None,
+        loop_protect_enabled: bool = False,
+        vlan_mode: str = 'access',
+        native_vlan_id: int = None,
+        access_vlan_id: int = None,
+        allowed_vlan_list: List[str] = None,
+        dhcpv4_snooping: str = None,
+    ) -> Response:
+        """Create/Update/Delete LAGs.
+
+        Args:
+            delete (List[str]): LAG list to be deleted
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            name (str, optional): Pattern:
+                "^(LAG|Lag|lag)(([1-9]|[1-9][0-9]|[1-4][0-9][0-9]|5[0-1][0-9]|520))$"
+            description (str, optional): Pattern: "^([\x20-\x21\x23-\x3E\x40-\x7F])*$"
+            admin_status (bool, optional): admin_status
+            port_members (List[str], optional): For group-level configuration, port_members pattern
+                to refer:<br>"^1\/1\/([1-9]|[1-4][0-9]|5[0-6])$"
+            speed_duplex (str, optional): Please refer device specific documentation for valid
+                speed_duplex values.<br>  Valid Values: 10-Full, 10-Half, 100-Full, 100-Half,
+                1000-Full, Auto, Auto 10M, Auto 100M, Auto 1G, Auto 2.5G, Auto 5G, Auto 10G, Auto
+                25G, Auto 50G
+            aggregation_mode (str, optional): aggregation_mode  Valid Values: None, LACP active,
+                LACP passive
+            routing (bool, optional): routing
+            ip_address (List[str], optional): Only configurable at device-level.<br>ipv4/ipv6
+                address with subnet are valid entries.<br>Please refer to device specific
+                documentation for more information.<br>An example for ipv6 allowed pattern is
+                provided.<br>
+            loop_protect_enabled (bool, optional): loop_protect_enabled
+            vlan_mode (str, optional): vlan_mode  Valid Values: access, trunk
+            native_vlan_id (int, optional): native_vlan_id
+            access_vlan_id (int, optional): access_vlan_id
+            allowed_vlan_list (List[str], optional): Configure VLAN to trunk-allowed mode in
+                LAGs.<br>Pattern: "(^([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4])(-([1-
+                9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4]))?$)|(^all$)"
+            dhcpv4_snooping (str, optional): dhcpv4_snooping
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/lags"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'delete': delete,
+            'name': name,
+            'description': description,
+            'admin_status': admin_status,
+            'port_members': port_members,
+            'speed_duplex': speed_duplex,
+            'aggregation_mode': aggregation_mode,
+            'routing': routing,
+            'ip_address': ip_address,
+            'loop_protect_enabled': loop_protect_enabled,
+            'vlan_mode': vlan_mode,
+            'native_vlan_id': native_vlan_id,
+            'access_vlan_id': access_vlan_id,
+            'allowed_vlan_list': allowed_vlan_list,
+            'dhcpv4_snooping': dhcpv4_snooping
+        }
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def configuration_get_loop_prevention(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get Loop Prevention.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/loop-prevention"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_loop_prevention(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+        name: str = None,
+        lag_members: List[str] = None,
+        port_priority: int = 128,
+        admin_edge_enabled: bool = False,
+        bpdu_guard_enabled: bool = False,
+        bpdu_filter_enabled: bool = False,
+        root_guard_enabled: bool = False,
+        loop_protect_enabled: bool = False,
+        description: str = None,
+    ) -> Response:
+        """Update Loop Prevention.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            name (str, optional): Pattern: "(^1/1/([1-9]|[1-4][0-9]|5[0-6])$|^(lag[
+                ]?([1-9]|[1-9][0-9]|[1-4][0-9][0-9]|5[0-1][0-9]|520))*$)"
+            lag_members (List[str], optional): lag_members
+            port_priority (int, optional): Configure spanning-tree port priority in Interface/LAG.
+                Valid Values: 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
+            admin_edge_enabled (bool, optional): admin_edge_enabled
+            bpdu_guard_enabled (bool, optional): Configure spanning-tree bpdu-guard in
+                Interface/LAG.
+            bpdu_filter_enabled (bool, optional): Configure spanning-tree bpdu-filter in
+                Interface/LAG.
+            root_guard_enabled (bool, optional): Configure spanning-tree root-filter in
+                Interface/LAG.
+            loop_protect_enabled (bool, optional): Configure loop-protect in Interface/LAG.
+            description (str, optional): description
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/loop-prevention"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'name': name,
+            'lag_members': lag_members,
+            'port_priority': port_priority,
+            'admin_edge_enabled': admin_edge_enabled,
+            'bpdu_guard_enabled': bpdu_guard_enabled,
+            'bpdu_filter_enabled': bpdu_filter_enabled,
+            'root_guard_enabled': root_guard_enabled,
+            'loop_protect_enabled': loop_protect_enabled,
+            'description': description
+        }
+
+        return await self.post(url, params=params, json_data=json_data)
+
+    async def configuration_get_properties(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get Properties.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/properties"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_properties(
+        self,
+        name: str = None,
+        contact: str = None,
+        location: str = None,
+        timezone: str = None,
+        vrf: str = None,
+        dns_servers: List[str] = [],
+        ntp_servers: List[str] = [],
+        admin_username: str = None,
+        admin_password: str = None,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Update Properties.
+
+        Args:
+            name (str): Only configurable at device-level.<br>Pattern:
+                "^((([A-Za-z0-9])+|([A-Za-z0-9]-+)*[A-Za-z0-9]+)*)$"
+            contact (str): Pattern: "^[^"?]*$"
+            location (str): Pattern: "^[^"?]*$"
+            timezone (str): timezone  Valid Values: Africa/Abidjan, Africa/Accra,
+                Africa/Addis_Ababa, Africa/Algiers, Africa/Asmara, Africa/Asmera, Africa/Bamako,
+                Africa/Bangui, Africa/Banjul, Africa/Bissau, Africa/Blantyre, Africa/Brazzaville,
+                Africa/Bujumbura, Africa/Cairo, Africa/Casablanca, Africa/Ceuta, Africa/Conakry,
+                Africa/Dakar, Africa/Dar_es_Salaam, Africa/Djibouti, Africa/Douala, Africa/El_Aaiun,
+                Africa/Freetown, Africa/Gaborone, Africa/Harare, Africa/Johannesburg, Africa/Juba,
+                Africa/Kampala, Africa/Khartoum, Africa/Kigali, Africa/Kinshasa, Africa/Lagos,
+                Africa/Libreville, Africa/Lome, Africa/Luanda, Africa/Lubumbashi, Africa/Lusaka,
+                Africa/Malabo, Africa/Maputo, Africa/Maseru, Africa/Mbabane, Africa/Mogadishu,
+                Africa/Monrovia, Africa/Nairobi, Africa/Ndjamena, Africa/Niamey, Africa/Nouakchott,
+                Africa/Ouagadougou, Africa/Porto-Novo, Africa/Sao_Tome, Africa/Timbuktu,
+                Africa/Tripoli, Africa/Tunis, Africa/Windhoek, America/Adak, America/Anchorage,
+                America/Anguilla, America/Antigua, America/Araguaina,
+                America/Argentina/Buenos_Aires, America/Argentina/Catamarca,
+                America/Argentina/ComodRivadavia, America/Argentina/Cordoba,
+                America/Argentina/Jujuy, America/Argentina/La_Rioja, America/Argentina/Mendoza,
+                America/Argentina/Rio_Gallegos, America/Argentina/Salta, America/Argentina/San_Juan,
+                America/Argentina/San_Luis, America/Argentina/Tucuman, America/Argentina/Ushuaia,
+                America/Aruba, America/Asuncion, America/Atikokan, America/Atka, America/Bahia,
+                America/Bahia_Banderas, America/Barbados, America/Belem, America/Belize,
+                America/Blanc-Sablon, America/Boa_Vista, America/Bogota, America/Boise,
+                America/Buenos_Aires, America/Cambridge_Bay, America/Campo_Grande, America/Cancun,
+                America/Caracas, America/Catamarca, America/Cayenne, America/Cayman,
+                America/Chicago, America/Chihuahua, America/Coral_Harbour, America/Cordoba,
+                America/Costa_Rica, America/Creston, America/Cuiaba, America/Curacao,
+                America/Danmarkshavn, America/Dawson, America/Dawson_Creek, America/Denver,
+                America/Detroit, America/Dominica, America/Edmonton, America/Eirunepe,
+                America/El_Salvador, America/Ensenada, America/Fort_Nelson, America/Fort_Wayne,
+                America/Fortaleza, America/Glace_Bay, America/Godthab, America/Goose_Bay,
+                America/Grand_Turk, America/Grenada, America/Guadeloupe, America/Guatemala,
+                America/Guayaquil, America/Guyana, America/Halifax, America/Havana,
+                America/Hermosillo, America/Indiana/Indianapolis, America/Indiana/Knox,
+                America/Indiana/Marengo, America/Indiana/Petersburg, America/Indiana/Tell_City,
+                America/Indiana/Vevay, America/Indiana/Vincennes, America/Indiana/Winamac,
+                America/Indianapolis, America/Inuvik, America/Iqaluit, America/Jamaica,
+                America/Jujuy, America/Juneau, America/Kentucky/Louisville,
+                America/Kentucky/Monticello, America/Knox_IN, America/Kralendijk, America/La_Paz,
+                America/Lima, America/Los_Angeles, America/Louisville, America/Lower_Princes,
+                America/Maceio, America/Managua, America/Manaus, America/Marigot,
+                America/Martinique, America/Matamoros, America/Mazatlan, America/Mendoza,
+                America/Menominee, America/Merida, America/Metlakatla, America/Mexico_City,
+                America/Miquelon, America/Moncton, America/Monterrey, America/Montevideo,
+                America/Montreal, America/Montserrat, America/Nassau, America/New_York,
+                America/Nipigon, America/Nome, America/Noronha, America/North_Dakota/Beulah,
+                America/North_Dakota/Center, America/North_Dakota/New_Salem, America/Ojinaga,
+                America/Panama, America/Pangnirtung, America/Paramaribo, America/Phoenix,
+                America/Port-au-Prince, America/Port_of_Spain, America/Porto_Acre,
+                America/Porto_Velho, America/Puerto_Rico, America/Punta_Arenas, America/Rainy_River,
+                America/Rankin_Inlet, America/Recife, America/Regina, America/Resolute,
+                America/Rio_Branco, America/Rosario, America/Santa_Isabel, America/Santarem,
+                America/Santiago, America/Santo_Domingo, America/Sao_Paulo, America/Scoresbysund,
+                America/Shiprock, America/Sitka, America/St_Barthelemy, America/St_Johns,
+                America/St_Kitts, America/St_Lucia, America/St_Thomas, America/St_Vincent,
+                America/Swift_Current, America/Tegucigalpa, America/Thule, America/Thunder_Bay,
+                America/Tijuana, America/Toronto, America/Tortola, America/Vancouver,
+                America/Virgin, America/Whitehorse, America/Winnipeg, America/Yakutat,
+                America/Yellowknife, Antarctica/Casey, Antarctica/Davis, Antarctica/DumontDUrville,
+                Antarctica/Macquarie, Antarctica/Mawson, Antarctica/McMurdo, Antarctica/Palmer,
+                Antarctica/Rothera, Antarctica/South_Pole, Antarctica/Syowa, Antarctica/Troll,
+                Antarctica/Vostok, Arctic/Longyearbyen, Asia/Aden, Asia/Almaty, Asia/Amman,
+                Asia/Anadyr, Asia/Aqtau, Asia/Aqtobe, Asia/Ashgabat, Asia/Ashkhabad, Asia/Atyrau,
+                Asia/Baghdad, Asia/Bahrain, Asia/Baku, Asia/Bangkok, Asia/Barnaul, Asia/Beirut,
+                Asia/Bishkek, Asia/Brunei, Asia/Calcutta, Asia/Chita, Asia/Choibalsan,
+                Asia/Chongqing, Asia/Chungking, Asia/Colombo, Asia/Dacca, Asia/Damascus, Asia/Dhaka,
+                Asia/Dili, Asia/Dubai, Asia/Dushanbe, Asia/Famagusta, Asia/Gaza, Asia/Harbin,
+                Asia/Hebron, Asia/Ho_Chi_Minh, Asia/Hong_Kong, Asia/Hovd, Asia/Irkutsk,
+                Asia/Istanbul, Asia/Jakarta, Asia/Jayapura, Asia/Jerusalem, Asia/Kabul,
+                Asia/Kamchatka, Asia/Karachi, Asia/Kashgar, Asia/Kathmandu, Asia/Katmandu,
+                Asia/Khandyga, Asia/Kolkata, Asia/Krasnoyarsk, Asia/Kuala_Lumpur, Asia/Kuching,
+                Asia/Kuwait, Asia/Macao, Asia/Macau, Asia/Magadan, Asia/Makassar, Asia/Manila,
+                Asia/Muscat, Asia/Nicosia, Asia/Novokuznetsk, Asia/Novosibirsk, Asia/Omsk,
+                Asia/Oral, Asia/Phnom_Penh, Asia/Pontianak, Asia/Pyongyang, Asia/Qatar,
+                Asia/Qostanay, Asia/Qyzylorda, Asia/Rangoon, Asia/Riyadh, Asia/Saigon,
+                Asia/Sakhalin, Asia/Samarkand, Asia/Seoul, Asia/Shanghai, Asia/Singapore,
+                Asia/Srednekolymsk, Asia/Taipei, Asia/Tashkent, Asia/Tbilisi, Asia/Tehran,
+                Asia/Tel_Aviv, Asia/Thimbu, Asia/Thimphu, Asia/Tokyo, Asia/Tomsk,
+                Asia/Ujung_Pandang, Asia/Ulaanbaatar, Asia/Ulan_Bator, Asia/Urumqi, Asia/Ust-Nera,
+                Asia/Vientiane, Asia/Vladivostok, Asia/Yakutsk, Asia/Yangon, Asia/Yekaterinburg,
+                Asia/Yerevan, Atlantic/Azores, Atlantic/Bermuda, Atlantic/Canary,
+                Atlantic/Cape_Verde, Atlantic/Faeroe, Atlantic/Faroe, Atlantic/Jan_Mayen,
+                Atlantic/Madeira, Atlantic/Reykjavik, Atlantic/South_Georgia, Atlantic/St_Helena,
+                Atlantic/Stanley, Australia/ACT, Australia/Adelaide, Australia/Brisbane,
+                Australia/Broken_Hill, Australia/Canberra, Australia/Currie, Australia/Darwin,
+                Australia/Eucla, Australia/Hobart, Australia/LHI, Australia/Lindeman,
+                Australia/Lord_Howe, Australia/Melbourne, Australia/North, Australia/NSW,
+                Australia/Perth, Australia/Queensland, Australia/South, Australia/Sydney,
+                Australia/Tasmania, Australia/Victoria, Australia/West, Australia/Yancowinna,
+                Brazil/Acre, Brazil/DeNoronha, Brazil/East, Brazil/West, Canada/Atlantic,
+                Canada/Central, Canada/Eastern, Canada/Mountain, Canada/Newfoundland,
+                Canada/Pacific, Canada/Saskatchewan, Canada/Yukon, CET, Chile/Continental,
+                Chile/EasterIsland, CST6CDT, Cuba, EET, Egypt, Eire, EST, EST5EDT, Etc/GMT,
+                Etc/GMT+0, Etc/GMT+1, Etc/GMT+10, Etc/GMT+11, Etc/GMT+12, Etc/GMT+2, Etc/GMT+3,
+                Etc/GMT+4, Etc/GMT+5, Etc/GMT+6, Etc/GMT+7, Etc/GMT+8, Etc/GMT+9, Etc/GMT-0,
+                Etc/GMT-1, Etc/GMT-10, Etc/GMT-11, Etc/GMT-12, Etc/GMT-13, Etc/GMT-14, Etc/GMT-2,
+                Etc/GMT-3, Etc/GMT-4, Etc/GMT-5, Etc/GMT-6, Etc/GMT-7, Etc/GMT-8, Etc/GMT-9,
+                Etc/GMT0, Etc/Greenwich, Etc/UCT, Etc/Universal, Etc/UTC, Etc/Zulu,
+                Europe/Amsterdam, Europe/Andorra, Europe/Astrakhan, Europe/Athens, Europe/Belfast,
+                Europe/Belgrade, Europe/Berlin, Europe/Bratislava, Europe/Brussels,
+                Europe/Bucharest, Europe/Budapest, Europe/Busingen, Europe/Chisinau,
+                Europe/Copenhagen, Europe/Dublin, Europe/Gibraltar, Europe/Guernsey,
+                Europe/Helsinki, Europe/Isle_of_Man, Europe/Istanbul, Europe/Jersey,
+                Europe/Kaliningrad, Europe/Kiev, Europe/Kirov, Europe/Lisbon, Europe/Ljubljana,
+                Europe/London, Europe/Luxembourg, Europe/Madrid, Europe/Malta, Europe/Mariehamn,
+                Europe/Minsk, Europe/Monaco, Europe/Moscow, Europe/Nicosia, Europe/Oslo,
+                Europe/Paris, Europe/Podgorica, Europe/Prague, Europe/Riga, Europe/Rome,
+                Europe/Samara, Europe/San_Marino, Europe/Sarajevo, Europe/Saratov,
+                Europe/Simferopol, Europe/Skopje, Europe/Sofia, Europe/Stockholm, Europe/Tallinn,
+                Europe/Tirane, Europe/Tiraspol, Europe/Ulyanovsk, Europe/Uzhgorod, Europe/Vaduz,
+                Europe/Vatican, Europe/Vienna, Europe/Vilnius, Europe/Volgograd, Europe/Warsaw,
+                Europe/Zagreb, Europe/Zaporozhye, Europe/Zurich, Factory, GB, GB-Eire, GMT, GMT+0,
+                GMT-0, GMT0, Greenwich, Hongkong, HST, Iceland, Indian/Antananarivo, Indian/Chagos,
+                Indian/Christmas, Indian/Cocos, Indian/Comoro, Indian/Kerguelen, Indian/Mahe,
+                Indian/Maldives, Indian/Mauritius, Indian/Mayotte, Indian/Reunion, Iran, Israel,
+                Jamaica, Japan, Kwajalein, Libya, MET, Mexico/BajaNorte, Mexico/BajaSur,
+                Mexico/General, MST, MST7MDT, Navajo, NZ, NZ-CHAT, Pacific/Apia, Pacific/Auckland,
+                Pacific/Bougainville, Pacific/Chatham, Pacific/Chuuk, Pacific/Easter, Pacific/Efate,
+                Pacific/Enderbury, Pacific/Fakaofo, Pacific/Fiji, Pacific/Funafuti,
+                Pacific/Galapagos, Pacific/Gambier, Pacific/Guadalcanal, Pacific/Guam,
+                Pacific/Honolulu, Pacific/Johnston, Pacific/Kiritimati, Pacific/Kosrae,
+                Pacific/Kwajalein, Pacific/Majuro, Pacific/Marquesas, Pacific/Midway, Pacific/Nauru,
+                Pacific/Niue, Pacific/Norfolk, Pacific/Noumea, Pacific/Pago_Pago, Pacific/Palau,
+                Pacific/Pitcairn, Pacific/Pohnpei, Pacific/Ponape, Pacific/Port_Moresby,
+                Pacific/Rarotonga, Pacific/Saipan, Pacific/Samoa, Pacific/Tahiti, Pacific/Tarawa,
+                Pacific/Tongatapu, Pacific/Truk, Pacific/Wake, Pacific/Wallis, Pacific/Yap, Poland,
+                Portugal, PRC, PST8PDT, ROC, ROK, Singapore, Turkey, UCT, Universal, US/Alaska,
+                US/Aleutian, US/Arizona, US/Central, US/East-Indiana, US/Eastern, US/Hawaii,
+                US/Indiana-Starke, US/Michigan, US/Mountain, US/Pacific, US/Samoa, UTC, W-SU, WET,
+                Zulu
+            vrf (str): vrf  Valid Values: default, mgmt
+            dns_servers (List[str]): vrf is required to configure dns_servers<br>ipv4/ipv6 address
+                without subnet are valid dns_server patterns.<br>Please refer to device specific
+                documentation for more information.<br>An example for ipv4 allowed pattern is
+                provided.
+            ntp_servers (List[str]): vrf is required to configure ntp_servers<br>ipv4/ipv6 address
+                without subnet are valid ntp_servers patterns.<br>Please refer to device specific
+                documentation for more information.<br>An example for ipv6 allowed pattern is
+                provided.
+            admin_username (str): Pattern: "^(admin)$"
+            admin_password (str): admin_username should be provided with this field.<br>Pattern:
+                "^[^"? ]*$"
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/properties"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'name': name,
+            'contact': contact,
+            'location': location,
+            'timezone': timezone,
+            'vrf': vrf,
+            'dns_servers': dns_servers,
+            'ntp_servers': ntp_servers,
+            'admin_username': admin_username,
+            'admin_password': admin_password
+        }
+
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def configuration_get_syslog(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get Syslog.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/syslog"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_crud_syslog(
+        self,
+        delete: List[str],
+        global_severity: str,
+        device_serial: str = None,
+        group_name: str = None,
+        severity: str = 'info',
+        vrf: str = 'default',
+    ) -> Response:
+        """Create/Update/Delete Syslog.
+
+        Args:
+            delete (List[str]): Logging servers list to be deleted
+            global_severity (str): Configure syslog server severity level.  Valid Values: alert,
+                crit, debug, emer, err, info, notice, warning
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            severity (str, optional): severity  Valid Values: alert, crit, debug, emerg, err, info,
+                notice, warning
+            vrf (str, optional): vrf  Valid Values: default, mgmt
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/syslog"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'delete': delete,
+            'global_severity': global_severity,
+            'severity': severity,
+            'vrf': vrf
+        }
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def configuration_get_vlans(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get VLANs.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/vlans"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_crud_vlans(
+        self,
+        delete: List[str],
+        device_serial: str = None,
+        group_name: str = None,
+        vlan_id: int = None,
+        name: str = None,
+        admin_status: bool = True,
+        description: str = None,
+        ip_address_assignment: str = 'DHCP',
+        ip_address: List[str] = None,
+        dhcp_relay: List[str] = None,
+        voice: bool = False,
+    ) -> Response:
+        """Create/Update/Delete VLANs.
+
+        Args:
+            delete (List[str]): VLAN list to be deleted
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            vlan_id (int, optional): vlan_id
+            name (str, optional): Pattern: "^$|^[^"?]*[A-Za-z0-9]$"
+            admin_status (bool, optional): admin_status
+            description (str, optional): Pattern: "^([\x20-\x21\x23-\x3E\x40-\x7F])*$"
+            ip_address_assignment (str, optional): For VLANs (excluding vlan1) and platforms
+                8320/8325/8360, the default value is "None", and "DHCP" is not valid
+                entry.<br>ip_address_assignment field is associated with ip_address.  Configure
+                interface-VLAN with static or dhcp mode ipv4/v6 address.  Valid Values: DHCP, Static
+            ip_address (List[str], optional): ipv4/ipv6 address with subnet are valid
+                entries.<br>Please refer to device specific documentation for more
+                information.<br>An example for ipv4 allowed pattern is provided.
+            dhcp_relay (List[str], optional): Only configurable at device-level.<br>
+            voice (bool, optional): voice
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/vlans"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'delete': delete,
+            'vlan_id': vlan_id,
+            'name': name,
+            'admin_status': admin_status,
+            'description': description,
+            'ip_address_assignment': ip_address_assignment,
+            'ip_address': ip_address,
+            'dhcp_relay': dhcp_relay,
+            'voice': voice
+        }
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def configuration_get_authentication(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+    ) -> Response:
+        """Get Port Access Authentication.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/port-access-auth"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        return await self.get(url, params=params)
+
+    async def configuration_update_authentication(
+        self,
+        device_serial: str = None,
+        group_name: str = None,
+        enable: bool = False,
+        cached_reauth_period_enable: bool = False,
+        cached_reauth_period: int = 30,
+        reauth_period_enable: bool = False,
+        reauth_period: int = 3600,
+        quiet_period: int = 60,
+        primary_auth: bool = False,
+        auth_priority: bool = False,
+    ) -> Response:
+        """Update Port Access Authentication.
+
+        Args:
+            device_serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+            group_name (str, optional): Group name.
+                Mandatory for group level configuration.
+            enable (bool, optional): enable
+            cached_reauth_period_enable (bool, optional): cached_reauth_period_enable
+            cached_reauth_period (int, optional): cached_reauth_period
+            reauth_period_enable (bool, optional): reauth_period_enable
+            reauth_period (int, optional): reauth_period
+            quiet_period (int, optional): quiet_period
+            primary_auth (bool, optional): primary_auth
+            auth_priority (bool, optional): auth_priority
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/port-access-auth"
+
+        params = {
+            'device_serial': device_serial,
+            'group_name': group_name
+        }
+
+        json_data = {
+            'enable': enable,
+            'cached_reauth_period_enable': cached_reauth_period_enable,
+            'cached_reauth_period': cached_reauth_period,
+            'reauth_period_enable': reauth_period_enable,
+            'reauth_period': reauth_period,
+            'quiet_period': quiet_period,
+            'primary_auth': primary_auth,
+            'auth_priority': auth_priority
+        }
+
+        return await self.post(url, params=params, json_data=json_data)
+
+    async def configuration_get_system_config(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get System Config.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/system_config/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_update_system_config(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        dns_server: str,
+        ntp_server: List[str],
+        username: str,
+        password: str,
+    ) -> Response:
+        """Update system config.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            dns_server (str): DNS server IPs or domain name
+            ntp_server (List[str]): List of ntp server,
+                Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
+                IPs or domain name.
+            username (str): username
+            password (str): password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/system_config/{group_name_or_guid_or_serial_number}"
+
+        json_data = {
+            'dns_server': dns_server,
+            'ntp_server': ntp_server,
+            'username': username,
+            'password': password
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_arm_config(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get ARM configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/arm/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_update_arm_config(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        _80mhz_support: bool,
+        a_channels: str,
+        air_time_fairness_mode: str,
+        backoff_time: int,
+        band_steering_mode: str,
+        client_aware: bool,
+        client_match: bool,
+        cm_calc_interval: int,
+        cm_calc_threshold: int,
+        cm_holdtime: int,
+        cm_key: str,
+        cm_match_debug: int,
+        cm_max_adaption: int,
+        cm_max_request: int,
+        cm_nb_matching: int,
+        cm_slb_mode: int,
+        error_rate_threshold: int,
+        error_rate_wait_time: int,
+        g_channels: str,
+        max_tx_power: str,
+        min_tx_power: str,
+        rf_channel_quality_aware_arm_disable: bool,
+        rf_channel_quality_threshold: int,
+        rf_channel_quality_wait_time: int,
+        rf_free_channel_index: int,
+        rf_ideal_coverage_index: int,
+        scanning: bool,
+        spectrum_lb: bool,
+        wide_bands: str,
+    ) -> Response:
+        """Update ARM configuration.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            _80mhz_support (bool): 80mhz_support
+            a_channels (str): a_channels
+            air_time_fairness_mode (str): air_time_fairness_mode
+            backoff_time (int): backoff_time
+            band_steering_mode (str): band_steering_mode
+            client_aware (bool): client_aware
+            client_match (bool): client_match
+            cm_calc_interval (int): cm_calc_interval
+            cm_calc_threshold (int): cm_calc_threshold
+            cm_holdtime (int): cm_holdtime
+            cm_key (str): cm_key
+            cm_match_debug (int): cm_match_debug
+            cm_max_adaption (int): cm_max_adaption
+            cm_max_request (int): cm_max_request
+            cm_nb_matching (int): cm_nb_matching
+            cm_slb_mode (int): cm_slb_mode
+            error_rate_threshold (int): error_rate_threshold
+            error_rate_wait_time (int): error_rate_wait_time
+            g_channels (str): g_channels
+            max_tx_power (str): max_tx_power
+            min_tx_power (str): min_tx_power
+            rf_channel_quality_aware_arm_disable (bool): rf_channel_quality_aware_arm_disable
+            rf_channel_quality_threshold (int): rf_channel_quality_threshold
+            rf_channel_quality_wait_time (int): rf_channel_quality_wait_time
+            rf_free_channel_index (int): rf_free_channel_index
+            rf_ideal_coverage_index (int): rf_ideal_coverage_index
+            scanning (bool): scanning
+            spectrum_lb (bool): spectrum_lb
+            wide_bands (str): wide_bands
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/arm/{group_name_or_guid_or_serial_number}"
+
+        json_data = {
+            '_80mhz_support': _80mhz_support,
+            'a_channels': a_channels,
+            'air_time_fairness_mode': air_time_fairness_mode,
+            'backoff_time': backoff_time,
+            'band_steering_mode': band_steering_mode,
+            'client_aware': client_aware,
+            'client_match': client_match,
+            'cm_calc_interval': cm_calc_interval,
+            'cm_calc_threshold': cm_calc_threshold,
+            'cm_holdtime': cm_holdtime,
+            'cm_key': cm_key,
+            'cm_match_debug': cm_match_debug,
+            'cm_max_adaption': cm_max_adaption,
+            'cm_max_request': cm_max_request,
+            'cm_nb_matching': cm_nb_matching,
+            'cm_slb_mode': cm_slb_mode,
+            'error_rate_threshold': error_rate_threshold,
+            'error_rate_wait_time': error_rate_wait_time,
+            'g_channels': g_channels,
+            'max_tx_power': max_tx_power,
+            'min_tx_power': min_tx_power,
+            'rf_channel_quality_aware_arm_disable': rf_channel_quality_aware_arm_disable,
+            'rf_channel_quality_threshold': rf_channel_quality_threshold,
+            'rf_channel_quality_wait_time': rf_channel_quality_wait_time,
+            'rf_free_channel_index': rf_free_channel_index,
+            'rf_ideal_coverage_index': rf_ideal_coverage_index,
+            'scanning': scanning,
+            'spectrum_lb': spectrum_lb,
+            'wide_bands': wide_bands
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_all_dot11g_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get all Dot11g Radio Profiles.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11g_radio_profiles/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_get_dot11g_radio_config_by_name(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+    ) -> Response:
+        """Get Dot11g radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Name of the dot11g radio profile that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        return await self.get(url)
+
+    async def configuration_update_dot11g_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+        allowed_channels: str,
+        beacon_interval: int,
+        ch_bw_range: List[str],
+        csa_count: int,
+        disable_arm_wids_functions: str,
+        dot11h: bool,
+        high_noise_backoff_time: int,
+        interference_immunity: int,
+        legacy_mode: bool,
+        max_tx_power: int,
+        max_tx_power_ai: str,
+        min_tx_power: int,
+        min_tx_power_ai: str,
+        new_name: str,
+        scanning_disable: bool,
+        smart_antenna: bool,
+        spectrum_monitor: bool,
+        zone: str,
+    ) -> Response:
+        """Update/Create Dot11g radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Name of the dot11g radio profile that needs to be deleted.
+            allowed_channels (str): allowed_channels
+            beacon_interval (int): beacon_interval
+            ch_bw_range (List[str]): ch_bw_range
+            csa_count (int): csa_count
+            disable_arm_wids_functions (str): disable_arm_wids_functions
+            dot11h (bool): dot11h
+            high_noise_backoff_time (int): high_noise_backoff_time
+            interference_immunity (int): interference_immunity
+            legacy_mode (bool): legacy_mode
+            max_tx_power (int): max_tx_power
+            max_tx_power_ai (str): max_tx_power_ai
+            min_tx_power (int): min_tx_power
+            min_tx_power_ai (str): min_tx_power_ai
+            new_name (str): name
+            scanning_disable (bool): scanning_disable
+            smart_antenna (bool): smart_antenna
+            spectrum_monitor (bool): spectrum_monitor
+            zone (str): zone
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        json_data = {
+            'allowed_channels': allowed_channels,
+            'beacon_interval': beacon_interval,
+            'ch_bw_range': ch_bw_range,
+            'csa_count': csa_count,
+            'disable_arm_wids_functions': disable_arm_wids_functions,
+            'dot11h': dot11h,
+            'high_noise_backoff_time': high_noise_backoff_time,
+            'interference_immunity': interference_immunity,
+            'legacy_mode': legacy_mode,
+            'max_tx_power': max_tx_power,
+            'max_tx_power_ai': max_tx_power_ai,
+            'min_tx_power': min_tx_power,
+            'min_tx_power_ai': min_tx_power_ai,
+            'new_name': new_name,
+            'scanning_disable': scanning_disable,
+            'smart_antenna': smart_antenna,
+            'spectrum_monitor': spectrum_monitor,
+            'zone': zone
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_dot11g_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+    ) -> Response:
+        """Delete Dot11g radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Name of the dot11g radio profile that needs to be deleted.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        return await self.delete(url)
+
+    async def configuration_get_all_dot11a_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get all Dot11a Radio Profiles.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11a_radio_profiles/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
+
+    async def configuration_get_dot11a_radio_config_by_name(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+    ) -> Response:
+        """Get Dot11a radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Dot11a radio profile name.                         Example: default.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        return await self.get(url)
+
+    async def configuration_update_dot11a_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+        allowed_channels: str,
+        beacon_interval: int,
+        ch_bw_range: List[str],
+        csa_count: int,
+        disable_arm_wids_functions: str,
+        dot11h: bool,
+        high_noise_backoff_time: int,
+        interference_immunity: int,
+        legacy_mode: bool,
+        max_tx_power: int,
+        max_tx_power_ai: str,
+        min_tx_power: int,
+        min_tx_power_ai: str,
+        new_name: str,
+        scanning_disable: bool,
+        smart_antenna: bool,
+        spectrum_monitor: bool,
+        zone: str,
+    ) -> Response:
+        """Update/Create Dot11a radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Dot11a radio profile name.                         Example: default.
+            allowed_channels (str): allowed_channels
+            beacon_interval (int): beacon_interval
+            ch_bw_range (List[str]): ch_bw_range
+            csa_count (int): csa_count
+            disable_arm_wids_functions (str): disable_arm_wids_functions
+            dot11h (bool): dot11h
+            high_noise_backoff_time (int): high_noise_backoff_time
+            interference_immunity (int): interference_immunity
+            legacy_mode (bool): legacy_mode
+            max_tx_power (int): max_tx_power
+            max_tx_power_ai (str): max_tx_power_ai
+            min_tx_power (int): min_tx_power
+            min_tx_power_ai (str): min_tx_power_ai
+            new_name (str): name
+            scanning_disable (bool): scanning_disable
+            smart_antenna (bool): smart_antenna
+            spectrum_monitor (bool): spectrum_monitor
+            zone (str): zone
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        json_data = {
+            'allowed_channels': allowed_channels,
+            'beacon_interval': beacon_interval,
+            'ch_bw_range': ch_bw_range,
+            'csa_count': csa_count,
+            'disable_arm_wids_functions': disable_arm_wids_functions,
+            'dot11h': dot11h,
+            'high_noise_backoff_time': high_noise_backoff_time,
+            'interference_immunity': interference_immunity,
+            'legacy_mode': legacy_mode,
+            'max_tx_power': max_tx_power,
+            'max_tx_power_ai': max_tx_power_ai,
+            'min_tx_power': min_tx_power,
+            'min_tx_power_ai': min_tx_power_ai,
+            'new_name': new_name,
+            'scanning_disable': scanning_disable,
+            'smart_antenna': smart_antenna,
+            'spectrum_monitor': spectrum_monitor,
+            'zone': zone
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_delete_dot11a_radio_profile(
+        self,
+        group_name_or_guid_or_serial_number: str,
+        name: str,
+    ) -> Response:
+        """Delete an existing Dot11a radio profile.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            name (str): Dot11a radio profile name.                         Example: default.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
+
+        return await self.delete(url)
+
+    async def configuration_get_group_ports(
+        self,
+        group_name: str,
+    ) -> Response:
+        """Get ports name for a group.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/ports/groups/{group_name}"
+
+        return await self.get(url)
+
+    async def configuration_set_group_ports(
+        self,
+        group_name: str,
+        ports: list,
+    ) -> Response:
+        """Update ports name for a group.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+            ports (list): ports
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/ports/groups/{group_name}"
+
+        json_data = {
+            'ports': ports
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_device_ports(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get ports name for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/ports/devices/{device_serial}"
+
+        return await self.get(url)
+
+    async def configuration_set_device_ports(
+        self,
+        device_serial: str,
+        ports: list,
+    ) -> Response:
+        """Update ports name for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+            ports (list): ports
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/ports/devices/{device_serial}"
+
+        json_data = {
+            'ports': ports
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_group_vlans(
+        self,
+        group_name: str,
+    ) -> Response:
+        """Get vlans with tagged, untagged and isolated ports for a group.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/vlans/groups/{group_name}"
+
+        return await self.get(url)
+
+    async def configuration_set_group_vlans(
+        self,
+        group_name: str,
+        vlans: list,
+    ) -> Response:
+        """Update vlans with tagged, untagged and isolated ports for a group.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+            vlans (list): vlans
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/vlans/groups/{group_name}"
+
+        json_data = {
+            'vlans': vlans
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_device_vlans(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get vlans with tagged, untagged and isolated ports for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/vlans/devices/{device_serial}"
+
+        return await self.get(url)
+
+    async def configuration_set_device_vlans(
+        self,
+        device_serial: str,
+        vlans: list,
+    ) -> Response:
+        """Update vlans with tagged, untagged and isolated ports for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+            vlans (list): vlans
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/vlans/devices/{device_serial}"
+
+        json_data = {
+            'vlans': vlans
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_group_admin(
+        self,
+        group_name: str,
+    ) -> Response:
+        """Get admin SSH details of a group.
+
+        Args:
+            group_name (str): Name of the group.                               Example:Group_1
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system/groups/{group_name}"
+
+        return await self.get(url)
+
+    async def configuration_set_group_admin(
+        self,
+        group_name: str,
+        username: str,
+        password: str,
+    ) -> Response:
+        """Update admin SSH details of a group.
+
+        Args:
+            group_name (str): Name of the group.                               Example:Group_1
+            username (str): username
+            password (str): password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system/groups/{group_name}"
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_device_admin(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get admin SSH details of a device.
+
+        Args:
+            device_serial (str): Serial of a Device.
+                Example:AB0011111
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system/devices/{device_serial}"
+
+        return await self.get(url)
+
+    async def configuration_set_device_admin(
+        self,
+        device_serial: str,
+        username: str,
+        password: str,
+    ) -> Response:
+        """Update admin SSH details of a device.
+
+        Args:
+            device_serial (str): Serial of a Device.
+                Example:AB0011111
+            username (str): username
+            password (str): password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system/devices/{device_serial}"
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_group_system_time(
+        self,
+        group_name: str,
+    ) -> Response:
+        """Get system time details for a group.
+
+        Args:
+            group_name (str): Name of the group.                               Example:Group_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system_time/groups/{group_name}"
+
+        return await self.get(url)
+
+    async def configuration_set_group_system_time(
+        self,
+        group_name: str,
+        time_zone: str,
+        day_of_month: int,
+        month: int,
+    ) -> Response:
+        """Update system time details for a group.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+            time_zone (str): time_zone
+            day_of_month (int): day_of_month
+            month (int): month
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system_time/groups/{group_name}"
+
+        json_data = {
+            'time_zone': time_zone,
+            'day_of_month': day_of_month,
+            'month': month
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_device_system_time(
+        self,
+        device_serial: str,
+    ) -> Response:
+        """Get system time details for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system_time/devices/{device_serial}"
+
+        return await self.get(url)
+
+    async def configuration_set_device_system_time(
+        self,
+        device_serial: str,
+        time_zone: str,
+        day_of_month: int,
+        month: int,
+    ) -> Response:
+        """Update system time details for a device.
+
+        Args:
+            device_serial (str): Device serial of the device.
+                Example:AB0011111.
+            time_zone (str): time_zone
+            day_of_month (int): day_of_month
+            month (int): month
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/aos_switch/system_time/devices/{device_serial}"
+
+        json_data = {
+            'time_zone': time_zone,
+            'day_of_month': day_of_month,
+            'month': month
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_get_group_ssh_credential(
+        self,
+        group_name: str,
+    ) -> Response:
+        """Get ssh credential in group level.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/group/ssh_credential/{group_name}"
+
+        return await self.get(url)
+
+    async def configuration_update_group_ssh_credential(
+        self,
+        group_name: str,
+        username: str,
+        password: str,
+    ) -> Response:
+        """Update ssh credential in group level.
+
+        Args:
+            group_name (str): Group name of the group.
+                Example:Group_1.
+            username (str): user name
+            password (str): plaintext password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/group/ssh_credential/{group_name}"
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def configuration_get_device_ssh_credential(
+        self,
+        serial_number_or_guid: str,
+    ) -> Response:
+        """Get ssh credential in device level.
+
+        Args:
+            serial_number_or_guid (str): Serial number of AP or guid of the swarm.
+                Example:CNBRHMV3HG or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/device/ssh_credential/{serial_number_or_guid}"
+
+        return await self.get(url)
+
+    async def configuration_update_device_ssh_credential(
+        self,
+        serial_number_or_guid: str,
+        username: str,
+        password: str,
+    ) -> Response:
+        """Update ssh credential in device level.
+
+        Args:
+            serial_number_or_guid (str): Serial number of AP or guid of the swarm.
+                Example:CNBRHMV3HG or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f
+            username (str): user name
+            password (str): plaintext password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/device/ssh_credential/{serial_number_or_guid}"
+
+        json_data = {
+            'username': username,
+            'password': password
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def device_management_send_command_to_device(
         self,
@@ -1041,29 +8499,6 @@ class AllCalls(CentralApi):
         url = f"/device_management/v1/status/{task_id}"
 
         return await self.get(url)
-
-    async def device_management_assign_pre_provisioned_group(
-        self,
-        serials: List[str],
-        group: str,
-    ) -> Response:
-        """Assign Pre-Provisioned Group.
-
-        Args:
-            serials (List[str]): List of device serials
-            group (str): Group name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/device_management/v1/group/assign"
-
-        json_data = {
-            'serials': serials,
-            'group': group
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def activate_move_devices(
         self,
@@ -1382,7 +8817,12 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policies/compliance_percentage"
 
-        return await self.get(url)
+        params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
+        }
+
+        return await self.get(url, params=params)
 
     async def dps_monitoring_getdpspoliciesstatus(
         self,
@@ -1438,7 +8878,719 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/sdwan_site/site_policy_stats/{site_name}"
 
+        params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_get_swarms_details(
+        self,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Firmware Details of Swarms.
+
+        Args:
+            group (str, optional): Group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 20 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/swarms"
+
+        params = {
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_get_swarm_details(
+        self,
+        swarm_id: str,
+    ) -> Response:
+        """Firmware Details of Swarm.
+
+        Args:
+            swarm_id (str): Swarm ID for which the firmware detail to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/swarms/{swarm_id}"
+
         return await self.get(url)
+
+    async def firmware_get_devices_details(
+        self,
+        device_type: str,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Firmware Details of Devices.
+
+        Args:
+            device_type (str): Specify one of "MAS/HP/CONTROLLER"
+            group (str, optional): Group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 20 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/devices"
+
+        params = {
+            'device_type': device_type,
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_get_device_details(
+        self,
+        serial: str,
+    ) -> Response:
+        """Firmware Details of Device.
+
+        Args:
+            serial (str): Serial of the device for which the firmware detail to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/devices/{serial}"
+
+        return await self.get(url)
+
+    async def firmware_get_version_list(
+        self,
+        device_type: str = None,
+        swarm_id: str = None,
+        serial: str = None,
+    ) -> Response:
+        """List Firmware Version.
+
+        Args:
+            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
+            swarm_id (str, optional): Swarm ID
+            serial (str, optional): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/versions"
+
+        params = {
+            'device_type': device_type,
+            'swarm_id': swarm_id,
+            'serial': serial
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_is_image_available(
+        self,
+        device_type: str,
+        firmware_version: str,
+    ) -> Response:
+        """Firmware Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): firmware version
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/versions/{firmware_version}"
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_get_status(
+        self,
+        swarm_id: str = None,
+        serial: str = None,
+    ) -> Response:
+        """Firmware Status.
+
+        Args:
+            swarm_id (str, optional): Swarm ID
+            serial (str, optional): Serial of device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/status"
+
+        params = {
+            'swarm_id': swarm_id,
+            'serial': serial
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_upgrade_firmware(
+        self,
+        firmware_scheduled_at: int,
+        swarm_id: str,
+        serial: str,
+        group: str,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        model: str,
+    ) -> Response:
+        """Firmware Upgrade.
+
+        Args:
+            firmware_scheduled_at (int): Firmware upgrade will be scheduled at,
+                firmware_scheduled_at - current time. firmware_scheduled_at is epoch in seconds and
+                default value is current time
+            swarm_id (str): Swarm ID
+            serial (str): Serial of device
+            group (str): Specify Group Name to initiate upgrade  for whole group.
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): Specify firmware version to which you want device to upgrade. If
+                you do not specify this field then firmware upgrade initiated with recommended
+                firmware version
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            model (str): To initiate upgrade at group level for specific model family. Applicable
+                only for Aruba switches.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade"
+
+        json_data = {
+            'firmware_scheduled_at': firmware_scheduled_at,
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'group': group,
+            'device_type': device_type,
+            'firmware_version': firmware_version,
+            'reboot': reboot,
+            'model': model
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_cancel_upgrade(
+        self,
+        swarm_id: str,
+        serial: str,
+        device_type: str,
+        group: str,
+    ) -> Response:
+        """Cancel Scheduled Upgrade.
+
+        Args:
+            swarm_id (str): Swarm ID
+            serial (str): Serial of device
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str): Specify Group Name to cancel upgrade for devices in that group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade/cancel"
+
+        json_data = {
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_set_compliance_customer(
+        self,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+    ) -> Response:
+        """Set Firmware Compliance Version Customer.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str): Group name
+            firmware_compliance_version (str): Firmware compliance version for specific device_type.
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            allow_unsupported_version (bool): Use True to set unsupported version as firmware
+                compliance version for specific device_type. Default is False.
+            compliance_scheduled_at (int): Firmware compliance will be schedule at,
+                compliance_scheduled_at - current time. compliance_scheduled_at is epoch in seconds
+                and default value is current time.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v2/upgrade/compliance_version"
+
+        json_data = {
+            'device_type': device_type,
+            'group': group,
+            'firmware_compliance_version': firmware_compliance_version,
+            'reboot': reboot,
+            'allow_unsupported_version': allow_unsupported_version,
+            'compliance_scheduled_at': compliance_scheduled_at
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_set_compliance(
+        self,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+    ) -> Response:
+        """Set Firmware Compliance Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str): Group name
+            firmware_compliance_version (str): Firmware compliance version for specific device_type.
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            allow_unsupported_version (bool): Use True to set unsupported version as firmware
+                compliance version for specific device_type. Default is False.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade/compliance_version"
+
+        json_data = {
+            'device_type': device_type,
+            'group': group,
+            'firmware_compliance_version': firmware_compliance_version,
+            'reboot': reboot,
+            'allow_unsupported_version': allow_unsupported_version
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_get_compliance(
+        self,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
+        """Get Firmware Compliance Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_delete_compliance(
+        self,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
+        """Clear Firmware Compliance Version.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/upgrade/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.delete(url, params=params)
+
+    async def firmware_upgrade_msp(
+        self,
+        firmware_scheduled_at: int,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        exclude_groups: str,
+        exclude_customers: str,
+    ) -> Response:
+        """Firmware Upgrade at MSP Level.
+
+        Args:
+            firmware_scheduled_at (int): Firmware upgrade will be schedule at, firmware_scheduled_at
+                - current time. firmware_scheduled_at is epoch in seconds and default value is
+                current time.
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): Specify firmware version which you want device to upgrade. If
+                you do not specify this field then firmware upgrade initiated with recommended
+                firmware version
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            exclude_groups (str): List of groups to be excluded while upgrading firmware, e.g.
+                ["TestGroup1", "TestGroup2"]
+            exclude_customers (str): List of customer IDs to be excluded while upgrading firmware,
+                e.g. ["111111", "111112"]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/msp/upgrade"
+
+        json_data = {
+            'firmware_scheduled_at': firmware_scheduled_at,
+            'device_type': device_type,
+            'firmware_version': firmware_version,
+            'reboot': reboot,
+            'exclude_groups': exclude_groups,
+            'exclude_customers': exclude_customers
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_upgrade_customer(
+        self,
+        customer_id: str,
+        firmware_scheduled_at: int,
+        device_type: str,
+        firmware_version: str,
+        reboot: bool,
+        exclude_groups: str,
+    ) -> Response:
+        """Firmware Upgrade at Customer Level.
+
+        Args:
+            customer_id (str): Customer id of the customer
+            firmware_scheduled_at (int): Firmware upgrade will be scheduled at,
+                firmware_scheduled_at - current time. firmware_scheduled_at is epoch in seconds and
+                default value is current time.
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_version (str): Specify firmware version which you want device to upgrade. If
+                you do not specify this field then firmware upgrade initiated with recommended
+                firmware version
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            exclude_groups (str): List of groups to be excluded while upgrading firmware, e.g.
+                ["TestGroup1", "TestGroup2"]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/msp/upgrade/customers/{customer_id}"
+
+        json_data = {
+            'firmware_scheduled_at': firmware_scheduled_at,
+            'device_type': device_type,
+            'firmware_version': firmware_version,
+            'reboot': reboot,
+            'exclude_groups': exclude_groups
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_cancel_upgrade_msp_v2(
+        self,
+        device_type: str,
+        exclude_customers: str,
+    ) -> Response:
+        """Cancel Scheduled Upgrade at MSP Level.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            exclude_customers (str): List of customer IDs to be excluded while canceling scheduled
+                upgrade, e.g. ["111111", "111112"]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v2/msp/upgrade/cancel"
+
+        json_data = {
+            'device_type': device_type,
+            'exclude_customers': exclude_customers
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_cancel_upgrade_customer_v2(
+        self,
+        customer_id: str,
+        device_type: str,
+    ) -> Response:
+        """Cancel Scheduled Upgrade at Customer Level.
+
+        Args:
+            customer_id (str): Customer id of the customer
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v2/msp/upgrade/customers/{customer_id}/cancel"
+
+        json_data = {
+            'device_type': device_type
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_get_model_families_list(
+        self,
+        serial: str = None,
+        device_type: str = None,
+    ) -> Response:
+        """List Model Family.
+
+        Args:
+            serial (str, optional): Serial of device
+            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/models"
+
+        params = {
+            'serial': serial,
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_set_compliance_msp(
+        self,
+        device_type: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+        tenants: str,
+    ) -> Response:
+        """Set Firmware Compliance Version for MSP customer.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            firmware_compliance_version (str): Firmware compliance version for specific device_type.
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            allow_unsupported_version (bool): Use True to set unsupported version as firmware
+                compliance version for specific device_type. Default is False.
+            compliance_scheduled_at (int): Firmware compliance will be schedule at,
+                compliance_scheduled_at - current time. compliance_scheduled_at is epoch in seconds
+                and default value is current time.
+            tenants (str): List of tenant IDs to set firmware compliance , e.g. ["111111", "111112"]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/msp/upgrade/compliance_version"
+
+        json_data = {
+            'device_type': device_type,
+            'firmware_compliance_version': firmware_compliance_version,
+            'reboot': reboot,
+            'allow_unsupported_version': allow_unsupported_version,
+            'compliance_scheduled_at': compliance_scheduled_at,
+            'tenants': tenants
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_get_compliance_msp(
+        self,
+        device_type: str,
+    ) -> Response:
+        """Get Firmware Compliance Version for MSP Customer.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/msp/upgrade/compliance_version"
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_delete_compliance_msp(
+        self,
+        device_type: str,
+        tenants: str,
+    ) -> Response:
+        """Clear Firmware Compliance Version for MSP Customer.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            tenants (str): List of tenant IDs to delete firmware compliance , e.g. ["111111",
+                "111112"]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/msp/upgrade/compliance_version"
+
+        json_data = {
+            'device_type': device_type,
+            'tenants': tenants
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def firmware_set_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str,
+        firmware_compliance_version: str,
+        reboot: bool,
+        allow_unsupported_version: bool,
+        compliance_scheduled_at: int,
+    ) -> Response:
+        """Set Firmware Compliance Version for Tenant.
+
+        Args:
+            customer_id (str): Customer id of the customer
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str): Group name
+            firmware_compliance_version (str): Firmware compliance version for specific device_type.
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches and controller since IAP
+                reboots automatically after firmware download.
+            allow_unsupported_version (bool): Use True to set unsupported version as firmware
+                compliance version for specific device_type. Default is False.
+            compliance_scheduled_at (int): Firmware compliance will be schedule at,
+                compliance_scheduled_at - current time. compliance_scheduled_at is epoch in seconds
+                and default value is current time.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/msp/upgrade/customers/{customer_id}/compliance_version"
+
+        json_data = {
+            'device_type': device_type,
+            'group': group,
+            'firmware_compliance_version': firmware_compliance_version,
+            'reboot': reboot,
+            'allow_unsupported_version': allow_unsupported_version,
+            'compliance_scheduled_at': compliance_scheduled_at
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def firmware_get_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
+        """Get Firmware Compliance Version for Tenant.
+
+        Args:
+            customer_id (str): Customer id of the customer
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/msp/upgrade/customers/{customer_id}/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def firmware_delete_compliance_msp_tenant(
+        self,
+        customer_id: str,
+        device_type: str,
+        group: str = None,
+    ) -> Response:
+        """Clear Firmware Compliance Version for Tenant.
+
+        Args:
+            customer_id (str): Customer id of the customer
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            group (str, optional): Group name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/msp/upgrade/customers/{customer_id}/compliance_version"
+
+        params = {
+            'device_type': device_type,
+            'group': group
+        }
+
+        return await self.delete(url, params=params)
+
+    async def firmware_get_tenants_details(
+        self,
+        device_type: str,
+        tenant_id: str,
+    ) -> Response:
+        """List Tenants of an MSP customer.
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            tenant_id (str): Tenant ID for which the firmware detail to be queried
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/msp/tenants/{tenant_id}"
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
 
     async def gdpr_get_gdprs_(
         self,
@@ -1503,6 +9655,861 @@ class AllCalls(CentralApi):
         url = f"/gdpr/v1/opt_out_clients/{mac}"
 
         return await self.delete(url)
+
+    async def guest_get_portals(
+        self,
+        sort: str = '+name',
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all portals with limited data.
+
+        Args:
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for
+                now  Valid Values: +name, -name
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/portals"
+
+        params = {
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def guest_create_portal(
+        self,
+        name: str,
+        auth_type: str,
+        username_password_enabled: bool,
+        registration_enabled: bool,
+        verify_registration: bool,
+        bypass_cna_policy: bool,
+        cna_policy: str,
+        register_accept_email: bool,
+        register_accept_phone: bool,
+        free_wifi_duration: int,
+        self_reg_account_unlimited: bool,
+        self_reg_account_expire_days: int,
+        self_reg_account_expire_hours: int,
+        self_reg_account_expire_minutes: int,
+        login_button_title: str,
+        whitelist_urls: List[str],
+        custom_username_label: str,
+        custom_password_label: str,
+        custom_sender_message: str,
+        custom_verification_message: str,
+        custom_registration_message: str,
+        custom_pwd_reset_message: str,
+        auth_sources: list,
+        facebook_wifi_configure_url: str,
+        facebook_wifi_gateway_id: str,
+        redirect_url: str,
+        auth_failure_message: str,
+        days: int,
+        hours: int,
+        minutes: int,
+        mac_caching_enabled: bool,
+        is_shared: bool,
+        simultaneous_login_limit: int,
+        daily_usage_limit: str,
+        by_hours: int,
+        by_minutes: int,
+        data_type: str,
+        data: int,
+        background_color: str,
+        button_color: str,
+        header_fill_color: str,
+        page_font_color: str,
+        logo_name: str,
+        logo: str,
+        background_image_name: str,
+        background_image: str,
+        max_columns: int,
+        page_title: str,
+        welcome_text: str,
+        terms_condition: str,
+        display_terms_checkbox: bool,
+        display_term_options: str,
+        ad_url: str,
+        login_image_name: str,
+        ad_image: str,
+        is_config_associated: bool,
+        capture_url: str,
+        override_common_name: str,
+        override_common_name_enabled: bool,
+    ) -> Response:
+        """Create a new guest portal profile.
+
+        Args:
+            name (str): Name of the portal (max length 22 characters)
+            auth_type (str): Authentication type of portal  Valid Values: unauthenticated,
+                authenticated, facebookwifi
+            username_password_enabled (bool): Username/Password authentication type
+            registration_enabled (bool): Identify if guest user can register on the portal
+            verify_registration (bool): Identify if verification is required for guest registration
+            bypass_cna_policy (bool): Identify if CNA policy is to be bypassed
+            cna_policy (str): cna_policy  Valid Values: allow_always, automatic
+            register_accept_email (bool): Identify if guest registration is performed via e-mail
+            register_accept_phone (bool): Identify if guest registration is performed via phone
+            free_wifi_duration (int): Free wifi allowed durations (0 to 59 minutes)
+            self_reg_account_unlimited (bool): Indicates if default registration account expiry is
+                unlimited or not
+            self_reg_account_expire_days (int): Specify the default registration account expiry in
+                days, min 0 to max 180.
+            self_reg_account_expire_hours (int): Specify default registration account expiry in
+                hours, min 0 to max 23
+            self_reg_account_expire_minutes (int): Specify default registration account expiry in
+                minutes, min 0 to max 59
+            login_button_title (str): Customizable login button label (optional field, max 32
+                characters).
+            whitelist_urls (List[str]): List of urls to  white list or allow  access before portal
+                login
+            custom_username_label (str): Custom username lable to be used in registration and
+                password reset messages (max 30 characters)
+            custom_password_label (str): Custom password label to be used in registration and
+                password reset messages (max 10 characters)
+            custom_sender_message (str): Custom sender text that will be in the footer of the sms
+                message. This will help guest users identify who is sending them sms message. (max
+                20 characters)
+            custom_verification_message (str): Custom verfication message that guest will receieve
+                for when verification is performed (max 90 characters)
+            custom_registration_message (str): Custom registration message that guest will receieve
+                for when registration is performed (max 90 characters)
+            custom_pwd_reset_message (str): Custom passowrd reset message that guest will receieve
+                for when password resert is performed (max 90 characters)
+            auth_sources (list): List of social auth app values. This could be empty array.
+            facebook_wifi_configure_url (str): Use URL to create or customize the facebook wifi page
+                which has to have facebook_wifi_gateway_id as a query param. Admin has to configure
+                the page inorder to get facebook wifi working
+            facebook_wifi_gateway_id (str): Gateway should be used with facebook_wifi_configure_url
+                to configure facebook wifi portal. This is auto generated.
+            redirect_url (str): Redirect url on succesful login
+            auth_failure_message (str): Display message on authentication failure (max 4096
+                characters)
+            days (int): Session expiry in unit of days. Min 0, Max 180
+            hours (int): Session expiry in unit of hours. Min 0, Max 23
+            minutes (int): Session expiry in unit of minutes. Min 0, Max 59
+            mac_caching_enabled (bool): Flag to indicate whether mac chacing enabled
+            is_shared (bool): Flag to indicate whether portal is shared
+            simultaneous_login_limit (int): Simultaneous portal logins limit. Value of 0 indicates
+                there is no limit  Valid Values: 0 - 5
+            daily_usage_limit (str): IO data allowed to be used in a day. Either by time or data
+                usage  Valid Values: bytime, bydata, nolimit
+            by_hours (int): Time limit in hours to access network (Max 23 hours)
+            by_minutes (int): Time limit in minutes to access network (Max 59 minutes)
+            data_type (str): Data usage per session or per visitor  Valid Values: session, visitor
+            data (int): Data usage limit in MB (Min 1 MB, Max 102400 MB)
+            background_color (str): Background color of the portal. (Format  '#XXXXXX', 6 hex
+                characters)
+            button_color (str): Button color. (Format  '#XXXXXX' , 6 hex characters)
+            header_fill_color (str): Header color of the portal. This field can could be null.
+                (Format '#XXXXXX' , 6 hex characters)
+            page_font_color (str): Portal page font color. (Format  '#XXXXXX ', 6 hex characters)
+            logo_name (str): Name of logo file
+            logo (str): Logo image. This is in base64 data format
+            background_image_name (str): Name of image file used as background
+            background_image (str): Background image. This is in base64 data format
+            max_columns (int): Layout  Valid Values: 1, 2
+            page_title (str): Page title of the portal
+            welcome_text (str): Welcome text to be displayed in the portal
+            terms_condition (str): Terms and condition text to be displayed in the portal
+            display_terms_checkbox (bool): Show/hide terms condition check box
+            display_term_options (str): Inline or overlay display option. Internal indicates inline
+                Valid Values: internal, external
+            ad_url (str): Advertisement url. This requires add image input
+            login_image_name (str): Name of logo file
+            ad_image (str): Advertisement image. This is in base64 data format
+            is_config_associated (bool): Indicates whether any configuration is associated to the
+                portal
+            capture_url (str): URL to be used in wlan configuration
+            override_common_name (str): Parameter to override the common name
+            override_common_name_enabled (bool): Flag indicating whether the common name should be
+                overridden
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/portals"
+
+        json_data = {
+            'name': name,
+            'auth_type': auth_type,
+            'username_password_enabled': username_password_enabled,
+            'registration_enabled': registration_enabled,
+            'verify_registration': verify_registration,
+            'bypass_cna_policy': bypass_cna_policy,
+            'cna_policy': cna_policy,
+            'register_accept_email': register_accept_email,
+            'register_accept_phone': register_accept_phone,
+            'free_wifi_duration': free_wifi_duration,
+            'self_reg_account_unlimited': self_reg_account_unlimited,
+            'self_reg_account_expire_days': self_reg_account_expire_days,
+            'self_reg_account_expire_hours': self_reg_account_expire_hours,
+            'self_reg_account_expire_minutes': self_reg_account_expire_minutes,
+            'login_button_title': login_button_title,
+            'whitelist_urls': whitelist_urls,
+            'custom_username_label': custom_username_label,
+            'custom_password_label': custom_password_label,
+            'custom_sender_message': custom_sender_message,
+            'custom_verification_message': custom_verification_message,
+            'custom_registration_message': custom_registration_message,
+            'custom_pwd_reset_message': custom_pwd_reset_message,
+            'auth_sources': auth_sources,
+            'facebook_wifi_configure_url': facebook_wifi_configure_url,
+            'facebook_wifi_gateway_id': facebook_wifi_gateway_id,
+            'redirect_url': redirect_url,
+            'auth_failure_message': auth_failure_message,
+            'days': days,
+            'hours': hours,
+            'minutes': minutes,
+            'mac_caching_enabled': mac_caching_enabled,
+            'is_shared': is_shared,
+            'simultaneous_login_limit': simultaneous_login_limit,
+            'daily_usage_limit': daily_usage_limit,
+            'by_hours': by_hours,
+            'by_minutes': by_minutes,
+            'data_type': data_type,
+            'data': data,
+            'background_color': background_color,
+            'button_color': button_color,
+            'header_fill_color': header_fill_color,
+            'page_font_color': page_font_color,
+            'logo_name': logo_name,
+            'logo': logo,
+            'background_image_name': background_image_name,
+            'background_image': background_image,
+            'max_columns': max_columns,
+            'page_title': page_title,
+            'welcome_text': welcome_text,
+            'terms_condition': terms_condition,
+            'display_terms_checkbox': display_terms_checkbox,
+            'display_term_options': display_term_options,
+            'ad_url': ad_url,
+            'login_image_name': login_image_name,
+            'ad_image': ad_image,
+            'is_config_associated': is_config_associated,
+            'capture_url': capture_url,
+            'override_common_name': override_common_name,
+            'override_common_name_enabled': override_common_name_enabled
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def guest_preview_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Get preview url of guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/preview/{portal_id}"
+
+        return await self.get(url)
+
+    async def guest_get_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Get guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        return await self.get(url)
+
+    async def guest_update_portal(
+        self,
+        portal_id: str,
+        name: str,
+        auth_type: str,
+        username_password_enabled: bool,
+        registration_enabled: bool,
+        verify_registration: bool,
+        bypass_cna_policy: bool,
+        cna_policy: str,
+        register_accept_email: bool,
+        register_accept_phone: bool,
+        free_wifi_duration: int,
+        self_reg_account_unlimited: bool,
+        self_reg_account_expire_days: int,
+        self_reg_account_expire_hours: int,
+        self_reg_account_expire_minutes: int,
+        login_button_title: str,
+        whitelist_urls: List[str],
+        custom_username_label: str,
+        custom_password_label: str,
+        custom_sender_message: str,
+        custom_verification_message: str,
+        custom_registration_message: str,
+        custom_pwd_reset_message: str,
+        auth_sources: list,
+        facebook_wifi_configure_url: str,
+        facebook_wifi_gateway_id: str,
+        redirect_url: str,
+        auth_failure_message: str,
+        days: int,
+        hours: int,
+        minutes: int,
+        mac_caching_enabled: bool,
+        is_shared: bool,
+        simultaneous_login_limit: int,
+        daily_usage_limit: str,
+        by_hours: int,
+        by_minutes: int,
+        data_type: str,
+        data: int,
+        background_color: str,
+        button_color: str,
+        header_fill_color: str,
+        page_font_color: str,
+        logo_name: str,
+        logo: str,
+        background_image_name: str,
+        background_image: str,
+        max_columns: int,
+        page_title: str,
+        welcome_text: str,
+        terms_condition: str,
+        display_terms_checkbox: bool,
+        display_term_options: str,
+        ad_url: str,
+        login_image_name: str,
+        ad_image: str,
+        is_config_associated: bool,
+        capture_url: str,
+        override_common_name: str,
+        override_common_name_enabled: bool,
+    ) -> Response:
+        """Update guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            name (str): Name of the portal (max length 22 characters)
+            auth_type (str): Authentication type of portal  Valid Values: unauthenticated,
+                authenticated, facebookwifi
+            username_password_enabled (bool): Username/Password authentication type
+            registration_enabled (bool): Identify if guest user can register on the portal
+            verify_registration (bool): Identify if verification is required for guest registration
+            bypass_cna_policy (bool): Identify if CNA policy is to be bypassed
+            cna_policy (str): cna_policy  Valid Values: allow_always, automatic
+            register_accept_email (bool): Identify if guest registration is performed via e-mail
+            register_accept_phone (bool): Identify if guest registration is performed via phone
+            free_wifi_duration (int): Free wifi allowed durations (0 to 59 minutes)
+            self_reg_account_unlimited (bool): Indicates if default registration account expiry is
+                unlimited or not
+            self_reg_account_expire_days (int): Specify the default registration account expiry in
+                days, min 0 to max 180.
+            self_reg_account_expire_hours (int): Specify default registration account expiry in
+                hours, min 0 to max 23
+            self_reg_account_expire_minutes (int): Specify default registration account expiry in
+                minutes, min 0 to max 59
+            login_button_title (str): Customizable login button label (optional field, max 32
+                characters).
+            whitelist_urls (List[str]): List of urls to  white list or allow  access before portal
+                login
+            custom_username_label (str): Custom username lable to be used in registration and
+                password reset messages (max 30 characters)
+            custom_password_label (str): Custom password label to be used in registration and
+                password reset messages (max 10 characters)
+            custom_sender_message (str): Custom sender text that will be in the footer of the sms
+                message. This will help guest users identify who is sending them sms message. (max
+                20 characters)
+            custom_verification_message (str): Custom verfication message that guest will receieve
+                for when verification is performed (max 90 characters)
+            custom_registration_message (str): Custom registration message that guest will receieve
+                for when registration is performed (max 90 characters)
+            custom_pwd_reset_message (str): Custom passowrd reset message that guest will receieve
+                for when password resert is performed (max 90 characters)
+            auth_sources (list): List of social auth app values. This could be empty array.
+            facebook_wifi_configure_url (str): Use URL to create or customize the facebook wifi page
+                which has to have facebook_wifi_gateway_id as a query param. Admin has to configure
+                the page inorder to get facebook wifi working
+            facebook_wifi_gateway_id (str): Gateway should be used with facebook_wifi_configure_url
+                to configure facebook wifi portal. This is auto generated.
+            redirect_url (str): Redirect url on succesful login
+            auth_failure_message (str): Display message on authentication failure (max 4096
+                characters)
+            days (int): Session expiry in unit of days. Min 0, Max 180
+            hours (int): Session expiry in unit of hours. Min 0, Max 23
+            minutes (int): Session expiry in unit of minutes. Min 0, Max 59
+            mac_caching_enabled (bool): Flag to indicate whether mac chacing enabled
+            is_shared (bool): Flag to indicate whether portal is shared
+            simultaneous_login_limit (int): Simultaneous portal logins limit. Value of 0 indicates
+                there is no limit  Valid Values: 0 - 5
+            daily_usage_limit (str): IO data allowed to be used in a day. Either by time or data
+                usage  Valid Values: bytime, bydata, nolimit
+            by_hours (int): Time limit in hours to access network (Max 23 hours)
+            by_minutes (int): Time limit in minutes to access network (Max 59 minutes)
+            data_type (str): Data usage per session or per visitor  Valid Values: session, visitor
+            data (int): Data usage limit in MB (Min 1 MB, Max 102400 MB)
+            background_color (str): Background color of the portal. (Format  '#XXXXXX', 6 hex
+                characters)
+            button_color (str): Button color. (Format  '#XXXXXX' , 6 hex characters)
+            header_fill_color (str): Header color of the portal. This field can could be null.
+                (Format '#XXXXXX' , 6 hex characters)
+            page_font_color (str): Portal page font color. (Format  '#XXXXXX ', 6 hex characters)
+            logo_name (str): Name of logo file
+            logo (str): Logo image. This is in base64 data format
+            background_image_name (str): Name of image file used as background
+            background_image (str): Background image. This is in base64 data format
+            max_columns (int): Layout  Valid Values: 1, 2
+            page_title (str): Page title of the portal
+            welcome_text (str): Welcome text to be displayed in the portal
+            terms_condition (str): Terms and condition text to be displayed in the portal
+            display_terms_checkbox (bool): Show/hide terms condition check box
+            display_term_options (str): Inline or overlay display option. Internal indicates inline
+                Valid Values: internal, external
+            ad_url (str): Advertisement url. This requires add image input
+            login_image_name (str): Name of logo file
+            ad_image (str): Advertisement image. This is in base64 data format
+            is_config_associated (bool): Indicates whether any configuration is associated to the
+                portal
+            capture_url (str): URL to be used in wlan configuration
+            override_common_name (str): Parameter to override the common name
+            override_common_name_enabled (bool): Flag indicating whether the common name should be
+                overridden
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        json_data = {
+            'name': name,
+            'auth_type': auth_type,
+            'username_password_enabled': username_password_enabled,
+            'registration_enabled': registration_enabled,
+            'verify_registration': verify_registration,
+            'bypass_cna_policy': bypass_cna_policy,
+            'cna_policy': cna_policy,
+            'register_accept_email': register_accept_email,
+            'register_accept_phone': register_accept_phone,
+            'free_wifi_duration': free_wifi_duration,
+            'self_reg_account_unlimited': self_reg_account_unlimited,
+            'self_reg_account_expire_days': self_reg_account_expire_days,
+            'self_reg_account_expire_hours': self_reg_account_expire_hours,
+            'self_reg_account_expire_minutes': self_reg_account_expire_minutes,
+            'login_button_title': login_button_title,
+            'whitelist_urls': whitelist_urls,
+            'custom_username_label': custom_username_label,
+            'custom_password_label': custom_password_label,
+            'custom_sender_message': custom_sender_message,
+            'custom_verification_message': custom_verification_message,
+            'custom_registration_message': custom_registration_message,
+            'custom_pwd_reset_message': custom_pwd_reset_message,
+            'auth_sources': auth_sources,
+            'facebook_wifi_configure_url': facebook_wifi_configure_url,
+            'facebook_wifi_gateway_id': facebook_wifi_gateway_id,
+            'redirect_url': redirect_url,
+            'auth_failure_message': auth_failure_message,
+            'days': days,
+            'hours': hours,
+            'minutes': minutes,
+            'mac_caching_enabled': mac_caching_enabled,
+            'is_shared': is_shared,
+            'simultaneous_login_limit': simultaneous_login_limit,
+            'daily_usage_limit': daily_usage_limit,
+            'by_hours': by_hours,
+            'by_minutes': by_minutes,
+            'data_type': data_type,
+            'data': data,
+            'background_color': background_color,
+            'button_color': button_color,
+            'header_fill_color': header_fill_color,
+            'page_font_color': page_font_color,
+            'logo_name': logo_name,
+            'logo': logo,
+            'background_image_name': background_image_name,
+            'background_image': background_image,
+            'max_columns': max_columns,
+            'page_title': page_title,
+            'welcome_text': welcome_text,
+            'terms_condition': terms_condition,
+            'display_terms_checkbox': display_terms_checkbox,
+            'display_term_options': display_term_options,
+            'ad_url': ad_url,
+            'login_image_name': login_image_name,
+            'ad_image': ad_image,
+            'is_config_associated': is_config_associated,
+            'capture_url': capture_url,
+            'override_common_name': override_common_name,
+            'override_common_name_enabled': override_common_name_enabled
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def guest_delete_portal(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Delete guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        return await self.delete(url)
+
+    async def guest_get_visitors(
+        self,
+        portal_id: str,
+        sort: str = '+name',
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all visitors created against a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for
+                now  Valid Values: +name, -name
+            filter_by (str, optional): filter by email or name  Valid Values: name, email
+            filter_value (str, optional): filter value
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        params = {
+            'sort': sort,
+            'filter_by': filter_by,
+            'filter_value': filter_value,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def guest_create_visitor(
+        self,
+        portal_id: str,
+        name: str,
+        id: str,
+        company_name: str,
+        phone: str,
+        email: str,
+        is_enabled: bool,
+        valid_till_no_limit: bool,
+        valid_till_days: int,
+        valid_till_hours: int,
+        valid_till_minutes: int,
+        notify: bool,
+        notify_to: str,
+        password: str,
+        status: bool,
+        created_at: str,
+        expire_at: str,
+    ) -> Response:
+        """Create a new guest visitor of a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            name (str): Visitor account name
+            id (str): NA for visitor post/put method. ID of the visitor
+            company_name (str): Company name of the visitor
+            phone (str): Phone number of the visitor; Format [+CountryCode][PhoneNumber]
+            email (str): Email address of the visitor
+            is_enabled (bool): Enable or disable the visitor account
+            valid_till_no_limit (bool): Visitor account will not expire when this is set to true
+            valid_till_days (int): Account validity in days
+            valid_till_hours (int): Account validity in hours
+            valid_till_minutes (int): Account validity in minutes
+            notify (bool): Flag to notify the password via email or number
+            notify_to (str): Notify to email or phone. Defualt is phone when it is provided
+                otherwise email.  Valid Values: email, phone
+            password (str): Password
+            status (bool): This field provides status of the account. Returns true when enabled and
+                not expired. NA for visitor post/put method. This is optional fields.
+            created_at (str): This field indicates the created date timestamp value. It is generated
+                while creating visitor. NA for visitor post/put method. This is optional field.
+            expire_at (str): This field indicates expiry time timestamp value. It is generated based
+                on the valid_till value and created_at time. NA for visitor post/put method. This is
+                optional field
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        json_data = {
+            'name': name,
+            'id': id,
+            'company_name': company_name,
+            'phone': phone,
+            'email': email,
+            'is_enabled': is_enabled,
+            'valid_till_no_limit': valid_till_no_limit,
+            'valid_till_days': valid_till_days,
+            'valid_till_hours': valid_till_hours,
+            'valid_till_minutes': valid_till_minutes,
+            'notify': notify,
+            'notify_to': notify_to,
+            'password': password,
+            'status': status,
+            'created_at': created_at,
+            'expire_at': expire_at
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def guest_get_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+    ) -> Response:
+        """Get guest visitor account.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            visitor_id (str): Visitor ID of the portal
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
+
+        return await self.get(url)
+
+    async def guest_update_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+        name: str,
+        id: str,
+        company_name: str,
+        phone: str,
+        email: str,
+        is_enabled: bool,
+        valid_till_no_limit: bool,
+        valid_till_days: int,
+        valid_till_hours: int,
+        valid_till_minutes: int,
+        notify: bool,
+        notify_to: str,
+        password: str,
+        status: bool,
+        created_at: str,
+        expire_at: str,
+    ) -> Response:
+        """Update guest visitor account.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            visitor_id (str): Visitor ID of the portal
+            name (str): Visitor account name
+            id (str): NA for visitor post/put method. ID of the visitor
+            company_name (str): Company name of the visitor
+            phone (str): Phone number of the visitor; Format [+CountryCode][PhoneNumber]
+            email (str): Email address of the visitor
+            is_enabled (bool): Enable or disable the visitor account
+            valid_till_no_limit (bool): Visitor account will not expire when this is set to true
+            valid_till_days (int): Account validity in days
+            valid_till_hours (int): Account validity in hours
+            valid_till_minutes (int): Account validity in minutes
+            notify (bool): Flag to notify the password via email or number
+            notify_to (str): Notify to email or phone. Defualt is phone when it is provided
+                otherwise email.  Valid Values: email, phone
+            password (str): Password
+            status (bool): This field provides status of the account. Returns true when enabled and
+                not expired. NA for visitor post/put method. This is optional fields.
+            created_at (str): This field indicates the created date timestamp value. It is generated
+                while creating visitor. NA for visitor post/put method. This is optional field.
+            expire_at (str): This field indicates expiry time timestamp value. It is generated based
+                on the valid_till value and created_at time. NA for visitor post/put method. This is
+                optional field
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
+
+        json_data = {
+            'name': name,
+            'id': id,
+            'company_name': company_name,
+            'phone': phone,
+            'email': email,
+            'is_enabled': is_enabled,
+            'valid_till_no_limit': valid_till_no_limit,
+            'valid_till_days': valid_till_days,
+            'valid_till_hours': valid_till_hours,
+            'valid_till_minutes': valid_till_minutes,
+            'notify': notify,
+            'notify_to': notify_to,
+            'password': password,
+            'status': status,
+            'created_at': created_at,
+            'expire_at': expire_at
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def guest_delete_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+    ) -> Response:
+        """Delete guest visitor account.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            visitor_id (str): Visitor ID of the portal
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
+
+        return await self.delete(url)
+
+    async def guest_get_sessions(
+        self,
+        essid_name: str,
+        portal_id: str,
+        sort: str = '+account_name',
+        ssid_name: str = None,
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all sessions of a ssid.
+
+        Args:
+            essid_name (str): get session of essid name
+            portal_id (str): Portal ID of the splash page
+            sort (str, optional): + is for ascending  and - for descending order , sorts by
+                account_name for now  Valid Values: +account_name, -account_name
+            ssid_name (str, optional): get session of ssid name. Not in use. Please filter by essid
+                instead. Filtering by ssid will be deprecated in the future.
+            filter_by (str, optional): filter by account_name  Valid Values: account_name
+            filter_value (str, optional): filter value
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/sessions"
+
+        params = {
+            'essid_name': essid_name,
+            'sort': sort,
+            'ssid_name': ssid_name,
+            'filter_by': filter_by,
+            'filter_value': filter_value,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def guest_get_wlans(
+        self,
+    ) -> Response:
+        """Get all guest wlans.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/wlans"
+
+        return await self.get(url)
+
+    async def guest_get_enabled(
+        self,
+    ) -> Response:
+        """Check if guest is enabled for current user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/enabled"
+
+        return await self.get(url)
+
+    async def guest_get_re_provision(
+        self,
+    ) -> Response:
+        """Provision cloud guest for current customer.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/reprovision"
+
+        return await self.post(url)
+
+    async def guest_wifi4eu_status(
+        self,
+        network_id: str,
+        lang_code: str,
+    ) -> Response:
+        """WiFi4EU Status.
+
+        Args:
+            network_id (str): Network ID for WiFi4EU
+            lang_code (str): Two letter language code for WiFi4EU
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/wifi4eu/lang_code/{lang_code}"
+
+        params = {
+            'network_id': network_id
+        }
+
+        return await self.post(url, params=params)
+
+    async def guest_get_statistics(
+        self,
+        days: int,
+        ssid: str,
+    ) -> Response:
+        """Get summary statistics.
+
+        Args:
+            days (int): Num of days for which session data is required  Valid Values: 1, 7, 28
+            ssid (str): A comma separated list of SSIDs for which session data is required
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/summary"
+
+        params = {
+            'days': days,
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
 
     async def install_manager_invite_installer(
         self,
@@ -2710,36 +11717,36 @@ class AllCalls(CentralApi):
 
     async def iot_operations_saveusingput(
         self,
+        clientId: str,
+        password: str,
+        token: str,
+        url: str,
+        username: str,
         collectorId: str,
         description: str,
+        outputFormatType: str,
+        protocol: str,
         name: str,
         transportProfileId: str,
-        clientId: str = None,
-        password: str = None,
-        token: str = None,
-        url: str = None,
-        username: str = None,
         reportInterval: int = None,
         rssiAggregation: str = None,
-        outputFormatType: str = None,
-        protocol: str = None,
     ) -> Response:
         """Update a transport profile by id.
 
         Args:
+            clientId (str): clientId
+            password (str): password
+            token (str): token
+            url (str): url
+            username (str): username
             collectorId (str): collectorId
             description (str): description
+            outputFormatType (str): outputFormatType  Valid Values: JSON, PROTOBUF
+            protocol (str): protocol  Valid Values: WS, WSS, MQTT, MQTT_WS, MQTT_WSS
             name (str): name
             transportProfileId (str): The Unique Transport Profile Id
-            clientId (str, optional): clientId
-            password (str, optional): password
-            token (str, optional): token
-            url (str, optional): url
-            username (str, optional): username
             reportInterval (int, optional): reportInterval
             rssiAggregation (str, optional): rssiAggregation  Valid Values: AVERAGE, LATEST, MAX
-            outputFormatType (str, optional): outputFormatType  Valid Values: JSON, PROTOBUF
-            protocol (str, optional): protocol  Valid Values: WS, WSS, MQTT, MQTT_WS, MQTT_WSS
 
         Returns:
             Response: CentralAPI Response object
@@ -2747,18 +11754,18 @@ class AllCalls(CentralApi):
         url = f"/iot_operations/api/v1/transport_profiles/{transportProfileId}"
 
         json_data = {
-            'collectorId': collectorId,
-            'description': description,
-            'name': name,
             'clientId': clientId,
             'password': password,
             'token': token,
             'url': url,
             'username': username,
-            'reportInterval': reportInterval,
-            'rssiAggregation': rssiAggregation,
+            'collectorId': collectorId,
+            'description': description,
             'outputFormatType': outputFormatType,
-            'protocol': protocol
+            'protocol': protocol,
+            'name': name,
+            'reportInterval': reportInterval,
+            'rssiAggregation': rssiAggregation
         }
 
         return await self.put(url, json_data=json_data)
@@ -2798,7 +11805,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             calculate_client_count (bool, optional): Whether to calculate client count per SSID
@@ -2833,7 +11840,7 @@ class AllCalls(CentralApi):
         Args:
             network_name (str): Name of the network to be queried
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
 
@@ -2842,7 +11849,14 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v2/networks/{network_name}"
 
-        return await self.get(url)
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site
+        }
+
+        return await self.get(url, params=params)
 
     async def monitoring_get_networks_bandwidth_usage_v2(
         self,
@@ -2859,7 +11873,7 @@ class AllCalls(CentralApi):
         Args:
             network (str): Filter by network name
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
                 in seconds. Default is current timestamp minus 3 hours
@@ -2874,8 +11888,12 @@ class AllCalls(CentralApi):
 
         params = {
             'network': network,
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
             'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp
+            'to_timestamp': to_timestamp,
+            'site': site
         }
 
         return await self.get(url, params=params)
@@ -2904,7 +11922,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             status (str, optional): Filter by AP status
@@ -2932,6 +11950,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/aps"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'status': status,
             'serial': serial,
             'macaddr': macaddr,
@@ -2967,7 +11989,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             serial (str, optional): Filter by AP serial number
@@ -2985,11 +12007,17 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/bssids"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'serial': serial,
             'macaddr': macaddr,
             'cluster_id': cluster_id,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3038,7 +12066,7 @@ class AllCalls(CentralApi):
 
         Args:
             serial (str): Serial Number of AP to be queried
-            band (str, optional): Filter by band (2.4 or 5). Valid only when serial parameter is
+            band (str, optional): Filter by band (2.4, 5 or 6). Valid only when serial parameter is
                 specified.
             radio_number (int, optional): Filter by radio_number (0, 1 or 2). Valid only when serial
                 parameter is specified.
@@ -3054,7 +12082,9 @@ class AllCalls(CentralApi):
 
         params = {
             'band': band,
-            'radio_number': radio_number
+            'radio_number': radio_number,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3079,13 +12109,13 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             serial (str, optional): Filter by AP serial
             cluster_id (str, optional): Filter by Mobility Controller serial number
             interval (str, optional): Filter by interval (5minutes or 1hour or 1day or 1week).
-            band (str, optional): Filter by band (2.4 or 5). Valid only when serial parameter is
+            band (str, optional): Filter by band (2.4, 5 or 6). Valid only when serial parameter is
                 specified.
             radio_number (int, optional): Filter by radio_number (0, 1 or 2). Valid only when serial
                 parameter is specified.
@@ -3104,13 +12134,19 @@ class AllCalls(CentralApi):
         url = "/monitoring/v3/aps/bandwidth_usage"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'serial': serial,
             'cluster_id': cluster_id,
             'interval': interval,
             'band': band,
             'radio_number': radio_number,
             'ethernet_interface_index': ethernet_interface_index,
-            'network': network
+            'network': network,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3130,7 +12166,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             cluster_id (str, optional): Filter by Mobility Controller serial number
@@ -3146,8 +12182,14 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/aps/bandwidth_usage/topn"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'cluster_id': cluster_id,
-            'count': count
+            'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3175,7 +12217,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/swarms/bandwidth_usage/topn"
 
         params = {
-            'count': count
+            'group': group,
+            'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3205,7 +12250,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/swarms/clients_count/topn"
 
         params = {
+            'group': group,
             'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'sort': sort
         }
 
@@ -3233,14 +12281,16 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
-            network (str, optional): Filter by network name
+            network (str, optional): Filter by network name. Field supported for wireless clients
+                only
             serial (str, optional): Filter by AP serial number
             os_type (str, optional): Filter by client os type
             cluster_id (str, optional): Filter by Mobility Controller serial number
-            band (str, optional): Filter by band. Value can be either "2.4" or "5"
+            band (str, optional): Filter by band. Value can be either "2.4", "5" or "6". Field
+                supported for wireless clients only.
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 name, ip_address, username, os_type, connection, associated_device, group_name,
                 swarm_id, network, radio_mac, manufacturer, vlan, encryption_method, radio_number,
@@ -3260,6 +12310,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/clients/wireless"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'network': network,
             'serial': serial,
             'os_type': os_type,
@@ -3268,7 +12322,9 @@ class AllCalls(CentralApi):
             'fields': fields,
             'calculate_total': calculate_total,
             'sort': sort,
-            'last_client_mac': last_client_mac
+            'last_client_mac': last_client_mac,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3293,7 +12349,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             serial (str, optional): Filter by Switch or AP serial number
@@ -3316,13 +12372,19 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/clients/wired"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'serial': serial,
             'cluster_id': cluster_id,
             'stack_id': stack_id,
             'fields': fields,
             'calculate_total': calculate_total,
             'sort': sort,
-            'last_client_mac': last_client_mac
+            'last_client_mac': last_client_mac,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3339,6 +12401,8 @@ class AllCalls(CentralApi):
         network: str = None,
         serial: str = None,
         cluster_id: str = None,
+        band: str = None,
+        stack_id: str = None,
         os_type: str = None,
         fields: str = None,
         calculate_total: bool = None,
@@ -3359,17 +12423,28 @@ class AllCalls(CentralApi):
             client_type (str): WIRED = List Wired Clients, WIRELESS = List Wireless Clients.  Valid
                 Values: WIRELESS, WIRED
             client_status (str): CONNECTED = List Connected Clients, FAILED_TO_CONNECT = List Failed
-                Clients.  Valid Values: CONNECTED, FAILED_TO_CONNECT
+                Clients.                                  Failed to connect status not supported for
+                wired clients.                                    Valid Values: CONNECTED,
+                FAILED_TO_CONNECT
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
-            network (str, optional): Filter by network name
+            network (str, optional): Filter by network name. Field supported for wireless clients
+                only
             serial (str, optional): Filter by device serial number
             cluster_id (str, optional): Filter by Mobility Controller serial number
+            band (str, optional): Filter by band. Value can be either "2.4", "5" or "6". Field
+                supported for wireless clients only.
+            stack_id (str, optional): Filter by Switch stack_id. Only for Wired Clients
             os_type (str, optional): Filter by OS Type
-            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
-                name, ip_address, username, associated_device, group_name, interface_mac, vlan
+            fields (str, optional): Comma separated list of fields to be returned.
+                Valid fields for wired clients are name, ip_address, username, associated_device,
+                group_name, interface_mac, vlan.                                      Valid field
+                values for wireless clients are name, ip_address, username, os_type, connection,
+                associated_device, group_name, swarm_id, network, radio_mac, manufacturer, vlan,
+                encryption_method, radio_number, speed, usage, health, labels, site,
+                signal_strength, signal_db, snr.
             calculate_total (bool, optional): Whether to calculate total Wireless/Wired Clients
             sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
                 '+macaddr'
@@ -3378,7 +12453,8 @@ class AllCalls(CentralApi):
                 will not make any sense and by default the results are sorted by macaddr.
             show_usage (bool, optional): Whether to show usage
             show_manufacturer (bool, optional): Whether to show manufacturer
-            show_signal_db (bool, optional): Whether to show signal_db and signal_strength
+            show_signal_db (bool, optional): Whether to show signal_db and signal_strength. Field
+                supported for wireless clients only
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
 
@@ -3391,8 +12467,15 @@ class AllCalls(CentralApi):
             'timerange': timerange,
             'client_type': client_type,
             'client_status': client_status,
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'network': network,
             'serial': serial,
             'cluster_id': cluster_id,
+            'band': band,
+            'stack_id': stack_id,
             'os_type': os_type,
             'fields': fields,
             'calculate_total': calculate_total,
@@ -3400,7 +12483,9 @@ class AllCalls(CentralApi):
             'last_client_mac': last_client_mac,
             'show_usage': show_usage,
             'show_manufacturer': show_manufacturer,
-            'show_signal_db': show_signal_db
+            'show_signal_db': show_signal_db,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3464,7 +12549,11 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
 
         params = {
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3501,7 +12590,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             cluster_id (str, optional): Filter by Mobility Controller serial number
             stack_id (str, optional): Filter by Switch stack_id
@@ -3518,10 +12607,15 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/clients/bandwidth_usage"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
             'cluster_id': cluster_id,
             'stack_id': stack_id,
             'serial': serial,
-            'macaddr': macaddr
+            'macaddr': macaddr,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3542,9 +12636,10 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
-            network (str, optional): Filter by network name
+            network (str, optional): Filter by network name. Field supported for wireless clients
+                only
             cluster_id (str, optional): Filter by Mobility Controller serial number
             stack_id (str, optional): Filter by Switch stack_id
             count (int, optional): Required top N clients count. Default is 5 and maximum is 100
@@ -3559,9 +12654,15 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/clients/bandwidth_usage/topn"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'network': network,
             'cluster_id': cluster_id,
             'stack_id': stack_id,
-            'count': count
+            'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3585,18 +12686,19 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
-            network (str, optional): Filter by network name
+            network (str, optional): Filter by network name. Field supported for wireless clients
+                only
             cluster_id (str, optional): Filter by Mobility Controller serial number
             stack_id (str, optional): Filter by Switch stack_id
             device_type (str, optional): Filter by device type. Value can be either "AP" or "Switch"
             serial (str, optional): Filter by Ap or serial
-            band (str, optional): Filter by band. Value can be either "2.4" or "5". Valid only when
-                serial parameter is specified.
-            radio_number (int, optional): Filter by radio_number (0 or 1). Valid only when serial
+            band (str, optional): Filter by band. Value can be either "2.4", "5" or "6". Valid only
+                when serial parameter is specified.
+            radio_number (int, optional): Filter by radio_number (0, 1 or 2). Valid only when serial
                 parameter is specified. If band is provided and radio_number is not provided then
-                radio_number is defaulted to 0 and 1 for band 5 and 2.4 respectively.
+                radio_number is defaulted to 0, 1 and 2 for band 5, 2.4 and 6 respectively.
             from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
                 in seconds. Default is current timestamp minus 3 hours
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -3608,12 +12710,18 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/clients/count"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'network': network,
             'cluster_id': cluster_id,
             'stack_id': stack_id,
             'device_type': device_type,
             'serial': serial,
             'band': band,
-            'radio_number': radio_number
+            'radio_number': radio_number,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -3650,12 +12758,15 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/swarms"
 
         params = {
+            'group': group,
             'status': status,
             'public_ip_address': public_ip_address,
             'fields': fields,
             'calculate_total': calculate_total,
             'sort': sort,
-            'swarm_name': swarm_name
+            'swarm_name': swarm_name,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3753,6 +12864,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/mobility_controllers/{serial}/ports/bandwidth_usage"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port
         }
 
@@ -3827,12 +12940,17 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/mobility_controllers"
 
         params = {
+            'group': group,
+            'label': label,
+            'site': site,
             'status': status,
             'macaddr': macaddr,
             'model': model,
             'fields': fields,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -3912,12 +13030,17 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/gateways"
 
         params = {
+            'group': group,
+            'label': label,
+            'site': site,
             'status': status,
             'macaddr': macaddr,
             'model': model,
             'fields': fields,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4010,7 +13133,9 @@ class AllCalls(CentralApi):
 
         params = {
             'uplink_id': uplink_id,
-            'interval': interval
+            'interval': interval,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -4044,7 +13169,9 @@ class AllCalls(CentralApi):
         params = {
             'uplink_id': uplink_id,
             'map_name': map_name,
-            'interval': interval
+            'interval': interval,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -4075,7 +13202,9 @@ class AllCalls(CentralApi):
 
         params = {
             'uplink_id': uplink_id,
-            'interval': interval
+            'interval': interval,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -4119,6 +13248,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/gateways/{serial}/ports/bandwidth_usage"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port
         }
 
@@ -4167,7 +13298,9 @@ class AllCalls(CentralApi):
 
         params = {
             'port': port,
-            'interval': interval
+            'interval': interval,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -4195,7 +13328,9 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/gateways/{serial}/tunnels"
 
         params = {
-            'timerange': timerange
+            'timerange': timerange,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4221,7 +13356,9 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/gateways/{serial}/dhcp_clients"
 
         params = {
-            'reservation': reservation
+            'reservation': reservation,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4284,7 +13421,9 @@ class AllCalls(CentralApi):
         params = {
             'calculate_total': calculate_total,
             'category_id': category_id,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4335,7 +13474,9 @@ class AllCalls(CentralApi):
 
         params = {
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4522,7 +13663,9 @@ class AllCalls(CentralApi):
         url = "/central/v1/labels/categories"
 
         params = {
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4550,7 +13693,9 @@ class AllCalls(CentralApi):
 
         params = {
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4825,6 +13970,8 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/switches"
 
         params = {
+            'group': group,
+            'label': label,
             'stack_id': stack_id,
             'status': status,
             'fields': fields,
@@ -4833,7 +13980,9 @@ class AllCalls(CentralApi):
             'calculate_client_count': calculate_client_count,
             'public_ip_address': public_ip_address,
             'site': site,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4892,7 +14041,9 @@ class AllCalls(CentralApi):
             'primary_vlan_id': primary_vlan_id,
             'status': status,
             'sort': sort,
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -4951,7 +14102,9 @@ class AllCalls(CentralApi):
             'primary_vlan_id': primary_vlan_id,
             'status': status,
             'sort': sort,
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5010,7 +14163,9 @@ class AllCalls(CentralApi):
             'primary_vlan_id': primary_vlan_id,
             'status': status,
             'sort': sort,
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5069,7 +14224,9 @@ class AllCalls(CentralApi):
             'primary_vlan_id': primary_vlan_id,
             'status': status,
             'sort': sort,
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5205,8 +14362,12 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/switches/bandwidth_usage"
 
         params = {
+            'group': group,
+            'label': label,
             'serial': serial,
-            'stack_id': stack_id
+            'stack_id': stack_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -5238,8 +14399,12 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/switches/bandwidth_usage/topn"
 
         params = {
+            'group': group,
+            'label': label,
             'stack_id': stack_id,
-            'count': count
+            'count': count,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp
         }
 
         return await self.get(url, params=params)
@@ -5363,6 +14528,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/switches/{serial}/ports/bandwidth_usage"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port,
             'show_uplink': show_uplink
         }
@@ -5394,6 +14561,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/cx_switches/{serial}/ports/bandwidth_usage"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port,
             'show_uplink': show_uplink
         }
@@ -5425,6 +14594,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/switches/{serial}/ports/errors"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port,
             'error': error
         }
@@ -5456,6 +14627,8 @@ class AllCalls(CentralApi):
         url = f"/monitoring/v1/cx_switches/{serial}/ports/errors"
 
         params = {
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'port': port,
             'error': error
         }
@@ -5494,6 +14667,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    # API-FLAW returns 200 w/ no content if there are no stacks rather than an empty list
     async def monitoring_get_switch_stacks(
         self,
         hostname: str = None,
@@ -5515,7 +14689,10 @@ class AllCalls(CentralApi):
         url = "/monitoring/v1/switch_stacks"
 
         params = {
-            'hostname': hostname
+            'hostname': hostname,
+            'group': group,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5579,7 +14756,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str, optional): Filter by group name
-            swarm_id (str, optional): Filter by Swarm ID
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
             label (str, optional): Filter by Label name
             from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
                 in seconds. Default is current timestamp minus 3 hours
@@ -5610,6 +14787,11 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/events"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'macaddr': macaddr,
             'bssid': bssid,
             'device_mac': device_mac,
@@ -5622,7 +14804,9 @@ class AllCalls(CentralApi):
             'event_description': event_description,
             'event_type': event_type,
             'fields': fields,
-            'calculate_total': calculate_total
+            'calculate_total': calculate_total,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5681,6 +14865,108 @@ class AllCalls(CentralApi):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def msp_create_customer_v2(
+        self,
+        customer_name: str,
+        country_name: str,
+        street_address: str,
+        city: str,
+        state: str,
+        zip_postal_code: str,
+        name: str,
+        description: str,
+        lock_msp_ssids: bool,
+    ) -> Response:
+        """Create a new customer with V2 API.
+
+        Args:
+            customer_name (str): Customer Name (Max 70 chars)
+            country_name (str): Country Name (Max 50 chars)
+            street_address (str): Street Address (Max 50 chars)
+            city (str): City (Max 70 chars)
+            state (str): City (Max 70 chars)
+            zip_postal_code (str): Zip Code (Max 20 chars)
+            name (str): Group Name
+            description (str): Customer Description (Max length 32 chars)
+            lock_msp_ssids (bool): enable/disable lock ssid
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/msp_api/v2/customers"
+
+        json_data = {
+            'customer_name': customer_name,
+            'country_name': country_name,
+            'street_address': street_address,
+            'city': city,
+            'state': state,
+            'zip_postal_code': zip_postal_code,
+            'name': name,
+            'description': description,
+            'lock_msp_ssids': lock_msp_ssids
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def msp_edit_customer_v2(
+        self,
+        customer_id: str,
+        customer_name: str,
+        country_name: str,
+        street_address: str,
+        city: str,
+        state: str,
+        zip_postal_code: str,
+        name: str,
+        description: str,
+        lock_msp_ssids: bool,
+    ) -> Response:
+        """Update a customer with V2 API.
+
+        Args:
+            customer_id (str): Filter on Customer ID
+            customer_name (str): Customer Name (Max 70 chars)
+            country_name (str): Country Name (Max 50 chars)
+            street_address (str): Street Address (Max 50 chars)
+            city (str): City (Max 70 chars)
+            state (str): City (Max 70 chars)
+            zip_postal_code (str): Zip Code (Max 20 chars)
+            name (str): Group Name
+            description (str): Customer Description (Max length 32 chars)
+            lock_msp_ssids (bool): enable/disable lock ssid
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/msp_api/v2/customers/{customer_id}"
+
+        json_data = {
+            'customer_name': customer_name,
+            'country_name': country_name,
+            'street_address': street_address,
+            'city': city,
+            'state': state,
+            'zip_postal_code': zip_postal_code,
+            'name': name,
+            'description': description,
+            'lock_msp_ssids': lock_msp_ssids
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def msp_get_country_code(
+        self,
+    ) -> Response:
+        """Get list of country code list.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/msp_api/v2/get_country_code"
+
+        return await self.get(url)
 
     async def msp_get_customer(
         self,
@@ -5761,7 +15047,12 @@ class AllCalls(CentralApi):
         """
         url = "/msp_api/v1/customers/users"
 
-        return await self.get(url)
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def msp_get_customer_users(
         self,
@@ -5781,7 +15072,12 @@ class AllCalls(CentralApi):
         """
         url = f"/msp_api/v1/customers/{customer_id}/users"
 
-        return await self.get(url)
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def msp_get_resource(
         self,
@@ -5852,7 +15148,8 @@ class AllCalls(CentralApi):
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
-        """Get list of devices and licenses under the Customer account based on limit and offset.
+        """Get list of devices and licenses under the Customer account based on limit and offset,
+        offset should be a multiple of the limit value.
 
         Args:
             customer_id (str): Filter on Customer ID
@@ -5868,7 +15165,9 @@ class AllCalls(CentralApi):
         url = f"/msp_api/v1/customers/{customer_id}/devices"
 
         params = {
-            'device_type': device_type
+            'device_type': device_type,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -5898,6 +15197,22 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def msp_unassign_tenant_devices(
+        self,
+        customer_id: str,
+    ) -> Response:
+        """Un-assign all devices from Tenant/end-customer.
+
+        Args:
+            customer_id (str): Filter on Customer ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/msp_api/v2/{customer_id}/devices"
+
+        return await self.put(url)
+
     async def msp_get_devices(
         self,
         device_allocation_status: int = 0,
@@ -5906,7 +15221,8 @@ class AllCalls(CentralApi):
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
-        """Get list of devices and licenses under the MSP account based on limit and offset.
+        """Get list of devices and licenses under the MSP account based on limit and offset, offset
+        should be a multiple of the limit value.
 
         Args:
             device_allocation_status (int, optional): Filter on device_allocation_status to get list
@@ -5914,8 +15230,7 @@ class AllCalls(CentralApi):
                 1-Allocated                                                         2-Available
                 Valid Values: 0 - 2
             device_type (str, optional): Filter on device_type to get list of devices
-                iap
-                switch
+                iap                                            switch
                 all_controller  Valid Values: iap, switch, all_controller
             customer_name (str, optional): Filter on Customer Name
             offset (int, optional): pagination start index Defaults to 0.
@@ -5927,7 +15242,11 @@ class AllCalls(CentralApi):
         url = "/msp_api/v1/devices"
 
         params = {
-            'device_allocation_status': device_allocation_status
+            'device_allocation_status': device_allocation_status,
+            'device_type': device_type,
+            'customer_name': customer_name,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -6018,19 +15337,18 @@ class AllCalls(CentralApi):
         Args:
             name (str, optional): site / label name or part of its name
             column (int, optional): Column to sort on
-            order (int, optional): Sort order:
-                * asc - Ascending, from A to Z.
-                * desc - Descending, from Z to A.
-                Valid Values: asc, desc
+            order (int, optional): Sort order:                                     * asc -
+                Ascending, from A to Z.                                     * desc - Descending,
+                from Z to A.                                      Valid Values: asc, desc
             Site_properties_used_with_thresholds (str, optional): Site thresholds
                 * All properties of a site can be used as filter parameters with a threshold
                 * The range filters can be combined with the column names with "\__"  # noqa
                 * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in  # noqa
-                down state
-                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan  # noqa
-                in down state
-                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10  # noqa
-                devices in up state
+                down state                                                                    * For
+                eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan in  # noqa
+                down state                                                                    * For
+                eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10 devices  # noqa
+                in up state
                 Valid Values: gt  (Greater than), lt  (Less than), gte (Greater than or equal to),
                 lte (Less than or equal to)
             offset (int, optional): pagination start index Defaults to 0.
@@ -6041,7 +15359,16 @@ class AllCalls(CentralApi):
         """
         url = "/branchhealth/v1/site"
 
-        return await self.get(url)
+        params = {
+            'name': name,
+            'column': column,
+            'order': order,
+            'Site_properties_used_with_thresholds': Site_properties_used_with_thresholds,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def central_get_types_(
         self,
@@ -6092,7 +15419,9 @@ class AllCalls(CentralApi):
 
         params = {
             'search': search,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -6185,6 +15514,7 @@ class AllCalls(CentralApi):
         remove_sites_from_mute: List[str],
         update_site_emails: list,
         default_recipients_email_list: List[str],
+        email_subject_line_template: str,
     ) -> Response:
         """Update customer settings.
 
@@ -6193,6 +15523,7 @@ class AllCalls(CentralApi):
             remove_sites_from_mute (List[str]): Sites to be unmuted for alert
             update_site_emails (list): update_site_emails
             default_recipients_email_list (List[str]): Emails to be saved as deafult recipient list
+            email_subject_line_template (str): Subject line to use for email notifications
 
         Returns:
             Response: CentralAPI Response object
@@ -6203,7 +15534,8 @@ class AllCalls(CentralApi):
             'add_sites_to_mute': add_sites_to_mute,
             'remove_sites_from_mute': remove_sites_from_mute,
             'update_site_emails': update_site_emails,
-            'default_recipients_email_list': default_recipients_email_list
+            'default_recipients_email_list': default_recipients_email_list,
+            'email_subject_line_template': email_subject_line_template
         }
 
         return await self.put(url, json_data=json_data)
@@ -6302,9 +15634,20 @@ class AllCalls(CentralApi):
 
         params = {
             'customer_id': customer_id,
+            'group': group,
+            'label': label,
+            'serial': serial,
+            'site': site,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
             'severity': severity,
             'type': type,
-            'fields': fields
+            'search': search,
+            'calculate_total': calculate_total,
+            'ack': ack,
+            'fields': fields,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -6521,30 +15864,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url)
 
-    async def platform_refresh_inventory_status(
-        self,
-    ) -> Response:
-        """Get status of refresh job.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/platform/device_inventory/v1/refresh"
-
-        return await self.get(url)
-
-    async def platform_refresh_inventory(
-        self,
-    ) -> Response:
-        """Schedule a job to refresh the device inventory.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/platform/device_inventory/v1/refresh"
-
-        return await self.post(url)
-
     async def platform_get_device(
         self,
         serial: str,
@@ -6750,6 +16069,7 @@ class AllCalls(CentralApi):
         self,
         license_type: str = 'all',
         service: str = None,
+        app_only_stats: bool = None,
     ) -> Response:
         """Get subscription stats.
 
@@ -6763,6 +16083,8 @@ class AllCalls(CentralApi):
                 foundation_70XX etc.
             service (str, optional): Service type: pa/pa,clarity,foundation_ap,
                 advanced_switch_6300, foundation_70XX  etc
+            app_only_stats (bool, optional): If value is True, stats only for the current
+                application returned rather than global stats
 
         Returns:
             Response: CentralAPI Response object
@@ -6771,7 +16093,8 @@ class AllCalls(CentralApi):
 
         params = {
             'license_type': license_type,
-            'service': service
+            'service': service,
+            'app_only_stats': app_only_stats
         }
 
         return await self.get(url, params=params)
@@ -7516,7 +16839,20 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/interfering_aps"
 
-        return await self.get(url)
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_rds_v1_suspect_aps(
         self,
@@ -7555,7 +16891,20 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/suspect_aps"
 
-        return await self.get(url)
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_rds_v1_neighbor_aps(
         self,
@@ -7594,23 +16943,72 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/neighbor_aps"
 
-        return await self.get(url)
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
 
-    async def delete_rds_v1_rogues(
+        return await self.get(url, params=params)
+
+    async def get_rds_v1_manually_contained_aps(
         self,
-        bssid: str,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100,
     ) -> Response:
-        """Delete a rogue.
+        """List manually contained APs.
 
         Args:
-            bssid (str): The bssid of the rogue device (AA:BB:CC:DD:EE:FF)
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/rapids/v1/rogues/{bssid}"
+        url = "/rapids/v1/manually_contained_aps"
 
-        return await self.delete(url)
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_rds_v1_ssid_allow(
         self,
@@ -7761,8 +17159,18 @@ class AllCalls(CentralApi):
         url = "/rapids/v1/wids/infrastructure_attacks"
 
         params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -7812,7 +17220,18 @@ class AllCalls(CentralApi):
         url = "/rapids/v1/wids/client_attacks"
 
         params = {
-            'calculate_total': calculate_total
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'calculate_total': calculate_total,
+            'sort': sort,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -7859,7 +17278,21 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/wids/events"
 
-        return await self.get(url)
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'sort': sort,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def oauth2_xxx(
         self,
@@ -8016,6 +17449,7 @@ class AllCalls(CentralApi):
         url = "/api/routing/v1/bgp/neighbor/detail"
 
         params = {
+            'device': device,
             'address': address
         }
 
@@ -8037,7 +17471,12 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/reset"
 
-        return await self.put(url)
+        params = {
+            'device': device,
+            'address': address
+        }
+
+        return await self.put(url, params=params)
 
     async def get_routing_v1_bgp_neighbor_route_learned(
         self,
@@ -8059,7 +17498,14 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/route/learned"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'address': address,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_bgp_neighbor_route_advertised(
         self,
@@ -8081,7 +17527,14 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/route/advertised"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'address': address,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_bgp_route(
         self,
@@ -8101,7 +17554,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/route"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_overlay_connection(
         self,
@@ -8143,7 +17602,11 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/connection/reset"
 
-        return await self.put(url)
+        params = {
+            'device': device
+        }
+
+        return await self.put(url, params=params)
 
     async def get_routing_v1_overlay_interface(
         self,
@@ -8163,7 +17626,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/interface"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_overlay_route_learned(
         self,
@@ -8183,7 +17652,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/learned"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_overlay_route_learned_best(
         self,
@@ -8203,7 +17678,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/learned/best"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_overlay_route_advertised(
         self,
@@ -8223,7 +17704,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/advertised"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_ospf_area(
         self,
@@ -8269,7 +17756,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/interface"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_ospf_neighbor(
         self,
@@ -8289,7 +17782,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/neighbor"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_ospf_database(
         self,
@@ -8309,7 +17808,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/database"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_rip_interface(
         self,
@@ -8355,7 +17860,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/rip/neighbor"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_rip_neighbor_route(
         self,
@@ -8378,7 +17889,10 @@ class AllCalls(CentralApi):
         url = "/api/routing/v1/rip/neighbor/route"
 
         params = {
-            'address': address
+            'device': device,
+            'address': address,
+            'marker': marker,
+            'limit': limit
         }
 
         return await self.get(url, params=params)
@@ -8401,7 +17915,13 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/rip/route"
 
-        return await self.get(url)
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_routing_v1_route(
         self,
@@ -8446,1212 +17966,833 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v0/route"
 
-        return await self.get(url)
+        params = {
+            'device': device
+        }
 
-    async def airgroup_config_get_aruba_dial_id16(
+        return await self.get(url, params=params)
+
+    async def airgroup_config_get_aruba_service_ids_id1(
         self,
-        node_type: str,
-        node_id: str,
+        name: str,
+        service_id: str,
     ) -> Response:
-        """Retrieve dial.
+        """Retrieve service_ids by identifier service_id.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_dial_id16(
+    async def airgroup_config_post_aruba_service_ids_id1(
         self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
+        name: str,
+        service_id: str,
+        new_service_id: str,
     ) -> Response:
-        """Create dial.
+        """Create service_ids by identifier service_id.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
+            new_service_id (str): An MDNS or SSDP service ID
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
 
         json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
+            'new_service_id': new_service_id
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_service_ids_id1(
+        self,
+        name: str,
+        service_id: str,
+        new_service_id: str,
+    ) -> Response:
+        """Create/Update service_ids by identifier service_id.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
+            new_service_id (str): An MDNS or SSDP service ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
+
+        json_data = {
+            'new_service_id': new_service_id
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_service_ids_id1(
+        self,
+        name: str,
+        service_id: str,
+    ) -> Response:
+        """Delete service_ids by identifier service_id.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_service_ids_id2(
+        self,
+        name: str,
+    ) -> Response:
+        """Retrieve service_ids.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_custom_services_id3(
+        self,
+        name: str,
+    ) -> Response:
+        """Retrieve custom_services by identifier name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_custom_services_id2(
+        self,
+        name: str,
+        new_name: str,
+        description: str,
+        service_ids: list,
+    ) -> Response:
+        """Create custom_services by identifier name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            new_name (str): Name of the Custom service. This should be unique
+            description (str): Few line description of the service
+            service_ids (list): List of Service-IDs found in protocol packets that can be used to
+                identify this service. Syntax is as follows. mDNS: _<label>. repeated ending with
+                tcp or _udp SSDP:  urn:<domain-name>:service:<device-type>:<version> or urn:<domain-
+                name>:device:<device-type>:<version>
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'description': description,
+            'service_ids': service_ids
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_custom_services_id2(
+        self,
+        name: str,
+        new_name: str,
+        description: str,
+        service_ids: list,
+    ) -> Response:
+        """Create/Update custom_services by identifier name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            new_name (str): Name of the Custom service. This should be unique
+            description (str): Few line description of the service
+            service_ids (list): List of Service-IDs found in protocol packets that can be used to
+                identify this service. Syntax is as follows. mDNS: _<label>. repeated ending with
+                tcp or _udp SSDP:  urn:<domain-name>:service:<device-type>:<version> or urn:<domain-
+                name>:device:<device-type>:<version>
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'description': description,
+            'service_ids': service_ids
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_custom_services_id2(
+        self,
+        name: str,
+    ) -> Response:
+        """Delete custom_services by identifier name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_custom_services_id4(
+        self,
+    ) -> Response:
+        """Retrieve custom_services.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/custom_services/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id5(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Retrieve disallowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_roles_id3(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create disallowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_roles_id3(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create/Update disallowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_roles_id3(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Delete disallowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id6(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Retrieve disallowed_roles.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_allowed_roles_id7(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Retrieve allowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_allowed_roles_id4(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create allowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_allowed_roles_id4(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create/Update allowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_allowed_roles_id4(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Delete allowed_roles by identifier role.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_allowed_roles_id8(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Retrieve allowed_roles.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_role_restrictions_id9(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Retrieve role_restrictions.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_role_restrictions_id5(
+        self,
+        mac_address: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+    ) -> Response:
+        """Create role_restrictions.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
+
+        json_data = {
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_dial_id16(
+    async def airgroup_config_put_aruba_role_restrictions_id5(
         self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
+        mac_address: str,
+        disallowed_roles: list,
+        allowed_roles: list,
     ) -> Response:
-        """Create/Update dial.
+        """Create/Update role_restrictions.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+            mac_address (str): Mac-address of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
 
         json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_dial_id16(
+    async def airgroup_config_delete_aruba_role_restrictions_id5(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
     ) -> Response:
-        """Delete dial.
+        """Delete role_restrictions.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_standard_services_id17(
+    async def airgroup_config_get_aruba_ap_list_id10(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
+        serial_number: str,
     ) -> Response:
-        """Retrieve standard_services.
+        """Retrieve ap_list by identifier serial_number.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_standard_services_id17(
+    async def airgroup_config_post_aruba_ap_list_id6(
         self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        mac_address: str,
+        serial_number: str,
+        new_serial_number: str,
+        device_name: str,
     ) -> Response:
-        """Create standard_services.
+        """Create ap_list by identifier serial_number.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
+            new_serial_number (str): AP Serial number
+            device_name (str): Device Name. This field should be omitted for POST operation and
+                instead use 'serial_number' to identify the AP
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'new_serial_number': new_serial_number,
+            'device_name': device_name
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_standard_services_id17(
+    async def airgroup_config_put_aruba_ap_list_id6(
         self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        mac_address: str,
+        serial_number: str,
+        new_serial_number: str,
+        device_name: str,
     ) -> Response:
-        """Create/Update standard_services.
+        """Create/Update ap_list by identifier serial_number.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
+            new_serial_number (str): AP Serial number
+            device_name (str): Device Name. This field should be omitted for POST operation and
+                instead use 'serial_number' to identify the AP
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'new_serial_number': new_serial_number,
+            'device_name': device_name
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_standard_services_id17(
+    async def airgroup_config_delete_aruba_ap_list_id6(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
+        serial_number: str,
     ) -> Response:
-        """Delete standard_services.
+        """Delete ap_list by identifier serial_number.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_id3(
+    async def airgroup_config_get_aruba_ap_list_id11(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
     ) -> Response:
-        """Retrieve disallowed for airplay.
+        """Retrieve ap_list.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_disallowed_id3(
+    async def airgroup_config_get_aruba_network_visibility_id12(
         self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        mac_address: str,
     ) -> Response:
-        """Create disallowed for airplay.
+        """Retrieve network_visibility.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_network_visibility_id7(
+        self,
+        mac_address: str,
+        ap_list: list,
+    ) -> Response:
+        """Create network_visibility.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'ap_list': ap_list
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_disallowed_id3(
+    async def airgroup_config_put_aruba_network_visibility_id7(
         self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        mac_address: str,
+        ap_list: list,
     ) -> Response:
-        """Create/Update disallowed for airplay.
+        """Create/Update network_visibility.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            mac_address (str): Mac-address of the airgroup server
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'ap_list': ap_list
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_id3(
+    async def airgroup_config_delete_aruba_network_visibility_id7(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
     ) -> Response:
-        """Delete disallowed for airplay.
+        """Delete network_visibility.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_id15(
+    async def airgroup_config_get_aruba_servers_list_id13(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
     ) -> Response:
-        """Retrieve disallowed for dial.
+        """Retrieve servers_list by identifier mac_address.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_disallowed_id15(
+    async def airgroup_config_post_aruba_servers_list_id8(
         self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        mac_address: str,
+        new_mac_address: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+        ap_list: list,
     ) -> Response:
-        """Create disallowed for dial.
+        """Create servers_list by identifier mac_address.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            mac_address (str): Mac-address of the airgroup server
+            new_mac_address (str): Mac-address of the airgroup server
+            name (str): Name of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_id15(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create/Update disallowed for dial.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_disallowed_id15(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete disallowed for dial.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dial/disallowed/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_airplay_id4(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve airplay.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_airplay_id4(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create airplay.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
+            'new_mac_address': new_mac_address,
+            'name': name,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles,
+            'ap_list': ap_list
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_airplay_id4(
+    async def airgroup_config_put_aruba_servers_list_id8(
         self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
+        mac_address: str,
+        new_mac_address: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+        ap_list: list,
     ) -> Response:
-        """Create/Update airplay.
+        """Create/Update servers_list by identifier mac_address.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+            mac_address (str): Mac-address of the airgroup server
+            new_mac_address (str): Mac-address of the airgroup server
+            name (str): Name of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
         json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
+            'new_mac_address': new_mac_address,
+            'name': name,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles,
+            'ap_list': ap_list
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_airplay_id4(
+    async def airgroup_config_delete_aruba_servers_list_id8(
         self,
-        node_type: str,
-        node_id: str,
+        mac_address: str,
     ) -> Response:
-        """Delete airplay.
+        """Delete servers_list by identifier mac_address.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            mac_address (str): Mac-address of the airgroup server
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airplay/"
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_amazon_tv_id14(
+    async def airgroup_config_get_aruba_servers_list_id14(
         self,
-        node_type: str,
-        node_id: str,
+        sort_by: str = None,
+        search_name: str = None,
+        search_mac: str = None,
+        offset: str = 0,
+        limit: int = 100,
     ) -> Response:
-        """Retrieve amazon_tv.
+        """Retrieve servers_list.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+            sort_by (str, optional): This can be used to sort results by either name ore mac_address
+                of the servers. Only ascending order is supported.  Valid Values: mac, name
+            search_name (str, optional): This can be used to search the servers by their 'name'.
+            search_mac (str, optional): This can be used to search the servers by their
+                'mac_address'.
+            offset (str, optional): Offset value from where to start lookup in the table Defaults to
+                0.
+            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
+                and max value allowed is 20 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
+        url = "/airgroup-config/v2/servers/servers_list/"
 
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_amazon_tv_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create amazon_tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
+        params = {
+            'sort_by': sort_by,
+            'search_name': search_name,
+            'search_mac': search_mac,
+            'offset': offset,
+            'limit': limit
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.get(url, params=params)
 
-    async def airgroup_config_put_aruba_amazon_tv_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create/Update amazon_tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_amazon_tv_id14(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete amazon_tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_general_settings_id2(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_general_settings_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-    ) -> Response:
-        """Create general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        json_data = {
-            'airgroup_status': airgroup_status
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_general_settings_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-    ) -> Response:
-        """Create/Update general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        json_data = {
-            'airgroup_status': airgroup_status
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_general_settings_id2(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_airprint_id6(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_airprint_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_airprint_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create/Update airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_airprint_id6(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_config_id18(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_config_id18(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'airgroup_status': airgroup_status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_config_id18(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create/Update config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'airgroup_status': airgroup_status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_config_id18(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_googlecast_id8(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve googlecast.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_googlecast_id8(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create googlecast.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_googlecast_id8(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
-    ) -> Response:
-        """Create/Update googlecast.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
-
-        json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'desc': desc
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_googlecast_id8(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete googlecast.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_disallowed_id13(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve disallowed for amazon tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_disallowed_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create disallowed for amazon tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create/Update disallowed for amazon tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_disallowed_id13(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete disallowed for amazon tv.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/amazon_tv/disallowed/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_node_list_id19(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve node_list by identifier node-type node-id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_get_aruba_airgroup_status_id1(
+    async def airgroup_config_get_aruba_airgroup_status_id15(
         self,
         node_type: str,
         node_id: str,
@@ -9660,19 +18801,19 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_airgroup_status_id1(
+    async def airgroup_config_post_aruba_airgroup_status_id9(
         self,
         node_type: str,
         node_id: str,
@@ -9682,16 +18823,17 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
         json_data = {
             'airgroup_status': airgroup_status
@@ -9699,7 +18841,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_airgroup_status_id1(
+    async def airgroup_config_put_aruba_airgroup_status_id9(
         self,
         node_type: str,
         node_id: str,
@@ -9709,16 +18851,17 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
         json_data = {
             'airgroup_status': airgroup_status
@@ -9726,7 +18869,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_airgroup_status_id1(
+    async def airgroup_config_delete_aruba_airgroup_status_id9(
         self,
         node_type: str,
         node_id: str,
@@ -9735,643 +18878,1308 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_id7(
+    async def airgroup_config_get_aruba_general_settings_id16(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve disallowed for googlecast.
+        """Retrieve general_settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_disallowed_id7(
+    async def airgroup_config_post_aruba_general_settings_id10(
         self,
         node_type: str,
         node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        airgroup_status: bool,
+        inherited_from: str,
     ) -> Response:
-        """Create disallowed for googlecast.
+        """Create general_settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'airgroup_status': airgroup_status,
+            'inherited_from': inherited_from
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_disallowed_id7(
+    async def airgroup_config_put_aruba_general_settings_id10(
         self,
         node_type: str,
         node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        airgroup_status: bool,
+        inherited_from: str,
     ) -> Response:
-        """Create/Update disallowed for googlecast.
+        """Create/Update general_settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'airgroup_status': airgroup_status,
+            'inherited_from': inherited_from
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_id7(
+    async def airgroup_config_delete_aruba_general_settings_id10(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete disallowed for googlecast.
+        """Delete general_settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/googlecast/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_dlnaprint_id12(
+    async def airgroup_config_get_aruba_disallowed_vlans_id17(
         self,
         node_type: str,
         node_id: str,
+        name: str,
+        vlan_or_range: str,
     ) -> Response:
-        """Retrieve dlnaprint.
+        """Retrieve disallowed_vlans by identifier vlan_or_range.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_dlnaprint_id12(
+    async def airgroup_config_post_aruba_disallowed_vlans_id11(
         self,
         node_type: str,
         node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
     ) -> Response:
-        """Create dlnaprint.
+        """Create disallowed_vlans by identifier vlan_or_range.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
 
         json_data = {
-            'status': status,
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_vlans_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
+    ) -> Response:
+        """Create/Update disallowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
+
+        json_data = {
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_vlans_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+    ) -> Response:
+        """Delete disallowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_vlans_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve disallowed_vlans.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_allowed_vlans_id19(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+    ) -> Response:
+        """Retrieve allowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_allowed_vlans_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
+    ) -> Response:
+        """Create allowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        json_data = {
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_allowed_vlans_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
+    ) -> Response:
+        """Create/Update allowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        json_data = {
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_allowed_vlans_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+    ) -> Response:
+        """Delete allowed_vlans by identifier vlan_or_range.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_allowed_vlans_id20(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve allowed_vlans.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_vlan_restrictions_id21(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve vlan_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_vlan_restrictions_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+    ) -> Response:
+        """Create vlan_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
+                This list must be if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'allowed_vlans' has vlans configured
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        json_data = {
             'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_vlan_restrictions_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+    ) -> Response:
+        """Create/Update vlan_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
+                This list must be if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'allowed_vlans' has vlans configured
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_vlan_restrictions_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Delete vlan_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id22(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Retrieve disallowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_disallowed_roles_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create disallowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_disallowed_roles_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create/Update disallowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_disallowed_roles_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Delete disallowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id23(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve disallowed_roles.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_allowed_roles_id24(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Retrieve allowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_allowed_roles_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create allowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_put_aruba_allowed_roles_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create/Update allowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_delete_aruba_allowed_roles_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Delete allowed_roles by identifier role.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_allowed_roles_id25(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve allowed_roles.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_role_restrictions_id26(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve role_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
+
+        return await self.get(url)
+
+    async def airgroup_config_post_aruba_role_restrictions_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+    ) -> Response:
+        """Create role_restrictions.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
+
+        json_data = {
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_dlnaprint_id12(
+    async def airgroup_config_put_aruba_role_restrictions_id16(
         self,
         node_type: str,
         node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-        desc: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
     ) -> Response:
-        """Create/Update dlnaprint.
+        """Create/Update role_restrictions.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
 
         json_data = {
-            'status': status,
-            'disallowed_vlans': disallowed_vlans,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_dlnaprint_id12(
+    async def airgroup_config_delete_aruba_role_restrictions_id16(
         self,
         node_type: str,
         node_id: str,
+        name: str,
     ) -> Response:
-        """Delete dlnaprint.
+        """Delete role_restrictions.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_id9(
+    async def airgroup_config_get_aruba_services_id27(
         self,
         node_type: str,
         node_id: str,
+        name: str,
     ) -> Response:
-        """Retrieve disallowed for dlnamedia.
+        """Retrieve services by identifier name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_disallowed_id9(
+    async def airgroup_config_post_aruba_services_id17(
         self,
         node_type: str,
         node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create disallowed for dlnamedia.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_id9(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create/Update disallowed for dlnamedia.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_disallowed_id9(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete disallowed for dlnamedia.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/disallowed/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_disallowed_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve disallowed for airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_disallowed_id5(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create disallowed for airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_id5(
-        self,
-        node_type: str,
-        node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
-    ) -> Response:
-        """Create/Update disallowed for airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_disallowed_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete disallowed for airprint.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/airprint/disallowed/"
-
-        return await self.delete(url)
-
-    async def airgroup_config_get_aruba_dlnamedia_id10(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve dlnamedia.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_dlnamedia_id10(
-        self,
-        node_type: str,
-        node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        name: str,
+        new_name: str,
+        inherited_from: str,
         desc: str,
+        status: bool,
+        server_expiry_time: int,
+        is_custom: bool,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+        disallowed_roles: list,
+        allowed_roles: list,
     ) -> Response:
-        """Create dlnamedia.
+        """Create services by identifier name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            new_name (str): Name of the Airgroup service. This should refer to one of the pre-
+                defined services or a custom-service that has been defined by user.
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
+            desc (str): Description of the Airgroup service. This is a read-only field
             status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+            server_expiry_time (int): Duration in minutes after which the records of inactive
+                servers are purged. This timer will be used for all server records belonging to this
+                service. Allowed range is from 60 (1 hour) to 360 (6 hours). If this is not
+                configured, the records are purged as per TTL/max-age specified in packets
+            is_custom (bool): Indicates whether the service is pre-defined or custom (user-defined)
+                service. This is a read-only field.
+            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
+                This list must be if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'allowed_vlans' has vlans configured
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
         json_data = {
+            'new_name': new_name,
+            'inherited_from': inherited_from,
+            'desc': desc,
             'status': status,
+            'server_expiry_time': server_expiry_time,
+            'is_custom': is_custom,
             'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_dlnamedia_id10(
+    async def airgroup_config_put_aruba_services_id17(
         self,
         node_type: str,
         node_id: str,
-        status: bool,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        name: str,
+        new_name: str,
+        inherited_from: str,
         desc: str,
+        status: bool,
+        server_expiry_time: int,
+        is_custom: bool,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+        disallowed_roles: list,
+        allowed_roles: list,
     ) -> Response:
-        """Create/Update dlnamedia.
+        """Create/Update services by identifier name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            new_name (str): Name of the Airgroup service. This should refer to one of the pre-
+                defined services or a custom-service that has been defined by user.
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
+            desc (str): Description of the Airgroup service. This is a read-only field
             status (bool): Indicates whether service is enabled or disabled
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
-            desc (str): Few line description of the service
+            server_expiry_time (int): Duration in minutes after which the records of inactive
+                servers are purged. This timer will be used for all server records belonging to this
+                service. Allowed range is from 60 (1 hour) to 360 (6 hours). If this is not
+                configured, the records are purged as per TTL/max-age specified in packets
+            is_custom (bool): Indicates whether the service is pre-defined or custom (user-defined)
+                service. This is a read-only field.
+            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
+                This list must be if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'allowed_vlans' has vlans configured
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
         json_data = {
+            'new_name': new_name,
+            'inherited_from': inherited_from,
+            'desc': desc,
             'status': status,
+            'server_expiry_time': server_expiry_time,
+            'is_custom': is_custom,
             'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans,
             'disallowed_roles': disallowed_roles,
-            'desc': desc
+            'allowed_roles': allowed_roles
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_dlnamedia_id10(
+    async def airgroup_config_delete_aruba_services_id17(
         self,
         node_type: str,
         node_id: str,
+        name: str,
     ) -> Response:
-        """Delete dlnamedia.
+        """Delete services by identifier name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnamedia/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_id11(
+    async def airgroup_config_get_aruba_services_id28(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve disallowed for dlnaprint.
+        """Retrieve services.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/"
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_disallowed_id11(
+    async def airgroup_config_get_aruba_config_id29(
         self,
         node_type: str,
         node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
     ) -> Response:
-        """Create disallowed for dlnaprint.
+        """Retrieve config.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_node_list_id30(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve node_list by identifier node-type node-id.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/"
+
+        return await self.get(url)
+
+    async def airmatch_config_get_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        return await self.get(url)
+
+    async def airmatch_config_post_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        schedule: bool,
+        deploy_hour: int,
+        quality_threshold: int,
+        quality_threshold_24ghz: int,
+        quality_threshold_5ghz: int,
+        quality_threshold_6ghz: int,
+    ) -> Response:
+        """Create system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                This configuration is deprecated and will have no effect. Please use per band fields
+                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
+                'quality_threshold_6ghz'
+            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'schedule': schedule,
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'quality_threshold_24ghz': quality_threshold_24ghz,
+            'quality_threshold_5ghz': quality_threshold_5ghz,
+            'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_disallowed_id11(
+    async def airmatch_config_put_aruba_system_id1(
         self,
         node_type: str,
         node_id: str,
-        disallowed_vlans: List[str],
-        disallowed_roles: List[str],
+        schedule: bool,
+        deploy_hour: int,
+        quality_threshold: int,
+        quality_threshold_24ghz: int,
+        quality_threshold_5ghz: int,
+        quality_threshold_6ghz: int,
     ) -> Response:
-        """Create/Update disallowed for dlnaprint.
+        """Create/Update system.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
+                applied.  Valid Values: GLOBAL
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            disallowed_vlans (List[str]): list of disallowed VLAN id or range of vlan ids
-            disallowed_roles (List[str]): list of disallowed user/server Roles
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                This configuration is deprecated and will have no effect. Please use per band fields
+                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
+                'quality_threshold_6ghz'
+            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
         json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'disallowed_roles': disallowed_roles
+            'schedule': schedule,
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'quality_threshold_24ghz': quality_threshold_24ghz,
+            'quality_threshold_5ghz': quality_threshold_5ghz,
+            'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_id11(
+    async def airmatch_config_delete_aruba_system_id1(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete disallowed for dlnaprint.
+        """Delete system.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
+                applied.  Valid Values: GLOBAL
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
@@ -10379,7 +20187,7 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v1/node_list/{node_type}/{node_id}/config/standard_services/dlnaprint/disallowed/"
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
         return await self.delete(url)
 
@@ -10408,9 +20216,12 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
+        schedule: bool,
         deploy_hour: int,
         quality_threshold: int,
-        schedule: bool,
+        quality_threshold_24ghz: int,
+        quality_threshold_5ghz: int,
+        quality_threshold_6ghz: int,
     ) -> Response:
         """Create config.
 
@@ -10420,12 +20231,20 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
             deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
                 Time Zone. Range 0-23. Default: 5
             quality_threshold (int): Quality threshold value above which solutions are deployed.
-                Range 0-100. Default: 8
-            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
-                occur for APs. Default: Enabled
+                This configuration is deprecated and will have no effect. Please use per band fields
+                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
+                'quality_threshold_6ghz'
+            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
 
         Returns:
             Response: CentralAPI Response object
@@ -10433,9 +20252,12 @@ class AllCalls(CentralApi):
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
+            'schedule': schedule,
             'deploy_hour': deploy_hour,
             'quality_threshold': quality_threshold,
-            'schedule': schedule
+            'quality_threshold_24ghz': quality_threshold_24ghz,
+            'quality_threshold_5ghz': quality_threshold_5ghz,
+            'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
         return await self.post(url, json_data=json_data)
@@ -10444,9 +20266,12 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
+        schedule: bool,
         deploy_hour: int,
         quality_threshold: int,
-        schedule: bool,
+        quality_threshold_24ghz: int,
+        quality_threshold_5ghz: int,
+        quality_threshold_6ghz: int,
     ) -> Response:
         """Create/Update config.
 
@@ -10456,12 +20281,20 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
             deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
                 Time Zone. Range 0-23. Default: 5
             quality_threshold (int): Quality threshold value above which solutions are deployed.
-                Range 0-100. Default: 8
-            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
-                occur for APs. Default: Enabled
+                This configuration is deprecated and will have no effect. Please use per band fields
+                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
+                'quality_threshold_6ghz'
+            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
 
         Returns:
             Response: CentralAPI Response object
@@ -10469,9 +20302,12 @@ class AllCalls(CentralApi):
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
+            'schedule': schedule,
             'deploy_hour': deploy_hour,
             'quality_threshold': quality_threshold,
-            'schedule': schedule
+            'quality_threshold_24ghz': quality_threshold_24ghz,
+            'quality_threshold_5ghz': quality_threshold_5ghz,
+            'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
         return await self.put(url, json_data=json_data)
@@ -10497,120 +20333,6 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airmatch_config_get_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        return await self.get(url)
-
-    async def airmatch_config_post_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        deploy_hour: int,
-        quality_threshold: int,
-        schedule: bool,
-    ) -> Response:
-        """Create system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
-                Time Zone. Range 0-23. Default: 5
-            quality_threshold (int): Quality threshold value above which solutions are deployed.
-                Range 0-100. Default: 8
-            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
-                occur for APs. Default: Enabled
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        json_data = {
-            'deploy_hour': deploy_hour,
-            'quality_threshold': quality_threshold,
-            'schedule': schedule
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airmatch_config_put_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        deploy_hour: int,
-        quality_threshold: int,
-        schedule: bool,
-    ) -> Response:
-        """Create/Update system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
-                Time Zone. Range 0-23. Default: 5
-            quality_threshold (int): Quality threshold value above which solutions are deployed.
-                Range 0-100. Default: 8
-            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
-                occur for APs. Default: Enabled
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        json_data = {
-            'deploy_hour': deploy_hour,
-            'quality_threshold': quality_threshold,
-            'schedule': schedule
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airmatch_config_delete_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        return await self.delete(url)
-
     async def airmatch_config_get_aruba_node_list_id3(
         self,
         node_type: str,
@@ -10631,431 +20353,6 @@ class AllCalls(CentralApi):
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/"
 
         return await self.get(url)
-
-    async def cloud_security_config_get_aruba_security_config_id2(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def cloud_security_config_post_aruba_security_config_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        base_uri: str,
-        password: str,
-        admin_status: str,
-        api_key: str,
-        user: str,
-    ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            base_uri (str): Base URI to access cloud security provider.
-            password (str): Password to be used as login credential.
-            admin_status (str): Enable auto config for Zscaler  Valid Values: UP, DOWN
-            api_key (str): Organization's API key.
-            user (str): User name to be used as login credential.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'base_uri': base_uri,
-            'password': password,
-            'admin_status': admin_status,
-            'api_key': api_key,
-            'user': user
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def cloud_security_config_put_aruba_security_config_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        base_uri: str,
-        password: str,
-        admin_status: str,
-        api_key: str,
-        user: str,
-    ) -> Response:
-        """Create/Update config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            base_uri (str): Base URI to access cloud security provider.
-            password (str): Password to be used as login credential.
-            admin_status (str): Enable auto config for Zscaler  Valid Values: UP, DOWN
-            api_key (str): Organization's API key.
-            user (str): User name to be used as login credential.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'base_uri': base_uri,
-            'password': password,
-            'admin_status': admin_status,
-            'api_key': api_key,
-            'user': user
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def cloud_security_config_delete_aruba_security_config_id2(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
-
-    async def cloud_security_config_get_aruba_security_zscaler_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve zscaler.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/zscaler/"
-
-        return await self.get(url)
-
-    async def cloud_security_config_post_aruba_security_zscaler_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        base_uri: str,
-        password: str,
-        admin_status: str,
-        api_key: str,
-        user: str,
-    ) -> Response:
-        """Create zscaler.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            base_uri (str): Base URI to access cloud security provider.
-            password (str): Password to be used as login credential.
-            admin_status (str): Enable auto config for Zscaler  Valid Values: UP, DOWN
-            api_key (str): Organization's API key.
-            user (str): User name to be used as login credential.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/zscaler/"
-
-        json_data = {
-            'base_uri': base_uri,
-            'password': password,
-            'admin_status': admin_status,
-            'api_key': api_key,
-            'user': user
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def cloud_security_config_put_aruba_security_zscaler_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        base_uri: str,
-        password: str,
-        admin_status: str,
-        api_key: str,
-        user: str,
-    ) -> Response:
-        """Create/Update zscaler.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            base_uri (str): Base URI to access cloud security provider.
-            password (str): Password to be used as login credential.
-            admin_status (str): Enable auto config for Zscaler  Valid Values: UP, DOWN
-            api_key (str): Organization's API key.
-            user (str): User name to be used as login credential.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/zscaler/"
-
-        json_data = {
-            'base_uri': base_uri,
-            'password': password,
-            'admin_status': admin_status,
-            'api_key': api_key,
-            'user': user
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def cloud_security_config_delete_aruba_security_zscaler_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete zscaler.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/config/zscaler/"
-
-        return await self.delete(url)
-
-    async def cloud_security_config_get_aruba_security_node_list_id3(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve node_list by identifier node-type node-id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloud-security-config/v1/node_list/{node_type}/{node_id}/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_get_aruba_ips_node_list_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve node_list by identifier node-type node-id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_get_aruba_ips_siem_servers_list_id3(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve siem_servers_list.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_get_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-    ) -> Response:
-        """Retrieve siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_post_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-        siem_index: str,
-        new_siem_server_name: str,
-        siem_server_url: str,
-        siem_token: str,
-    ) -> Response:
-        """Create siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-            siem_index (str): SIEM bucket that the events have to go into
-            new_siem_server_name (str): SIEM server name
-            siem_server_url (str): SIEM server url including the port
-            siem_token (str): SIEM authentication token; HEC token in case of Splunk
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        json_data = {
-            'siem_index': siem_index,
-            'new_siem_server_name': new_siem_server_name,
-            'siem_server_url': siem_server_url,
-            'siem_token': siem_token
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ids_ips_config_put_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-        siem_index: str,
-        new_siem_server_name: str,
-        siem_server_url: str,
-        siem_token: str,
-    ) -> Response:
-        """Create/Update siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-            siem_index (str): SIEM bucket that the events have to go into
-            new_siem_server_name (str): SIEM server name
-            siem_server_url (str): SIEM server url including the port
-            siem_token (str): SIEM authentication token; HEC token in case of Splunk
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        json_data = {
-            'siem_index': siem_index,
-            'new_siem_server_name': new_siem_server_name,
-            'siem_server_url': siem_server_url,
-            'siem_token': siem_token
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def ids_ips_config_delete_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-    ) -> Response:
-        """Delete siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        return await self.delete(url)
 
     async def ids_ips_config_get_aruba_ips_siem_notification_id1(
         self,
@@ -11153,6 +20450,149 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
+    async def ids_ips_config_get_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+    ) -> Response:
+        """Retrieve siem_servers_list by identifier siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        return await self.get(url)
+
+    async def ids_ips_config_post_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+        new_siem_server_name: str,
+        siem_server_url: str,
+        siem_index: str,
+        siem_token: str,
+    ) -> Response:
+        """Create siem_servers_list by identifier siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+            new_siem_server_name (str): SIEM server name
+            siem_server_url (str): SIEM server url including the port
+            siem_index (str): SIEM bucket that the events have to go into
+            siem_token (str): SIEM authentication token; HEC token in case of Splunk
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        json_data = {
+            'new_siem_server_name': new_siem_server_name,
+            'siem_server_url': siem_server_url,
+            'siem_index': siem_index,
+            'siem_token': siem_token
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ids_ips_config_put_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+        new_siem_server_name: str,
+        siem_server_url: str,
+        siem_index: str,
+        siem_token: str,
+    ) -> Response:
+        """Create/Update siem_servers_list by identifier siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+            new_siem_server_name (str): SIEM server name
+            siem_server_url (str): SIEM server url including the port
+            siem_index (str): SIEM bucket that the events have to go into
+            siem_token (str): SIEM authentication token; HEC token in case of Splunk
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        json_data = {
+            'new_siem_server_name': new_siem_server_name,
+            'siem_server_url': siem_server_url,
+            'siem_index': siem_index,
+            'siem_token': siem_token
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def ids_ips_config_delete_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+    ) -> Response:
+        """Delete siem_servers_list by identifier siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        return await self.delete(url)
+
+    async def ids_ips_config_get_aruba_ips_siem_servers_list_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve siem_servers_list.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/"
+
+        return await self.get(url)
+
     async def ids_ips_config_get_aruba_ips_config_id4(
         self,
         node_type: str,
@@ -11178,8 +20618,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        siem_servers_list: list,
         enable: bool,
+        siem_servers_list: list,
     ) -> Response:
         """Create config.
 
@@ -11189,8 +20629,8 @@ class AllCalls(CentralApi):
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
                 node-id will be rejected.
-            siem_servers_list (list): SIEM Server Configuration
             enable (bool): Enable reporting of threats to SIEM systems
+            siem_servers_list (list): SIEM Server Configuration
 
         Returns:
             Response: CentralAPI Response object
@@ -11198,8 +20638,8 @@ class AllCalls(CentralApi):
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
-            'siem_servers_list': siem_servers_list,
-            'enable': enable
+            'enable': enable,
+            'siem_servers_list': siem_servers_list
         }
 
         return await self.post(url, json_data=json_data)
@@ -11208,8 +20648,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        siem_servers_list: list,
         enable: bool,
+        siem_servers_list: list,
     ) -> Response:
         """Create/Update config.
 
@@ -11219,8 +20659,8 @@ class AllCalls(CentralApi):
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
                 node-id will be rejected.
-            siem_servers_list (list): SIEM Server Configuration
             enable (bool): Enable reporting of threats to SIEM systems
+            siem_servers_list (list): SIEM Server Configuration
 
         Returns:
             Response: CentralAPI Response object
@@ -11228,8 +20668,8 @@ class AllCalls(CentralApi):
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
-            'siem_servers_list': siem_servers_list,
-            'enable': enable
+            'enable': enable,
+            'siem_servers_list': siem_servers_list
         }
 
         return await self.put(url, json_data=json_data)
@@ -11255,231 +20695,26 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ipms_config_get_aruba_ip_range_id2(
+    async def ids_ips_config_get_aruba_ips_node_list_id5(
         self,
         node_type: str,
         node_id: str,
-        pool_name: str,
     ) -> Response:
-        """Retrieve ip_range.
+        """Retrieve node_list by identifier node-type node-id.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
                 applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/"
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/"
 
         return await self.get(url)
-
-    async def ipms_config_get_aruba_config_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def ipms_config_delete_aruba_config_id3(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
-
-    async def ipms_config_get_aruba_address_pool_id4(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve address_pool.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/"
-
-        return await self.get(url)
-
-    async def ipms_config_get_aruba_address_pool_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-    ) -> Response:
-        """Retrieve address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        return await self.get(url)
-
-    async def ipms_config_post_aruba_address_pool_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-        pool_type: str,
-        new_pool_name: str,
-        max_clients: int,
-        ip_range: list,
-        oldKey: str = None,
-    ) -> Response:
-        """Create address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
-                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
-            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            max_clients (int): Maximum number of clients that can be allocated when subnets are
-                carved out from this pool. This applies only to pool that are of type
-                'DHCP_POOL_TYPE'
-            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
-            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        params = {
-            'oldKey': oldKey
-        }
-
-        json_data = {
-            'pool_type': pool_type,
-            'new_pool_name': new_pool_name,
-            'max_clients': max_clients,
-            'ip_range': ip_range
-        }
-
-        return await self.post(url, json_data=json_data, params=params)
-
-    async def ipms_config_put_aruba_address_pool_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-        pool_type: str,
-        new_pool_name: str,
-        max_clients: int,
-        ip_range: list,
-        oldKey: str = None,
-    ) -> Response:
-        """Create/Update address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
-                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
-            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            max_clients (int): Maximum number of clients that can be allocated when subnets are
-                carved out from this pool. This applies only to pool that are of type
-                'DHCP_POOL_TYPE'
-            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
-            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        params = {
-            'oldKey': oldKey
-        }
-
-        json_data = {
-            'pool_type': pool_type,
-            'new_pool_name': new_pool_name,
-            'max_clients': max_clients,
-            'ip_range': ip_range
-        }
-
-        return await self.put(url, json_data=json_data, params=params)
-
-    async def ipms_config_delete_aruba_address_pool_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-    ) -> Response:
-        """Delete address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        return await self.delete(url)
 
     async def ipms_config_get_aruba_ip_range_id1(
         self,
@@ -11513,8 +20748,8 @@ class AllCalls(CentralApi):
         node_id: str,
         pool_name: str,
         range_id: str,
-        start_ip: str,
         new_range_id: str,
+        start_ip: str,
         end_ip: str,
         is_conflicting: bool,
     ) -> Response:
@@ -11529,12 +20764,13 @@ class AllCalls(CentralApi):
             pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
             range_id (str): Identifier for each IP range in the pool. This is just a string
                 identifier in form of 2 digit number that must be unique within each pool
-            start_ip (str): Starting IPv4 Address of the range.
             new_range_id (str): Identifier for each IP range in the pool. This is just a string
                 identifier in form of 2 digit number that must be unique within each pool
+            start_ip (str): Starting IPv4 Address of the range.
             end_ip (str): Last IPv4 Address of the range.
-            is_conflicting (bool): This indicates whether this range is conflicting with any other
-                range in the config. This can happen with migrated IP-ranges
+            is_conflicting (bool): This is a Read-only field that indicates whether this range is
+                overlapping with any other range in the config. Adding of overlapping ranges is not
+                allowed. However, we can have such ranges when legacy config is migrated
 
         Returns:
             Response: CentralAPI Response object
@@ -11542,8 +20778,8 @@ class AllCalls(CentralApi):
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
 
         json_data = {
-            'start_ip': start_ip,
             'new_range_id': new_range_id,
+            'start_ip': start_ip,
             'end_ip': end_ip,
             'is_conflicting': is_conflicting
         }
@@ -11556,8 +20792,8 @@ class AllCalls(CentralApi):
         node_id: str,
         pool_name: str,
         range_id: str,
-        start_ip: str,
         new_range_id: str,
+        start_ip: str,
         end_ip: str,
         is_conflicting: bool,
     ) -> Response:
@@ -11572,12 +20808,13 @@ class AllCalls(CentralApi):
             pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
             range_id (str): Identifier for each IP range in the pool. This is just a string
                 identifier in form of 2 digit number that must be unique within each pool
-            start_ip (str): Starting IPv4 Address of the range.
             new_range_id (str): Identifier for each IP range in the pool. This is just a string
                 identifier in form of 2 digit number that must be unique within each pool
+            start_ip (str): Starting IPv4 Address of the range.
             end_ip (str): Last IPv4 Address of the range.
-            is_conflicting (bool): This indicates whether this range is conflicting with any other
-                range in the config. This can happen with migrated IP-ranges
+            is_conflicting (bool): This is a Read-only field that indicates whether this range is
+                overlapping with any other range in the config. Adding of overlapping ranges is not
+                allowed. However, we can have such ranges when legacy config is migrated
 
         Returns:
             Response: CentralAPI Response object
@@ -11585,22 +20822,21 @@ class AllCalls(CentralApi):
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
 
         json_data = {
-            'start_ip': start_ip,
             'new_range_id': new_range_id,
+            'start_ip': start_ip,
             'end_ip': end_ip,
             'is_conflicting': is_conflicting
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def ipms_config_delete_aruba_ip_range_id1(
+    async def ipms_config_get_aruba_ip_range_id2(
         self,
         node_type: str,
         node_id: str,
         pool_name: str,
-        range_id: str,
     ) -> Response:
-        """Delete ip_range by identifier range_id.
+        """Retrieve ip_range.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -11609,15 +20845,195 @@ class AllCalls(CentralApi):
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
             pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            range_id (str): Identifier for each IP range in the pool. This is just a string
-                identifier in form of 2 digit number that must be unique within each pool
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/"
+
+        return await self.get(url)
+
+    async def ipms_config_get_aruba_address_pool_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+    ) -> Response:
+        """Retrieve address_pool by identifier pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
+
+        return await self.get(url)
+
+    async def ipms_config_post_aruba_address_pool_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+        new_pool_name: str,
+        pool_type: str,
+        ip_range: list,
+        max_clients: int,
+        oldKey: str = None,
+    ) -> Response:
+        """Create address_pool by identifier pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
+                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
+            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
+            max_clients (int): Maximum number of clients that can be allocated when subnets are
+                carved out from this pool. This applies only to pool that are of type
+                'DHCP_POOL_TYPE'
+            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
+
+        params = {
+            'oldKey': oldKey
+        }
+
+        json_data = {
+            'new_pool_name': new_pool_name,
+            'pool_type': pool_type,
+            'ip_range': ip_range,
+            'max_clients': max_clients
+        }
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def ipms_config_put_aruba_address_pool_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+        new_pool_name: str,
+        pool_type: str,
+        ip_range: list,
+        max_clients: int,
+        oldKey: str = None,
+    ) -> Response:
+        """Create/Update address_pool by identifier pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
+                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
+            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
+            max_clients (int): Maximum number of clients that can be allocated when subnets are
+                carved out from this pool. This applies only to pool that are of type
+                'DHCP_POOL_TYPE'
+            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
+
+        params = {
+            'oldKey': oldKey
+        }
+
+        json_data = {
+            'new_pool_name': new_pool_name,
+            'pool_type': pool_type,
+            'ip_range': ip_range,
+            'max_clients': max_clients
+        }
+
+        return await self.put(url, json_data=json_data, params=params)
+
+    async def ipms_config_delete_aruba_address_pool_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+    ) -> Response:
+        """Delete address_pool by identifier pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
 
         return await self.delete(url)
+
+    async def ipms_config_get_aruba_address_pool_id4(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve address_pool.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/"
+
+        return await self.get(url)
+
+    async def ipms_config_get_aruba_config_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
 
     async def ipms_config_get_aruba_node_list_id6(
         self,
@@ -12115,7 +21531,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_admin_status_id18(
+    async def sdwan_config_get_aruba_admin_status_id21(
         self,
         node_type: str,
         node_id: str,
@@ -12136,7 +21552,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_clusters_id7(
+    async def sdwan_config_put_aruba_hub_clusters_id6(
         self,
         node_type: str,
         node_id: str,
@@ -12171,7 +21587,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_clusters_id7(
+    async def sdwan_config_post_aruba_hub_clusters_id6(
         self,
         node_type: str,
         node_id: str,
@@ -12180,7 +21596,7 @@ class AllCalls(CentralApi):
         new_cluster_group: str,
         new_cluster_name: str,
     ) -> Response:
-        """Create by hub-clusters cluster name and cluster group.
+        """Create by hub-clusters by cluster name and cluster group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -12213,7 +21629,7 @@ class AllCalls(CentralApi):
         cluster_name: str,
         cluster_group: str,
     ) -> Response:
-        """Delete by hub-clusters cluster name and cluster group.
+        """Delete by hub-clusters by cluster name and cluster group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -12239,7 +21655,7 @@ class AllCalls(CentralApi):
         cluster_name: str,
         cluster_group: str,
     ) -> Response:
-        """Retrieve by hub-clusters cluster name and cluster group.
+        """Retrieve by hub-clusters by cluster name and cluster group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -12280,7 +21696,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_load_balance_orchestration_id17(
+    async def sdwan_config_put_aruba_load_balance_orchestration_id18(
         self,
         node_type: str,
         node_id: str,
@@ -12316,7 +21732,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_load_balance_orchestration_id17(
+    async def sdwan_config_post_aruba_load_balance_orchestration_id18(
         self,
         node_type: str,
         node_id: str,
@@ -12352,7 +21768,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_load_balance_orchestration_id19(
+    async def sdwan_config_delete_aruba_load_balance_orchestration_id21(
         self,
         node_type: str,
         node_id: str,
@@ -12373,7 +21789,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_load_balance_orchestration_id28(
+    async def sdwan_config_get_aruba_load_balance_orchestration_id31(
         self,
         node_type: str,
         node_id: str,
@@ -12394,12 +21810,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_network_segment_policy_id21(
+    async def sdwan_config_get_aruba_hub_mesh_id42(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve network-segment-policy.
+        """Retrieve hub-mesh.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -12411,11 +21827,11 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_tunnel_policy_id21(
+    async def sdwan_config_put_aruba_tunnel_policy_id22(
         self,
         node_type: str,
         node_id: str,
@@ -12447,7 +21863,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_tunnel_policy_id21(
+    async def sdwan_config_post_aruba_tunnel_policy_id22(
         self,
         node_type: str,
         node_id: str,
@@ -12479,7 +21895,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_tunnel_policy_id24(
+    async def sdwan_config_delete_aruba_tunnel_policy_id26(
         self,
         node_type: str,
         node_id: str,
@@ -12500,7 +21916,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_tunnel_policy_id35(
+    async def sdwan_config_get_aruba_tunnel_policy_id38(
         self,
         node_type: str,
         node_id: str,
@@ -12534,6 +21950,28 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_get_aruba_hub_clusters_id19(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve hub-clusters.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/"
 
         return await self.get(url)
 
@@ -12633,7 +22071,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_topology_id10(
+    async def sdwan_config_put_aruba_topology_id11(
         self,
         node_type: str,
         node_id: str,
@@ -12660,7 +22098,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_topology_id10(
+    async def sdwan_config_post_aruba_topology_id11(
         self,
         node_type: str,
         node_id: str,
@@ -12687,7 +22125,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_topology_id11(
+    async def sdwan_config_delete_aruba_topology_id13(
         self,
         node_type: str,
         node_id: str,
@@ -12708,7 +22146,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_topology_id19(
+    async def sdwan_config_get_aruba_topology_id22(
         self,
         node_type: str,
         node_id: str,
@@ -12729,28 +22167,241 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_sdwan_global_id22(
+    async def sdwan_config_put_aruba_hub_clusters_id8(
         self,
         node_type: str,
         node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_group: str,
+        new_cluster_name: str,
     ) -> Response:
-        """Retrieve sdwan-global.
+        """Create/Update hub-clusters by identifier cluster-name cluster-group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_group': new_cluster_group,
+            'new_cluster_name': new_cluster_name
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_hub_clusters_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_group: str,
+        new_cluster_name: str,
+    ) -> Response:
+        """Create hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_group': new_cluster_group,
+            'new_cluster_name': new_cluster_name
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_delete_aruba_hub_clusters_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Delete hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hub_clusters_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Retrieve hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_route_policy_id33(
+    async def sdwan_config_put_aruba_microbranch_dc_cluster_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create/Update microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
+                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_microbranch_dc_cluster_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
+                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_delete_aruba_microbranch_dc_cluster_id11(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_microbranch_dc_cluster_id20(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
+                group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        return await self.get(url)
+
+    async def sdwan_config_get_aruba_route_policy_id36(
         self,
         node_type: str,
         node_id: str,
@@ -12771,7 +22422,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_mesh_id23(
+    async def sdwan_config_put_aruba_hub_mesh_id24(
         self,
         node_type: str,
         node_id: str,
@@ -12803,7 +22454,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_mesh_id23(
+    async def sdwan_config_post_aruba_hub_mesh_id24(
         self,
         node_type: str,
         node_id: str,
@@ -12835,7 +22486,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_mesh_id26(
+    async def sdwan_config_delete_aruba_hub_mesh_id28(
         self,
         node_type: str,
         node_id: str,
@@ -12858,7 +22509,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_mesh_id38(
+    async def sdwan_config_get_aruba_hub_mesh_id41(
         self,
         node_type: str,
         node_id: str,
@@ -12893,8 +22544,8 @@ class AllCalls(CentralApi):
                 applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a BranchGateway
-                group
+                node-id will be rejected. Note: For this API, node_id must refer to a
+                BranchGateway/Microbranch group
 
         Returns:
             Response: CentralAPI Response object
@@ -12903,28 +22554,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_delete_aruba_config_id28(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_config_id41(
+    async def sdwan_config_get_aruba_config_id44(
         self,
         node_type: str,
         node_id: str,
@@ -12966,7 +22596,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_as_number_id12(
+    async def sdwan_config_put_aruba_as_number_id13(
         self,
         node_type: str,
         node_id: str,
@@ -12993,7 +22623,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_as_number_id12(
+    async def sdwan_config_post_aruba_as_number_id13(
         self,
         node_type: str,
         node_id: str,
@@ -13020,7 +22650,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_as_number_id14(
+    async def sdwan_config_delete_aruba_as_number_id16(
         self,
         node_type: str,
         node_id: str,
@@ -13041,7 +22671,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_as_number_id23(
+    async def sdwan_config_get_aruba_as_number_id26(
         self,
         node_type: str,
         node_id: str,
@@ -13062,7 +22692,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_id16(
+    async def sdwan_config_put_aruba_hub_id17(
         self,
         node_type: str,
         node_id: str,
@@ -13100,7 +22730,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_id16(
+    async def sdwan_config_post_aruba_hub_id17(
         self,
         node_type: str,
         node_id: str,
@@ -13138,7 +22768,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_id18(
+    async def sdwan_config_delete_aruba_hub_id20(
         self,
         node_type: str,
         node_id: str,
@@ -13159,7 +22789,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_id27(
+    async def sdwan_config_get_aruba_hub_id30(
         self,
         node_type: str,
         node_id: str,
@@ -13183,6 +22813,7 @@ class AllCalls(CentralApi):
     async def sdwan_config_get_aruba_branch_mesh_id5(
         self,
         last_index: str = '0',
+        search_name: str = None,
         offset: str = 0,
         limit: int = 100,
     ) -> Response:
@@ -13191,10 +22822,12 @@ class AllCalls(CentralApi):
         Args:
             last_index (str, optional): Last seen index returned part of the previous query . It can
                 be used instead of offset for seeking the table faster
+            search_name (str, optional): Specify partial/complete string that will be used to search
+                the primary-key (labels).
             offset (str, optional): Offset value from where to start lookup in the table Defaults to
                 0.
-            limit (int, optional): Max no.of Entries to be returned for Page. Default value and max
-                value is set to 10 Defaults to 100.
+            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
+                and maximum value allowed is 10 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -13203,71 +22836,12 @@ class AllCalls(CentralApi):
 
         params = {
             'last_index': last_index,
+            'search_name': search_name,
             'offset': offset,
             'limit': limit
         }
 
         return await self.get(url, params=params)
-
-    async def sdwan_config_put_aruba_hubs_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        identifier: str,
-        new_identifier: str,
-    ) -> Response:
-        """Create/Update hubs by device serial number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a BranchGateway
-                group
-            identifier (str): VPNC device serial-number
-            new_identifier (str): VPNC device serial-number
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
-
-        json_data = {
-            'new_identifier': new_identifier
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_hubs_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        identifier: str,
-        new_identifier: str,
-    ) -> Response:
-        """Create hubs by device serial number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a BranchGateway
-                group
-            identifier (str): VPNC device serial-number
-            new_identifier (str): VPNC device serial-number
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
-
-        json_data = {
-            'new_identifier': new_identifier
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def sdwan_config_delete_aruba_hubs_id7(
         self,
@@ -13282,8 +22856,8 @@ class AllCalls(CentralApi):
                 applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a BranchGateway
-                group
+                node-id will be rejected. Note: For this API, node_id must refer to a
+                BranchGateway/Microbranch group
             identifier (str): VPNC device serial-number
 
         Returns:
@@ -13306,8 +22880,8 @@ class AllCalls(CentralApi):
                 applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a BranchGateway
-                group
+                node-id will be rejected. Note: For this API, node_id must refer to a
+                BranchGateway/Microbranch group
             identifier (str): VPNC device serial-number
 
         Returns:
@@ -13317,7 +22891,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_rekey_interval_id20(
+    async def sdwan_config_put_aruba_rekey_interval_id21(
         self,
         node_type: str,
         node_id: str,
@@ -13346,7 +22920,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_rekey_interval_id20(
+    async def sdwan_config_post_aruba_rekey_interval_id21(
         self,
         node_type: str,
         node_id: str,
@@ -13375,7 +22949,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_rekey_interval_id23(
+    async def sdwan_config_delete_aruba_rekey_interval_id25(
         self,
         node_type: str,
         node_id: str,
@@ -13396,7 +22970,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_rekey_interval_id34(
+    async def sdwan_config_get_aruba_rekey_interval_id37(
         self,
         node_type: str,
         node_id: str,
@@ -13414,6 +22988,29 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
+
+        return await self.get(url)
+
+    async def sdwan_config_get_aruba_hub_groups_id40(
+        self,
+        node_type: str,
+        node_id: str,
+        label: str,
+    ) -> Response:
+        """Retrieve hub-groups.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+            label (str): Hub-mesh label
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/"
 
         return await self.get(url)
 
@@ -13501,7 +23098,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_best_path_computation_id15(
+    async def sdwan_config_put_aruba_best_path_computation_id16(
         self,
         node_type: str,
         node_id: str,
@@ -13530,7 +23127,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_best_path_computation_id15(
+    async def sdwan_config_post_aruba_best_path_computation_id16(
         self,
         node_type: str,
         node_id: str,
@@ -13559,7 +23156,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_best_path_computation_id17(
+    async def sdwan_config_delete_aruba_best_path_computation_id19(
         self,
         node_type: str,
         node_id: str,
@@ -13580,7 +23177,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_best_path_computation_id26(
+    async def sdwan_config_get_aruba_best_path_computation_id29(
         self,
         node_type: str,
         node_id: str,
@@ -13736,7 +23333,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_delete_aruba_mesh_policy_id27(
+    async def sdwan_config_delete_aruba_mesh_policy_id29(
         self,
         node_type: str,
         node_id: str,
@@ -13757,7 +23354,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_mesh_policy_id40(
+    async def sdwan_config_get_aruba_mesh_policy_id43(
         self,
         node_type: str,
         node_id: str,
@@ -13778,12 +23375,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_hub_mesh_id39(
+    async def sdwan_config_get_aruba_network_segment_policy_id24(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve hub-mesh.
+        """Retrieve network-segment-policy.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -13795,11 +23392,11 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_groups_id22(
+    async def sdwan_config_put_aruba_hub_groups_id23(
         self,
         node_type: str,
         node_id: str,
@@ -13832,7 +23429,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_groups_id22(
+    async def sdwan_config_post_aruba_hub_groups_id23(
         self,
         node_type: str,
         node_id: str,
@@ -13865,7 +23462,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_groups_id25(
+    async def sdwan_config_delete_aruba_hub_groups_id27(
         self,
         node_type: str,
         node_id: str,
@@ -13891,7 +23488,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_groups_id36(
+    async def sdwan_config_get_aruba_hub_groups_id39(
         self,
         node_type: str,
         node_id: str,
@@ -13917,7 +23514,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_graceful_restart_id14(
+    async def sdwan_config_put_aruba_graceful_restart_id15(
         self,
         node_type: str,
         node_id: str,
@@ -13952,7 +23549,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_graceful_restart_id14(
+    async def sdwan_config_post_aruba_graceful_restart_id15(
         self,
         node_type: str,
         node_id: str,
@@ -13987,7 +23584,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_graceful_restart_id16(
+    async def sdwan_config_delete_aruba_graceful_restart_id18(
         self,
         node_type: str,
         node_id: str,
@@ -14008,7 +23605,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_graceful_restart_id25(
+    async def sdwan_config_get_aruba_graceful_restart_id28(
         self,
         node_type: str,
         node_id: str,
@@ -14029,7 +23626,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_network_segment_policy_id11(
+    async def sdwan_config_put_aruba_network_segment_policy_id12(
         self,
         node_type: str,
         node_id: str,
@@ -14061,7 +23658,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_network_segment_policy_id11(
+    async def sdwan_config_post_aruba_network_segment_policy_id12(
         self,
         node_type: str,
         node_id: str,
@@ -14093,7 +23690,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_network_segment_policy_id12(
+    async def sdwan_config_delete_aruba_network_segment_policy_id14(
         self,
         node_type: str,
         node_id: str,
@@ -14116,7 +23713,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_network_segment_policy_id20(
+    async def sdwan_config_get_aruba_network_segment_policy_id23(
         self,
         node_type: str,
         node_id: str,
@@ -14139,7 +23736,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_aggregates_id30(
+    async def sdwan_config_get_aruba_aggregates_id33(
         self,
         node_type: str,
         node_id: str,
@@ -14162,7 +23759,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_branch_aggregates_id32(
+    async def sdwan_config_get_aruba_branch_aggregates_id35(
         self,
         node_type: str,
         node_id: str,
@@ -14183,13 +23780,14 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_branch_config_id8(
+    async def sdwan_config_put_aruba_branch_config_id7(
         self,
         node_type: str,
         node_id: str,
         hubs_type: str,
         hubs: list,
         hub_clusters: list,
+        dc_ordering_status: str,
     ) -> Response:
         """Create/Update branch-config.
 
@@ -14205,9 +23803,15 @@ class AllCalls(CentralApi):
                 used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
                 'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
             hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config
+                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
+                be ordered such that devices belonging to same group are contiguous
             hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
                 'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
+                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
+                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
+                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
+                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
 
         Returns:
             Response: CentralAPI Response object
@@ -14217,18 +23821,20 @@ class AllCalls(CentralApi):
         json_data = {
             'hubs_type': hubs_type,
             'hubs': hubs,
-            'hub_clusters': hub_clusters
+            'hub_clusters': hub_clusters,
+            'dc_ordering_status': dc_ordering_status
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_branch_config_id8(
+    async def sdwan_config_post_aruba_branch_config_id7(
         self,
         node_type: str,
         node_id: str,
         hubs_type: str,
         hubs: list,
         hub_clusters: list,
+        dc_ordering_status: str,
     ) -> Response:
         """Create branch-config.
 
@@ -14244,9 +23850,15 @@ class AllCalls(CentralApi):
                 used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
                 'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
             hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config
+                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
+                be ordered such that devices belonging to same group are contiguous
             hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
                 'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
+                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
+                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
+                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
+                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
 
         Returns:
             Response: CentralAPI Response object
@@ -14256,7 +23868,8 @@ class AllCalls(CentralApi):
         json_data = {
             'hubs_type': hubs_type,
             'hubs': hubs,
-            'hub_clusters': hub_clusters
+            'hub_clusters': hub_clusters,
+            'dc_ordering_status': dc_ordering_status
         }
 
         return await self.post(url, json_data=json_data)
@@ -14305,7 +23918,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_timer_id13(
+    async def sdwan_config_put_aruba_timer_id14(
         self,
         node_type: str,
         node_id: str,
@@ -14337,7 +23950,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_timer_id13(
+    async def sdwan_config_post_aruba_timer_id14(
         self,
         node_type: str,
         node_id: str,
@@ -14369,7 +23982,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_timer_id15(
+    async def sdwan_config_delete_aruba_timer_id17(
         self,
         node_type: str,
         node_id: str,
@@ -14390,7 +24003,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_timer_id24(
+    async def sdwan_config_get_aruba_timer_id27(
         self,
         node_type: str,
         node_id: str,
@@ -14411,7 +24024,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_node_list_id42(
+    async def sdwan_config_get_aruba_node_list_id45(
         self,
         node_type: str,
         node_id: str,
@@ -14618,7 +24231,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_aggregates_id18(
+    async def sdwan_config_put_aruba_aggregates_id19(
         self,
         node_type: str,
         node_id: str,
@@ -14649,7 +24262,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_aggregates_id18(
+    async def sdwan_config_post_aruba_aggregates_id19(
         self,
         node_type: str,
         node_id: str,
@@ -14680,7 +24293,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_aggregates_id20(
+    async def sdwan_config_delete_aruba_aggregates_id22(
         self,
         node_type: str,
         node_id: str,
@@ -14705,7 +24318,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_aggregates_id29(
+    async def sdwan_config_get_aruba_aggregates_id32(
         self,
         node_type: str,
         node_id: str,
@@ -14730,13 +24343,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_hub_groups_id37(
+    async def sdwan_config_get_aruba_sdwan_global_id25(
         self,
         node_type: str,
         node_id: str,
-        label: str,
     ) -> Response:
-        """Retrieve hub-groups.
+        """Retrieve sdwan-global.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -14744,16 +24356,15 @@ class AllCalls(CentralApi):
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
                 node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_branch_aggregates_id19(
+    async def sdwan_config_put_aruba_branch_aggregates_id20(
         self,
         node_type: str,
         node_id: str,
@@ -14785,7 +24396,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_branch_aggregates_id19(
+    async def sdwan_config_post_aruba_branch_aggregates_id20(
         self,
         node_type: str,
         node_id: str,
@@ -14817,7 +24428,7 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_branch_aggregates_id21(
+    async def sdwan_config_delete_aruba_branch_aggregates_id23(
         self,
         node_type: str,
         node_id: str,
@@ -14840,7 +24451,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_branch_aggregates_id31(
+    async def sdwan_config_get_aruba_branch_aggregates_id34(
         self,
         node_type: str,
         node_id: str,
@@ -14866,6 +24477,7 @@ class AllCalls(CentralApi):
     async def sdwan_config_get_aruba_branch_mesh_ui_id6(
         self,
         last_index: str = '0',
+        search_name: str = None,
         offset: str = 0,
         limit: int = 100,
     ) -> Response:
@@ -14874,10 +24486,12 @@ class AllCalls(CentralApi):
         Args:
             last_index (str, optional): Last seen index returned part of the previous query . It can
                 be used instead of offset for seeking the table faster
+            search_name (str, optional): Specify partial/complete string that will be used to search
+                the primary-key (labels).
             offset (str, optional): Offset value from where to start lookup in the table Defaults to
                 0.
-            limit (int, optional): Max no.of Entries to be returned for Page. Default value and max
-                value is set to 10 Defaults to 100.
+            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
+                and maximum value allowed is 10 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -14886,6 +24500,7 @@ class AllCalls(CentralApi):
 
         params = {
             'last_index': last_index,
+            'search_name': search_name,
             'offset': offset,
             'limit': limit
         }
@@ -14929,129 +24544,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ucc_config_get_aruba_dns_patterns_id3(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve dns_patterns.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/"
-
-        return await self.get(url)
-
-    async def ucc_config_get_aruba_sip_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_sip_id4(
-        self,
-        node_type: str,
-        node_id: str,
-        video_priority: int,
-        voice_priority: int,
-    ) -> Response:
-        """Create sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            video_priority (int): DSCP priority to be applied to video calls of SIP application.
-            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_sip_id4(
-        self,
-        node_type: str,
-        node_id: str,
-        video_priority: int,
-        voice_priority: int,
-    ) -> Response:
-        """Create/Update sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            video_priority (int): DSCP priority to be applied to video calls of SIP application.
-            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def ucc_config_delete_aruba_sip_id4(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        return await self.delete(url)
-
     async def ucc_config_get_aruba_skype4b_id1(
         self,
         node_type: str,
@@ -15077,8 +24569,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        video_priority: int,
         voice_priority: int,
+        video_priority: int,
     ) -> Response:
         """Create skype4b.
 
@@ -15088,9 +24580,9 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
             voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
                 application.
 
         Returns:
@@ -15099,8 +24591,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
         json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
         }
 
         return await self.post(url, json_data=json_data)
@@ -15109,8 +24601,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        video_priority: int,
         voice_priority: int,
+        video_priority: int,
     ) -> Response:
         """Create/Update skype4b.
 
@@ -15120,9 +24612,9 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
             voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
                 application.
 
         Returns:
@@ -15131,8 +24623,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
         json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
         }
 
         return await self.put(url, json_data=json_data)
@@ -15157,131 +24649,6 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
         return await self.delete(url)
-
-    async def ucc_config_get_aruba_ucc_settings_id8(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_ucc_settings_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        activate: bool,
-        enable_call_prioritization: bool,
-    ) -> Response:
-        """Create ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        json_data = {
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_ucc_settings_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        activate: bool,
-        enable_call_prioritization: bool,
-    ) -> Response:
-        """Create/Update ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        json_data = {
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def ucc_config_delete_aruba_ucc_settings_id7(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        return await self.delete(url)
-
-    async def ucc_config_get_aruba_node_list_id10(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve node_list by identifier node-type node-id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/"
-
-        return await self.get(url)
 
     async def ucc_config_get_aruba_dns_patterns_id2(
         self,
@@ -15312,8 +24679,8 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
         dns_pattern: str,
-        carrier_service_provider: str,
         new_dns_pattern: str,
+        carrier_service_provider: str,
     ) -> Response:
         """Create dns_patterns by identifier dns_pattern.
 
@@ -15325,10 +24692,10 @@ class AllCalls(CentralApi):
                 group-name
             dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
                 patterns can be configured; This is applicable only for Wifi Calling application.
-            carrier_service_provider (str): Enter service provider name for enhanced visibility.
-                Enter NA otherwise.
             new_dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
                 patterns can be configured; This is applicable only for Wifi Calling application.
+            carrier_service_provider (str): Enter service provider name for enhanced visibility.
+                Enter NA otherwise.
 
         Returns:
             Response: CentralAPI Response object
@@ -15336,8 +24703,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
 
         json_data = {
-            'carrier_service_provider': carrier_service_provider,
-            'new_dns_pattern': new_dns_pattern
+            'new_dns_pattern': new_dns_pattern,
+            'carrier_service_provider': carrier_service_provider
         }
 
         return await self.post(url, json_data=json_data)
@@ -15347,8 +24714,8 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
         dns_pattern: str,
-        carrier_service_provider: str,
         new_dns_pattern: str,
+        carrier_service_provider: str,
     ) -> Response:
         """Create/Update dns_patterns by identifier dns_pattern.
 
@@ -15360,10 +24727,10 @@ class AllCalls(CentralApi):
                 group-name
             dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
                 patterns can be configured; This is applicable only for Wifi Calling application.
-            carrier_service_provider (str): Enter service provider name for enhanced visibility.
-                Enter NA otherwise.
             new_dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
                 patterns can be configured; This is applicable only for Wifi Calling application.
+            carrier_service_provider (str): Enter service provider name for enhanced visibility.
+                Enter NA otherwise.
 
         Returns:
             Response: CentralAPI Response object
@@ -15371,8 +24738,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
 
         json_data = {
-            'carrier_service_provider': carrier_service_provider,
-            'new_dns_pattern': new_dns_pattern
+            'new_dns_pattern': new_dns_pattern,
+            'carrier_service_provider': carrier_service_provider
         }
 
         return await self.put(url, json_data=json_data)
@@ -15401,12 +24768,12 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_config_id9(
+    async def ucc_config_get_aruba_dns_patterns_id3(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve config.
+        """Retrieve dns_patterns.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -15418,108 +24785,9 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/"
 
         return await self.get(url)
-
-    async def ucc_config_post_aruba_config_id8(
-        self,
-        node_type: str,
-        node_id: str,
-        video_priority: int,
-        voice_priority: int,
-        activate: bool,
-        enable_call_prioritization: bool,
-    ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
-            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
-                application.
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority,
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_config_id8(
-        self,
-        node_type: str,
-        node_id: str,
-        video_priority: int,
-        voice_priority: int,
-        activate: bool,
-        enable_call_prioritization: bool,
-    ) -> Response:
-        """Create/Update config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
-            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
-                application.
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'video_priority': video_priority,
-            'voice_priority': voice_priority,
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def ucc_config_delete_aruba_config_id8(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
 
     async def ucc_config_get_aruba_wifi_calling_id4(
         self,
@@ -15625,6 +24893,108 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
+    async def ucc_config_get_aruba_sip_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve sip.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        return await self.get(url)
+
+    async def ucc_config_post_aruba_sip_id4(
+        self,
+        node_type: str,
+        node_id: str,
+        voice_priority: int,
+        video_priority: int,
+    ) -> Response:
+        """Create sip.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
+            video_priority (int): DSCP priority to be applied to video calls of SIP application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_put_aruba_sip_id4(
+        self,
+        node_type: str,
+        node_id: str,
+        voice_priority: int,
+        video_priority: int,
+    ) -> Response:
+        """Create/Update sip.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
+            video_priority (int): DSCP priority to be applied to video calls of SIP application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def ucc_config_delete_aruba_sip_id4(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete sip.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        return await self.delete(url)
+
     async def ucc_config_get_aruba_ucc_alg_id6(
         self,
         node_type: str,
@@ -15650,8 +25020,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        video_priority: int,
         voice_priority: int,
+        video_priority: int,
         dns_patterns: list,
     ) -> Response:
         """Create ucc_alg.
@@ -15662,9 +25032,9 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
             voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
                 application.
             dns_patterns (list): Wifi calling DNS patterns.
 
@@ -15674,8 +25044,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
 
         json_data = {
-            'video_priority': video_priority,
             'voice_priority': voice_priority,
+            'video_priority': video_priority,
             'dns_patterns': dns_patterns
         }
 
@@ -15685,8 +25055,8 @@ class AllCalls(CentralApi):
         self,
         node_type: str,
         node_id: str,
-        video_priority: int,
         voice_priority: int,
+        video_priority: int,
         dns_patterns: list,
     ) -> Response:
         """Create/Update ucc_alg.
@@ -15697,9 +25067,9 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
             voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
                 application.
             dns_patterns (list): Wifi calling DNS patterns.
 
@@ -15709,8 +25079,8 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
 
         json_data = {
-            'video_priority': video_priority,
             'voice_priority': voice_priority,
+            'video_priority': video_priority,
             'dns_patterns': dns_patterns
         }
 
@@ -15832,6 +25202,251 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
 
         return await self.delete(url)
+
+    async def ucc_config_get_aruba_ucc_settings_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve ucc_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        return await self.get(url)
+
+    async def ucc_config_post_aruba_ucc_settings_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+    ) -> Response:
+        """Create ucc_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_put_aruba_ucc_settings_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+    ) -> Response:
+        """Create/Update ucc_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def ucc_config_delete_aruba_ucc_settings_id7(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete ucc_settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        return await self.delete(url)
+
+    async def ucc_config_get_aruba_config_id9(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def ucc_config_post_aruba_config_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+        voice_priority: int = 46,
+        video_priority: int = 34,
+    ) -> Response:
+        """Create config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+            voice_priority (int, optional): DSCP priority to be applied to voice calls of Skype for
+                business application.
+            video_priority (int, optional): DSCP priority to be applied to video calls of Skype for
+                business application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization,
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_put_aruba_config_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+        voice_priority: int = 46,
+        video_priority: int = 34,
+    ) -> Response:
+        """Create/Update config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+            voice_priority (int, optional): DSCP priority to be applied to voice calls of Skype for
+                business application.
+            video_priority (int, optional): DSCP priority to be applied to video calls of Skype for
+                business application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization,
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def ucc_config_delete_aruba_config_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.delete(url)
+
+    async def ucc_config_get_aruba_node_list_id10(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve node_list by identifier node-type node-id.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/"
+
+        return await self.get(url)
 
     async def topology_external_display_topology(
         self,
@@ -16086,7 +25701,11 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}"
 
-        return await self.delete(url)
+        params = {
+            'session_id': session_id
+        }
+
+        return await self.delete(url, params=params)
 
     async def troubleshooting_get_session_id(
         self,
@@ -16120,7 +25739,11 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}/export"
 
-        return await self.get(url)
+        params = {
+            'session_id': session_id
+        }
+
+        return await self.get(url, params=params)
 
     async def tools_send_enroll_pki_certificate_switch(
         self,
@@ -16178,9 +25801,9 @@ class AllCalls(CentralApi):
         Args:
             serial (str): Serial of device
             prefix (str): Name prefix for name of long term named storage. Must be 3 - 64
-                characters. Must start with a letter or number.
-                Can contain the following special characters: '-', ',', '?', '!', '+', '&', '@',
-                ':', ';', '(', ')', '_', '.', '*'
+                characters. Must start with a letter or number.                           Can
+                contain the following special characters: '-', ',', '?', '!', '+', '&', '@', ':',
+                ';', '(', ')', '_', '.', '*'
 
         Returns:
             Response: CentralAPI Response object
@@ -16199,9 +25822,9 @@ class AllCalls(CentralApi):
         Args:
             group_name (str): Group name of the group of interest
             prefix (str): Name prefix for name of long term named storage. Must be 3 - 64
-                characters. Must start with a letter or number.
-                Can contain the following special characters: '-', ',', '?', '!', '+', '&', '@',
-                ':', ';', '(', ')', '_', '.', '*'
+                characters. Must start with a letter or number.                           Can
+                contain the following special characters: '-', ',', '?', '!', '+', '&', '@', ':',
+                ';', '(', ')', '_', '.', '*'
 
         Returns:
             Response: CentralAPI Response object
@@ -16734,8 +26357,14 @@ class AllCalls(CentralApi):
         """Change user password.
 
         Args:
-            current_password (str): current password
-            new_password (str): new password
+            current_password (str): Current Password (Password requirements are at least 8
+                characters, a lowercase letter, an uppercase letter, a number, a symbol, no parts of
+                your username, does not include your first name, does not include your last name.
+                Your password cannot be any of your last 6 passwords.)
+            new_password (str): New Password (Password requirements are at least 8 characters, a
+                lowercase letter, an uppercase letter, a number, a symbol, no parts of your
+                username, does not include your first name, does not include your last name. Your
+                password cannot be any of your last 6 passwords.)
             user_id (str): User's email id is specified as the user id
 
         Returns:
@@ -16758,7 +26387,10 @@ class AllCalls(CentralApi):
         """Reset user password.
 
         Args:
-            password (str): password
+            password (str): Password (Password requirements are at least 8 characters, a lowercase
+                letter, an uppercase letter, a number, a symbol, no parts of your username, does not
+                include your first name, does not include your last name. Your password cannot be
+                any of your last 6 passwords.)
             user_id (str): User's email id is specified as the user id
 
         Returns:
@@ -16850,7 +26482,8 @@ class AllCalls(CentralApi):
         """Get list of all roles.
 
         Args:
-            app_name (str, optional): Filter users based on app_name
+            app_name (str, optional): Filter users based on app_name  Valid Values: nms,
+                account_setting
             order_by (str, optional): Sort ordering. +rolename means ascending order of rolename
                 Valid Values: +rolename, -rolename
             offset (int, optional): Zero based offset to start from Defaults to 0.
@@ -16879,7 +26512,7 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): role name
-            app_name (str): app name
+            app_name (str): app name  Valid Values: nms, account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -16897,7 +26530,7 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): User role name
-            app_name (str): app name
+            app_name (str): app name  Valid Values: nms, account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -16918,9 +26551,10 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): User role name
-            app_name (str): app name
+            app_name (str): app name  Valid Values: nms, account_setting
             new_rolename (str): name of the role
-            permission (str): permission of the role
+            permission (str): permission for OtherApplications [Notifications and Virtual Gateway]
+                ("view"/"modify"/"denied")
             applications (list): applications
 
         Returns:
@@ -16947,9 +26581,11 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): name of the role
-            permission (str): permission of the role
+            permission (str): permission for OtherApplications [Notifications and Virtual Gateway]
+                ("view"/"modify"/"denied")
             applications (list): applications
-            app_name (str): app name where role needs to be created
+            app_name (str): app name where role needs to be created  Valid Values: nms,
+                account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -17015,7 +26651,13 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/client_location"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_rogue_location(
         self,
@@ -17039,7 +26681,13 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/rogue_location/{macaddr}"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_floor_rogue_location(
         self,
@@ -17062,7 +26710,62 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/rogue_location"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_visualrf_v1_campus(
+        self,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """ Get list of all campuses.
+
+        Args:
+            offset (int, optional): Pagination start index. Defaults to 0.
+            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/campus"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_visualrf_v1_campus(
+        self,
+        campus_id: str,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """ Get a specific campus and its buildings.
+
+        Args:
+            campus_id (str):  Provide campus_id returned by /visualrf_api/v1/campus api. Example:
+                /visualrf_api/v1/campus/201610193176__1b99400c-f5bd-4a17-9a1c-87da89941381
+            offset (int, optional): Pagination start index. Defaults to 0.
+            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/visualrf_api/v1/campus/{campus_id}"
+
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_building(
         self,
@@ -17086,7 +26789,13 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/building/{building_id}"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_floor(
         self,
@@ -17109,7 +26818,13 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_floor_image(
         self,
@@ -17130,7 +26845,12 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/image"
 
-        return await self.get(url)
+        params = {
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_floor_access_point_location(
         self,
@@ -17153,7 +26873,13 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/access_point_location"
 
-        return await self.get(url)
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_visualrf_v1_access_point_location(
         self,
@@ -17177,4 +26903,84 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/access_point_location/{ap_id}"
 
+        params = {
+            'units': units,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def post_visualrf_v1_restore_sites(
+        self,
+        file: Union[Path, str],
+    ) -> Response:
+        """create floorplans using zip file (supported files are zip and .esx).
+
+        Args:
+            file (Union[Path, str]): select zip or esx file to begin import
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/restore_sites"
+        file = file if isinstance(file, Path) else Path(str(file))
+
+        return await self.post(url)
+
+    async def get_visualrf_v1_restore_sites_status(
+        self,
+    ) -> Response:
+        """get last import operation information.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/restore_sites/status"
+
         return await self.get(url)
+
+    async def get_visualrf_v1_anonymization(
+        self,
+    ) -> Response:
+        """Get status of anonymization.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/anonymization"
+
+        return await self.get(url)
+
+    async def post_visualrf_v1_anonymization(
+        self,
+        schedule: str = None,
+    ) -> Response:
+        """Enable anonymization.
+
+        Args:
+            schedule (str, optional): Anonymization schedule. Default value is NEVER  Valid Values:
+                NEVER, DAILY, WEEKLY, MONTHLY
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/anonymization"
+
+        json_data = {
+            'schedule': schedule
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def delete_visualrf_v1_anonymization(
+        self,
+    ) -> Response:
+        """Disable anonymization.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/anonymization"
+
+        return await self.delete(url)
