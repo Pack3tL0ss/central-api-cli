@@ -635,6 +635,7 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
     if not warn or typer.confirm("Warnings exist proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+        # TODO use new configuration_preprovision to preassign to group
         _data = None if not all([r.ok for r in resp]) else data
         asyncio.run(cli.cache.update_inv_db(data=_data))
         return resp
@@ -991,6 +992,7 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
+# TODO batch delete sites does a call for each site, not multi-site endpoint?
 @app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
 def delete(
     what: BatchDelArgs = typer.Argument(...,),
