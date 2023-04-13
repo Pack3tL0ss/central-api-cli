@@ -1617,8 +1617,19 @@ class CentralApi(Session):
         params = {"group": group}
         return await self.get(url, params)
 
-    async def get_all_sites(self) -> Response:
-        return await self.get("/central/v2/sites", callback=cleaner.sites)
+    # TODO move cleaner
+    async def get_all_sites(
+        self,
+        calculate_total: bool = False,
+        offset: int = 0,
+        limit: int = 1000
+    ) -> Response:
+        params = {
+            "calculate_total": str(calculate_total),
+            "offset": offset,
+            "limit": limit
+        }
+        return await self.get("/central/v2/sites", params=params, callback=cleaner.sites)
 
     async def get_site_details(self, site_id):
         return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
@@ -4795,6 +4806,219 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def get_portals(
+        self,
+        sort: str = '+name',
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all portals with limited data.
+
+        // Used by show portals ... //
+
+        Args:
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for now
+                Valid Values: +name, -name
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/portals"
+
+        params = {
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_visitors(
+        self,
+        portal_id: str,
+        sort: str = '+name',
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all visitors created against a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for
+                now  Valid Values: +name, -name
+            filter_by (str, optional): filter by email or name  Valid Values: name, email
+            filter_value (str, optional): filter value
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        params = {
+            'sort': sort,
+            'filter_by': filter_by,
+            'filter_value': filter_value,
+            'offset': offset,
+            'limit': limit
+        }
+        params = utils.strip_none(params)
+
+        return await self.get(url, params=params)
+
+
+    async def add_visitor(
+        self,
+        portal_id: str,
+        name: str,
+        # id: str,
+        password: str = None,
+        *,
+        company_name: str = None,
+        phone: str | None = None,
+        email: str | None = None,
+        valid_forever: bool = False,
+        valid_days: int = 3,
+        valid_hours: int = 0,
+        valid_minutes: int = 0,
+        notify: bool | None = None,
+        notify_to: constants.NotifyToArgs | None = None,
+        is_enabled: bool = True,
+        # status: bool,
+        # created_at: str,
+        # expire_at: str,
+    ) -> Response:
+        """Create a new guest visitor of a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            name (str): Visitor account name
+            password (str): Password
+            company_name (str): Company name of the visitor
+            phone (str): Phone number of the visitor; Format [+CountryCode][PhoneNumber]
+            email (str): Email address of the visitor
+            valid_forever (bool): Visitor account will not expire when this is set to true
+            valid_days (int): Account validity in days
+            valid_hours (int): Account validity in hours
+            valid_minutes (int): Account validity in minutes
+            notify (bool): Flag to notify the password via email or number
+            notify_to (str): Notify to email or phone. Defualt is phone when it is provided
+                otherwise email.  Valid Values: email, phone
+            is_enabled (bool): Enable or disable the visitor account
+            # id (str): NA for visitor post/put method. ID of the visitor
+            # status (bool): This field provides status of the account. Returns true when enabled and
+            #     not expired. NA for visitor post/put method. This is optional fields.
+            # created_at (str): This field indicates the created date timestamp value. It is generated
+            #     while creating visitor. NA for visitor post/put method. This is optional field.
+            # expire_at (str): This field indicates expiry time timestamp value. It is generated based
+            #     on the valid_till value and created_at time. NA for visitor post/put method. This is
+            #     optional field
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        user_data = {
+            'phone': phone,
+            'email': email
+        }
+        # API requires phone and email, but allows None/null as value depending on how portal is configured
+        # user_data = utils.strip_none(user_data)
+
+        json_data = {
+            'name': name,
+            'company_name': company_name,
+            'is_enabled': is_enabled,
+            'valid_till_no_limit': valid_forever,
+            'valid_till_days': valid_days,
+            'valid_till_hours': valid_hours,
+            'valid_till_minutes': valid_minutes,
+            'notify': notify,
+            'notify_to': notify_to,
+            'password': password
+        }
+        json_data = utils.strip_none(json_data)
+        if user_data:
+            json_data["user"] = user_data
+
+        return await self.post(url, json_data=json_data)
+
+    # TODO validate IP address format
+    async def update_cx_properties(
+        self,
+        *,
+        serial: str = None,
+        group: str = None,
+        name: str = None,
+        contact: str = None,
+        location: str = None,
+        timezone: constants.TZDB = None,
+        mgmt_vrf: bool = None,
+        dns_servers: List[str] = [],
+        ntp_servers: List[str] = [],
+        admin_user: str = None,
+        admin_pass: str = None,
+    ) -> Response:
+        """Update Properties (ArubaOS-CX).
+
+        Args:
+            serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+                1 and only 1 of serial or group are required
+            group (str, optional): Group name.
+                Mandatory for group level configuration.
+                1 and only 1 of serial or group are required
+            name (str): Only configurable at device-level.
+            contact (str): Pattern: "^[^"?]*$"
+            location (str): Pattern: "^[^"?]*$"
+            timezone (str): timezone  Valid Values: use tz database format like "America/Chicago"
+            mgmt_vrf (bool): Use mgmt VRF, indicates VRF for dns_servers and ntp_servers, if False or not provided default VRF is used.
+            dns_servers (List[str]): ipv4/ipv6 address
+            ntp_servers (List[str]): ipv4/ipv6 address
+            admin_user (str): local admin user
+            admin_pass (str): local admin password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/properties"
+
+        params = {
+            'device_serial': serial,
+            'group_name': group
+        }
+
+        json_data = {
+            'name': name,
+            'contact': contact,
+            'location': location,
+            'timezone': timezone,
+            'dns_servers': dns_servers,
+            'ntp_servers': ntp_servers,
+            'admin_username': admin_user,
+            'admin_password': admin_pass
+        }
+        if mgmt_vrf is not None:
+            json_data["vrf"] = "mgmt" if mgmt_vrf else "default"
+        elif dns_servers or ntp_servers:
+            json_data["vrf"] = "default"
+
+        if len([x for x in [admin_user, admin_pass] if x is not None]) == 1:
+            raise ValueError("If either admin_user or admin_pass are bing updated, *both* should be provided.")
+
+        if len([x for x in [serial, group] if x is not None]) == 2:
+            raise ValueError("provide serial to update device level properties, or group to update at the group level.  Providing both is invalid.")
+
+        json_data = utils.strip_none(json_data, strip_empty_obj=True)
+
+        return await self.post(url, json_data=json_data, params=params)
 
     # // -- Not used by commands yet.  undocumented kms api -- //
     async def kms_get_synced_aps(self, mac: str) -> Response:
