@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import List, Tuple
 import typer
+import yaml
 from rich import print
 from rich.console import Console
 
@@ -23,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars
+from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
 from centralcli.strings import LongHelp
 help_text = LongHelp()
 
@@ -563,6 +564,68 @@ def template(
         resp = cli.central.request(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
         cli.display_results(resp, tablefmt="action")
     # TODO update cache
+
+
+# TODO cache for portal name/id
+# TODO config option for different random pass formats
+@app.command()
+def guest(
+    portal_id: str = typer.Argument(..., ),
+    name: str = typer.Argument(..., ),
+    password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    company: str = typer.Option(None, help="Company Name",),
+    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]"),
+    email: str = typer.Option(None, help="email of guest"),
+    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'"),
+    disable: bool = typer.Option(False, "--disable", is_flag=True, show_default=False, help="add account, but set to disabled"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    """Add a guest user to a configured portal"""
+    yes = yes_ if yes_ else yes
+    notify = True if notify_to is not None else None
+    is_enabled = True if not disable else False
+
+    _phone_strip = list("()-. ")
+    if phone:
+        phone_orig = phone
+        phone = "".join([p for p in phone if p not in _phone_strip])
+        if not phone.startswith("+"):
+            if not len(phone) == 10:
+                print(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
+                raise typer.Exit(1)
+            phone = f"+1{phone}"
+
+    # TODO Add options for expire after / valid forever
+    payload = {
+        "portal_id": portal_id,
+        "name": name,
+        "company_name": company,
+        "phone": phone,
+        "email": email,
+        "notify": notify,
+        "notify_to": None if not notify_to else notify_to.value,
+        "is_enabled": is_enabled,
+    }
+    payload = utils.strip_none(payload)
+    options = "\n  ".join(yaml.safe_dump(payload).splitlines())
+    if password:
+        payload["password"] = password
+
+
+    # portal_id = cli.cache.get_portal_identifier(portal_id)
+    _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
+    _msg += f"  {options}\n"
+    _msg += f"\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
+    print(_msg)
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.add_visitor, **payload)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()
