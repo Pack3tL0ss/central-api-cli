@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Union
 import pendulum
 from rich.console import Console
 from rich.markup import escape
+import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -149,7 +150,7 @@ _short_value = {
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
     "start_date": _mdyt_timestamp,
     "end_date": _mdyt_timestamp,
-
+    "auth_type": lambda v: v if v != "None" else "-",
 }
 
 _short_key = {
@@ -198,6 +199,14 @@ _short_key = {
     "capture_url": "url",
     "register_accept_email": "accept email",
     "register_accept_phone": "accept phone",
+    "neighbor_id": "router id",
+    "dr_address": "DR IP",
+    "bdr_address": "BDR IP",
+    "dr_id": "DR rtr id",
+    "bdr_id": "BDR rtr id",
+    "auth_type": "auth",
+    "neighbor_count": "nbrs",
+    "area_id": "area",
 }
 
 
@@ -1113,5 +1122,31 @@ def get_portals(data: List[dict],) -> List[dict]:
         dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
     data = strip_no_value(data)
+
+    return data
+
+def get_ospf_neighbor(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+
+    # send all key/value pairs through formatters and return
+    # swapping "address" for ip here as address is also used for site address
+    data = [
+        dict(short_value(k if k != "address" else "ip", v) for k, v in inner.items()) for inner in data
+    ]
+
+    return data
+
+def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+
+    # send all key/value pairs through formatters and return
+    # swapping "address" for ip here as address is also used for site address
+    data = [
+        dict(
+            short_value(
+                k if k != "address" else "ip/mask", v if k != "address" else str(ipaddress.ip_network(f"{inner['address']}/{inner['mask']}", strict=False))
+            ) for k, v in inner.items() if k != "mask"
+        ) for inner in data
+    ]
 
     return data
