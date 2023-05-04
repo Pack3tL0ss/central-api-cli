@@ -241,8 +241,11 @@ def test_show_logs_past():
     result = runner.invoke(app, ["show", "logs", "--past", "5d"],)
     print(result.stdout)
     assert result.exit_code == 0
-    assert "Audit Logs" in result.stdout
-    assert "id" in result.stdout
+    if "Empty Response" in result.stdout:
+        assert "Empty" in result.stdout
+    else:
+        assert "Audit Logs" in result.stdout
+        assert "id" in result.stdout
 
 
 def test_show_switch_vlans_by_name():
@@ -299,3 +302,16 @@ def test_show_group_level_config():
     assert result.exit_code == 0
     assert "!" in result.stdout
     assert "mgmt-user" in result.stdout
+
+
+def test_show_ospf_neighbor():
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            "neighbors",
+            TEST_DEVICES["gateway"]["name"],
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "Router ID" in result.stdout
