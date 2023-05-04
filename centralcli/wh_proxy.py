@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
 
+import base64
+import hashlib
+import hmac
+import json
+import sys
+from datetime import datetime as dt
+from pathlib import Path
 from typing import List, Literal, Optional, Union
+
+import uvicorn
+from fastapi import FastAPI, Header, Request, Response, status
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from rich import print_json  # NoQA
 from starlette.requests import Request  # NoQA
 from starlette.responses import FileResponse
-import uvicorn
-from pathlib import Path
-import base64
-import hashlib
-import hmac
-from fastapi import FastAPI, Header, Request, Response, status
-from fastapi.staticfiles import StaticFiles
-from fastapi.openapi.docs import (
-    get_redoc_html,
-    get_swagger_ui_html,
-)
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from datetime import datetime as dt
-import sys
-import json
-
 
 # TODO should have a periodic call to branch_health (every 6 hours etc) to verify cache
 # TODO ensure script handles network down / unreachable state (for the script to communicate externally)
@@ -31,13 +27,13 @@ import json
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, cache, central, MyLogger
+    from centralcli import MyLogger, cache, central, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         import sys
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, cache, central, MyLogger  # type: ignore
+        from centralcli import MyLogger, cache, central, config  # type: ignore
     else:
         print(pkg_dir.parts)
         raise e

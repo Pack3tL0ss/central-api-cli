@@ -635,6 +635,7 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
     if not warn or typer.confirm("Warnings exist proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+        # TODO use new configuration_preprovision to preassign to group
         _data = None if not all([r.ok for r in resp]) else data
         asyncio.run(cli.cache.update_inv_db(data=_data))
         return resp
@@ -642,12 +643,12 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
 
 @app.command(short_help="Validate a batch import")
 def verify(
-    what: BatchAddArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(..., exists=True),
+    what: BatchAddArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(..., exists=True, show_default=False,),
     no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
     failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
     passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
-    outfile: Path = typer.Option(None, "--out", help="Write output to a file (and display)"),
+    outfile: Path = typer.Option(None, "--out", help="Write output to a file (and display)", show_default=False,),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
         callback=cli.default_callback,
@@ -758,8 +759,8 @@ def verify(
 # FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
 @app.command(short_help="Perform Batch Add from file")
 def add(
-    what: BatchAddArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, exists=True),
+    what: BatchAddArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -805,7 +806,7 @@ def add(
         cli.display_results(resp, tablefmt="action")
 
 
-def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
+def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
     resp = None
@@ -830,7 +831,7 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
     gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
     devs_in_monitoring = [*aps, *switches, *gws]
 
-    reqs = [] if not inv_del_serials else [
+    reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
     ]
@@ -862,12 +863,27 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
+
+
     # construnct confirmation msg
     # TODO need to break this up into inv del / mon del as it was prior, could have mon del w/ no inv del
     _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs])} additional API Calls."
+
+    _total_reqs = len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
+
+    if ui_only:
+        if delayed_mon_del_reqs:
+            print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
+            delayed_mon_del_reqs = []
+        if not mon_del_reqs:
+            print("No devices found to remove from UI... Exiting")
+            raise typer.Exit(1)
+        else:
+            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
+
+    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
 
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
@@ -907,6 +923,7 @@ def batch_delete_devices(data: Union[list, dict], *, yes: bool = False) -> List[
 
     batch_resp += del_resp or _del_resp
 
+    # TODO need to update cache after ui-only delete
     if batch_resp:
         with console.status("Performing cache updates..."):
             db_updates = []
@@ -975,10 +992,12 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
+# TODO batch delete sites does a call for each site, not multi-site endpoint?
 @app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
 def delete(
-    what: BatchDelArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, exists=True, readable=True),
+    what: BatchDelArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False),
+    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1030,7 +1049,7 @@ def delete(
         data = [dict(d) for d in data.dict]  # adapts from OrderedDict to dict
 
     if what == "devices":
-        resp = batch_delete_devices(data, yes=yes)
+        resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
         cli.display_results(resp, tablefmt="action")
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
@@ -1039,16 +1058,16 @@ def delete(
         raise typer.Exit(1)
 
 
-@app.command(help="Batch rename APs based on import file or site/LLDP info.")
+@app.command()
 def rename(
-    what: BatchRenameArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),  # TODO completion
-    lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
-    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP",),
-    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label",),
-    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group",),
-    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site",),
-    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model",),
+    what: BatchRenameArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),  # TODO completion
+    lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
+    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
+    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
+    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
+    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
+    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "0.24.9"
+version = "1.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -15,11 +15,13 @@ keywords = [
     "Aruba Central",
     "HPE",
     "API",
-    "RESTFUL"
+    "RESTFUL",
+    "REST"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Programming Language :: Python :: 3.8"
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3.8",
+    "License :: OSI Approved :: MIT License",
 ]
 
 [tool.poetry.scripts]
@@ -43,6 +45,7 @@ tablib = "^3"
 jinja2 = "*"
 pydantic = "^1.9.0"
 click = "^7.1.2"
+ipaddress = "*"
 
 # Optional dependencies see tool.poetry.extras
 fastapi = {version = "*", optional = true}

@@ -419,16 +419,21 @@ class CentralApi(Session):
             self.BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
             self.BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
         ]
+        # FIXME if wireless clients call passes but wired fails there is no indication in cencli show clients output
         resp = await self._batch_request(reqs)
-        if len(resp) == 2 and all(x.ok for x in resp):
-            out = [*resp[0].output, *resp[1].output]
+        if len(resp) == 2:  # and all(x.ok for x in resp):
+            out = []
+            for r in resp:
+                if r.ok:
+                    out += r.output
             raw = [
                 {"raw_wireless_response": resp[0].raw},
                 {"raw_wired_response": resp[1].raw}
             ]
-            resp = resp[1]
+            resp = resp[1] if resp[1].ok else resp[0]
             resp.output = out
             resp.raw = raw
+            # TODO need Response to have an attribute that stores failed calls so cli commands can display output of passed calls and details on errors (when some calls fail)
 
         return resp
 
@@ -1612,8 +1617,19 @@ class CentralApi(Session):
         params = {"group": group}
         return await self.get(url, params)
 
-    async def get_all_sites(self) -> Response:
-        return await self.get("/central/v2/sites", callback=cleaner.sites)
+    # TODO move cleaner
+    async def get_all_sites(
+        self,
+        calculate_total: bool = False,
+        offset: int = 0,
+        limit: int = 1000
+    ) -> Response:
+        params = {
+            "calculate_total": str(calculate_total),
+            "offset": offset,
+            "limit": limit
+        }
+        return await self.get("/central/v2/sites", params=params, callback=cleaner.sites)
 
     async def get_site_details(self, site_id):
         return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
@@ -2422,7 +2438,7 @@ class CentralApi(Session):
         Can provide both in subsequent calls, but apigw does not
         allow both in same call.
 
-        # TODO Used by cencli update site [name|id|address]'
+        // Used by cencli update site [name|id|address] OR --lat <lat> --lon <lon> //
 
         Args:
             site_id (int): Site ID
@@ -3844,12 +3860,13 @@ class CentralApi(Session):
         mac_address: str = None,
         serial_num: str = None,
         group: str = None,
-        # site: str = None,
+        # site: int = None,
         part_num: str = None,
         license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Union[Response, List[Response]]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
+        Will also pre-assign device to group if provided
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
         // Used by add device and batch add devices //
@@ -3858,7 +3875,7 @@ class CentralApi(Session):
             mac_address (str, optional): MAC address of device to be added
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
-            site (str, optional): -- Not implemented -- Device needs to check in prior to site assignment
+            site (int, optional): -- Not implemented -- Site ID
             part_num (str, optional): Part Number is required for Central On Prem.
             license (str|List(str), optional): The subscription license(s) to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
@@ -3873,9 +3890,11 @@ class CentralApi(Session):
         if license:
             license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
         if serial_num and mac_address:
-            to_group = None if not group else {group: [serial_num]}
             if device_list:
                 raise ValueError("serial_num and mac_address are not expected when device_list is being provided.")
+
+            to_group = None if not group else {group: [serial_num]}
+            # to_site = None if not site else {site: [serial_num]}
 
             mac = utils.Mac(mac_address)
             if not mac:
@@ -3922,6 +3941,11 @@ class CentralApi(Session):
                 if "group" in d:
                     to_group[d["group"]].append(d.get("serial_num", d.get("serial")))
 
+            # to_site = {d.get("site"): [] for d in device_list if "site" in d}
+            # for d in device_list:
+            #     if "site" in d:
+            #         to_site[d["site"]].append(d.get("serial_num", d.get("serial")))
+
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
             _lic_kwargs = {}
@@ -3963,8 +3987,13 @@ class CentralApi(Session):
             # Assign devices to pre-provisioned group.  1 API call per group
             # TODO test that this is 1 API call per group.
             if to_group:
-                group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
+                group_reqs = [br(self.preprovision_device_to_group, (g, devs)) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
+
+            # TODO You can add the device to a site after it's been pre-assigned
+            # if to_site:
+            #     site_reqs = [br(self.move_devices_to_site, (s, devs, "gw")) for s, devs in to_site.items()]
+            #     reqs = [*reqs, *site_reqs]
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
@@ -3972,6 +4001,8 @@ class CentralApi(Session):
                 reqs = [*reqs, *lic_reqs]
 
             return await self._batch_request(reqs, continue_on_fail=True)
+        # elif to_site:
+        #     raise ValueError("Site can only be pre-assigned if device is pre-provisioned to a group")
         else:
             return await self.post(url, json_data=json_data)
 
@@ -4024,6 +4055,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
+    # TODO may remove this would show the device in the group, but didn't behave as expected (device was not in device list)
     async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
         """Assign devices to pre-provisioned group.
 
@@ -4043,6 +4075,34 @@ class CentralApi(Session):
             'serials': serial_nums,
             'group': group
         }
+
+        return await self.post(url, json_data=json_data)
+
+    async def preprovision_device_to_group(
+        self,
+        group_name: str,
+        serial_nums: List[str] | str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Pre Provision a group to the device.
+
+        Args:
+            device_id (List[str]): device_id
+            group_name (str): Group name
+            tenant_id (str): Tenant id, (only applicable with MSP mode)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/preassign"
+
+        json_data = {
+            'device_id': serial_nums,
+            'group_name': group_name,
+        }
+
+        if tenant_id is not None:
+            json_data["tenant_id"] = str(tenant_id)
 
         return await self.post(url, json_data=json_data)
 
@@ -4790,6 +4850,323 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def get_portals(
+        self,
+        sort: str = '+name',
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all portals with limited data.
+
+        // Used by show portals ... //
+
+        Args:
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for now
+                Valid Values: +name, -name
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/portals"
+
+        params = {
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_visitors(
+        self,
+        portal_id: str,
+        sort: str = '+name',
+        filter_by: str = None,
+        filter_value: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Get all visitors created against a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            sort (str, optional): + is for ascending  and - for descending order , sorts by name for
+                now  Valid Values: +name, -name
+            filter_by (str, optional): filter by email or name  Valid Values: name, email
+            filter_value (str, optional): filter value
+            offset (int, optional): Starting index of element for a paginated query Defaults to 0.
+            limit (int, optional): Number of items required per query Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        params = {
+            'sort': sort,
+            'filter_by': filter_by,
+            'filter_value': filter_value,
+            'offset': offset,
+            'limit': limit
+        }
+        params = utils.strip_none(params)
+
+        return await self.get(url, params=params)
+
+
+    async def add_visitor(
+        self,
+        portal_id: str,
+        name: str,
+        # id: str,
+        password: str = None,
+        *,
+        company_name: str = None,
+        phone: str | None = None,
+        email: str | None = None,
+        valid_forever: bool = False,
+        valid_days: int = 3,
+        valid_hours: int = 0,
+        valid_minutes: int = 0,
+        notify: bool | None = None,
+        notify_to: constants.NotifyToArgs | None = None,
+        is_enabled: bool = True,
+        # status: bool,
+        # created_at: str,
+        # expire_at: str,
+    ) -> Response:
+        """Create a new guest visitor of a portal.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            name (str): Visitor account name
+            password (str): Password
+            company_name (str): Company name of the visitor
+            phone (str): Phone number of the visitor; Format [+CountryCode][PhoneNumber]
+            email (str): Email address of the visitor
+            valid_forever (bool): Visitor account will not expire when this is set to true
+            valid_days (int): Account validity in days
+            valid_hours (int): Account validity in hours
+            valid_minutes (int): Account validity in minutes
+            notify (bool): Flag to notify the password via email or number
+            notify_to (str): Notify to email or phone. Defualt is phone when it is provided
+                otherwise email.  Valid Values: email, phone
+            is_enabled (bool): Enable or disable the visitor account
+            # id (str): NA for visitor post/put method. ID of the visitor
+            # status (bool): This field provides status of the account. Returns true when enabled and
+            #     not expired. NA for visitor post/put method. This is optional fields.
+            # created_at (str): This field indicates the created date timestamp value. It is generated
+            #     while creating visitor. NA for visitor post/put method. This is optional field.
+            # expire_at (str): This field indicates expiry time timestamp value. It is generated based
+            #     on the valid_till value and created_at time. NA for visitor post/put method. This is
+            #     optional field
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors"
+
+        user_data = {
+            'phone': phone,
+            'email': email
+        }
+        # API requires phone and email, but allows None/null as value depending on how portal is configured
+        # user_data = utils.strip_none(user_data)
+
+        json_data = {
+            'name': name,
+            'company_name': company_name,
+            'is_enabled': is_enabled,
+            'valid_till_no_limit': valid_forever,
+            'valid_till_days': valid_days,
+            'valid_till_hours': valid_hours,
+            'valid_till_minutes': valid_minutes,
+            'notify': notify,
+            'notify_to': notify_to,
+            'password': password
+        }
+        json_data = utils.strip_none(json_data)
+        if user_data:
+            json_data["user"] = user_data
+
+        return await self.post(url, json_data=json_data)
+
+    # TODO validate IP address format
+    async def update_cx_properties(
+        self,
+        *,
+        serial: str = None,
+        group: str = None,
+        name: str = None,
+        contact: str = None,
+        location: str = None,
+        timezone: constants.TZDB = None,
+        mgmt_vrf: bool = None,
+        dns_servers: List[str] = [],
+        ntp_servers: List[str] = [],
+        admin_user: str = None,
+        admin_pass: str = None,
+    ) -> Response:
+        """Update Properties (ArubaOS-CX).
+
+        Args:
+            serial (str, optional): Device serial number.
+                Mandatory for device level configuration.
+                1 and only 1 of serial or group are required
+            group (str, optional): Group name.
+                Mandatory for group level configuration.
+                1 and only 1 of serial or group are required
+            name (str): Only configurable at device-level.
+            contact (str): Pattern: "^[^"?]*$"
+            location (str): Pattern: "^[^"?]*$"
+            timezone (str): timezone  Valid Values: use tz database format like "America/Chicago"
+            mgmt_vrf (bool): Use mgmt VRF, indicates VRF for dns_servers and ntp_servers, if False or not provided default VRF is used.
+            dns_servers (List[str]): ipv4/ipv6 address
+            ntp_servers (List[str]): ipv4/ipv6 address
+            admin_user (str): local admin user
+            admin_pass (str): local admin password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/switch/cx/properties"
+
+        params = {
+            'device_serial': serial,
+            'group_name': group
+        }
+
+        json_data = {
+            'name': name,
+            'contact': contact,
+            'location': location,
+            'timezone': timezone,
+            'dns_servers': dns_servers,
+            'ntp_servers': ntp_servers,
+            'admin_username': admin_user,
+            'admin_password': admin_pass
+        }
+        if mgmt_vrf is not None:
+            json_data["vrf"] = "mgmt" if mgmt_vrf else "default"
+        elif dns_servers or ntp_servers:
+            json_data["vrf"] = "default"
+
+        if len([x for x in [admin_user, admin_pass] if x is not None]) == 1:
+            raise ValueError("If either admin_user or admin_pass are bing updated, *both* should be provided.")
+
+        if len([x for x in [serial, group] if x is not None]) == 2:
+            raise ValueError("provide serial to update device level properties, or group to update at the group level.  Providing both is invalid.")
+
+        json_data = utils.strip_none(json_data, strip_empty_obj=True)
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def get_ospf_area(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Area Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/area"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_interface(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Interface Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/interface"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_neighbor(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF neighbor Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/neighbor"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_database(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Link State Database Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/database"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     # // -- Not used by commands yet.  undocumented kms api -- //
     async def kms_get_synced_aps(self, mac: str) -> Response:

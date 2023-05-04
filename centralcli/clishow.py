@@ -20,12 +20,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -40,6 +40,7 @@ app = typer.Typer()
 app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
 app.add_typer(clishowbranch.app, name="branch")
+app.add_typer(clishowospf.app, name="ospf")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -349,7 +350,7 @@ def devices(
 
 @app.command(short_help="Show APs/details")
 def aps(
-    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
+    args: List[str] = typer.Argument(None, metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_ap_completion),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by device status"),
@@ -2311,6 +2312,98 @@ def archived(
     """Show archived devices"""
     resp = cli.central.request(cli.central.get_archived_devices)
     cli.display_results(resp, tablefmt="yaml")
+
+# @app.command(short_help="Show config", hidden=True)
+def _get_cencli_config(
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+
+    try:
+        from centralcli import config
+    except (ImportError, ModuleNotFoundError):
+        pkg_dir = Path(__file__).absolute().parent
+        if pkg_dir.name == "centralcli":
+            sys.path.insert(0, str(pkg_dir.parent))
+            from centralcli import config
+
+    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items()}
+    resp = Response(output=out)
+
+    cli.display_results(resp, tablefmt="yaml")
+
+
+# TODO cahce portal/name ids
+@app.command()
+def portals(
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show Configured Guest Portals"""
+    resp = cli.central.request(cli.central.get_portals)
+    cli.display_results(resp, cleaner=cleaner.get_portals, fold_cols=["url"],)
+
+
+# TODO add sort_by completion
+@app.command()
+def guests(
+    portal_id: str = typer.Argument(..., ),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show Guests configured for a Portal
+
+    You need to use `cencli show portals` to get the portal id
+    friendly name and completion for portals coming soon
+    """
+    resp = cli.central.request(cli.central.get_visitors, portal_id, )
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+
 
 # @app.command(short_help="Show config", hidden=True)
 def _get_cencli_config(

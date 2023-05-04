@@ -178,8 +178,9 @@ class Config:
 
         self.data = self.get_file_data(self.file) or {}
         self.forget: Union[int, None] = self.data.get("forget_account_after")
-        self.debug = self.data.get("debug", False)
-        self.debugv = self.data.get("debugv", False)
+        self.debug: bool = self.data.get("debug", False)
+        self.debugv: bool = self.data.get("debugv", False)
+        self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
         self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
 
@@ -261,6 +262,7 @@ class Config:
                         with import_file.open('r') as fh:
                             # TODO return consistent data type list/dict
                             # tough given csv etc dictates a flat structure
+                            # TODO ignore lines starting with # in csv import
                             return tablib.Dataset().load(fh)
                     elif text_ok:
                         return [line.rstrip() for line in import_file.read_text().splitlines()]

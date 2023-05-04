@@ -10,6 +10,7 @@ from rich import print
 from rich.console import Console
 from jinja2 import FileSystemLoader, Environment
 import yaml
+import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -23,8 +24,10 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole
+from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
 from centralcli import CentralObject
+from centralcli.strings import LongHelp
+help_text = LongHelp()
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -415,6 +418,73 @@ def webhook(
         resp = cli.central.request(cli.central.update_webhook, wid, name, urls)
 
         cli.display_results(resp, tablefmt="action")
+
+
+@app.command(short_help="Update site details.", help=help_text.update_site)
+def site(
+    site_name: str = typer.Argument(...),
+    address: str = typer.Argument(None, help="street address, (enclose in quotes)"),
+    city: str = typer.Argument(None,),
+    state: str = typer.Argument(
+        None,
+        autocompletion=lambda incomplete: [
+        s for s in [
+            *list(state_abbrev_to_pretty.keys()),
+            *list(state_abbrev_to_pretty.values())
+            ]
+            if s.lower().startswith(incomplete.lower())
+        ]
+    ),
+    zipcode: int = typer.Argument(None,),
+    country: str = typer.Argument(None,),
+    lat: str = typer.Option(None, metavar="LATITUDE"),
+    lon: str = typer.Option(None, metavar="LONGITUDE"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    yes = yes_ if yes_ else yes
+
+    site_now = cli.cache.get_site_identifier(site_name)
+
+    # These conversions just make the fields match what is used if done via GUI
+    if state and len(state) == 2:
+        state = state_abbrev_to_pretty.get(state, state)
+    if country and country.upper() in ["US", "USA"]:
+        country = "United States"
+
+    kwargs = {
+        "address": address,
+        "city": city,
+        "state": state,
+        "zipcode": zipcode if zipcode is None else str(zipcode),
+        "country": country,
+        "latitude": lat,
+        "longitude": lon
+    }
+    address_fields = {k: v for k, v in kwargs.items() if v}
+
+    print(f"Updating Site: {site_now.rich_help_text}")
+    print(" [bright_green]Send the following updates:[reset]")
+    if site_now.name != site_name:
+        print(f"  Change Name [red]{site_now.name}[/] --> [bright_green]{site_name}[/]")
+    _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
+    if yes or typer.confirm(f"\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.update_site, site_now.id, site_name, **address_fields)
+        cli.display_results(resp, exit_on_fail=True)
+        if resp:
+            # FIXME  this does a full cache update, not an update based on the change above
+            asyncio.run(cli.cache.update_site_db())
 
 
 @app.callback()

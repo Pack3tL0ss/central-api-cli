@@ -20,3 +20,4 @@ fastapi
 uvicorn
 psutil
 pydantic
+ipaddress

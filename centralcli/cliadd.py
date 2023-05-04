@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import List, Tuple
 import typer
+import yaml
 from rich import print
 from rich.console import Console
 
@@ -23,7 +24,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars
+from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
+from centralcli.strings import LongHelp
+help_text = LongHelp()
 
 
 app = typer.Typer()
@@ -55,13 +58,17 @@ class AddGroupArgs(str, Enum):
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
-    val1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    arg1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
-    val2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    arg2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
-                               autocompletion=cli.cache.smg_kw_completion),
+    arg3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
+                               autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
+    # arg4: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
+                            #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
+    # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -76,11 +83,12 @@ def device(
 ) -> None:
     yes = yes_ if yes_ else yes
     kwd_vars = [kw1, kw2, kw3]
-    vals = [val1, val2, val3]
+    vals = [arg1, arg2, arg3]
     kwargs = {
         "mac": None,
         "serial": None,
         "group": None,
+        # "site": None,
         "license": license
     }
 
@@ -97,6 +105,7 @@ def device(
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
+    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
@@ -112,9 +121,9 @@ def device(
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
     # if "site" in kwargs and kwargs["site"]:
-        # _site = cli.cache.get_site_identifier(kwargs["site"])
-        # kwargs["site"] = _site.id
-        # _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
+    #     _site = cli.cache.get_site_identifier(kwargs["site"])
+    #     kwargs["site"] = _site.id
+    #     _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
@@ -309,10 +318,10 @@ def wlan(
         raise typer.Abort()
 
 
-@app.command(short_help="Add a site.")
+@app.command(short_help="Add a site.", help=help_text.add_site)
 def site(
     site_name: str = typer.Argument(...),
-    address: str = typer.Argument(None, help="street address"),
+    address: str = typer.Argument(None, help="street address, (enclose in quotes)"),
     city: str = typer.Argument(None,),
     state: str = typer.Argument(
         None,
@@ -326,8 +335,8 @@ def site(
     ),
     zipcode: int = typer.Argument(None,),
     country: str = typer.Argument(None,),
-    lat: str = typer.Option(None,),
-    lon: str = typer.Option(None,),
+    lat: str = typer.Option(None, metavar="LATITUDE"),
+    lon: str = typer.Option(None, metavar="LONGITUDE"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
@@ -342,7 +351,6 @@ def site(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Add operations using import data from file."""
     yes = yes_ if yes_ else yes
 
     # These conversions just make the fields match what is used if done via GUI
@@ -562,6 +570,68 @@ def template(
         resp = cli.central.request(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
         cli.display_results(resp, tablefmt="action")
     # TODO update cache
+
+
+# TODO cache for portal name/id
+# TODO config option for different random pass formats
+@app.command()
+def guest(
+    portal_id: str = typer.Argument(..., ),
+    name: str = typer.Argument(..., ),
+    password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    company: str = typer.Option(None, help="Company Name",),
+    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]"),
+    email: str = typer.Option(None, help="email of guest"),
+    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'"),
+    disable: bool = typer.Option(False, "--disable", is_flag=True, show_default=False, help="add account, but set to disabled"),
+    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes_: bool = typer.Option(False, "-y", hidden=True),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    """Add a guest user to a configured portal"""
+    yes = yes_ if yes_ else yes
+    notify = True if notify_to is not None else None
+    is_enabled = True if not disable else False
+
+    _phone_strip = list("()-. ")
+    if phone:
+        phone_orig = phone
+        phone = "".join([p for p in phone if p not in _phone_strip])
+        if not phone.startswith("+"):
+            if not len(phone) == 10:
+                print(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
+                raise typer.Exit(1)
+            phone = f"+1{phone}"
+
+    # TODO Add options for expire after / valid forever
+    payload = {
+        "portal_id": portal_id,
+        "name": name,
+        "company_name": company,
+        "phone": phone,
+        "email": email,
+        "notify": notify,
+        "notify_to": None if not notify_to else notify_to.value,
+        "is_enabled": is_enabled,
+    }
+    payload = utils.strip_none(payload)
+    options = "\n  ".join(yaml.safe_dump(payload).splitlines())
+    if password:
+        payload["password"] = password
+
+
+    # portal_id = cli.cache.get_portal_identifier(portal_id)
+    _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
+    _msg += f"  {options}\n"
+    _msg += f"\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
+    print(_msg)
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.add_visitor, **payload)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()
