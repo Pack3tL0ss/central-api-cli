@@ -995,8 +995,8 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
 @app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
 def delete(
-    what: BatchDelArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, exists=True, readable=True),
+    what: BatchDelArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False),
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
     show_example: bool = typer.Option(
         False, "--example",

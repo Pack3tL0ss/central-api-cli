@@ -139,14 +139,15 @@ name\nphl-access\nsan-dc-tor\ncom-branches
 clibatch_delete_devices_help = f"""
 [bright_green]Perform batch Delete operations using import data from file.[/]
 
+[cyan]cencli delete sites <IMPORT_FILE>[/] and
+[cyan]cencli delte groups <IMPORT_FILE>[/]
+    Do what you'd expect.
+
 [cyan]cencli batch delete devices <IMPORT_FILE>[/]
 
-    will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
+    Delete devices will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
 
     Note: devices can only be removed from monitoring views if they are in a down state.  This command will delay/wait for any Up devices to go Down after the subscriptions/assignment to Central is removed, but it can also be ran again.  It will pick up where it left off, skipping any steps that have already been performed.
-
-cencli delete sites <IMPORT_FILE> and cencli delte groups <IMPORT_FILE>
-    Do what you'd expect.
 """
 
 _site_common = """
