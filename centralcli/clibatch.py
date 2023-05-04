@@ -1058,16 +1058,16 @@ def delete(
         raise typer.Exit(1)
 
 
-@app.command(help="Batch rename APs based on import file or site/LLDP info.")
+@app.command()
 def rename(
-    what: BatchRenameArgs = typer.Argument(...,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]"),  # TODO completion
-    lldp: bool = typer.Option(None, help="Automatic AP rename based on lldp info from upstream switch.",),
-    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP",),
-    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label",),
-    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group",),
-    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site",),
-    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model",),
+    what: BatchRenameArgs = typer.Argument(..., show_default=False,),
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),  # TODO completion
+    lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
+    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
+    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
+    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
+    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
+    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
