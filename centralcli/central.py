@@ -3860,12 +3860,13 @@ class CentralApi(Session):
         mac_address: str = None,
         serial_num: str = None,
         group: str = None,
-        # site: str = None,
+        # site: int = None,
         part_num: str = None,
         license: Union[str, List[str]] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Union[Response, List[Response]]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
+        Will also pre-assign device to group if provided
 
         Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
         // Used by add device and batch add devices //
@@ -3874,7 +3875,7 @@ class CentralApi(Session):
             mac_address (str, optional): MAC address of device to be added
             serial_num (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
-            site (str, optional): -- Not implemented -- Device needs to check in prior to site assignment
+            site (int, optional): -- Not implemented -- Site ID
             part_num (str, optional): Part Number is required for Central On Prem.
             license (str|List(str), optional): The subscription license(s) to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
@@ -3889,9 +3890,11 @@ class CentralApi(Session):
         if license:
             license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
         if serial_num and mac_address:
-            to_group = None if not group else {group: [serial_num]}
             if device_list:
                 raise ValueError("serial_num and mac_address are not expected when device_list is being provided.")
+
+            to_group = None if not group else {group: [serial_num]}
+            # to_site = None if not site else {site: [serial_num]}
 
             mac = utils.Mac(mac_address)
             if not mac:
@@ -3938,6 +3941,11 @@ class CentralApi(Session):
                 if "group" in d:
                     to_group[d["group"]].append(d.get("serial_num", d.get("serial")))
 
+            # to_site = {d.get("site"): [] for d in device_list if "site" in d}
+            # for d in device_list:
+            #     if "site" in d:
+            #         to_site[d["site"]].append(d.get("serial_num", d.get("serial")))
+
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
             _lic_kwargs = {}
@@ -3979,8 +3987,13 @@ class CentralApi(Session):
             # Assign devices to pre-provisioned group.  1 API call per group
             # TODO test that this is 1 API call per group.
             if to_group:
-                group_reqs = [br(self.assign_devices_to_group, (g, devs)) for g, devs in to_group.items()]
+                group_reqs = [br(self.preprovision_device_to_group, (g, devs)) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
+
+            # TODO You can add the device to a site after it's been pre-assigned
+            # if to_site:
+            #     site_reqs = [br(self.move_devices_to_site, (s, devs, "gw")) for s, devs in to_site.items()]
+            #     reqs = [*reqs, *site_reqs]
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
@@ -3988,6 +4001,8 @@ class CentralApi(Session):
                 reqs = [*reqs, *lic_reqs]
 
             return await self._batch_request(reqs, continue_on_fail=True)
+        # elif to_site:
+        #     raise ValueError("Site can only be pre-assigned if device is pre-provisioned to a group")
         else:
             return await self.post(url, json_data=json_data)
 
@@ -4040,6 +4055,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
+    # TODO may remove this would show the device in the group, but didn't behave as expected (device was not in device list)
     async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
         """Assign devices to pre-provisioned group.
 
@@ -4059,6 +4075,34 @@ class CentralApi(Session):
             'serials': serial_nums,
             'group': group
         }
+
+        return await self.post(url, json_data=json_data)
+
+    async def preprovision_device_to_group(
+        self,
+        group_name: str,
+        serial_nums: List[str] | str,
+        tenant_id: str = None,
+    ) -> Response:
+        """Pre Provision a group to the device.
+
+        Args:
+            device_id (List[str]): device_id
+            group_name (str): Group name
+            tenant_id (str): Tenant id, (only applicable with MSP mode)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/preassign"
+
+        json_data = {
+            'device_id': serial_nums,
+            'group_name': group_name,
+        }
+
+        if tenant_id is not None:
+            json_data["tenant_id"] = str(tenant_id)
 
         return await self.post(url, json_data=json_data)
 
@@ -5019,6 +5063,110 @@ class CentralApi(Session):
         json_data = utils.strip_none(json_data, strip_empty_obj=True)
 
         return await self.post(url, json_data=json_data, params=params)
+
+    async def get_ospf_area(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Area Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/area"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_interface(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Interface Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/interface"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_neighbor(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF neighbor Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/neighbor"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_ospf_database(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List OSPF Link State Database Information.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/ospf/database"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     # // -- Not used by commands yet.  undocumented kms api -- //
     async def kms_get_synced_aps(self, mac: str) -> Response:
