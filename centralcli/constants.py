@@ -122,7 +122,10 @@ STRIP_KEYS = [
     "servers",
     "subscriptions",
     "portals",
-    "visitors"
+    "visitors",
+    "interfaces",
+    "areas",
+    "lsas",
 ]
 
 
@@ -578,7 +581,6 @@ class SortOptions(str, Enum):
     serial_asc = "+serial"
     serial_des = "-serial"
 
-
 class SortDevOptions(str, Enum):
     name = "name"
     model = "model"
@@ -670,6 +672,60 @@ class SortSubscriptionOptions(str, Enum):
     network = "network"
     start_date = "start_date"
     end_date = "end_date"
+
+
+class SortOspfAreaOptions(str, Enum):
+    area = "area"
+    area_type = "area_type"
+    interface_count = "interface_count"
+    spf_run_count = "spf_run_count"
+    default_cost = "default_cost"
+    summary_enable = "summary_enable"
+
+
+class SortOspfInterfaceOptions(str, Enum):
+    name = "name"
+    area = "area"
+    ip = "ip"
+    state = "state"
+    oper_state = "oper_state"
+    type = "type"
+    cost = "cost"
+    nbrs = "nbrs"
+    DR_rtr_id = "DR_rtr_id"
+    DR_IP = "DR_IP"
+    BDR_rtr_id = "BDR_rtr_id"
+    BDR_IP = "BDR_IP"
+    auth = "auth"
+    priority = "priority"
+    hello_interval = "hello_interval"
+    dead_interval = "dead_interval"
+    rexmt_interval = "rexmt_interval"
+
+
+class SortOspfNeighborOptions(str, Enum):
+    router_id = "router_id"
+    ip = "ip"
+    priority = "priority"
+    interface_name = "interface_name"
+    interface_state = "interface_state"
+    neighbor_state = "neighbor_state"
+    area = "area"
+    options = "options"
+    dead_timer = "dead_timer"
+    rexmt_timer = "rexmt_timer"
+
+
+class SortOspfDatabaseOptions(str, Enum):
+    area = "area"
+    lsa_type = "lsa_type"
+    ls_id = "ls_id"
+    router_id = "router_id"
+    age = "age"
+    seq_no = "seq_no"
+    checksum = "checksum"
+    link_count = "link_count"
+    route_tag = "route_tag"
 
 
 class StatusOptions(str, Enum):
