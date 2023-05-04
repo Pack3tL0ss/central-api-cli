@@ -58,13 +58,17 @@ class AddGroupArgs(str, Enum):
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
-    val1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    arg1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
-    val2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    arg2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    val3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
-                               autocompletion=cli.cache.smg_kw_completion),
+    arg3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
+                               autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
+    # arg4: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
+                            #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
+    # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
     license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
@@ -79,11 +83,12 @@ def device(
 ) -> None:
     yes = yes_ if yes_ else yes
     kwd_vars = [kw1, kw2, kw3]
-    vals = [val1, val2, val3]
+    vals = [arg1, arg2, arg3]
     kwargs = {
         "mac": None,
         "serial": None,
         "group": None,
+        # "site": None,
         "license": license
     }
 
@@ -100,6 +105,7 @@ def device(
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
+    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
@@ -115,9 +121,9 @@ def device(
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
     # if "site" in kwargs and kwargs["site"]:
-        # _site = cli.cache.get_site_identifier(kwargs["site"])
-        # kwargs["site"] = _site.id
-        # _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
+    #     _site = cli.cache.get_site_identifier(kwargs["site"])
+    #     kwargs["site"] = _site.id
+    #     _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
