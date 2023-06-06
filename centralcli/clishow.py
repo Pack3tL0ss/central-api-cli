@@ -49,7 +49,7 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
     _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device type use [cyan]show <DEVICE TYPE>[/cyan]\n"
+    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]\n"
     if inventory:
         caption = f"{caption}  [italic dark_olive_green2]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
