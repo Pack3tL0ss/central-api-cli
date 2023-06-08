@@ -2572,7 +2572,8 @@ class AllCalls(CentralApi):
 
     async def bbs_retrieve_desire_beacon(
         self,
-        profile_id: str,
+        group_name: str,
+        profile_id: str = None,
         ap_mac: str = None,
         iot_radio_mac: str = None,
         offset: int = 0,
@@ -2581,7 +2582,8 @@ class AllCalls(CentralApi):
         """Retrieve ble configured beacons.
 
         Args:
-            profile_id (str): Id of profile for which to retrieve device beacon
+            group_name (str): Name of group for which to retrieve device beacon
+            profile_id (str, optional): Id of profile for which to retrieve device beacon
             ap_mac (str, optional): ap mac address for which to retrieve device beacon
             iot_radio_mac (str, optional): ble radio mac address for which to retrieve device beacon
             offset (int, optional): Offset of first item in response. Defaults to 0.
@@ -2590,9 +2592,10 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/bbs/v1/ble_cfg_beacons/{profile_id}"
+        url = f"/bbs/v1/ble_cfg_beacons/{group_name}"
 
         params = {
+            'profile_id': profile_id,
             'ap_mac': ap_mac,
             'iot_radio_mac': iot_radio_mac,
             'offset': offset,
@@ -2603,7 +2606,8 @@ class AllCalls(CentralApi):
 
     async def bbs_retrieve_actual_beacon(
         self,
-        profile_id: str,
+        group_name: str,
+        profile_id: str = None,
         ap_mac: str = None,
         iot_radio_mac: str = None,
         offset: int = 0,
@@ -2612,7 +2616,8 @@ class AllCalls(CentralApi):
         """Retrieve ble running beacons.
 
         Args:
-            profile_id (str): Id of profile for which to retrieve device beacon
+            group_name (str): Name of group for which to retrieve device beacon
+            profile_id (str, optional): Id of profile for which to retrieve device beacon
             ap_mac (str, optional): ap mac address for which to retrieve device beacon
             iot_radio_mac (str, optional): ble radio mac address for which to retrieve device beacon
             offset (int, optional): Offset of first item in response. Defaults to 0.
@@ -2621,9 +2626,10 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/bbs/v1/ble_run_beacons/{profile_id}"
+        url = f"/bbs/v1/ble_run_beacons/{group_name}"
 
         params = {
+            'profile_id': profile_id,
             'ap_mac': ap_mac,
             'iot_radio_mac': iot_radio_mac,
             'offset': offset,
@@ -2634,6 +2640,7 @@ class AllCalls(CentralApi):
 
     async def bbs_retrieve_beacon_profile(
         self,
+        group_name: str = None,
         profile_id: str = None,
         offset: int = 0,
         limit: int = 100,
@@ -2641,6 +2648,7 @@ class AllCalls(CentralApi):
         """Retrieve ble beacon profiles.
 
         Args:
+            group_name (str, optional): Name of group for which to retrieve device beacon profile
             profile_id (str, optional): Id of profile for which to retrieve device beacon
             offset (int, optional): Offset of first item in response. Defaults to 0.
             limit (int, optional): Maximum number of items in response. Defaults to 100.
@@ -2651,6 +2659,7 @@ class AllCalls(CentralApi):
         url = "/bbs/v1/ble_beacon_profiles"
 
         params = {
+            'group_name': group_name,
             'profile_id': profile_id,
             'offset': offset,
             'limit': limit
@@ -3322,7 +3331,6 @@ class AllCalls(CentralApi):
         token_uri: str,
         type: str,
         tenant_id: str,
-        mpsk: list,
         organization_name: str,
         rules: list,
         wlan_network: str,
@@ -3358,7 +3366,6 @@ class AllCalls(CentralApi):
             type (str): Copy attribute with same name from JSON file downloaded from Google
                 Workspace
             tenant_id (str): Tenant ID
-            mpsk (list): SSID names for the MPSK ssids that need to be configured.
             organization_name (str): Organization name
             rules (list): Mapping rules of User Groups to Client Roles.
             wlan_network (str): WLAN network for clients that do not support Passpoint profiles.
@@ -3387,7 +3394,6 @@ class AllCalls(CentralApi):
             'token_uri': token_uri,
             'type': type,
             'tenant_id': tenant_id,
-            'mpsk': mpsk,
             'organization_name': organization_name,
             'rules': rules,
             'wlan_network': wlan_network
@@ -3406,6 +3412,325 @@ class AllCalls(CentralApi):
         url = "/cloudAuth/api/v1/user_policy"
 
         return await self.delete(url)
+
+    async def cloudauth_readallmpskconfigs(
+        self,
+    ) -> Response:
+        """Read all configured MPSK networks.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/mpsk"
+
+        return await self.get(url)
+
+    async def cloudauth_addmpskconfig(
+        self,
+        accessURL: str,
+        id: str,
+        passwordPolicy: str,
+        ssid: str,
+    ) -> Response:
+        """Create an MPSK network config.
+
+        Args:
+            accessURL (str): URL for generating MPSK passwords by end users.
+            id (str): Identifier for the MPSK Config.
+            passwordPolicy (str): Password policy for generating MPSK passwords. Can be
+                'generate_words' or 'generate_alphanumeric'.
+            ssid (str): The SSID for the MPSK Network.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/mpsk"
+
+        json_data = {
+            'accessURL': accessURL,
+            'id': id,
+            'passwordPolicy': passwordPolicy,
+            'ssid': ssid
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloudauth_readmpskconfig(
+        self,
+        mpsk_id: str,
+    ) -> Response:
+        """Read one MPSK network config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}"
+
+        return await self.get(url)
+
+    async def cloudauth_editmpskconfig(
+        self,
+        mpsk_id: str,
+        accessURL: str,
+        id: str,
+        passwordPolicy: str,
+        ssid: str,
+    ) -> Response:
+        """Edit an MPSK network config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            accessURL (str): URL for generating MPSK passwords by end users.
+            id (str): Identifier for the MPSK Config.
+            passwordPolicy (str): Password policy for generating MPSK passwords. Can be
+                'generate_words' or 'generate_alphanumeric'.
+            ssid (str): The SSID for the MPSK Network.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}"
+
+        json_data = {
+            'accessURL': accessURL,
+            'id': id,
+            'passwordPolicy': passwordPolicy,
+            'ssid': ssid
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloudauth_deletempskconfig(
+        self,
+        mpsk_id: str,
+    ) -> Response:
+        """Delete an MPSK network configuration.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}"
+
+        return await self.delete(url)
+
+    async def cloudauth_readallnamedmpsks(
+        self,
+        mpsk_id: str,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        cursor: str = None,
+        sort: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Read all named MPSK.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            cursor (str, optional): For cursor based pagination.
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+            limit (int, optional): Number of items to be fetched Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
+
+        params = {
+            'name': name,
+            'role': role,
+            'status': status,
+            'cursor': cursor,
+            'sort': sort,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_addnamedmpsk(
+        self,
+        mpsk_id: str,
+        id: str,
+        mpsk: str,
+        name: str,
+        role: str,
+        status: str,
+    ) -> Response:
+        """Add a named MPSK config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            id (str): Identifier for the named MPSK
+            mpsk (str): The password to be used to connect.
+            name (str): Name to identify the mpsk password with
+            role (str): Aruba Role to be assigned to device connected using this MPSK password.
+            status (str): Named MPSK Status                           Status of this named MPSK
+                configuration. Can only be enabled or disabled.                           enum:
+                [enabled,disabled]
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
+
+        json_data = {
+            'id': id,
+            'mpsk': mpsk,
+            'name': name,
+            'role': role,
+            'status': status
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloudauth_readnamedmpsk(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+    ) -> Response:
+        """Read a named MPSK config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            named_mpsk_id (str): The Named MPSK Config ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        return await self.get(url)
+
+    async def cloudauth_fulleditnamedmpskconfig(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+        id: str,
+        mpsk: str,
+        name: str,
+        role: str,
+        status: str,
+        resetMPSK: bool = False,
+    ) -> Response:
+        """Edit a Named MPSK Config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            named_mpsk_id (str): The Named MPSK Config ID
+            id (str): Identifier for the named MPSK
+            mpsk (str): The password to be used to connect.
+            name (str): Name to identify the mpsk password with
+            role (str): Aruba Role to be assigned to device connected using this MPSK password.
+            status (str): Named MPSK Status                           Status of this named MPSK
+                configuration. Can only be enabled or disabled.                           enum:
+                [enabled,disabled]
+            resetMPSK (bool, optional): If true, a new MPSK password is generated for this named
+                MPSK config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        params = {
+            'resetMPSK': resetMPSK
+        }
+
+        json_data = {
+            'id': id,
+            'mpsk': mpsk,
+            'name': name,
+            'role': role,
+            'status': status
+        }
+
+        return await self.put(url, json_data=json_data, params=params)
+
+    async def cloudauth_deletenamedmpskconfig(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+    ) -> Response:
+        """Delete a Named MPSK Config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            named_mpsk_id (str): The Named MPSK Config ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        return await self.delete(url)
+
+    async def cloudauth_partialeditnamedmpskconfig(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+        id: str,
+        mpsk: str,
+        name: str,
+        role: str,
+        status: str,
+        resetMPSK: bool = False,
+    ) -> Response:
+        """Partially Edit a Named MPSK Config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            named_mpsk_id (str): The Named MPSK Config ID
+            id (str): Identifier for the named MPSK
+            mpsk (str): The password to be used to connect.
+            name (str): Name to identify the mpsk password with
+            role (str): Aruba Role to be assigned to device connected using this MPSK password.
+            status (str): Named MPSK Status                           Status of this named MPSK
+                configuration. Can only be enabled or disabled.                           enum:
+                [enabled,disabled]
+            resetMPSK (bool, optional): If true, a new MPSK password is generated for this named
+                MPSK config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        params = {
+            'resetMPSK': resetMPSK
+        }
+
+        json_data = {
+            'id': id,
+            'mpsk': mpsk,
+            'name': name,
+            'role': role,
+            'status': status
+        }
+
+        return await self.patch(url, json_data=json_data, params=params)
+
+    async def cloudauth_readmpskusage(
+        self,
+    ) -> Response:
+        """Read MPSK Usage Stats.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/usage/mpsk"
+
+        return await self.get(url)
 
     async def configuration_get_groups_v2(
         self,
@@ -3564,7 +3889,6 @@ class AllCalls(CentralApi):
         GwNetworkRole: str = None,
         AllowedSwitchTypes: List[str] = None,
         MonitorOnly: List[str] = None,
-        NewCentral: bool = None,
         Wired: bool = True,
         Wireless: bool = None,
     ) -> Response:
@@ -3599,8 +3923,6 @@ class AllCalls(CentralApi):
                 enabled                                                - Currently, this is
                 available only for AOS_S and AOS_CX switches in groups where switches are
                 managed using UI mode of configuration.
-            NewCentral (bool, optional): - Flag to specify that the group is compatible with New
-                Central workflows.
             Wired (bool, optional): Set to true if wired(Switch) configuration in a group is managed
                 using templates.
             Wireless (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
@@ -3618,7 +3940,6 @@ class AllCalls(CentralApi):
             'GwNetworkRole': GwNetworkRole,
             'AllowedSwitchTypes': AllowedSwitchTypes,
             'MonitorOnly': MonitorOnly,
-            'NewCentral': NewCentral,
             'Wired': Wired,
             'Wireless': Wireless
         }
@@ -3699,7 +4020,7 @@ class AllCalls(CentralApi):
         self,
         device_id: List[str],
         group_name: str,
-        tenant_id: str = None,
+        tenant_id: str,
     ) -> Response:
         """Pre Provision a group to the device.
 
@@ -3716,10 +4037,8 @@ class AllCalls(CentralApi):
         json_data = {
             'device_id': device_id,
             'group_name': group_name,
+            'tenant_id': tenant_id
         }
-
-        if tenant_id is not None:
-            json_data["tenant_id"] = str(tenant_id)
 
         return await self.post(url, json_data=json_data)
 
@@ -4616,6 +4935,39 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = "/configuration/v1/msp/certificate"
+
+        json_data = {
+            'cert_name': cert_name,
+            'cert_type': cert_type,
+            'cert_format': cert_format,
+            'passphrase': passphrase,
+            'cert_data': cert_data
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def configuration_update_certificate_for_non_msp_customer(
+        self,
+        cert_name: str,
+        cert_type: str,
+        cert_format: str,
+        passphrase: str,
+        cert_data: str,
+    ) -> Response:
+        """Update a certificate for non msp customer.
+
+        Args:
+            cert_name (str): cert_name
+            cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
+                OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
+            cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
+            passphrase (str): passphrase
+            cert_data (str): Certificate content encoded in base64 for all format certificates.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/non_msp/certificate"
 
         json_data = {
             'cert_name': cert_name,
@@ -7247,7 +7599,6 @@ class AllCalls(CentralApi):
             'admin_password': admin_password
         }
 
-
         return await self.post(url, json_data=json_data, params=params)
 
     async def configuration_get_syslog(
@@ -7509,8 +7860,8 @@ class AllCalls(CentralApi):
 
         Args:
             group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+                or serial number of 10x AP. Example:Group_1 or
+                6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             dns_server (str): DNS server IPs or domain name
             ntp_server (List[str]): List of ntp server,
                 Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
@@ -7665,8 +8016,8 @@ class AllCalls(CentralApi):
         """Get all Dot11g Radio Profiles.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
 
         Returns:
@@ -7684,8 +8035,8 @@ class AllCalls(CentralApi):
         """Get Dot11g radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Name of the dot11g radio profile that needs to be deleted.
 
@@ -7722,8 +8073,8 @@ class AllCalls(CentralApi):
         """Update/Create Dot11g radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Name of the dot11g radio profile that needs to be deleted.
             allowed_channels (str): allowed_channels
@@ -7781,8 +8132,8 @@ class AllCalls(CentralApi):
         """Delete Dot11g radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Name of the dot11g radio profile that needs to be deleted.
 
@@ -7800,8 +8151,8 @@ class AllCalls(CentralApi):
         """Get all Dot11a Radio Profiles.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
 
         Returns:
@@ -7819,8 +8170,8 @@ class AllCalls(CentralApi):
         """Get Dot11a radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Dot11a radio profile name.                         Example: default.
 
@@ -7857,8 +8208,8 @@ class AllCalls(CentralApi):
         """Update/Create Dot11a radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Dot11a radio profile name.                         Example: default.
             allowed_channels (str): allowed_channels
@@ -7916,8 +8267,8 @@ class AllCalls(CentralApi):
         """Delete an existing Dot11a radio profile.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
+                serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             name (str): Dot11a radio profile name.                         Example: default.
 
@@ -9575,7 +9926,7 @@ class AllCalls(CentralApi):
         device_type: str,
         tenant_id: str,
     ) -> Response:
-        """List Tenants of an MSP customer.
+        """List Firmware Details of a Tenant.
 
         Args:
             device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
@@ -13395,6 +13746,32 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
+    # NEW-ENDPOINT
+    async def monitoring_disconnect_users_from_gateway(
+        self,
+        serial: str,
+        disconnect_all_users: bool,
+        client_mac: str,
+    ) -> Response:
+        """Disconnect Gateway Users.
+
+        Args:
+            serial (str): Serial number of gateway to be queried
+            disconnect_all_users (bool): Flag to disconnect all users from gateway
+            client_mac (str): Client MAC address to be disconnected from the gateway
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/disconnect_users"
+
+        json_data = {
+            'disconnect_all_users': disconnect_all_users,
+            'client_mac': client_mac
+        }
+
+        return await self.post(url, json_data=json_data)
+
     async def central_get_labels(
         self,
         calculate_total: bool = None,
@@ -14667,7 +15044,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # API-FLAW returns 200 w/ no content if there are no stacks rather than an empty list
     async def monitoring_get_switch_stacks(
         self,
         hostname: str = None,
@@ -14837,35 +15213,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def msp_create_customer(
-        self,
-        customer_name: str,
-        name: str,
-        description: str,
-        lock_msp_ssids: bool,
-    ) -> Response:
-        """Create a new customer.
-
-        Args:
-            customer_name (str): Customer Name (Max 70 chars)
-            name (str): Group Name
-            description (str): Customer Description (Max length 32 chars)
-            lock_msp_ssids (bool): enable/disable lock ssid
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/msp_api/v1/customers"
-
-        json_data = {
-            'customer_name': customer_name,
-            'name': name,
-            'description': description,
-            'lock_msp_ssids': lock_msp_ssids
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def msp_create_customer_v2(
         self,
         customer_name: str,
@@ -14878,7 +15225,7 @@ class AllCalls(CentralApi):
         description: str,
         lock_msp_ssids: bool,
     ) -> Response:
-        """Create a new customer with V2 API.
+        """Create a new customer.
 
         Args:
             customer_name (str): Customer Name (Max 70 chars)
@@ -14888,7 +15235,7 @@ class AllCalls(CentralApi):
             state (str): City (Max 70 chars)
             zip_postal_code (str): Zip Code (Max 20 chars)
             name (str): Group Name
-            description (str): Customer Description (Max length 32 chars)
+            description (str): Customer Description (Max length 100 chars)
             lock_msp_ssids (bool): enable/disable lock ssid
 
         Returns:
@@ -14923,7 +15270,7 @@ class AllCalls(CentralApi):
         description: str,
         lock_msp_ssids: bool,
     ) -> Response:
-        """Update a customer with V2 API.
+        """Update a customer.
 
         Args:
             customer_id (str): Filter on Customer ID
@@ -14934,7 +15281,7 @@ class AllCalls(CentralApi):
             state (str): City (Max 70 chars)
             zip_postal_code (str): Zip Code (Max 20 chars)
             name (str): Group Name
-            description (str): Customer Description (Max length 32 chars)
+            description (str): Customer Description (Max length 100 chars)
             lock_msp_ssids (bool): enable/disable lock ssid
 
         Returns:
@@ -14959,7 +15306,7 @@ class AllCalls(CentralApi):
     async def msp_get_country_code(
         self,
     ) -> Response:
-        """Get list of country code list.
+        """Get list of country code.
 
         Returns:
             Response: CentralAPI Response object
@@ -14983,37 +15330,6 @@ class AllCalls(CentralApi):
         url = f"/msp_api/v1/customers/{customer_id}"
 
         return await self.get(url)
-
-    async def msp_edit_customer(
-        self,
-        customer_id: str,
-        customer_name: str,
-        name: str,
-        description: str,
-        lock_msp_ssids: bool,
-    ) -> Response:
-        """Update a customer.
-
-        Args:
-            customer_id (str): Filter on Customer ID
-            customer_name (str): Customer Name (Max 70 chars)
-            name (str): Group Name
-            description (str): Customer Description (Max length 32 chars)
-            lock_msp_ssids (bool): enable/disable lock ssid
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/msp_api/v1/customers/{customer_id}"
-
-        json_data = {
-            'customer_name': customer_name,
-            'name': name,
-            'description': description,
-            'lock_msp_ssids': lock_msp_ssids
-        }
-
-        return await self.put(url, json_data=json_data)
 
     async def msp_delete_customer(
         self,
@@ -15654,7 +15970,7 @@ class AllCalls(CentralApi):
 
     async def central_acknowledge_notifications(
         self,
-        NoName: List[str] = None,
+        notifications: Union[str, List[str]] = None,
     ) -> Response:
         """Acknowledge Notifications by ID List / All.
 
@@ -15665,8 +15981,9 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = "/central/v1/notifications"
+        notifications = notifications if isinstance(notifications, list) else [notifications]
 
-        return await self.post(url)
+        return await self.post(url, json_data=notifications)
 
     async def central_acknowledge_notification(
         self,
@@ -25637,6 +25954,26 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    async def troubleshooting_get_cxcommands_list(
+        self,
+        Serial: str,
+    ) -> Response:
+        """List Troubleshooting CX Commands.
+
+        Args:
+            Serial (str): Serial of CX Device
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/troubleshooting/v1/cxcommands"
+
+        params = {
+            'Serial': Serial
+        }
+
+        return await self.get(url, params=params)
+
     async def troubleshooting_start_troubleshoot(
         self,
         serial: str,
@@ -25706,6 +26043,29 @@ class AllCalls(CentralApi):
         }
 
         return await self.delete(url, params=params)
+
+    # NEW-ENDPOINT
+    async def troubleshooting_start_cx_troubleshoot(
+        self,
+        serial: str,
+        commands: List[str],
+    ) -> Response:
+        """Start Troubleshooting Session For CX Device.
+
+        Args:
+            serial (str): Serial of device
+            commands (List[str]): List of commands
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/troubleshooting/v1/cxdevices/{serial}"
+
+        json_data = {
+            'commands': commands
+        }
+
+        return await self.post(url, json_data=json_data)
 
     async def troubleshooting_get_session_id(
         self,
@@ -26171,7 +26531,9 @@ class AllCalls(CentralApi):
         """List user accounts.
 
         Args:
-            app_name (str, optional): Filter users based on app_name
+            app_name (str, optional): Appname nms to filter Aruba Central users, and account_setting
+                to filter HPE GreenLake Edge to Cloud Platform (CCS) application users  Valid
+                Values: nms, account_setting
             type (str, optional): Filter based on system or federated user  Valid Values: system,
                 federated
             status (str, optional): Filter user based on status (inprogress, failed)  Valid Values:
@@ -26265,9 +26627,10 @@ class AllCalls(CentralApi):
         zipcode: str = None,
         applications: list = None,
     ) -> Response:
-        """update user account details specified by user id.Providing info on account setting app is
-        mandatory in this API along with other subscribed apps.Scope must be given only for NMS app.
-        For non-nms apps such as account setting refer the parameters in the example json payload.
+        """Update user account details specified by user id. Providing info on account setting app
+        is mandatory in this API along with other subscribed apps. Scope must be given only for NMS
+        app. For non-nms apps such as account setting refer the parameters in the example json
+        payload.
 
         Args:
             user_id (str): User's email id is specified as the user id
@@ -26331,7 +26694,7 @@ class AllCalls(CentralApi):
         user_id: str,
         system_user: bool = True,
     ) -> Response:
-        """delete user account details specified by user id.
+        """Delete user account details specified by user id.
 
         Args:
             user_id (str): User's email id is specified as the user id
@@ -26357,10 +26720,7 @@ class AllCalls(CentralApi):
         """Change user password.
 
         Args:
-            current_password (str): Current Password (Password requirements are at least 8
-                characters, a lowercase letter, an uppercase letter, a number, a symbol, no parts of
-                your username, does not include your first name, does not include your last name.
-                Your password cannot be any of your last 6 passwords.)
+            current_password (str): Current Password
             new_password (str): New Password (Password requirements are at least 8 characters, a
                 lowercase letter, an uppercase letter, a number, a symbol, no parts of your
                 username, does not include your first name, does not include your last name. Your
@@ -26482,8 +26842,9 @@ class AllCalls(CentralApi):
         """Get list of all roles.
 
         Args:
-            app_name (str, optional): Filter users based on app_name  Valid Values: nms,
-                account_setting
+            app_name (str, optional): App name nms to filter Aruba Central roles, and
+                account_setting to filter HPE GreenLake Edge to Cloud Platform (CCS) application
+                roles  Valid Values: nms, account_setting
             order_by (str, optional): Sort ordering. +rolename means ascending order of rolename
                 Valid Values: +rolename, -rolename
             offset (int, optional): Zero based offset to start from Defaults to 0.
@@ -26512,7 +26873,9 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): role name
-            app_name (str): app name  Valid Values: nms, account_setting
+            app_name (str): Appname nms to get Aruba Central role details, and account_setting to
+                get HPE GreenLake Edge to Cloud Platform (CCS) application role  Valid Values: nms,
+                account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -26530,7 +26893,9 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): User role name
-            app_name (str): app name  Valid Values: nms, account_setting
+            app_name (str): Appname nms to delete Aruba Central roles, and account_setting to delete
+                HPE GreenLake Edge to Cloud Platform (CCS) application roles  Valid Values: nms,
+                account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -26551,7 +26916,9 @@ class AllCalls(CentralApi):
 
         Args:
             rolename (str): User role name
-            app_name (str): app name  Valid Values: nms, account_setting
+            app_name (str): Appname nms to update Aruba Central role and account_setting to update
+                HPE GreenLake Edge to Cloud Platform (CCS) application role  Valid Values: nms,
+                account_setting
             new_rolename (str): name of the role
             permission (str): permission for OtherApplications [Notifications and Virtual Gateway]
                 ("view"/"modify"/"denied")
@@ -26584,8 +26951,9 @@ class AllCalls(CentralApi):
             permission (str): permission for OtherApplications [Notifications and Virtual Gateway]
                 ("view"/"modify"/"denied")
             applications (list): applications
-            app_name (str): app name where role needs to be created  Valid Values: nms,
-                account_setting
+            app_name (str): App name where role needs to be created, nms—corresponds to Aruba
+                Central application, account_settings—corresponds to HPE GreenLake Edge to Cloud
+                Platform (CCS) application  Valid Values: nms, account_setting
 
         Returns:
             Response: CentralAPI Response object
@@ -26614,8 +26982,24 @@ class AllCalls(CentralApi):
                 /visualrf_api/v1/floor/{floor_id}/*_location api. Example:
                 /visualrf_api/v1/client_location/ac:37:43:a9:ec:10
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26643,8 +27027,24 @@ class AllCalls(CentralApi):
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26673,8 +27073,24 @@ class AllCalls(CentralApi):
                 /visualrf_api/v1/floor/{floor_id}/*_location api. Example:
                 /visualrf_api/v1/client_location/ac:37:43:a9:ec:10
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26702,8 +27118,24 @@ class AllCalls(CentralApi):
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26726,8 +27158,24 @@ class AllCalls(CentralApi):
         """ Get list of all campuses.
 
         Args:
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26752,8 +27200,24 @@ class AllCalls(CentralApi):
         Args:
             campus_id (str):  Provide campus_id returned by /visualrf_api/v1/campus api. Example:
                 /visualrf_api/v1/campus/201610193176__1b99400c-f5bd-4a17-9a1c-87da89941381
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26781,8 +27245,24 @@ class AllCalls(CentralApi):
                 api. Example:
                 /visualrf_api/v1/building/201610193176__f2267635-d1b5-4e33-be9b-2bf7dbd6f885
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26810,8 +27290,24 @@ class AllCalls(CentralApi):
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26837,8 +27333,24 @@ class AllCalls(CentralApi):
         Args:
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26865,8 +27377,24 @@ class AllCalls(CentralApi):
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -26895,8 +27423,24 @@ class AllCalls(CentralApi):
                 /visualrf_api/v1/floor/{floor_id}/access_point_location api. Example:
                 /visualrf_api/v1/access_point_location/201610193176__B4:5D:50:C5:DA:5A
             units (str, optional): METERS or FEET  Valid Values: METERS, FEET
-            offset (int, optional): Pagination start index. Defaults to 0.
-            limit (int, optional): Pagination size. Default 100  Max 100 Defaults to 100.
+            offset (int, optional): used as a page number when working with paginated results, with
+                the first page being at offset 0 and last page at  Math.ceil(total_items/limit)-1.
+                For example: Assuming you have a collection of 100 items, and you want to retrieve
+                them in batches of 20 items per page. Here's how you can use limit and offset in
+                your API request:
+                Example 1: Retrieve the first page of items                                      API
+                Request: GET with limit=20&offset=0                                      API
+                Response: Returns the first 20 items in the collection.
+                Example 2: Retrieve the second page of items
+                API Request: GET with limit=20&offset=1                                      API
+                Response: Returns the next 20 items in the collection, starting from item 21 to item
+                40.
+                Example 3: Retrieve the sixth page of items                                      API
+                Request: GET with limit=20&offset=5                                      API
+                Response: Returns an empty response, as there are no items available from item 101
+                to item 120 in the collection. Defaults to 0.
+            limit (int, optional): specifies the maximum number of items per page. Default 100,  Max
+                100. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
