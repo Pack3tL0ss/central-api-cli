@@ -425,7 +425,8 @@ def label(
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
-@app.command(help="Add/Upload a Certificate.", hidden=True)
+# This worked: cencli add certificate lejun23 securelogin.kabrew.com.all.pem -pem -svr  (no passphrase, entering passphrase caused error above)
+@app.command(hidden=False)
 def certificate(
     cert_name: str = typer.Argument(...),
     cert_file: Path = typer.Argument(None,),
@@ -457,8 +458,6 @@ def certificate(
     ),
 ) -> None:
     """Upload a Certificate to Aruba Central
-
-    This command is built but the API endpoint does not appear to work currently.
     """
     yes = yes_ if yes_ else yes
     passphrase = "" if passphrase is None else passphrase
