@@ -955,8 +955,8 @@ class CentralApi(Session):
 
     async def _get_group_names(self) -> Response:
         url = "/configuration/v2/groups"
-        params = {"offset": 0, "limit": 20}  # 20 is the max
-        resp = await self.get(url, params=params,)  # callback=cleaner._get_group_names)
+        params = {"offset": 0, "limit": 100}  # 100 is the max
+        resp = await self.get(url, params=params,)
         resp.output = cleaner._get_group_names(resp.output)
         return resp
 
@@ -1357,7 +1357,7 @@ class CentralApi(Session):
         macaddr: str = None,
         public_ip_address: str = None,
         site: str = None,
-        limit: int = 500,  # max allowed 1000
+        limit: int = 1000,  # max allowed 1000
         offset: int = 0,
         # sort: str = None,
     ) -> Response:
