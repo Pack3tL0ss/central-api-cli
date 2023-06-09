@@ -1060,11 +1060,13 @@ class CentralApi(Session):
         params = {"sku_type": "all"}
         return await self.get(url, params=params)
 
+    # TODO total is returned with first request can batch remaining requests with limit/offset adjusted
+    # API-FLAW limit doesn't appear to have an upper limit, but took forever to return 5,000 records
     async def get_device_inventory(
         self,
         sku_type: str = "all",
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 1000,
     ) -> Response:
         """Get devices from device inventory.
 
@@ -1072,7 +1074,7 @@ class CentralApi(Session):
             sku_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
                 Defaults to all.
             offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of devices to get Defaults to 100.
+            limit (int, optional): Number of devices to get Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -1200,11 +1202,14 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_dev_by_type(self, dev_type: str) -> Response:  # VERIFIED
+    async def get_dev_by_type(
+            self,
+            dev_type: str,
+        ) -> Response:  # VERIFIED
         url = "/platform/device_inventory/v1/devices"
         # iap, switch, gateway|boc
         if dev_type.lower() in ["aps", "ap"]:
-            dev_type = "iap"
+            dev_type = "all_ap"
         params = {"sku_type": dev_type}
         return await self.get(url, params=params)
 
@@ -4241,12 +4246,11 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO add command show subscriptions
     async def get_subscriptions(
         self,
         license_type: str = None,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 1000,  # Doesn't appear to have max, allowed 10k limit in swagger
     ) -> Response:
         """Get user subscription keys.
 
@@ -4265,6 +4269,42 @@ class CentralApi(Session):
             'license_type': license_type,
             'offset': offset,
             'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_subscription_stats(
+        self,
+        license_type: str = 'all',
+        service: str = None,
+        app_only_stats: bool = None,
+    ) -> Response:
+        """Get subscription stats.
+
+        Args:
+            license_type (str, optional): Supports basic/special/all.
+                special - will fetch the statistics of special central services like presence
+                    analytics(pa), ucc, clarity etc.
+                basic - will fetch the statistics of device management service licenses.
+                all - will fetch both of these license types.
+
+                Also supports multi tier license types such foundation_ap, advanced_switch_6300,
+                foundation_70XX etc.
+
+            service (str, optional): Service type: pa/pa,clarity,foundation_ap,
+                advanced_switch_6300, foundation_70XX  etc.
+            app_only_stats (bool, optional): If value is True, stats only for the current
+                application returned rather than global stats
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/subscriptions/stats"
+
+        params = {
+            'license_type': license_type,
+            'service': service,
+            'app_only_stats': app_only_stats
         }
 
         return await self.get(url, params=params)
