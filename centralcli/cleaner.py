@@ -1089,7 +1089,7 @@ def get_subscriptions(data: List[dict],) -> List[dict]:
         "start_date",
         "end_date",
     ]
-    data = [
+    return [
         dict(short_value(k, d[k]) for k in field_order) for d in data
     ]
 
