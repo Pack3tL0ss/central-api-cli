@@ -29910,7 +29910,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def get_visualrf_v1_campus(
+    async def get_visualrf_v1_campus_by_id(
         self,
         campus_id: str,
         offset: int = 0,
@@ -30007,6 +30007,8 @@ class AllCalls(CentralApi):
     ) -> Response:
         """Get details of a specific floor.
 
+        Same output as "/visualrf_api/v1/building/{building_id}", but showing only the specified floor.
+
         Args:
             floor_id (str): Provide floor_id returned by /visualrf_api/v1/building/{building_id api.
                 Example: /visualrf_api/v1/floor/201610193176__39295d71-fac8-4837-8a91-c1798b51a2ad
@@ -30085,7 +30087,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def get_visualrf_v1_floor_access_point_location(
+    async def get_visualrf_v1_floor_access_point_location_by_floor_id(
         self,
         floor_id: str,
         units: str = 'FEET',
@@ -30130,7 +30132,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def get_visualrf_v1_access_point_location(
+    async def get_visualrf_v1_access_point_location_by_ap_id(
         self,
         ap_id: str,
         units: str = 'FEET',
