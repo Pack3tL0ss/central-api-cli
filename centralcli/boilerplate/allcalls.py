@@ -757,7 +757,7 @@ class AllCalls(CentralApi):
         radio_mac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get reporting_radio of a specific Radio MAC.
+        """Get reporting radio of a specific radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -778,7 +778,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get All reporting_radio for a Customer.
+        """Get all reporting radio for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -799,7 +799,7 @@ class AllCalls(CentralApi):
         ap_eth_mac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get ap_info of a specific AP Ethernet MAC.
+        """Get AP info of a specific AP ethernet MAC.
 
         Args:
             ap_eth_mac (str): AP Ethernet MAC address
@@ -820,7 +820,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get ap_info for all APs.
+        """Get AP info for all AP's.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -843,7 +843,7 @@ class AllCalls(CentralApi):
         band: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get nbr_pathloss of a Neighbor Mac heard by a specific Radio Mac.
+        """Get nbr pathloss of a neighbor MAC heard by a specific radio MAC.
 
         Args:
             radio_mac (str): Heard Radio MAC address
@@ -867,7 +867,7 @@ class AllCalls(CentralApi):
         band: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get All nbr_pathloss for a Customer and Band.
+        """Get all nbr pathloss for a customer and band.
 
         Args:
             band (str): Heard on a specific Band
@@ -889,7 +889,7 @@ class AllCalls(CentralApi):
         radio_mac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get rf_events of a specific Radio MAC.
+        """Get RF events of a specific radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -911,7 +911,7 @@ class AllCalls(CentralApi):
         radio_mac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get radar and noise RF events of a specific Radio MAC.
+        """Get radar and noise RF events of a specific radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -934,7 +934,7 @@ class AllCalls(CentralApi):
         band: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get history of a specific Radio MAC.
+        """Get history of a specific radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -958,7 +958,7 @@ class AllCalls(CentralApi):
         band: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get All nbr_pathloss for a Customer and Radio-Mac.
+        """Get all nbr pathloss for a customer and radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -980,7 +980,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get All Static Radios for a Customer.
+        """Get all static radios for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1000,7 +1000,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get Number of APs and AP Models.
+        """Get number of AP's and AP models.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1020,7 +1020,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get EIRP Distribution.
+        """Get EIRP distribution.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1040,7 +1040,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get EIRP Reasons.
+        """Get EIRP reasons.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1060,7 +1060,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get Information about Radio.
+        """Get information about radio.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1080,7 +1080,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get Neighbor stats information.
+        """Get neighbor stats information.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1100,7 +1100,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get all rf_events of a tenant-id.
+        """Get all RF events of a tenant id.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1206,7 +1206,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """run the algorithm for the solution.
+        """Run the algorithm for the solution.
 
         Args:
             tenant_id (str, optional): tenant to run the solution
@@ -1228,7 +1228,7 @@ class AllCalls(CentralApi):
         tenant_id: str = None,
         debug: bool = None,
     ) -> Response:
-        """Get solution of a specific Radio MAC.
+        """Get solution of a specific radio MAC.
 
         Args:
             radio_mac (str): Radio MAC address
@@ -1254,7 +1254,7 @@ class AllCalls(CentralApi):
         band: str = None,
         debug: bool = None,
     ) -> Response:
-        """Get All solutions for a Customer.
+        """Get all solutions for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1303,7 +1303,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Gets Radios Deployment Status.
+        """Gets radios deployment status.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1367,7 +1367,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """get the schedule of all jobs computed by the scheduler.
+        """Get the schedule of all jobs computed by the scheduler.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1387,7 +1387,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """get the jobs to be sent to deployer for airmatch solution deployment.
+        """Get the jobs to be sent to deployer for AirMatch solution deployment.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1407,7 +1407,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get the list of jobs generated by Scheduler.
+        """Get the list of jobs generated by scheduler.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1447,7 +1447,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Trigger - RMQ message with on-demand compute for a provided tenant-id.
+        """Trigger - RMQ message with on-demand compute for a provided tenant id.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1490,7 +1490,7 @@ class AllCalls(CentralApi):
         radioMac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get radio_feasibility of a specific radio MAC.
+        """Get radio feasibility of a specific radio MAC.
 
         Args:
             radioMac (str): radio MAC address
@@ -1511,7 +1511,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get All radio_feasibility for a Customer.
+        """Get all radio feasibility for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1531,7 +1531,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Returns all Device (AP) Running Configuration for a Customer.
+        """Returns all device (AP) running configuration for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1552,7 +1552,7 @@ class AllCalls(CentralApi):
         ap_serial: str,
         tenant_id: str = None,
     ) -> Response:
-        """Returns Device (AP) Running Configuration.
+        """Returns device (AP) running configuration.
 
         Args:
             ap_serial (str): AP Serial Num
@@ -1580,7 +1580,7 @@ class AllCalls(CentralApi):
         CBW20: List[int] = None,
         CBW40: List[int] = None,
     ) -> Response:
-        """Change a device Running Config.
+        """Change a device running config.
 
         Args:
             ap_serial (str): AP Serial Num
@@ -1615,7 +1615,7 @@ class AllCalls(CentralApi):
     async def airmatch_get_all_service_config(
         self,
     ) -> Response:
-        """Returns All Device (AP) Running Configuration for all customers.
+        """Returns all device (AP) running configuration for all customers.
 
         Returns:
             Response: CentralAPI Response object
@@ -1628,7 +1628,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Returns Device (AP) Running Configuration.
+        """Returns device (AP) running configuration.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1648,7 +1648,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get EIRP Reasons.
+        """Get EIRP reasons.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1690,7 +1690,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Get All radio_feasibility for a Customer.
+        """Get all radio feasibility for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1711,7 +1711,7 @@ class AllCalls(CentralApi):
         ap_serial: str,
         tenant_id: str = None,
     ) -> Response:
-        """Returns Device (AP) Running Configuration.
+        """Returns device (AP) running configuration.
 
         Args:
             ap_serial (str): AP Serial Num
@@ -1739,7 +1739,7 @@ class AllCalls(CentralApi):
         CBW20: List[int] = None,
         CBW40: List[int] = None,
     ) -> Response:
-        """Change a device Running Config.
+        """Change a device running config.
 
         Args:
             ap_serial (str): AP Serial Num
@@ -1775,7 +1775,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Returns all Device (AP) Running Configuration for a Customer.
+        """Returns all device (AP) running configuration for a customer.
 
         Args:
             tenant_id (str, optional): Customer(Tenant) ID
@@ -1796,7 +1796,7 @@ class AllCalls(CentralApi):
         ap_serial: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get feasibility ap_info of a specific AP Ethernet MAC.
+        """Get feasibility ap info of a specific AP ethernet MAC.
 
         Args:
             ap_serial (str): AP Serial
@@ -1818,7 +1818,7 @@ class AllCalls(CentralApi):
         radioMac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get Feasibility Radio info of a specific radio MAC.
+        """Get feasibility radio info of a specific radio MAC.
 
         Args:
             radioMac (str): radio MAC address
@@ -1862,7 +1862,7 @@ class AllCalls(CentralApi):
         tenant_id: str = None,
         deploy_hour: int = None,
     ) -> Response:
-        """get a list of pending deployments for a tenant-id.
+        """Get a list of pending deployments for a tenant id.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1884,7 +1884,7 @@ class AllCalls(CentralApi):
         self,
         tenant_id: str = None,
     ) -> Response:
-        """Trigger Computation complete message.
+        """Trigger computation complete message.
 
         Args:
             tenant_id (str, optional): tenant id
@@ -1994,7 +1994,7 @@ class AllCalls(CentralApi):
         radiomac: str,
         tenant_id: str = None,
     ) -> Response:
-        """Get Radio neighbor list.
+        """Get radio neighbor list.
 
         Args:
             radiomac (str): Radio Mac to look up list of Neighbors
@@ -2667,6 +2667,126 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
+    async def bbs_create_beacon_profile(
+        self,
+        group_name: str,
+        profile_name: str,
+        config_method: str,
+        radio_instance: str,
+        adv_format: str = None,
+        interval: int = None,
+        major_start: int = None,
+        major_end: int = None,
+        minor_start: int = None,
+        minor_end: int = None,
+        UUID: str = None,
+        payload: str = None,
+    ) -> Response:
+        """Config ble beacon profile.
+
+        Args:
+            group_name (str): the name of configured group
+            profile_name (str): config ble beacon profile name
+            config_method (str): ble beacon profile method  Valid Values: auto_generate, api, iotops
+            radio_instance (str): apply the profile ble radio instance  Valid Values: all, internal,
+                external
+            adv_format (str, optional): ble advertise beacon format  Valid Values: ibeacon, custom
+            interval (int, optional): ble beacon advertisement interval. Range: [100-30000 ms] and
+                increment in multiples of 100
+            major_start (int, optional): ibeacon config, range is 0-65535
+            major_end (int, optional): ibeacon config, range is 0-65535
+            minor_start (int, optional): ibeacon config, range is 0-65535
+            minor_end (int, optional): ibeacon config, range is 0-65535
+            UUID (str, optional): ibeacon config
+            payload (str, optional): custom beacon config, length is 3-31 bytes and each bytes
+                include 2 ASCII characters
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/cfg_beacon_profiles/{group_name}"
+
+        params = {
+            'profile_name': profile_name,
+            'config_method': config_method,
+            'radio_instance': radio_instance,
+            'adv_format': adv_format,
+            'interval': interval,
+            'major_start': major_start,
+            'major_end': major_end,
+            'minor_start': minor_start,
+            'minor_end': minor_end,
+            'UUID': UUID,
+            'payload': payload
+        }
+
+        return await self.post(url, params=params)
+
+    async def bbs_edit_beacon_profile(
+        self,
+        group_name: str,
+        profile_id: str,
+        adv_format: str = None,
+        interval: int = None,
+        major_start: int = None,
+        major_end: int = None,
+        minor_start: int = None,
+        minor_end: int = None,
+        UUID: str = None,
+        payload: str = None,
+    ) -> Response:
+        """Edit ble beacon profile.
+
+        Args:
+            group_name (str): the name of configured group
+            profile_id (str): config ble beacon profile name
+            adv_format (str, optional): ble advertise beacon format  Valid Values: ibeacon, custom
+            interval (int, optional): ble beacon advertisement interval. Range: [100-30000 ms] and
+                increment in multiples of 100
+            major_start (int, optional): ibeacon config, range is 0-65535
+            major_end (int, optional): ibeacon config, range is 0-65535
+            minor_start (int, optional): ibeacon config, range is 0-65535
+            minor_end (int, optional): ibeacon config, range is 0-65535
+            UUID (str, optional): ibeacon config
+            payload (str, optional): custom beacon config, length is 3-31 bytes and each bytes
+                include 2 ASCII characters
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/edit_beacon_profiles/{group_name}/{profile_id}"
+
+        params = {
+            'adv_format': adv_format,
+            'interval': interval,
+            'major_start': major_start,
+            'major_end': major_end,
+            'minor_start': minor_start,
+            'minor_end': minor_end,
+            'UUID': UUID,
+            'payload': payload
+        }
+
+        return await self.post(url, params=params)
+
+    async def bbs_process_profile_delete(
+        self,
+        group_name: str,
+        profile_id: str,
+    ) -> Response:
+        """Delete ble beacon profile.
+
+        Args:
+            group_name (str): the name of configured group
+            profile_id (str): config ble beacon profile name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/bbs/v1/delete_beacon_profiles/{group_name}/{profile_id}"
+
+        return await self.delete(url)
+
     async def bbs_update_device_beacon(
         self,
         iot_radio_mac: str,
@@ -2917,6 +3037,502 @@ class AllCalls(CentralApi):
             Response: CentralAPI Response object
         """
         url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
+
+        return await self.delete(url)
+
+    async def cloud_connect_post_aruba_vpn_connect_config_id1(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Create Custom cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/custom"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloud_connect_put_aruba_vpn_connect_config_id1(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Update Custom cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/custom"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloud_connect_delete_aruba_vpn_connect_config_id1(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Delete Custom cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/custom"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def cloud_connect_post_aruba_vpn_connect_config_id2(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Create Zscaler cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/zscaler"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloud_connect_put_aruba_vpn_connect_config_id2(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Update Zscaler cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/zscaler"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloud_connect_delete_aruba_vpn_connect_config_id2(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Delete Zscaler cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/zscaler"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def cloud_connect_post_aruba_vpn_connect_config_id3(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Create AWS cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/aws"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloud_connect_put_aruba_vpn_connect_config_id3(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Update AWS cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/aws"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloud_connect_delete_aruba_vpn_connect_config_id3(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Delete AWS cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/aws"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def cloud_connect_post_aruba_vpn_connect_config_id4(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Create Azure cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/azure"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloud_connect_put_aruba_vpn_connect_config_id4(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Update Azure cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/azure"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def cloud_connect_delete_aruba_vpn_connect_config_id4(
+        self,
+        node_id: str,
+        endpoints: list,
+    ) -> Response:
+        """Delete Azure cloud provider endpoint config.
+
+        Args:
+            node_id (str): The identifer of the configuration node(aka group). 'GROUP', node-id
+                should be set to the group-name
+            endpoints (list): Cloud Account Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/node_list/{node_id}/config/azure"
+
+        json_data = {
+            'endpoints': endpoints
+        }
+
+        return await self.delete(url, json_data=json_data)
+
+    async def cloud_connect_get_aruba_vpn_connect_topology_scan(
+        self,
+    ) -> Response:
+        """Trigger cloud provider endpoint scan.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/topology-scan"
+
+        return await self.get(url)
+
+    async def cloud_connect_get_aruba_vpn_connect_topology_eps(
+        self,
+        group: str,
+    ) -> Response:
+        """Get all Cloud Provider endpoints.
+
+        Args:
+            group (str): Group Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/topology-eps"
+
+        params = {
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloud_connect_get_aruba_vpn_connect_zscaler_node_scan(
+        self,
+    ) -> Response:
+        """Get Zscaler node scan details.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/zscaler/node-scan"
+
+        return await self.get(url)
+
+    async def cloud_connect_get_aruba_vpn_connect_vlan_cfg(
+        self,
+        group: str,
+    ) -> Response:
+        """Get configured vlan list for each cloud connect endpoint.
+
+        Args:
+            group (str): Group Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/vlan-cfg"
+
+        params = {
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloud_connect_get_aruba_vpn_connect_config_summary(
+        self,
+        group: str,
+    ) -> Response:
+        """Get config summary for configured groups.
+
+        Args:
+            group (str): Group Name.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/config-summary"
+
+        params = {
+            'group': group
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_cloud_connect_v1_tunnel_policy_config_metadata(
+        self,
+    ) -> Response:
+        """Get the list of valid Tunnel Policy configurations.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloud-connect/v1/tunnel-policy-config-metadata"
+
+        return await self.get(url)
+
+    async def get_cloud_connect_v1_tunnel_policy_config(
+        self,
+        policy_name: str,
+    ) -> Response:
+        """Get the Tunnel Policy Configuration for policy_name.
+
+        Args:
+            policy_name (str): Name of Tunnel Policy
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
+
+        return await self.get(url)
+
+    async def post_cloud_connect_v1_tunnel_policy_config(
+        self,
+        policy_name: str,
+        auth_method: str,
+        auth_type: str,
+        rekey_val: str,
+        prf_method: str,
+        dh_method: str,
+        enc_method: str,
+        force_tunnel_mode: str,
+        force_natt: str,
+        pfs_method: str,
+    ) -> Response:
+        """Creates a new Tunnel Policy with name as policy_name.
+
+        Args:
+            policy_name (str): Name of Tunnel Policy
+            auth_method (str): auth_method
+            auth_type (str): auth_type
+            rekey_val (str): rekey_val
+            prf_method (str): prf_method
+            dh_method (str): dh_method
+            enc_method (str): enc_method
+            force_tunnel_mode (str): force_tunnel_mode
+            force_natt (str): force_natt
+            pfs_method (str): pfs_method
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
+
+        json_data = {
+            'auth_method': auth_method,
+            'auth_type': auth_type,
+            'rekey_val': rekey_val,
+            'prf_method': prf_method,
+            'dh_method': dh_method,
+            'enc_method': enc_method,
+            'force_tunnel_mode': force_tunnel_mode,
+            'force_natt': force_natt,
+            'pfs_method': pfs_method
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def put_cloud_connect_v1_tunnel_policy_config(
+        self,
+        policy_name: str,
+        auth_method: str,
+        auth_type: str,
+        rekey_val: str,
+        prf_method: str,
+        dh_method: str,
+        enc_method: str,
+        force_tunnel_mode: str,
+        force_natt: str,
+        pfs_method: str,
+    ) -> Response:
+        """Updates an existing Tunnel Policy with name as policy_name.
+
+        Args:
+            policy_name (str): Name of Tunnel Policy
+            auth_method (str): auth_method
+            auth_type (str): auth_type
+            rekey_val (str): rekey_val
+            prf_method (str): prf_method
+            dh_method (str): dh_method
+            enc_method (str): enc_method
+            force_tunnel_mode (str): force_tunnel_mode
+            force_natt (str): force_natt
+            pfs_method (str): pfs_method
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
+
+        json_data = {
+            'auth_method': auth_method,
+            'auth_type': auth_type,
+            'rekey_val': rekey_val,
+            'prf_method': prf_method,
+            'dh_method': dh_method,
+            'enc_method': enc_method,
+            'force_tunnel_mode': force_tunnel_mode,
+            'force_natt': force_natt,
+            'pfs_method': pfs_method
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def delete_cloud_connect_v1_tunnel_policy_config(
+        self,
+        policy_name: str,
+    ) -> Response:
+        """Delete Tunnel Policy with name as policy_name.
+
+        Args:
+            policy_name (str): Name of Tunnel Policy
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
 
         return await self.delete(url)
 
@@ -3413,6 +4029,44 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
+    async def cloudauth_downloadnamedmpsks(
+        self,
+        ssid: str,
+        filename: str = None,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        sort: str = None,
+    ) -> Response:
+        """Fetch all Named MPSK as a CSV file.
+
+        Args:
+            ssid (str): Configured MPSK SSID for which Named MPSKs are to be downloaded.
+            filename (str, optional): Suggest a file name for the downloading file via content
+                disposition header.
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/download/mpsk"
+
+        params = {
+            'ssid': ssid,
+            'filename': filename,
+            'name': name,
+            'role': role,
+            'status': status,
+            'sort': sort
+        }
+
+        return await self.get(url, params=params)
+
     async def cloudauth_readallmpskconfigs(
         self,
     ) -> Response:
@@ -3719,6 +4373,97 @@ class AllCalls(CentralApi):
         }
 
         return await self.patch(url, json_data=json_data, params=params)
+
+    async def cloudauth_upload(
+        self,
+        upload_type: str,
+        file: Union[Path, str],
+        ssid: str = None,
+    ) -> Response:
+        """Upload file.
+
+        Args:
+            upload_type (str): Type of file upload  Valid Values: mpsk
+            file (Union[Path, str]): The csv file to upload
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/upload/{upload_type}"
+        file = file if isinstance(file, Path) else Path(str(file))
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.post(url, params=params)
+
+    async def cloudauth_uploadstatus(
+        self,
+        upload_type: str,
+        ssid: str = None,
+    ) -> Response:
+        """Read upload status of last file upload.
+
+        Args:
+            upload_type (str): Type of file upload  Valid Values: mpsk
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/upload/{upload_type}/status"
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_uploaderrors(
+        self,
+        upload_type: str,
+        ssid: str = None,
+    ) -> Response:
+        """Read errors in last file upload.
+
+        Args:
+            upload_type (str): Type of file upload  Valid Values: mpsk
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/upload/{upload_type}/errors"
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_uploadterminate(
+        self,
+        upload_type: str,
+        ssid: str = None,
+    ) -> Response:
+        """Terminate Upload.
+
+        Args:
+            upload_type (str): Type of file upload  Valid Values: mpsk
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/upload/{upload_type}/terminate"
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.put(url, params=params)
 
     async def cloudauth_readmpskusage(
         self,
@@ -9288,7 +10033,7 @@ class AllCalls(CentralApi):
         """List Firmware Details of Devices.
 
         Args:
-            device_type (str): Specify one of "MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "MAS/HP/CX/CONTROLLER"
             group (str, optional): Group name
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 20 and max is 1000 Defaults to 100.
@@ -9332,7 +10077,7 @@ class AllCalls(CentralApi):
         """List Firmware Version.
 
         Args:
-            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str, optional): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             swarm_id (str, optional): Swarm ID
             serial (str, optional): Serial of device
 
@@ -9357,7 +10102,7 @@ class AllCalls(CentralApi):
         """Firmware Version.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             firmware_version (str): firmware version
 
         Returns:
@@ -9414,13 +10159,13 @@ class AllCalls(CentralApi):
             swarm_id (str): Swarm ID
             serial (str): Serial of device
             group (str): Specify Group Name to initiate upgrade  for whole group.
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             firmware_version (str): Specify firmware version to which you want device to upgrade. If
                 you do not specify this field then firmware upgrade initiated with recommended
                 firmware version
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             model (str): To initiate upgrade at group level for specific model family. Applicable
                 only for Aruba switches.
 
@@ -9454,7 +10199,7 @@ class AllCalls(CentralApi):
         Args:
             swarm_id (str): Swarm ID
             serial (str): Serial of device
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str): Specify Group Name to cancel upgrade for devices in that group
 
         Returns:
@@ -9483,12 +10228,12 @@ class AllCalls(CentralApi):
         """Set Firmware Compliance Version Customer.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str): Group name
             firmware_compliance_version (str): Firmware compliance version for specific device_type.
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             allow_unsupported_version (bool): Use True to set unsupported version as firmware
                 compliance version for specific device_type. Default is False.
             compliance_scheduled_at (int): Firmware compliance will be schedule at,
@@ -9522,12 +10267,12 @@ class AllCalls(CentralApi):
         """Set Firmware Compliance Version.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str): Group name
             firmware_compliance_version (str): Firmware compliance version for specific device_type.
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             allow_unsupported_version (bool): Use True to set unsupported version as firmware
                 compliance version for specific device_type. Default is False.
 
@@ -9554,7 +10299,7 @@ class AllCalls(CentralApi):
         """Get Firmware Compliance Version.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str, optional): Group name
 
         Returns:
@@ -9577,7 +10322,7 @@ class AllCalls(CentralApi):
         """Clear Firmware Compliance Version.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str, optional): Group name
 
         Returns:
@@ -9607,17 +10352,17 @@ class AllCalls(CentralApi):
             firmware_scheduled_at (int): Firmware upgrade will be schedule at, firmware_scheduled_at
                 - current time. firmware_scheduled_at is epoch in seconds and default value is
                 current time.
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             firmware_version (str): Specify firmware version which you want device to upgrade. If
                 you do not specify this field then firmware upgrade initiated with recommended
                 firmware version
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             exclude_groups (str): List of groups to be excluded while upgrading firmware, e.g.
-                ["TestGroup1", "TestGroup2"]
+                "[\"TestGroup1\", \"TestGroup2\"]"
             exclude_customers (str): List of customer IDs to be excluded while upgrading firmware,
-                e.g. ["111111", "111112"]
+                e.g. "[\"111111\", \"111112\"]"
 
         Returns:
             Response: CentralAPI Response object
@@ -9651,15 +10396,15 @@ class AllCalls(CentralApi):
             firmware_scheduled_at (int): Firmware upgrade will be scheduled at,
                 firmware_scheduled_at - current time. firmware_scheduled_at is epoch in seconds and
                 default value is current time.
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             firmware_version (str): Specify firmware version which you want device to upgrade. If
                 you do not specify this field then firmware upgrade initiated with recommended
                 firmware version
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             exclude_groups (str): List of groups to be excluded while upgrading firmware, e.g.
-                ["TestGroup1", "TestGroup2"]
+                "[\"TestGroup1\", \"TestGroup2\"]"
 
         Returns:
             Response: CentralAPI Response object
@@ -9684,9 +10429,9 @@ class AllCalls(CentralApi):
         """Cancel Scheduled Upgrade at MSP Level.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             exclude_customers (str): List of customer IDs to be excluded while canceling scheduled
-                upgrade, e.g. ["111111", "111112"]
+                upgrade, e.g. "[\"111111\", \"111112\"]"
 
         Returns:
             Response: CentralAPI Response object
@@ -9709,7 +10454,7 @@ class AllCalls(CentralApi):
 
         Args:
             customer_id (str): Customer id of the customer
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
 
         Returns:
             Response: CentralAPI Response object
@@ -9727,11 +10472,11 @@ class AllCalls(CentralApi):
         serial: str = None,
         device_type: str = None,
     ) -> Response:
-        """List Model Family.
+        """List (switch) Model Family.
 
         Args:
             serial (str, optional): Serial of device
-            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str, optional): Specify one of "MAS/HP/CX"
 
         Returns:
             Response: CentralAPI Response object
@@ -9757,17 +10502,18 @@ class AllCalls(CentralApi):
         """Set Firmware Compliance Version for MSP customer.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             firmware_compliance_version (str): Firmware compliance version for specific device_type.
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             allow_unsupported_version (bool): Use True to set unsupported version as firmware
                 compliance version for specific device_type. Default is False.
             compliance_scheduled_at (int): Firmware compliance will be schedule at,
                 compliance_scheduled_at - current time. compliance_scheduled_at is epoch in seconds
                 and default value is current time.
-            tenants (str): List of tenant IDs to set firmware compliance , e.g. ["111111", "111112"]
+            tenants (str): List of tenant IDs to set firmware compliance , e.g. "[\"111111\",
+                \"111112\"]"
 
         Returns:
             Response: CentralAPI Response object
@@ -9792,7 +10538,7 @@ class AllCalls(CentralApi):
         """Get Firmware Compliance Version for MSP Customer.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
 
         Returns:
             Response: CentralAPI Response object
@@ -9813,9 +10559,9 @@ class AllCalls(CentralApi):
         """Clear Firmware Compliance Version for MSP Customer.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            tenants (str): List of tenant IDs to delete firmware compliance , e.g. ["111111",
-                "111112"]
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
+            tenants (str): List of tenant IDs to delete firmware compliance , e.g. "[\"111111\",
+                \"111112\"]"
 
         Returns:
             Response: CentralAPI Response object
@@ -9843,12 +10589,12 @@ class AllCalls(CentralApi):
 
         Args:
             customer_id (str): Customer id of the customer
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str): Group name
             firmware_compliance_version (str): Firmware compliance version for specific device_type.
             reboot (bool): Use True for auto reboot after successful firmware download. Default
-                value is False. Applicable only on MAS, aruba switches and controller since IAP
-                reboots automatically after firmware download.
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
             allow_unsupported_version (bool): Use True to set unsupported version as firmware
                 compliance version for specific device_type. Default is False.
             compliance_scheduled_at (int): Firmware compliance will be schedule at,
@@ -9881,7 +10627,7 @@ class AllCalls(CentralApi):
 
         Args:
             customer_id (str): Customer id of the customer
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str, optional): Group name
 
         Returns:
@@ -9906,7 +10652,7 @@ class AllCalls(CentralApi):
 
         Args:
             customer_id (str): Customer id of the customer
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             group (str, optional): Group name
 
         Returns:
@@ -9929,7 +10675,7 @@ class AllCalls(CentralApi):
         """List Firmware Details of a Tenant.
 
         Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
             tenant_id (str): Tenant ID for which the firmware detail to be queried
 
         Returns:
@@ -10879,8 +11625,8 @@ class AllCalls(CentralApi):
             last_name (str): Last Name of Installer
             country_code (str): Country code of Installer mobile number
             mobile_number (str): Installer mobile number without spaces or special characters
-            expire_at (int): Date upto which the installer should be given access. Value is in epoch
-                seconds
+            expire_at (int): Date up to which the installer should be given access. Value is in
+                epoch seconds
             allow_config (bool): Allow the installer to add a device name during installation
             sites (list): The list of sites assigned to the installer
 
@@ -10901,6 +11647,188 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
+    async def install_manager_get_installers(
+        self,
+    ) -> Response:
+        """Get all installers.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/installer"
+
+        return await self.get(url)
+
+    async def install_manager_delete_installer(
+        self,
+        id: int,
+    ) -> Response:
+        """Delete an installer.
+
+        Args:
+            id (int): installer id to delete the installer
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/installer"
+
+        params = {
+            'id': id
+        }
+
+        return await self.delete(url, params=params)
+
+    async def install_manager_update_installer(
+        self,
+        id: int,
+        first_name: str,
+        last_name: str,
+        country_code: str,
+        mobile_number: str,
+        expire_at: int,
+        allow_config: bool,
+        sites: object,
+    ) -> Response:
+        """Update an installer.
+
+        Args:
+            id (int): installer id to delete the installer
+            first_name (str): First Name of Installer
+            last_name (str): Last Name of Installer
+            country_code (str): Country code of Installer mobile number
+            mobile_number (str): Installer mobile number without spaces or special characters
+            expire_at (int): Date up to which the installer should be given access. Value is in
+                epoch seconds
+            allow_config (bool): Allow the installer to add a device name during installation
+            sites (object): The sites assigned to the installer
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/installer"
+
+        params = {
+            'id': id
+        }
+
+        json_data = {
+            'first_name': first_name,
+            'last_name': last_name,
+            'country_code': country_code,
+            'mobile_number': mobile_number,
+            'expire_at': expire_at,
+            'allow_config': allow_config,
+            'sites': sites
+        }
+
+        return await self.patch(url, params=params, json_data=json_data)
+
+    async def install_manager_get_all_qr_codes(
+        self,
+        id: int = None,
+    ) -> Response:
+        """Get QR code list.
+
+        Args:
+            id (int, optional): QR code id to view the QR code
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/vendor"
+
+        params = {
+            'id': id
+        }
+
+        return await self.get(url, params=params)
+
+    async def install_manager_delete_qr_code(
+        self,
+        id: int,
+    ) -> Response:
+        """Delete a QR code.
+
+        Args:
+            id (int): QR code id to delete the QR code
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/vendor"
+
+        params = {
+            'id': id
+        }
+
+        return await self.delete(url, params=params)
+
+    async def install_manager_create_qr_code(
+        self,
+        name: str,
+        email_id: str,
+        company: str,
+        expire_at: int,
+        allow_config: bool,
+        sites: list,
+    ) -> Response:
+        """Create a QR code.
+
+        Args:
+            name (str): Name of the QR code
+            email_id (str): Email id of the vendor
+            company (str): Company name of the vendor
+            expire_at (int): Date up to which the QR code should be given access. Value is in epoch
+                seconds
+            allow_config (bool): Allow the installer to add a device name during installation
+            sites (list): The list of sites assigned to the QR code
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/vendor"
+
+        json_data = {
+            'name': name,
+            'email_id': email_id,
+            'company': company,
+            'expire_at': expire_at,
+            'allow_config': allow_config,
+            'sites': sites
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def install_manager_update_qr_code(
+        self,
+        id: int,
+        allow_config: bool,
+        sites: list,
+    ) -> Response:
+        """Update a QR code.
+
+        Args:
+            id (int): QR code id to update the QR code
+            allow_config (bool): Allow the installer to add a device name during installation
+            sites (list): The list of sites assigned to the QR code
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/vendor"
+
+        params = {
+            'id': id
+        }
+
+        json_data = {
+            'allow_config': allow_config,
+            'sites': sites
+        }
+
+        return await self.patch(url, params=params, json_data=json_data)
+
     async def install_manager_assign_group_to_device_types_in_sites(
         self,
         groups_association: list,
@@ -10920,6 +11848,41 @@ class AllCalls(CentralApi):
         json_data = {
             'groups_association': groups_association,
             'sites_association': sites_association
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def install_manager_assigned_group_to_site_list(
+        self,
+    ) -> Response:
+        """Get all assigned group to sites list.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/assigned_group_to_site_list"
+
+        return await self.get(url)
+
+    async def install_manager_update_site_status(
+        self,
+        site_id: int,
+        mark_as_completed: bool,
+    ) -> Response:
+        """Update site status.
+
+        Args:
+            site_id (int): Site id of the site
+            mark_as_completed (bool): Status of the site
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/install_manager/external/v1/update_site_status"
+
+        json_data = {
+            'site_id': site_id,
+            'mark_as_completed': mark_as_completed
         }
 
         return await self.post(url, json_data=json_data)
@@ -13746,32 +14709,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    # NEW-ENDPOINT
-    async def monitoring_disconnect_users_from_gateway(
-        self,
-        serial: str,
-        disconnect_all_users: bool,
-        client_mac: str,
-    ) -> Response:
-        """Disconnect Gateway Users.
-
-        Args:
-            serial (str): Serial number of gateway to be queried
-            disconnect_all_users (bool): Flag to disconnect all users from gateway
-            client_mac (str): Client MAC address to be disconnected from the gateway
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/monitoring/v1/gateways/{serial}/disconnect_users"
-
-        json_data = {
-            'disconnect_all_users': disconnect_all_users,
-            'client_mac': client_mac
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def central_get_labels(
         self,
         calculate_total: bool = None,
@@ -15975,13 +16912,12 @@ class AllCalls(CentralApi):
         """Acknowledge Notifications by ID List / All.
 
         Args:
-            NoName (List[str], optional): Acknowledge notifications
+            notifications (str | List[str], optional): Acknowledge notifications
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v1/notifications"
-        notifications = notifications if isinstance(notifications, list) else [notifications]
 
         return await self.post(url, json_data=notifications)
 
@@ -17327,110 +18263,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def get_rds_v1_ssid_allow(
-        self,
-    ) -> Response:
-        """List Allowed SSIDs.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_allow"
-
-        return await self.get(url)
-
-    async def post_rds_v1_ssid_allow(
-        self,
-        ssids: List[str],
-    ) -> Response:
-        """Add Allowed SSIDs.
-
-        Args:
-            ssids (List[str]): Array of SSIDs to be manually blocked
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_allow"
-
-        json_data = {
-            'ssids': ssids
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def delete_rds_v1_ssid_allow(
-        self,
-        ssids: List[str],
-    ) -> Response:
-        """Delete Allowed SSIDs.
-
-        Args:
-            ssids (List[str]): Array of SSIDs to be manually blocked
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_allow"
-
-        json_data = {
-            'ssids': ssids
-        }
-
-        return await self.delete(url, json_data=json_data)
-
-    async def get_rds_v1_ssid_block(
-        self,
-    ) -> Response:
-        """List Blocked SSIDs.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_block"
-
-        return await self.get(url)
-
-    async def post_rds_v1_ssid_block(
-        self,
-        ssids: List[str],
-    ) -> Response:
-        """Add Blocked SSIDs.
-
-        Args:
-            ssids (List[str]): Array of SSIDs to be manually allowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_block"
-
-        json_data = {
-            'ssids': ssids
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def delete_rds_v1_ssid_block(
-        self,
-        ssids: List[str],
-    ) -> Response:
-        """Delete Blocked SSIDs.
-
-        Args:
-            ssids (List[str]): Array of SSIDs to be manually allowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/rapids/v1/ssid_block"
-
-        json_data = {
-            'ssids': ssids
-        }
-
-        return await self.delete(url, json_data=json_data)
-
     async def rds_get_infrastructure_attacks(
         self,
         group: List[str] = None,
@@ -18289,55 +19121,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def airgroup_config_get_aruba_service_ids_id1(
-        self,
-        name: str,
-        service_id: str,
-    ) -> Response:
-        """Retrieve service_ids by identifier service_id.
-
-        Args:
-            name (str): Name of the Custom service. This should be unique
-            service_id (str): An MDNS or SSDP service ID
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_service_ids_id1(
-        self,
-        name: str,
-        service_id: str,
-        new_service_id: str,
-    ) -> Response:
-        """Create service_ids by identifier service_id.
-
-        Args:
-            name (str): Name of the Custom service. This should be unique
-            service_id (str): An MDNS or SSDP service ID
-            new_service_id (str): An MDNS or SSDP service ID
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
-
-        json_data = {
-            'new_service_id': new_service_id
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def airgroup_config_put_aruba_service_ids_id1(
         self,
         name: str,
         service_id: str,
         new_service_id: str,
     ) -> Response:
-        """Create/Update service_ids by identifier service_id.
+        """Create/Update service-id for given custom service.
 
         Args:
             name (str): Name of the Custom service. This should be unique
@@ -18355,12 +19145,54 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def airgroup_config_post_aruba_service_ids_id1(
+        self,
+        name: str,
+        service_id: str,
+        new_service_id: str,
+    ) -> Response:
+        """Create service-id for given custom service.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
+            new_service_id (str): An MDNS or SSDP service ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
+
+        json_data = {
+            'new_service_id': new_service_id
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_service_ids_id1(
+        self,
+        name: str,
+        service_id: str,
+    ) -> Response:
+        """Retrieve service-id for given custom service.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            service_id (str): An MDNS or SSDP service ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
+
+        return await self.get(url)
+
     async def airgroup_config_delete_aruba_service_ids_id1(
         self,
         name: str,
         service_id: str,
     ) -> Response:
-        """Delete service_ids by identifier service_id.
+        """Delete service-id for given custom service.
 
         Args:
             name (str): Name of the Custom service. This should be unique
@@ -18377,7 +19209,7 @@ class AllCalls(CentralApi):
         self,
         name: str,
     ) -> Response:
-        """Retrieve service_ids.
+        """Retrieve all service-ids in given custom service.
 
         Args:
             name (str): Name of the Custom service. This should be unique
@@ -18389,53 +19221,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_custom_services_id3(
-        self,
-        name: str,
-    ) -> Response:
-        """Retrieve custom_services by identifier name.
-
-        Args:
-            name (str): Name of the Custom service. This should be unique
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/custom_services/{name}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_custom_services_id2(
-        self,
-        name: str,
-        new_name: str,
-        description: str,
-        service_ids: list,
-    ) -> Response:
-        """Create custom_services by identifier name.
-
-        Args:
-            name (str): Name of the Custom service. This should be unique
-            new_name (str): Name of the Custom service. This should be unique
-            description (str): Few line description of the service
-            service_ids (list): List of Service-IDs found in protocol packets that can be used to
-                identify this service. Syntax is as follows. mDNS: _<label>. repeated ending with
-                tcp or _udp SSDP:  urn:<domain-name>:service:<device-type>:<version> or urn:<domain-
-                name>:device:<device-type>:<version>
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/custom_services/{name}/"
-
-        json_data = {
-            'new_name': new_name,
-            'description': description,
-            'service_ids': service_ids
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def airgroup_config_put_aruba_custom_services_id2(
         self,
         name: str,
@@ -18443,7 +19228,7 @@ class AllCalls(CentralApi):
         description: str,
         service_ids: list,
     ) -> Response:
-        """Create/Update custom_services by identifier name.
+        """Create/Update custom service for given name.
 
         Args:
             name (str): Name of the Custom service. This should be unique
@@ -18467,11 +19252,58 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def airgroup_config_post_aruba_custom_services_id2(
+        self,
+        name: str,
+        new_name: str,
+        description: str,
+        service_ids: list,
+    ) -> Response:
+        """Create custom service for given name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+            new_name (str): Name of the Custom service. This should be unique
+            description (str): Few line description of the service
+            service_ids (list): List of Service-IDs found in protocol packets that can be used to
+                identify this service. Syntax is as follows. mDNS: _<label>. repeated ending with
+                tcp or _udp SSDP:  urn:<domain-name>:service:<device-type>:<version> or urn:<domain-
+                name>:device:<device-type>:<version>
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'description': description,
+            'service_ids': service_ids
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_custom_services_id3(
+        self,
+        name: str,
+    ) -> Response:
+        """Retrieve custom service for given name.
+
+        Args:
+            name (str): Name of the Custom service. This should be unique
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/custom_services/{name}/"
+
+        return await self.get(url)
+
     async def airgroup_config_delete_aruba_custom_services_id2(
         self,
         name: str,
     ) -> Response:
-        """Delete custom_services by identifier name.
+        """Delete custom service for given name.
 
         Args:
             name (str): Name of the Custom service. This should be unique
@@ -18485,65 +19317,398 @@ class AllCalls(CentralApi):
 
     async def airgroup_config_get_aruba_custom_services_id4(
         self,
+        last_index: str = 0,
+        search_name: str = None,
+        offset: str = 0,
+        limit: int = 100,
     ) -> Response:
-        """Retrieve custom_services.
+        """Retrieve all custom service definitions.
+
+        Args:
+            last_index (str, optional): Last seen index returned part of the previous query . It can
+                be used instead of offset for seeking the table faster
+            search_name (str, optional): Specify partial/complete string that will be used to search
+                the key('name') for this list
+            offset (str, optional): Offset value from where to start lookup in the table Defaults to
+                0.
+            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
+                and maximum value allowed is 10 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/airgroup-config/v2/custom_services/"
 
-        return await self.get(url)
+        params = {
+            'last_index': last_index,
+            'search_name': search_name,
+            'offset': offset,
+            'limit': limit
+        }
 
-    async def airgroup_config_get_aruba_disallowed_roles_id5(
+        return await self.get(url, params=params)
+
+    async def airgroup_config_put_aruba_admin_user_ids_id3(
         self,
-        mac_address: str,
-        role: str,
+        user_id: str,
+        new_user_id: str,
     ) -> Response:
-        """Retrieve disallowed_roles by identifier role.
+        """Create/Update entry in admin user-ids for given user_id.
 
         Args:
-            mac_address (str): Mac-address of the airgroup server
-            role (str): User role that needs to be disallowed
+            user_id (str): User ID used to authenticate server devices
+            new_user_id (str): User ID used to authenticate server devices
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_disallowed_roles_id3(
-        self,
-        mac_address: str,
-        role: str,
-        new_role: str,
-    ) -> Response:
-        """Create disallowed_roles by identifier role.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            role (str): User role that needs to be disallowed
-            new_role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+        url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
 
         json_data = {
-            'new_role': new_role
+            'new_user_id': new_user_id
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_post_aruba_admin_user_ids_id3(
+        self,
+        user_id: str,
+        new_user_id: str,
+    ) -> Response:
+        """Create entry in admin user-ids for given user_id.
+
+        Args:
+            user_id (str): User ID used to authenticate server devices
+            new_user_id (str): User ID used to authenticate server devices
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
+
+        json_data = {
+            'new_user_id': new_user_id
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def airgroup_config_put_aruba_disallowed_roles_id3(
+    async def airgroup_config_get_aruba_admin_user_ids_id5(
+        self,
+        user_id: str,
+    ) -> Response:
+        """Retrieve entry in admin user-ids for given user_id.
+
+        Args:
+            user_id (str): User ID used to authenticate server devices
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_admin_user_ids_id3(
+        self,
+        user_id: str,
+    ) -> Response:
+        """Delete entry in admin user-ids for given user_id.
+
+        Args:
+            user_id (str): User ID used to authenticate server devices
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_admin_user_ids_id6(
+        self,
+    ) -> Response:
+        """Retrieve all user-ids treated as admin users for device visibility.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/"
+
+        return await self.get(url)
+
+    async def airgroup_config_put_aruba_personal_device_visibility_id4(
+        self,
+        restrict_personal: bool,
+        admin_user_ids: list,
+    ) -> Response:
+        """Create/Update Personal device visibility configuration.
+
+        Args:
+            restrict_personal (bool): Enabling this flag will restrict visibility of personal
+                devices to the owner of such devices
+            admin_user_ids (list): User-IDs associated with devices that are visible/available to
+                everyone. Access to Airgroup services on such devices are not restricted based on
+                'restrict_personal' configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/personal_device_visibility/"
+
+        json_data = {
+            'restrict_personal': restrict_personal,
+            'admin_user_ids': admin_user_ids
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_post_aruba_personal_device_visibility_id4(
+        self,
+        restrict_personal: bool,
+        admin_user_ids: list,
+    ) -> Response:
+        """Create Personal device visibility configuration.
+
+        Args:
+            restrict_personal (bool): Enabling this flag will restrict visibility of personal
+                devices to the owner of such devices
+            admin_user_ids (list): User-IDs associated with devices that are visible/available to
+                everyone. Access to Airgroup services on such devices are not restricted based on
+                'restrict_personal' configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/personal_device_visibility/"
+
+        json_data = {
+            'restrict_personal': restrict_personal,
+            'admin_user_ids': admin_user_ids
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_personal_device_visibility_id7(
+        self,
+    ) -> Response:
+        """Retrieve Personal device visibility configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/personal_device_visibility/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_personal_device_visibility_id4(
+        self,
+    ) -> Response:
+        """Delete Personal device visibility configuration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/personal_device_visibility/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_put_aruba_service_ids_id5(
+        self,
+        name: str,
+        service_id: str,
+        new_service_id: str,
+        enable: bool,
+    ) -> Response:
+        """Create/Update service-id mapping for given standard service.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+            service_id (str): An MDNS or SSDP service ID
+            new_service_id (str): An MDNS or SSDP service ID
+            enable (bool): Flag to indicate this service-id is enabled as part of the parent
+                standard service. A standard service-id can be disabled if it needs to be added in a
+                custom service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/{service_id}/"
+
+        json_data = {
+            'new_service_id': new_service_id,
+            'enable': enable
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_post_aruba_service_ids_id5(
+        self,
+        name: str,
+        service_id: str,
+        new_service_id: str,
+        enable: bool,
+    ) -> Response:
+        """Create service-id mapping for given standard service.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+            service_id (str): An MDNS or SSDP service ID
+            new_service_id (str): An MDNS or SSDP service ID
+            enable (bool): Flag to indicate this service-id is enabled as part of the parent
+                standard service. A standard service-id can be disabled if it needs to be added in a
+                custom service
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/{service_id}/"
+
+        json_data = {
+            'new_service_id': new_service_id,
+            'enable': enable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_service_ids_id8(
+        self,
+        name: str,
+        service_id: str,
+    ) -> Response:
+        """Retrieve service-id mapping for given standard service.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+            service_id (str): An MDNS or SSDP service ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/{service_id}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_service_ids_id9(
+        self,
+        name: str,
+    ) -> Response:
+        """Retrieve all service-ids for given standard service.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/"
+
+        return await self.get(url)
+
+    async def airgroup_config_put_aruba_standard_services_id6(
+        self,
+        name: str,
+        new_name: str,
+        description: str,
+        service_ids: list,
+    ) -> Response:
+        """Create/Update standard service for given name.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+            new_name (str): Name of the Standard(Pre-defined) Airgroup service.
+            description (str): Modified description of a standard service
+            service_ids (list): Service-IDs mapped to this pre-defined Airgroup service. The mapping
+                can be disabled/re-enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'description': description,
+            'service_ids': service_ids
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_post_aruba_standard_services_id6(
+        self,
+        name: str,
+        new_name: str,
+        description: str,
+        service_ids: list,
+    ) -> Response:
+        """Create standard service for given name.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+            new_name (str): Name of the Standard(Pre-defined) Airgroup service.
+            description (str): Modified description of a standard service
+            service_ids (list): Service-IDs mapped to this pre-defined Airgroup service. The mapping
+                can be disabled/re-enabled
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'description': description,
+            'service_ids': service_ids
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_standard_services_id10(
+        self,
+        name: str,
+    ) -> Response:
+        """Retrieve standard service for given name.
+
+        Args:
+            name (str): Name of the Standard(Pre-defined) Airgroup service.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/common_config/standard_services/{name}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_standard_services_id11(
+        self,
+    ) -> Response:
+        """Retrieve all standard Airgroup service definitions.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/standard_services/"
+
+        return await self.get(url)
+
+    async def airgroup_config_get_aruba_common_config_id12(
+        self,
+    ) -> Response:
+        """Retrieve common_config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/airgroup-config/v2/common_config/"
+
+        return await self.get(url)
+
+    async def airgroup_config_put_aruba_disallowed_roles_id7(
         self,
         mac_address: str,
         role: str,
         new_role: str,
     ) -> Response:
-        """Create/Update disallowed_roles by identifier role.
+        """Create/Update disallowed role for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18561,12 +19726,54 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_roles_id3(
+    async def airgroup_config_post_aruba_disallowed_roles_id7(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create disallowed role for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id13(
         self,
         mac_address: str,
         role: str,
     ) -> Response:
-        """Delete disallowed_roles by identifier role.
+        """Retrieve disallowed role for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_disallowed_roles_id5(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Delete disallowed role for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18579,11 +19786,11 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_roles_id6(
+    async def airgroup_config_get_aruba_disallowed_roles_id14(
         self,
         mac_address: str,
     ) -> Response:
-        """Retrieve disallowed_roles.
+        """Retrieve all disallowed roles for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18595,55 +19802,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_allowed_roles_id7(
-        self,
-        mac_address: str,
-        role: str,
-    ) -> Response:
-        """Retrieve allowed_roles by identifier role.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_allowed_roles_id4(
+    async def airgroup_config_put_aruba_allowed_roles_id8(
         self,
         mac_address: str,
         role: str,
         new_role: str,
     ) -> Response:
-        """Create allowed_roles by identifier role.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            role (str): User role that needs to be disallowed
-            new_role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
-
-        json_data = {
-            'new_role': new_role
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_allowed_roles_id4(
-        self,
-        mac_address: str,
-        role: str,
-        new_role: str,
-    ) -> Response:
-        """Create/Update allowed_roles by identifier role.
+        """Create/Update allowed role for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18661,12 +19826,54 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_allowed_roles_id4(
+    async def airgroup_config_post_aruba_allowed_roles_id8(
+        self,
+        mac_address: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create allowed role for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_allowed_roles_id15(
         self,
         mac_address: str,
         role: str,
     ) -> Response:
-        """Delete allowed_roles by identifier role.
+        """Retrieve allowed role for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_allowed_roles_id6(
+        self,
+        mac_address: str,
+        role: str,
+    ) -> Response:
+        """Delete allowed role for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18679,11 +19886,11 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_allowed_roles_id8(
+    async def airgroup_config_get_aruba_allowed_roles_id16(
         self,
         mac_address: str,
     ) -> Response:
-        """Retrieve allowed_roles.
+        """Retrieve all allowed roles for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18695,56 +19902,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_role_restrictions_id9(
-        self,
-        mac_address: str,
-    ) -> Response:
-        """Retrieve role_restrictions.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_role_restrictions_id5(
+    async def airgroup_config_put_aruba_role_restrictions_id9(
         self,
         mac_address: str,
         disallowed_roles: list,
         allowed_roles: list,
     ) -> Response:
-        """Create role_restrictions.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            disallowed_roles (list): List of disallowed user Roles for this server. This must be
-                empty if any roles are configured in 'allowed_roles'
-            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
-                any roles are configured in 'disallowed_roles'
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
-
-        json_data = {
-            'disallowed_roles': disallowed_roles,
-            'allowed_roles': allowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_role_restrictions_id5(
-        self,
-        mac_address: str,
-        disallowed_roles: list,
-        allowed_roles: list,
-    ) -> Response:
-        """Create/Update role_restrictions.
+        """Create/Update role restrictions for given airgroup server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18765,11 +19929,54 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_role_restrictions_id5(
+    async def airgroup_config_post_aruba_role_restrictions_id9(
+        self,
+        mac_address: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+    ) -> Response:
+        """Create role restrictions for given airgroup server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
+
+        json_data = {
+            'disallowed_roles': disallowed_roles,
+            'allowed_roles': allowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_role_restrictions_id17(
         self,
         mac_address: str,
     ) -> Response:
-        """Delete role_restrictions.
+        """Retrieve role restrictions for given airgroup server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_role_restrictions_id7(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Delete role restrictions for given airgroup server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18781,60 +19988,14 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_ap_list_id10(
-        self,
-        mac_address: str,
-        serial_number: str,
-    ) -> Response:
-        """Retrieve ap_list by identifier serial_number.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            serial_number (str): AP Serial number
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_ap_list_id6(
+    async def airgroup_config_put_aruba_ap_list_id10(
         self,
         mac_address: str,
         serial_number: str,
         new_serial_number: str,
         device_name: str,
     ) -> Response:
-        """Create ap_list by identifier serial_number.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            serial_number (str): AP Serial number
-            new_serial_number (str): AP Serial number
-            device_name (str): Device Name. This field should be omitted for POST operation and
-                instead use 'serial_number' to identify the AP
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
-
-        json_data = {
-            'new_serial_number': new_serial_number,
-            'device_name': device_name
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_ap_list_id6(
-        self,
-        mac_address: str,
-        serial_number: str,
-        new_serial_number: str,
-        device_name: str,
-    ) -> Response:
-        """Create/Update ap_list by identifier serial_number.
+        """Create/Update entry for serial_number in visibility ap_list for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18855,12 +20016,58 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_ap_list_id6(
+    async def airgroup_config_post_aruba_ap_list_id10(
+        self,
+        mac_address: str,
+        serial_number: str,
+        new_serial_number: str,
+        device_name: str,
+    ) -> Response:
+        """Create entry for serial_number in visibility ap_list for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
+            new_serial_number (str): AP Serial number
+            device_name (str): Device Name. This field should be omitted for POST operation and
+                instead use 'serial_number' to identify the AP
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
+
+        json_data = {
+            'new_serial_number': new_serial_number,
+            'device_name': device_name
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_ap_list_id18(
         self,
         mac_address: str,
         serial_number: str,
     ) -> Response:
-        """Delete ap_list by identifier serial_number.
+        """Retrieve entry for serial_number in visibility ap_list for given server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            serial_number (str): AP Serial number
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_ap_list_id8(
+        self,
+        mac_address: str,
+        serial_number: str,
+    ) -> Response:
+        """Delete entry for serial_number in visibility ap_list for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18873,11 +20080,11 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_ap_list_id11(
+    async def airgroup_config_get_aruba_ap_list_id19(
         self,
         mac_address: str,
     ) -> Response:
-        """Retrieve ap_list.
+        """Retrieve complete visibility ap_list for given server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18889,51 +20096,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_network_visibility_id12(
-        self,
-        mac_address: str,
-    ) -> Response:
-        """Retrieve network_visibility.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_network_visibility_id7(
+    async def airgroup_config_put_aruba_network_visibility_id11(
         self,
         mac_address: str,
         ap_list: list,
     ) -> Response:
-        """Create network_visibility.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            ap_list (list): List of APs which will process this server's advertisements. One hop
-                neighbours of these APs will also be included in this list dynamically.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
-
-        json_data = {
-            'ap_list': ap_list
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_network_visibility_id7(
-        self,
-        mac_address: str,
-        ap_list: list,
-    ) -> Response:
-        """Create/Update network_visibility.
+        """Create/Update network visibility config for given airgroup server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18951,11 +20119,50 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_network_visibility_id7(
+    async def airgroup_config_post_aruba_network_visibility_id11(
+        self,
+        mac_address: str,
+        ap_list: list,
+    ) -> Response:
+        """Create network visibility config for given airgroup server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
+
+        json_data = {
+            'ap_list': ap_list
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_network_visibility_id20(
         self,
         mac_address: str,
     ) -> Response:
-        """Delete network_visibility.
+        """Retrieve network visibility config for given airgroup server.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_network_visibility_id9(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Delete network visibility config for given airgroup server.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -18967,23 +20174,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_servers_list_id13(
-        self,
-        mac_address: str,
-    ) -> Response:
-        """Retrieve servers_list by identifier mac_address.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_servers_list_id8(
+    async def airgroup_config_put_aruba_servers_list_id12(
         self,
         mac_address: str,
         new_mac_address: str,
@@ -18992,44 +20183,7 @@ class AllCalls(CentralApi):
         allowed_roles: list,
         ap_list: list,
     ) -> Response:
-        """Create servers_list by identifier mac_address.
-
-        Args:
-            mac_address (str): Mac-address of the airgroup server
-            new_mac_address (str): Mac-address of the airgroup server
-            name (str): Name of the airgroup server
-            disallowed_roles (list): List of disallowed user Roles for this server. This must be
-                empty if any roles are configured in 'allowed_roles'
-            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
-                any roles are configured in 'disallowed_roles'
-            ap_list (list): List of APs which will process this server's advertisements. One hop
-                neighbours of these APs will also be included in this list dynamically.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
-
-        json_data = {
-            'new_mac_address': new_mac_address,
-            'name': name,
-            'disallowed_roles': disallowed_roles,
-            'allowed_roles': allowed_roles,
-            'ap_list': ap_list
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_servers_list_id8(
-        self,
-        mac_address: str,
-        new_mac_address: str,
-        name: str,
-        disallowed_roles: list,
-        allowed_roles: list,
-        ap_list: list,
-    ) -> Response:
-        """Create/Update servers_list by identifier mac_address.
+        """Create/Update airgroup server config by mac_address.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -19057,11 +20211,64 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_servers_list_id8(
+    async def airgroup_config_post_aruba_servers_list_id12(
+        self,
+        mac_address: str,
+        new_mac_address: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+        ap_list: list,
+    ) -> Response:
+        """Create airgroup server config by mac_address.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+            new_mac_address (str): Mac-address of the airgroup server
+            name (str): Name of the airgroup server
+            disallowed_roles (list): List of disallowed user Roles for this server. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this server. This must be empty if
+                any roles are configured in 'disallowed_roles'
+            ap_list (list): List of APs which will process this server's advertisements. One hop
+                neighbours of these APs will also be included in this list dynamically.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
+
+        json_data = {
+            'new_mac_address': new_mac_address,
+            'name': name,
+            'disallowed_roles': disallowed_roles,
+            'allowed_roles': allowed_roles,
+            'ap_list': ap_list
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_servers_list_id21(
         self,
         mac_address: str,
     ) -> Response:
-        """Delete servers_list by identifier mac_address.
+        """Retrieve airgroup server config by mac_address.
+
+        Args:
+            mac_address (str): Mac-address of the airgroup server
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_servers_list_id10(
+        self,
+        mac_address: str,
+    ) -> Response:
+        """Delete airgroup server config by mac_address.
 
         Args:
             mac_address (str): Mac-address of the airgroup server
@@ -19073,21 +20280,21 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_servers_list_id14(
+    async def airgroup_config_get_aruba_servers_list_id22(
         self,
-        sort_by: str = None,
-        search_name: str = None,
-        search_mac: str = None,
+        sort: str = None,
+        name: str = None,
+        mac_address: str = None,
         offset: str = 0,
         limit: int = 100,
     ) -> Response:
-        """Retrieve servers_list.
+        """Retrieve all configured airgroup servers.
 
         Args:
-            sort_by (str, optional): This can be used to sort results by either name ore mac_address
-                of the servers. Only ascending order is supported.  Valid Values: mac, name
-            search_name (str, optional): This can be used to search the servers by their 'name'.
-            search_mac (str, optional): This can be used to search the servers by their
+            sort (str, optional): This can be used to sort results by either name ore mac_address of
+                the servers. Only ascending order is supported.  Valid Values: mac_address, name
+            name (str, optional): This can be used to search the servers by their 'name'.
+            mac_address (str, optional): This can be used to search the servers by their
                 'mac_address'.
             offset (str, optional): Offset value from where to start lookup in the table Defaults to
                 0.
@@ -19100,65 +20307,16 @@ class AllCalls(CentralApi):
         url = "/airgroup-config/v2/servers/servers_list/"
 
         params = {
-            'sort_by': sort_by,
-            'search_name': search_name,
-            'search_mac': search_mac,
+            'sort': sort,
+            'name': name,
+            'mac_address': mac_address,
             'offset': offset,
             'limit': limit
         }
 
         return await self.get(url, params=params)
 
-    async def airgroup_config_get_aruba_airgroup_status_id15(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve airgroup_status.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_airgroup_status_id9(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-    ) -> Response:
-        """Create airgroup_status.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
-                rides enable/disable at individual service level
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
-
-        json_data = {
-            'airgroup_status': airgroup_status
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_airgroup_status_id9(
+    async def airgroup_config_put_aruba_airgroup_status_id13(
         self,
         node_type: str,
         node_id: str,
@@ -19186,7 +20344,56 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_airgroup_status_id9(
+    async def airgroup_config_post_aruba_airgroup_status_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+    ) -> Response:
+        """Create airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        json_data = {
+            'airgroup_status': airgroup_status
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_airgroup_status_id23(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve airgroup_status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_airgroup_status_id11(
         self,
         node_type: str,
         node_id: str,
@@ -19207,67 +20414,14 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_general_settings_id16(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_general_settings_id10(
+    async def airgroup_config_put_aruba_general_settings_id14(
         self,
         node_type: str,
         node_id: str,
         airgroup_status: bool,
         inherited_from: str,
     ) -> Response:
-        """Create general_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
-                rides enable/disable at individual service level
-            inherited_from (str): This field indicates whether this profile was explicitly
-                configured at this node or inherited from a parent node
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
-
-        json_data = {
-            'airgroup_status': airgroup_status,
-            'inherited_from': inherited_from
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_general_settings_id10(
-        self,
-        node_type: str,
-        node_id: str,
-        airgroup_status: bool,
-        inherited_from: str,
-    ) -> Response:
-        """Create/Update general_settings.
+        """Create/Update General settings for given Global or Group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19292,12 +20446,65 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_general_settings_id10(
+    async def airgroup_config_post_aruba_general_settings_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        airgroup_status: bool,
+        inherited_from: str,
+    ) -> Response:
+        """Create General settings for given Global or Group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            airgroup_status (bool): Specifies if AirGroup service is enabled/disabled. This over-
+                rides enable/disable at individual service level
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        json_data = {
+            'airgroup_status': airgroup_status,
+            'inherited_from': inherited_from
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_general_settings_id24(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete general_settings.
+        """Retrieve General settings for given Global or Group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_general_settings_id12(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete General settings for given Global or Group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19313,34 +20520,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_vlans_id17(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        vlan_or_range: str,
-    ) -> Response:
-        """Retrieve disallowed_vlans by identifier vlan_or_range.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_disallowed_vlans_id11(
+    async def airgroup_config_put_aruba_disallowed_vlans_id15(
         self,
         node_type: str,
         node_id: str,
@@ -19348,41 +20528,7 @@ class AllCalls(CentralApi):
         vlan_or_range: str,
         new_vlan_or_range: str,
     ) -> Response:
-        """Create disallowed_vlans by identifier vlan_or_range.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
-
-        json_data = {
-            'new_vlan_or_range': new_vlan_or_range
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_vlans_id11(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        vlan_or_range: str,
-        new_vlan_or_range: str,
-    ) -> Response:
-        """Create/Update disallowed_vlans by identifier vlan_or_range.
+        """Create/Update disallowed vlan for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19408,14 +20554,75 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_vlans_id11(
+    async def airgroup_config_post_aruba_disallowed_vlans_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
+    ) -> Response:
+        """Create disallowed vlan for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
+
+        json_data = {
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_disallowed_vlans_id25(
         self,
         node_type: str,
         node_id: str,
         name: str,
         vlan_or_range: str,
     ) -> Response:
-        """Delete disallowed_vlans by identifier vlan_or_range.
+        """Retrieve disallowed vlan for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_disallowed_vlans_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+    ) -> Response:
+        """Delete disallowed vlan for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19435,13 +20642,13 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_vlans_id18(
+    async def airgroup_config_get_aruba_disallowed_vlans_id26(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Retrieve disallowed_vlans.
+        """Retrieve all disallowed vlans for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19459,34 +20666,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_allowed_vlans_id19(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        vlan_or_range: str,
-    ) -> Response:
-        """Retrieve allowed_vlans by identifier vlan_or_range.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_allowed_vlans_id12(
+    async def airgroup_config_put_aruba_allowed_vlans_id16(
         self,
         node_type: str,
         node_id: str,
@@ -19494,41 +20674,7 @@ class AllCalls(CentralApi):
         vlan_or_range: str,
         new_vlan_or_range: str,
     ) -> Response:
-        """Create allowed_vlans by identifier vlan_or_range.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
-                '200-300')
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
-
-        json_data = {
-            'new_vlan_or_range': new_vlan_or_range
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_allowed_vlans_id12(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        vlan_or_range: str,
-        new_vlan_or_range: str,
-    ) -> Response:
-        """Create/Update allowed_vlans by identifier vlan_or_range.
+        """Create/Update allowed vlan for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19554,14 +20700,75 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_allowed_vlans_id12(
+    async def airgroup_config_post_aruba_allowed_vlans_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+        new_vlan_or_range: str,
+    ) -> Response:
+        """Create allowed vlan for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+            new_vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        json_data = {
+            'new_vlan_or_range': new_vlan_or_range
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_allowed_vlans_id27(
         self,
         node_type: str,
         node_id: str,
         name: str,
         vlan_or_range: str,
     ) -> Response:
-        """Delete allowed_vlans by identifier vlan_or_range.
+        """Retrieve allowed vlan for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            vlan_or_range (str): String representing a vlan-id or range of vlan-ids (such as
+                '200-300')
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_allowed_vlans_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        vlan_or_range: str,
+    ) -> Response:
+        """Delete allowed vlan for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19581,13 +20788,13 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_allowed_vlans_id20(
+    async def airgroup_config_get_aruba_allowed_vlans_id28(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Retrieve allowed_vlans.
+        """Retrieve all allowed vlans for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19605,13 +20812,83 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_vlan_restrictions_id21(
+    async def airgroup_config_put_aruba_vlan_restrictions_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+    ) -> Response:
+        """Create/Update vlan restriction for given service at Global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_vlans (list): Disallowed VLAN IDs or range of VLAN IDs (eg '100-200'. This
+                list must be empty if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'disallowed_vlans' has vlans configured
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def airgroup_config_post_aruba_vlan_restrictions_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+    ) -> Response:
+        """Create vlan restriction for given service at Global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_vlans (list): Disallowed VLAN IDs or range of VLAN IDs (eg '100-200'. This
+                list must be empty if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'disallowed_vlans' has vlans configured
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
+
+        json_data = {
+            'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_vlan_restrictions_id29(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Retrieve vlan_restrictions.
+        """Retrieve vlan restriction for given service at Global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19629,83 +20906,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_post_aruba_vlan_restrictions_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        disallowed_vlans: list,
-        allowed_vlans: list,
-    ) -> Response:
-        """Create vlan_restrictions.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
-                This list must be if vlans are configured as part of 'allowed_vlans'.
-            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
-                empty if 'allowed_vlans' has vlans configured
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'allowed_vlans': allowed_vlans
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_vlan_restrictions_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        disallowed_vlans: list,
-        allowed_vlans: list,
-    ) -> Response:
-        """Create/Update vlan_restrictions.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
-                This list must be if vlans are configured as part of 'allowed_vlans'.
-            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
-                empty if 'allowed_vlans' has vlans configured
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
-
-        json_data = {
-            'disallowed_vlans': disallowed_vlans,
-            'allowed_vlans': allowed_vlans
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def airgroup_config_delete_aruba_vlan_restrictions_id13(
+    async def airgroup_config_delete_aruba_vlan_restrictions_id15(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Delete vlan_restrictions.
+        """Delete vlan restriction for given service at Global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19723,33 +20930,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_roles_id22(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        role: str,
-    ) -> Response:
-        """Retrieve disallowed_roles by identifier role.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_disallowed_roles_id14(
+    async def airgroup_config_put_aruba_disallowed_roles_id18(
         self,
         node_type: str,
         node_id: str,
@@ -19757,39 +20938,7 @@ class AllCalls(CentralApi):
         role: str,
         new_role: str,
     ) -> Response:
-        """Create disallowed_roles by identifier role.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            role (str): User role that needs to be disallowed
-            new_role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
-
-        json_data = {
-            'new_role': new_role
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_disallowed_roles_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        role: str,
-        new_role: str,
-    ) -> Response:
-        """Create/Update disallowed_roles by identifier role.
+        """Create/Update disallowed role for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19813,14 +20962,72 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_disallowed_roles_id14(
+    async def airgroup_config_post_aruba_disallowed_roles_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create disallowed role for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_disallowed_roles_id30(
         self,
         node_type: str,
         node_id: str,
         name: str,
         role: str,
     ) -> Response:
-        """Delete disallowed_roles by identifier role.
+        """Retrieve disallowed role for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_disallowed_roles_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Delete disallowed role for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19839,13 +21046,13 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_disallowed_roles_id23(
+    async def airgroup_config_get_aruba_disallowed_roles_id31(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Retrieve disallowed_roles.
+        """Retrieve all disallowed roles for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19863,33 +21070,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_allowed_roles_id24(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        role: str,
-    ) -> Response:
-        """Retrieve allowed_roles by identifier role.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_allowed_roles_id15(
+    async def airgroup_config_put_aruba_allowed_roles_id19(
         self,
         node_type: str,
         node_id: str,
@@ -19897,39 +21078,7 @@ class AllCalls(CentralApi):
         role: str,
         new_role: str,
     ) -> Response:
-        """Create allowed_roles by identifier role.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            role (str): User role that needs to be disallowed
-            new_role (str): User role that needs to be disallowed
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
-
-        json_data = {
-            'new_role': new_role
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_allowed_roles_id15(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        role: str,
-        new_role: str,
-    ) -> Response:
-        """Create/Update allowed_roles by identifier role.
+        """Create/Update allowed role for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19953,14 +21102,72 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_allowed_roles_id15(
+    async def airgroup_config_post_aruba_allowed_roles_id19(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+        new_role: str,
+    ) -> Response:
+        """Create allowed role for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+            new_role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        json_data = {
+            'new_role': new_role
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_allowed_roles_id32(
         self,
         node_type: str,
         node_id: str,
         name: str,
         role: str,
     ) -> Response:
-        """Delete allowed_roles by identifier role.
+        """Retrieve allowed role for given service.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            role (str): User role that needs to be disallowed
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_allowed_roles_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        role: str,
+    ) -> Response:
+        """Delete allowed role for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -19979,13 +21186,13 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_allowed_roles_id25(
+    async def airgroup_config_get_aruba_allowed_roles_id33(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Retrieve allowed_roles.
+        """Retrieve all allowed roles for given service.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20003,31 +21210,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_role_restrictions_id26(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-    ) -> Response:
-        """Retrieve role_restrictions.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_role_restrictions_id16(
+    async def airgroup_config_put_aruba_role_restrictions_id20(
         self,
         node_type: str,
         node_id: str,
@@ -20035,42 +21218,7 @@ class AllCalls(CentralApi):
         disallowed_roles: list,
         allowed_roles: list,
     ) -> Response:
-        """Create role_restrictions.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            disallowed_roles (list): List of disallowed user Roles for this service. This must be
-                empty if any roles are configured in 'allowed_roles'
-            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
-                any roles are configured in 'disallowed_roles'
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
-
-        json_data = {
-            'disallowed_roles': disallowed_roles,
-            'allowed_roles': allowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_role_restrictions_id16(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        disallowed_roles: list,
-        allowed_roles: list,
-    ) -> Response:
-        """Create/Update role_restrictions.
+        """Create/Update role restrictions for given service at global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20097,13 +21245,72 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_role_restrictions_id16(
+    async def airgroup_config_post_aruba_role_restrictions_id20(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        disallowed_roles: list,
+        allowed_roles: list,
+    ) -> Response:
+        """Create role restrictions for given service at global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
+
+        json_data = {
+            'disallowed_roles': disallowed_roles,
+            'allowed_roles': allowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_role_restrictions_id34(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Delete role_restrictions.
+        """Retrieve role restrictions for given service at global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_role_restrictions_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Delete role restrictions for given service at global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20121,31 +21328,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_services_id27(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-    ) -> Response:
-        """Retrieve services by identifier name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
-
-        return await self.get(url)
-
-    async def airgroup_config_post_aruba_services_id17(
+    async def airgroup_config_put_aruba_services_id21(
         self,
         node_type: str,
         node_id: str,
@@ -20161,7 +21344,7 @@ class AllCalls(CentralApi):
         disallowed_roles: list,
         allowed_roles: list,
     ) -> Response:
-        """Create services by identifier name.
+        """Create/Update airgroup service policy by name at Global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20183,77 +21366,10 @@ class AllCalls(CentralApi):
                 configured, the records are purged as per TTL/max-age specified in packets
             is_custom (bool): Indicates whether the service is pre-defined or custom (user-defined)
                 service. This is a read-only field.
-            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
-                This list must be if vlans are configured as part of 'allowed_vlans'.
+            disallowed_vlans (list): Disallowed VLAN IDs or range of VLAN IDs (eg '100-200'. This
+                list must be empty if vlans are configured as part of 'allowed_vlans'.
             allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
-                empty if 'allowed_vlans' has vlans configured
-            disallowed_roles (list): List of disallowed user Roles for this service. This must be
-                empty if any roles are configured in 'allowed_roles'
-            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
-                any roles are configured in 'disallowed_roles'
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
-
-        json_data = {
-            'new_name': new_name,
-            'inherited_from': inherited_from,
-            'desc': desc,
-            'status': status,
-            'server_expiry_time': server_expiry_time,
-            'is_custom': is_custom,
-            'disallowed_vlans': disallowed_vlans,
-            'allowed_vlans': allowed_vlans,
-            'disallowed_roles': disallowed_roles,
-            'allowed_roles': allowed_roles
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def airgroup_config_put_aruba_services_id17(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-        new_name: str,
-        inherited_from: str,
-        desc: str,
-        status: bool,
-        server_expiry_time: int,
-        is_custom: bool,
-        disallowed_vlans: list,
-        allowed_vlans: list,
-        disallowed_roles: list,
-        allowed_roles: list,
-    ) -> Response:
-        """Create/Update services by identifier name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The identifier of the configuration node(aka group). For node-type
-                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
-                the group-name
-            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
-                services or a custom-service that has been defined by user.
-            new_name (str): Name of the Airgroup service. This should refer to one of the pre-
-                defined services or a custom-service that has been defined by user.
-            inherited_from (str): This field indicates whether this profile was explicitly
-                configured at this node or inherited from a parent node
-            desc (str): Description of the Airgroup service. This is a read-only field
-            status (bool): Indicates whether service is enabled or disabled
-            server_expiry_time (int): Duration in minutes after which the records of inactive
-                servers are purged. This timer will be used for all server records belonging to this
-                service. Allowed range is from 60 (1 hour) to 360 (6 hours). If this is not
-                configured, the records are purged as per TTL/max-age specified in packets
-            is_custom (bool): Indicates whether the service is pre-defined or custom (user-defined)
-                service. This is a read-only field.
-            disallowed_vlans (list): List of disallowed VLAN IDs or range of VLAN IDs (eg '100-200'.
-                This list must be if vlans are configured as part of 'allowed_vlans'.
-            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
-                empty if 'allowed_vlans' has vlans configured
+                empty if 'disallowed_vlans' has vlans configured
             disallowed_roles (list): List of disallowed user Roles for this service. This must be
                 empty if any roles are configured in 'allowed_roles'
             allowed_roles (list): List of allowed user Roles for this service. This must be empty if
@@ -20279,13 +21395,104 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airgroup_config_delete_aruba_services_id17(
+    async def airgroup_config_post_aruba_services_id21(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        new_name: str,
+        inherited_from: str,
+        desc: str,
+        status: bool,
+        server_expiry_time: int,
+        is_custom: bool,
+        disallowed_vlans: list,
+        allowed_vlans: list,
+        disallowed_roles: list,
+        allowed_roles: list,
+    ) -> Response:
+        """Create airgroup service policy by name at Global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+            new_name (str): Name of the Airgroup service. This should refer to one of the pre-
+                defined services or a custom-service that has been defined by user.
+            inherited_from (str): This field indicates whether this profile was explicitly
+                configured at this node or inherited from a parent node
+            desc (str): Description of the Airgroup service. This is a read-only field
+            status (bool): Indicates whether service is enabled or disabled
+            server_expiry_time (int): Duration in minutes after which the records of inactive
+                servers are purged. This timer will be used for all server records belonging to this
+                service. Allowed range is from 60 (1 hour) to 360 (6 hours). If this is not
+                configured, the records are purged as per TTL/max-age specified in packets
+            is_custom (bool): Indicates whether the service is pre-defined or custom (user-defined)
+                service. This is a read-only field.
+            disallowed_vlans (list): Disallowed VLAN IDs or range of VLAN IDs (eg '100-200'. This
+                list must be empty if vlans are configured as part of 'allowed_vlans'.
+            allowed_vlans (list): List of allowed VLAN ids or range of VLAN ids. This list must be
+                empty if 'disallowed_vlans' has vlans configured
+            disallowed_roles (list): List of disallowed user Roles for this service. This must be
+                empty if any roles are configured in 'allowed_roles'
+            allowed_roles (list): List of allowed user Roles for this service. This must be empty if
+                any roles are configured in 'disallowed_roles'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'inherited_from': inherited_from,
+            'desc': desc,
+            'status': status,
+            'server_expiry_time': server_expiry_time,
+            'is_custom': is_custom,
+            'disallowed_vlans': disallowed_vlans,
+            'allowed_vlans': allowed_vlans,
+            'disallowed_roles': disallowed_roles,
+            'allowed_roles': allowed_roles
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airgroup_config_get_aruba_services_id35(
         self,
         node_type: str,
         node_id: str,
         name: str,
     ) -> Response:
-        """Delete services by identifier name.
+        """Retrieve airgroup service policy by name at Global or group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+            name (str): Name of the Airgroup service. This should refer to one of the pre-defined
+                services or a custom-service that has been defined by user.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
+
+        return await self.get(url)
+
+    async def airgroup_config_delete_aruba_services_id19(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Delete airgroup service policy by name at Global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20303,12 +21510,12 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def airgroup_config_get_aruba_services_id28(
+    async def airgroup_config_get_aruba_services_id36(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve services.
+        """Retrieve all airgroup service policies at given Global or group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20324,12 +21531,12 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_config_id29(
+    async def airgroup_config_get_aruba_config_id37(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve config.
+        """Retrieve complete Airgroup config for given Global or Group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20345,7 +21552,28 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def airgroup_config_get_aruba_node_list_id30(
+    async def airgroup_config_delete_aruba_config_id20(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete complete Airgroup config for given Global or Group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The identifier of the configuration node(aka group). For node-type
+                GLOBAL, node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to
+                the group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        return await self.delete(url)
+
+    async def airgroup_config_get_aruba_node_list_id38(
         self,
         node_type: str,
         node_id: str,
@@ -20365,77 +21593,6 @@ class AllCalls(CentralApi):
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/"
 
         return await self.get(url)
-
-    async def airmatch_config_get_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        return await self.get(url)
-
-    async def airmatch_config_post_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        schedule: bool,
-        deploy_hour: int,
-        quality_threshold: int,
-        quality_threshold_24ghz: int,
-        quality_threshold_5ghz: int,
-        quality_threshold_6ghz: int,
-    ) -> Response:
-        """Create system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
-                occur for APs. Default: Enabled
-            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
-                Time Zone. Range 0-23. Default: 5
-            quality_threshold (int): Quality threshold value above which solutions are deployed.
-                This configuration is deprecated and will have no effect. Please use per band fields
-                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
-                'quality_threshold_6ghz'
-            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
-                solutions are deployed. Range 0-100. Default: 8
-            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
-                solutions are deployed. Range 0-100. Default: 8
-            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
-                solutions are deployed. Range 0-100. Default: 8
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        json_data = {
-            'schedule': schedule,
-            'deploy_hour': deploy_hour,
-            'quality_threshold': quality_threshold,
-            'quality_threshold_24ghz': quality_threshold_24ghz,
-            'quality_threshold_5ghz': quality_threshold_5ghz,
-            'quality_threshold_6ghz': quality_threshold_6ghz
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def airmatch_config_put_aruba_system_id1(
         self,
@@ -20487,49 +21644,7 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def airmatch_config_delete_aruba_system_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete system.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
-
-        return await self.delete(url)
-
-    async def airmatch_config_get_aruba_config_id2(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def airmatch_config_post_aruba_config_id2(
+    async def airmatch_config_post_aruba_system_id1(
         self,
         node_type: str,
         node_id: str,
@@ -20540,7 +21655,7 @@ class AllCalls(CentralApi):
         quality_threshold_5ghz: int,
         quality_threshold_6ghz: int,
     ) -> Response:
-        """Create config.
+        """Create system.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20566,7 +21681,7 @@ class AllCalls(CentralApi):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
         json_data = {
             'schedule': schedule,
@@ -20578,6 +21693,48 @@ class AllCalls(CentralApi):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def airmatch_config_get_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        return await self.get(url)
+
+    async def airmatch_config_delete_aruba_system_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete system.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
+
+        return await self.delete(url)
 
     async def airmatch_config_put_aruba_config_id2(
         self,
@@ -20629,6 +21786,77 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def airmatch_config_post_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        schedule: bool,
+        deploy_hour: int,
+        quality_threshold: int,
+        quality_threshold_24ghz: int,
+        quality_threshold_5ghz: int,
+        quality_threshold_6ghz: int,
+    ) -> Response:
+        """Create config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            schedule (bool): Indicates whether daily Airmatch optimizations and deployments should
+                occur for APs. Default: Enabled
+            deploy_hour (int): Indicates Hour of Day for RF Plan Deployment. Deploy hour in AP's
+                Time Zone. Range 0-23. Default: 5
+            quality_threshold (int): Quality threshold value above which solutions are deployed.
+                This configuration is deprecated and will have no effect. Please use per band fields
+                such as 'quality_threshold_24ghz', 'quality_threshold_5ghz' and
+                'quality_threshold_6ghz'
+            quality_threshold_24ghz (int): Quality threshold value for 2.4 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_5ghz (int): Quality threshold value for 5 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+            quality_threshold_6ghz (int): Quality threshold value for 6 Ghz band above which
+                solutions are deployed. Range 0-100. Default: 8
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'schedule': schedule,
+            'deploy_hour': deploy_hour,
+            'quality_threshold': quality_threshold,
+            'quality_threshold_24ghz': quality_threshold_24ghz,
+            'quality_threshold_5ghz': quality_threshold_5ghz,
+            'quality_threshold_6ghz': quality_threshold_6ghz
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def airmatch_config_get_aruba_config_id2(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
     async def airmatch_config_delete_aruba_config_id2(
         self,
         node_type: str,
@@ -20671,61 +21899,13 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ids_ips_config_get_aruba_ips_siem_notification_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve siem_notification.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_post_aruba_ips_siem_notification_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        enable: bool,
-    ) -> Response:
-        """Create siem_notification.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            enable (bool): Enable reporting of threats to SIEM systems
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
-
-        json_data = {
-            'enable': enable
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def ids_ips_config_put_aruba_ips_siem_notification_id1(
         self,
         node_type: str,
         node_id: str,
         enable: bool,
     ) -> Response:
-        """Create/Update siem_notification.
+        """Create/Update SIEM server notification configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20746,12 +21926,60 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ids_ips_config_post_aruba_ips_siem_notification_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        enable: bool,
+    ) -> Response:
+        """Create SIEM server notification configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            enable (bool): Enable reporting of threats to SIEM systems
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
+
+        json_data = {
+            'enable': enable
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ids_ips_config_get_aruba_ips_siem_notification_id1(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve SIEM server notification configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
+
+        return await self.get(url)
+
     async def ids_ips_config_delete_aruba_ips_siem_notification_id1(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete siem_notification.
+        """Delete SIEM server notification configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20767,67 +21995,6 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ids_ips_config_get_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-    ) -> Response:
-        """Retrieve siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_post_aruba_ips_siem_servers_list_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        siem_server_name: str,
-        new_siem_server_name: str,
-        siem_server_url: str,
-        siem_index: str,
-        siem_token: str,
-    ) -> Response:
-        """Create siem_servers_list by identifier siem_server_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            siem_server_name (str): SIEM server name
-            new_siem_server_name (str): SIEM server name
-            siem_server_url (str): SIEM server url including the port
-            siem_index (str): SIEM bucket that the events have to go into
-            siem_token (str): SIEM authentication token; HEC token in case of Splunk
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
-
-        json_data = {
-            'new_siem_server_name': new_siem_server_name,
-            'siem_server_url': siem_server_url,
-            'siem_index': siem_index,
-            'siem_token': siem_token
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def ids_ips_config_put_aruba_ips_siem_servers_list_id2(
         self,
         node_type: str,
@@ -20838,7 +22005,7 @@ class AllCalls(CentralApi):
         siem_index: str,
         siem_token: str,
     ) -> Response:
-        """Create/Update siem_servers_list by identifier siem_server_name.
+        """Create/Update SIEM server config for given siem_server_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20866,13 +22033,74 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ids_ips_config_post_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+        new_siem_server_name: str,
+        siem_server_url: str,
+        siem_index: str,
+        siem_token: str,
+    ) -> Response:
+        """Create SIEM server config for given siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+            new_siem_server_name (str): SIEM server name
+            siem_server_url (str): SIEM server url including the port
+            siem_index (str): SIEM bucket that the events have to go into
+            siem_token (str): SIEM authentication token; HEC token in case of Splunk
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        json_data = {
+            'new_siem_server_name': new_siem_server_name,
+            'siem_server_url': siem_server_url,
+            'siem_index': siem_index,
+            'siem_token': siem_token
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ids_ips_config_get_aruba_ips_siem_servers_list_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        siem_server_name: str,
+    ) -> Response:
+        """Retrieve SIEM server config for given siem_server_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            siem_server_name (str): SIEM server name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
+
+        return await self.get(url)
+
     async def ids_ips_config_delete_aruba_ips_siem_servers_list_id2(
         self,
         node_type: str,
         node_id: str,
         siem_server_name: str,
     ) -> Response:
-        """Delete siem_servers_list by identifier siem_server_name.
+        """Delete SIEM server config for given siem_server_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20894,7 +22122,7 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve siem_servers_list.
+        """Retrieve config for all SIEM servers.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20910,57 +22138,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ids_ips_config_get_aruba_ips_config_id4(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def ids_ips_config_post_aruba_ips_config_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        enable: bool,
-        siem_servers_list: list,
-    ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected.
-            enable (bool): Enable reporting of threats to SIEM systems
-            siem_servers_list (list): SIEM Server Configuration
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'enable': enable,
-            'siem_servers_list': siem_servers_list
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def ids_ips_config_put_aruba_ips_config_id3(
         self,
         node_type: str,
@@ -20968,7 +22145,7 @@ class AllCalls(CentralApi):
         enable: bool,
         siem_servers_list: list,
     ) -> Response:
-        """Create/Update config.
+        """Create/Update complete config for IDS/IPS.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -20991,12 +22168,63 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ids_ips_config_post_aruba_ips_config_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        enable: bool,
+        siem_servers_list: list,
+    ) -> Response:
+        """Create complete config for IDS/IPS.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            enable (bool): Enable reporting of threats to SIEM systems
+            siem_servers_list (list): SIEM Server Configuration
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'enable': enable,
+            'siem_servers_list': siem_servers_list
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ids_ips_config_get_aruba_ips_config_id4(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve complete config for IDS/IPS.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
     async def ids_ips_config_delete_aruba_ips_config_id3(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete config.
+        """Delete complete config for IDS/IPS.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21033,76 +22261,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ipms_config_get_aruba_ip_range_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-        range_id: str,
-    ) -> Response:
-        """Retrieve ip_range by identifier range_id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            range_id (str): Identifier for each IP range in the pool. This is just a string
-                identifier in form of 2 digit number that must be unique within each pool
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
-
-        return await self.get(url)
-
-    async def ipms_config_post_aruba_ip_range_id1(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-        range_id: str,
-        new_range_id: str,
-        start_ip: str,
-        end_ip: str,
-        is_conflicting: bool,
-    ) -> Response:
-        """Create ip_range by identifier range_id.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            range_id (str): Identifier for each IP range in the pool. This is just a string
-                identifier in form of 2 digit number that must be unique within each pool
-            new_range_id (str): Identifier for each IP range in the pool. This is just a string
-                identifier in form of 2 digit number that must be unique within each pool
-            start_ip (str): Starting IPv4 Address of the range.
-            end_ip (str): Last IPv4 Address of the range.
-            is_conflicting (bool): This is a Read-only field that indicates whether this range is
-                overlapping with any other range in the config. Adding of overlapping ranges is not
-                allowed. However, we can have such ranges when legacy config is migrated
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
-
-        json_data = {
-            'new_range_id': new_range_id,
-            'start_ip': start_ip,
-            'end_ip': end_ip,
-            'is_conflicting': is_conflicting
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def ipms_config_put_aruba_ip_range_id1(
         self,
         node_type: str,
@@ -21114,7 +22272,7 @@ class AllCalls(CentralApi):
         end_ip: str,
         is_conflicting: bool,
     ) -> Response:
-        """Create/Update ip_range by identifier range_id.
+        """Create/Update IP range by range_id for given address pool_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21147,13 +22305,83 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ipms_config_post_aruba_ip_range_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+        range_id: str,
+        new_range_id: str,
+        start_ip: str,
+        end_ip: str,
+        is_conflicting: bool,
+    ) -> Response:
+        """Create IP range by range_id for given address pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            range_id (str): Identifier for each IP range in the pool. This is just a string
+                identifier in form of 2 digit number that must be unique within each pool
+            new_range_id (str): Identifier for each IP range in the pool. This is just a string
+                identifier in form of 2 digit number that must be unique within each pool
+            start_ip (str): Starting IPv4 Address of the range.
+            end_ip (str): Last IPv4 Address of the range.
+            is_conflicting (bool): This is a Read-only field that indicates whether this range is
+                overlapping with any other range in the config. Adding of overlapping ranges is not
+                allowed. However, we can have such ranges when legacy config is migrated
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
+
+        json_data = {
+            'new_range_id': new_range_id,
+            'start_ip': start_ip,
+            'end_ip': end_ip,
+            'is_conflicting': is_conflicting
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ipms_config_get_aruba_ip_range_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+        range_id: str,
+    ) -> Response:
+        """Retrieve IP range by range_id for given address pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            range_id (str): Identifier for each IP range in the pool. This is just a string
+                identifier in form of 2 digit number that must be unique within each pool
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
+
+        return await self.get(url)
+
     async def ipms_config_get_aruba_ip_range_id2(
         self,
         node_type: str,
         node_id: str,
         pool_name: str,
     ) -> Response:
-        """Retrieve ip_range.
+        """Retrieve all IP ranges for given address pool_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21170,76 +22398,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ipms_config_get_aruba_address_pool_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-    ) -> Response:
-        """Retrieve address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        return await self.get(url)
-
-    async def ipms_config_post_aruba_address_pool_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        pool_name: str,
-        new_pool_name: str,
-        pool_type: str,
-        ip_range: list,
-        max_clients: int,
-        oldKey: str = None,
-    ) -> Response:
-        """Create address_pool by identifier pool_name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
-            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
-                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
-            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
-            max_clients (int): Maximum number of clients that can be allocated when subnets are
-                carved out from this pool. This applies only to pool that are of type
-                'DHCP_POOL_TYPE'
-            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
-
-        params = {
-            'oldKey': oldKey
-        }
-
-        json_data = {
-            'new_pool_name': new_pool_name,
-            'pool_type': pool_type,
-            'ip_range': ip_range,
-            'max_clients': max_clients
-        }
-
-        return await self.post(url, json_data=json_data, params=params)
-
     async def ipms_config_put_aruba_address_pool_id2(
         self,
         node_type: str,
@@ -21251,7 +22409,7 @@ class AllCalls(CentralApi):
         max_clients: int,
         oldKey: str = None,
     ) -> Response:
-        """Create/Update address_pool by identifier pool_name.
+        """Create/Update IP address pool for given pool_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21287,13 +22445,83 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data, params=params)
 
+    async def ipms_config_post_aruba_address_pool_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+        new_pool_name: str,
+        pool_type: str,
+        ip_range: list,
+        max_clients: int,
+        oldKey: str = None,
+    ) -> Response:
+        """Create IP address pool for given pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            new_pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+            pool_type (str): Pool Type identifying whether IP address is used as Inner-IP or is used
+                as part of DHCP pool  Valid Values: INNER_IP_POOL_TYPE, DHCP_POOL_TYPE
+            ip_range (list): IP Address Range. The ranges must not overlap within or across pools
+            max_clients (int): Maximum number of clients that can be allocated when subnets are
+                carved out from this pool. This applies only to pool that are of type
+                'DHCP_POOL_TYPE'
+            oldKey (str, optional): Specify old value of 'pool_name' if it needs to be replaced
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
+
+        params = {
+            'oldKey': oldKey
+        }
+
+        json_data = {
+            'new_pool_name': new_pool_name,
+            'pool_type': pool_type,
+            'ip_range': ip_range,
+            'max_clients': max_clients
+        }
+
+        return await self.post(url, json_data=json_data, params=params)
+
+    async def ipms_config_get_aruba_address_pool_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        pool_name: str,
+    ) -> Response:
+        """Retrieve IP address pool for given pool_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            pool_name (str): Name to identify an IP pool. Maximum characters allowed is 60.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
+
+        return await self.get(url)
+
     async def ipms_config_delete_aruba_address_pool_id1(
         self,
         node_type: str,
         node_id: str,
         pool_name: str,
     ) -> Response:
-        """Delete address_pool by identifier pool_name.
+        """Delete IP address pool for given pool_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21315,7 +22543,7 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve address_pool.
+        """Retrieve all IP address pools.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21336,7 +22564,7 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve config.
+        """Retrieve complete IPMS config.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21373,7 +22601,7 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def overlay_wlan_config_get_aruba_wlan_gw_cluster_list_id1(
+    async def overlay_wlan_config_put_aruba_wlan_gw_cluster_list_id1(
         self,
         node_type: str,
         node_id: str,
@@ -21381,8 +22609,14 @@ class AllCalls(CentralApi):
         profile_type: str,
         cluster_redundancy_type: str,
         cluster_group_name: str,
+        cluster: str,
+        new_cluster_group_name: str,
+        new_cluster_redundancy_type: str,
+        cluster_type: str,
+        tunnel_type: str,
     ) -> Response:
-        """Retrieve gw_cluster_list by identifier cluster_redundancy_type cluster_group_name.
+        """Create/Update Cluster mapping by redundancy-type and group-name for given profile and
+        type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21395,15 +22629,29 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY, BACKUP
-            cluster_group_name (str): Cluster Group Name. Group name to which the cluster belongs
-                to.
+            cluster_group_name (str): Group Name to which the cluster belongs to.
+            cluster (str): Cluster name
+            new_cluster_group_name (str): Group Name to which the cluster belongs to.
+            new_cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY,
+                BACKUP
+            cluster_type (str): Specifies if Cluster is explicitly identified using 'cluster' field
+                or implicitly using site mappings.  Valid Values: CLUSTER_ID, SITE_CLUSTER
+            tunnel_type (str): Type of Tunnel  Valid Values: IPSEC, GRE, MPLS, GREOIPSEC
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
-        return await self.get(url)
+        json_data = {
+            'cluster': cluster,
+            'new_cluster_group_name': new_cluster_group_name,
+            'new_cluster_redundancy_type': new_cluster_redundancy_type,
+            'cluster_type': cluster_type,
+            'tunnel_type': tunnel_type
+        }
+
+        return await self.put(url, json_data=json_data)
 
     async def overlay_wlan_config_post_aruba_wlan_gw_cluster_list_id1(
         self,
@@ -21413,13 +22661,13 @@ class AllCalls(CentralApi):
         profile_type: str,
         cluster_redundancy_type: str,
         cluster_group_name: str,
-        new_cluster_redundancy_type: str,
         cluster: str,
         new_cluster_group_name: str,
-        tunnel_type: str,
+        new_cluster_redundancy_type: str,
         cluster_type: str,
+        tunnel_type: str,
     ) -> Response:
-        """Create gw_cluster_list by identifier cluster_redundancy_type cluster_group_name.
+        """Create Cluster mapping by redundancy-type and group-name for given profile and type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21432,15 +22680,14 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY, BACKUP
-            cluster_group_name (str): Cluster Group Name. Group name to which the cluster belongs
-                to.
+            cluster_group_name (str): Group Name to which the cluster belongs to.
+            cluster (str): Cluster name
+            new_cluster_group_name (str): Group Name to which the cluster belongs to.
             new_cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY,
                 BACKUP
-            cluster (str): Cluster name
-            new_cluster_group_name (str): Cluster Group Name. Group name to which the cluster
-                belongs to.
+            cluster_type (str): Specifies if Cluster is explicitly identified using 'cluster' field
+                or implicitly using site mappings.  Valid Values: CLUSTER_ID, SITE_CLUSTER
             tunnel_type (str): Type of Tunnel  Valid Values: IPSEC, GRE, MPLS, GREOIPSEC
-            cluster_type (str): Type of Cluster  Valid Values: CLUSTER_ID, SITE_CLUSTER
 
         Returns:
             Response: CentralAPI Response object
@@ -21448,16 +22695,16 @@ class AllCalls(CentralApi):
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
         json_data = {
-            'new_cluster_redundancy_type': new_cluster_redundancy_type,
             'cluster': cluster,
             'new_cluster_group_name': new_cluster_group_name,
-            'tunnel_type': tunnel_type,
-            'cluster_type': cluster_type
+            'new_cluster_redundancy_type': new_cluster_redundancy_type,
+            'cluster_type': cluster_type,
+            'tunnel_type': tunnel_type
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def overlay_wlan_config_put_aruba_wlan_gw_cluster_list_id1(
+    async def overlay_wlan_config_get_aruba_wlan_gw_cluster_list_id1(
         self,
         node_type: str,
         node_id: str,
@@ -21465,13 +22712,8 @@ class AllCalls(CentralApi):
         profile_type: str,
         cluster_redundancy_type: str,
         cluster_group_name: str,
-        new_cluster_redundancy_type: str,
-        cluster: str,
-        new_cluster_group_name: str,
-        tunnel_type: str,
-        cluster_type: str,
     ) -> Response:
-        """Create/Update gw_cluster_list by identifier cluster_redundancy_type cluster_group_name.
+        """Retrieve Cluster mapping by redundancy-type and group-name for given profile and type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21484,30 +22726,14 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY, BACKUP
-            cluster_group_name (str): Cluster Group Name. Group name to which the cluster belongs
-                to.
-            new_cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY,
-                BACKUP
-            cluster (str): Cluster name
-            new_cluster_group_name (str): Cluster Group Name. Group name to which the cluster
-                belongs to.
-            tunnel_type (str): Type of Tunnel  Valid Values: IPSEC, GRE, MPLS, GREOIPSEC
-            cluster_type (str): Type of Cluster  Valid Values: CLUSTER_ID, SITE_CLUSTER
+            cluster_group_name (str): Group Name to which the cluster belongs to.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
-        json_data = {
-            'new_cluster_redundancy_type': new_cluster_redundancy_type,
-            'cluster': cluster,
-            'new_cluster_group_name': new_cluster_group_name,
-            'tunnel_type': tunnel_type,
-            'cluster_type': cluster_type
-        }
-
-        return await self.put(url, json_data=json_data)
+        return await self.get(url)
 
     async def overlay_wlan_config_delete_aruba_wlan_gw_cluster_list_id1(
         self,
@@ -21518,7 +22744,7 @@ class AllCalls(CentralApi):
         cluster_redundancy_type: str,
         cluster_group_name: str,
     ) -> Response:
-        """Delete gw_cluster_list by identifier cluster_redundancy_type cluster_group_name.
+        """Delete Cluster mapping by redundancy-type and group-name for given profile and type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21531,8 +22757,7 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             cluster_redundancy_type (str): Type of Cluster Redundancy  Valid Values: PRIMARY, BACKUP
-            cluster_group_name (str): Cluster Group Name. Group name to which the cluster belongs
-                to.
+            cluster_group_name (str): Group Name to which the cluster belongs to.
 
         Returns:
             Response: CentralAPI Response object
@@ -21548,7 +22773,7 @@ class AllCalls(CentralApi):
         profile: str,
         profile_type: str,
     ) -> Response:
-        """Retrieve gw_cluster_list.
+        """Retrieve all Cluster mappings for given profile and type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21568,116 +22793,17 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def overlay_wlan_config_get_aruba_wlan_config_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def overlay_wlan_config_post_aruba_wlan_config_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        address_family: List[str],
-        ssid_cluster: list,
-    ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            address_family (List[str]): Address family configuration <AFI,SAFI>.
-            ssid_cluster (list): Wlan profile to Cluster mapping
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'address_family': address_family,
-            'ssid_cluster': ssid_cluster
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def overlay_wlan_config_put_aruba_wlan_config_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        address_family: List[str],
-        ssid_cluster: list,
-    ) -> Response:
-        """Create/Update config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            address_family (List[str]): Address family configuration <AFI,SAFI>.
-            ssid_cluster (list): Wlan profile to Cluster mapping
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'address_family': address_family,
-            'ssid_cluster': ssid_cluster
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def overlay_wlan_config_delete_aruba_wlan_config_id3(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GROUP
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
-
-        return await self.delete(url)
-
-    async def overlay_wlan_config_get_aruba_wlan_ssid_cluster_id3(
+    async def overlay_wlan_config_put_aruba_wlan_ssid_cluster_id2(
         self,
         node_type: str,
         node_id: str,
         profile: str,
         profile_type: str,
+        new_profile: str,
+        new_profile_type: str,
+        gw_cluster_list: list,
     ) -> Response:
-        """Retrieve ssid_cluster by identifier profile profile_type.
+        """Create/Update Cluster mapping for given profile and profile_type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21689,13 +22815,24 @@ class AllCalls(CentralApi):
             profile_type (str): WIRELESS_PROFILE if profile is wlan ssid name, pass
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
+            new_profile (str): Wlan ssid name or wired-port profile name
+            new_profile_type (str): WIRELESS_PROFILE if profile is wlan ssid name, pass
+                'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
+                WIRELESS_PROFILE, WIRED_PORT_PROFILE
+            gw_cluster_list (list): Gateway Clusters mapped to this profile
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/"
 
-        return await self.get(url)
+        json_data = {
+            'new_profile': new_profile,
+            'new_profile_type': new_profile_type,
+            'gw_cluster_list': gw_cluster_list
+        }
+
+        return await self.put(url, json_data=json_data)
 
     async def overlay_wlan_config_post_aruba_wlan_ssid_cluster_id2(
         self,
@@ -21704,10 +22841,10 @@ class AllCalls(CentralApi):
         profile: str,
         profile_type: str,
         new_profile: str,
-        gw_cluster_list: list,
         new_profile_type: str,
+        gw_cluster_list: list,
     ) -> Response:
-        """Create ssid_cluster by identifier profile profile_type.
+        """Create Cluster mapping for given profile and profile_type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21720,10 +22857,10 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             new_profile (str): Wlan ssid name or wired-port profile name
-            gw_cluster_list (list): Gw Cluster
             new_profile_type (str): WIRELESS_PROFILE if profile is wlan ssid name, pass
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
+            gw_cluster_list (list): Gateway Clusters mapped to this profile
 
         Returns:
             Response: CentralAPI Response object
@@ -21732,23 +22869,20 @@ class AllCalls(CentralApi):
 
         json_data = {
             'new_profile': new_profile,
-            'gw_cluster_list': gw_cluster_list,
-            'new_profile_type': new_profile_type
+            'new_profile_type': new_profile_type,
+            'gw_cluster_list': gw_cluster_list
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def overlay_wlan_config_put_aruba_wlan_ssid_cluster_id2(
+    async def overlay_wlan_config_get_aruba_wlan_ssid_cluster_id3(
         self,
         node_type: str,
         node_id: str,
         profile: str,
         profile_type: str,
-        new_profile: str,
-        gw_cluster_list: list,
-        new_profile_type: str,
     ) -> Response:
-        """Create/Update ssid_cluster by identifier profile profile_type.
+        """Retrieve Cluster mapping for given profile and profile_type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21760,24 +22894,13 @@ class AllCalls(CentralApi):
             profile_type (str): WIRELESS_PROFILE if profile is wlan ssid name, pass
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
-            new_profile (str): Wlan ssid name or wired-port profile name
-            gw_cluster_list (list): Gw Cluster
-            new_profile_type (str): WIRELESS_PROFILE if profile is wlan ssid name, pass
-                'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
-                WIRELESS_PROFILE, WIRED_PORT_PROFILE
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/"
 
-        json_data = {
-            'new_profile': new_profile,
-            'gw_cluster_list': gw_cluster_list,
-            'new_profile_type': new_profile_type
-        }
-
-        return await self.put(url, json_data=json_data)
+        return await self.get(url)
 
     async def overlay_wlan_config_delete_aruba_wlan_ssid_cluster_id2(
         self,
@@ -21786,7 +22909,7 @@ class AllCalls(CentralApi):
         profile: str,
         profile_type: str,
     ) -> Response:
-        """Delete ssid_cluster by identifier profile profile_type.
+        """Delete Cluster mapping for given profile and profile_type.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21811,7 +22934,7 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve ssid_cluster.
+        """Retrieve all Profile to Cluster mappings for given group.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -21826,6 +22949,108 @@ class AllCalls(CentralApi):
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/"
 
         return await self.get(url)
+
+    async def overlay_wlan_config_put_aruba_wlan_config_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        ssid_cluster: list,
+        address_family: List[str],
+    ) -> Response:
+        """Create/Update Complete Overlay-wlan config for given group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            ssid_cluster (list): Wlan profile to Cluster mapping
+            address_family (List[str]): Address family configuration <AFI,SAFI>.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'ssid_cluster': ssid_cluster,
+            'address_family': address_family
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def overlay_wlan_config_post_aruba_wlan_config_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        ssid_cluster: list,
+        address_family: List[str],
+    ) -> Response:
+        """Create Complete Overlay-wlan config for given group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            ssid_cluster (list): Wlan profile to Cluster mapping
+            address_family (List[str]): Address family configuration <AFI,SAFI>.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'ssid_cluster': ssid_cluster,
+            'address_family': address_family
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def overlay_wlan_config_get_aruba_wlan_config_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve Complete Overlay-wlan config for given group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def overlay_wlan_config_delete_aruba_wlan_config_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete Complete Overlay-wlan config for given group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GROUP
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
+
+        return await self.delete(url)
 
     async def overlay_wlan_config_get_aruba_wlan_node_list_id6(
         self,
@@ -21848,1486 +23073,1123 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_admin_status_id21(
+    async def rds_config_put_aruba_ssid_includes_id1(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        essid: str,
+        new_essid: str,
     ) -> Response:
-        """Retrieve admin-status.
+        """Create/Update essid in include SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+            new_essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_hub_clusters_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        cluster_name: str,
-        cluster_group: str,
-        new_cluster_group: str,
-        new_cluster_name: str,
-    ) -> Response:
-        """Create/Update hub-clusters by cluster name and cluster group.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_name (str): Name of controller Cluster
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
 
         json_data = {
-            'new_cluster_group': new_cluster_group,
-            'new_cluster_name': new_cluster_name
+            'new_essid': new_essid
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_clusters_id6(
+    async def rds_config_post_aruba_ssid_includes_id1(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
-        new_cluster_group: str,
-        new_cluster_name: str,
+        rule_name: str,
+        essid: str,
+        new_essid: str,
     ) -> Response:
-        """Create by hub-clusters by cluster name and cluster group.
+        """Create essid in include SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_name (str): Name of controller Cluster
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+            new_essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
 
         json_data = {
-            'new_cluster_group': new_cluster_group,
-            'new_cluster_name': new_cluster_name
+            'new_essid': new_essid
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_clusters_id8(
+    async def rds_config_get_aruba_ssid_includes_id1(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
+        rule_name: str,
+        essid: str,
     ) -> Response:
-        """Delete by hub-clusters by cluster name and cluster group.
+        """Retrieve essid in include SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
+
+        return await self.get(url)
+
+    async def rds_config_delete_aruba_ssid_includes_id1(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+        essid: str,
+    ) -> Response:
+        """Delete essid in include SSIDs for given classification rule_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_clusters_id15(
+    async def rds_config_get_aruba_ssid_includes_id2(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
+        rule_name: str,
     ) -> Response:
-        """Retrieve by hub-clusters by cluster name and cluster group.
+        """Retrieve all include SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_hub_clusters_id16(
+    async def rds_config_put_aruba_ssid_excludes_id2(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        essid: str,
+        new_essid: str,
     ) -> Response:
-        """Retrieve hub-clusters.
+        """Create/Update essid in exclude SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+            new_essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_load_balance_orchestration_id18(
-        self,
-        node_type: str,
-        node_id: str,
-        hold_time: int,
-        pre_emption: bool,
-        randomize_time: int,
-    ) -> Response:
-        """Create/Update load-balance-orchestration.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            hold_time (int): Hold time, in seconds, before switching over to the alternate hub after
-                the connectivity to the active hub is lost. Range is 30..300 seconds
-            pre_emption (bool): Enable/disable preemption. If enabled then the routing path is
-                switched back to the primary as soon as primary is available.
-            randomize_time (int): Random time after hold-time when failover occurs. Range is 30..300
-                seconds
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
 
         json_data = {
-            'hold_time': hold_time,
-            'pre_emption': pre_emption,
-            'randomize_time': randomize_time
+            'new_essid': new_essid
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_load_balance_orchestration_id18(
+    async def rds_config_post_aruba_ssid_excludes_id2(
         self,
         node_type: str,
         node_id: str,
-        hold_time: int,
-        pre_emption: bool,
-        randomize_time: int,
+        rule_name: str,
+        essid: str,
+        new_essid: str,
     ) -> Response:
-        """Create load-balance-orchestration.
+        """Create essid in exclude SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            hold_time (int): Hold time, in seconds, before switching over to the alternate hub after
-                the connectivity to the active hub is lost. Range is 30..300 seconds
-            pre_emption (bool): Enable/disable preemption. If enabled then the routing path is
-                switched back to the primary as soon as primary is available.
-            randomize_time (int): Random time after hold-time when failover occurs. Range is 30..300
-                seconds
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+            new_essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
 
         json_data = {
-            'hold_time': hold_time,
-            'pre_emption': pre_emption,
-            'randomize_time': randomize_time
+            'new_essid': new_essid
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_load_balance_orchestration_id21(
+    async def rds_config_get_aruba_ssid_excludes_id3(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        essid: str,
     ) -> Response:
-        """Delete load-balance-orchestration.
+        """Retrieve essid in exclude SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
+
+        return await self.get(url)
+
+    async def rds_config_delete_aruba_ssid_excludes_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+        essid: str,
+    ) -> Response:
+        """Delete essid in exclude SSIDs for given classification rule_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            essid (str): Partial or complete SSID string that needs to be matched
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_load_balance_orchestration_id31(
+    async def rds_config_get_aruba_ssid_excludes_id4(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
     ) -> Response:
-        """Retrieve load-balance-orchestration.
+        """Retrieve all exclude SSIDs for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_hub_mesh_id42(
+    async def rds_config_put_aruba_site_includes_id3(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        name: str,
+        new_name: str,
     ) -> Response:
-        """Retrieve hub-mesh.
+        """Create/Update  site by name in Site-Includes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
+            new_name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_tunnel_policy_id22(
-        self,
-        node_type: str,
-        node_id: str,
-        rekey_interval: int,
-        type: str,
-    ) -> Response:
-        """Create/Update tunnel-policy.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
-                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
-                hours.
-            type (str): Type of tunnel  Valid Values: IPSEC
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
 
         json_data = {
-            'rekey_interval': rekey_interval,
-            'type': type
+            'new_name': new_name
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_tunnel_policy_id22(
+    async def rds_config_post_aruba_site_includes_id3(
         self,
         node_type: str,
         node_id: str,
-        rekey_interval: int,
-        type: str,
+        rule_name: str,
+        name: str,
+        new_name: str,
     ) -> Response:
-        """Create tunnel-policy.
+        """Create  site by name in Site-Includes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
-                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
-                hours.
-            type (str): Type of tunnel  Valid Values: IPSEC
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
+            new_name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
 
         json_data = {
-            'rekey_interval': rekey_interval,
-            'type': type
+            'new_name': new_name
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_tunnel_policy_id26(
+    async def rds_config_get_aruba_site_includes_id5(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        name: str,
     ) -> Response:
-        """Delete tunnel-policy.
+        """Retrieve  site by name in Site-Includes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
+
+        return await self.get(url)
+
+    async def rds_config_delete_aruba_site_includes_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+        name: str,
+    ) -> Response:
+        """Delete  site by name in Site-Includes for given classification rule_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_tunnel_policy_id38(
+    async def rds_config_get_aruba_site_includes_id6(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
     ) -> Response:
-        """Retrieve tunnel-policy.
+        """Retrieve all sites in Site-Includes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_branch_mesh_id4(
-        self,
-        label: str,
-    ) -> Response:
-        """Retrieve branch-mesh by label.
-
-        Args:
-            label (str): branch-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_hub_clusters_id19(
+    async def rds_config_put_aruba_site_excludes_id4(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        name: str,
+        new_name: str,
     ) -> Response:
-        """Retrieve hub-clusters.
+        """Create/Update  site by name in Site-Excludes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
+            new_name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_transit_id3(
-        self,
-        node_type: str,
-        node_id: str,
-        transit: bool,
-    ) -> Response:
-        """Create/Update transit.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            transit (bool): Ability to provide transit (inter-branch connectivity) services.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
 
         json_data = {
-            'transit': transit
+            'new_name': new_name
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_transit_id3(
+    async def rds_config_post_aruba_site_excludes_id4(
         self,
         node_type: str,
         node_id: str,
-        transit: bool,
+        rule_name: str,
+        name: str,
+        new_name: str,
     ) -> Response:
-        """Create transit.
+        """Create  site by name in Site-Excludes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            transit (bool): Ability to provide transit (inter-branch connectivity) services.
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
+            new_name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
 
         json_data = {
-            'transit': transit
+            'new_name': new_name
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_transit_id3(
+    async def rds_config_get_aruba_site_excludes_id7(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
+        name: str,
     ) -> Response:
-        """Delete transit.
+        """Retrieve  site by name in Site-Excludes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_transit_id7(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve transit.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_topology_id11(
+    async def rds_config_delete_aruba_site_excludes_id4(
         self,
         node_type: str,
         node_id: str,
-        topology: str,
+        rule_name: str,
+        name: str,
     ) -> Response:
-        """Create/Update topology.
+        """Delete  site by name in Site-Excludes for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            topology (str): Overlay topology  Valid Values: HUB_AND_SPOKE
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            name (str): Name of site
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
+
+        return await self.delete(url)
+
+    async def rds_config_get_aruba_site_excludes_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+    ) -> Response:
+        """Retrieve all sites in Site-Excludes for given classification rule_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/"
+
+        return await self.get(url)
+
+    async def rds_config_put_aruba_match_criteria_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+        min_signal: int,
+        detected_ap_count: int,
+        wlan_classification: str,
+        ssid_includes: list,
+        ssid_excludes: list,
+        known_ssid_match: bool,
+        plugged_into_network: bool,
+        monitored_time: int,
+        site_includes: list,
+        site_excludes: list,
+        radio_band: str,
+        encryption: str,
+        valid_client_match: bool,
+    ) -> Response:
+        """Create/Update match criteria for given classification rule_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            min_signal (int): Indicates the minimum signal strength for the AP to be considered for
+                classification
+            detected_ap_count (int): Minimum number of detecting APs to consider this AP for
+                classification
+            wlan_classification (str): The classification value received from the detecting device
+                Valid Values: VALID, INTERFERING, KNOWN_INTERFERING, ROGUE, DOS, SUSPECT_ROGUE
+            ssid_includes (list): SSIDs to match for this classification rule. This criterion is
+                matched if any of the SSIDs in the list are matched (even partially). For example:
+                'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            ssid_excludes (list): List of SSIDs to that are to be excluded from this classification
+                rule. If if any of the SSIDs in the list are matched (even partially) the rule is
+                not applied. For example: 'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            known_ssid_match (bool): Match against all known valid SSIDs
+            plugged_into_network (bool): AP ethernet MAC has been identified by an HP switch
+            monitored_time (int): Minimum amount of time in minutes that the AP has to be active to
+                consider it for classification
+            site_includes (list): Apply this classification rule only to APs that are part of
+                specified sites
+            site_excludes (list): Skip this classification rule to APs that are part of specified
+                sites. The same site must not be specified in both 'site_inlucdes' and
+                'site_excludes'.
+            radio_band (str): The radio band of the monitored AP  Valid Values: BAND_2_4_GHZ,
+                BAND_5_GHZ, BAND_6_GHZ
+            encryption (str): Minimum encryption type used by this AP  Valid Values: OPEN, WEP, WPA,
+                WPA2
+            valid_client_match (bool): Rogue BSSID matches exactly a known valid client MAC address
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
 
         json_data = {
-            'topology': topology
+            'min_signal': min_signal,
+            'detected_ap_count': detected_ap_count,
+            'wlan_classification': wlan_classification,
+            'ssid_includes': ssid_includes,
+            'ssid_excludes': ssid_excludes,
+            'known_ssid_match': known_ssid_match,
+            'plugged_into_network': plugged_into_network,
+            'monitored_time': monitored_time,
+            'site_includes': site_includes,
+            'site_excludes': site_excludes,
+            'radio_band': radio_band,
+            'encryption': encryption,
+            'valid_client_match': valid_client_match
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_topology_id11(
+    async def rds_config_post_aruba_match_criteria_id5(
         self,
         node_type: str,
         node_id: str,
-        topology: str,
+        rule_name: str,
+        min_signal: int,
+        detected_ap_count: int,
+        wlan_classification: str,
+        ssid_includes: list,
+        ssid_excludes: list,
+        known_ssid_match: bool,
+        plugged_into_network: bool,
+        monitored_time: int,
+        site_includes: list,
+        site_excludes: list,
+        radio_band: str,
+        encryption: str,
+        valid_client_match: bool,
     ) -> Response:
-        """Create topology.
+        """Create match criteria for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            topology (str): Overlay topology  Valid Values: HUB_AND_SPOKE
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            min_signal (int): Indicates the minimum signal strength for the AP to be considered for
+                classification
+            detected_ap_count (int): Minimum number of detecting APs to consider this AP for
+                classification
+            wlan_classification (str): The classification value received from the detecting device
+                Valid Values: VALID, INTERFERING, KNOWN_INTERFERING, ROGUE, DOS, SUSPECT_ROGUE
+            ssid_includes (list): SSIDs to match for this classification rule. This criterion is
+                matched if any of the SSIDs in the list are matched (even partially). For example:
+                'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            ssid_excludes (list): List of SSIDs to that are to be excluded from this classification
+                rule. If if any of the SSIDs in the list are matched (even partially) the rule is
+                not applied. For example: 'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            known_ssid_match (bool): Match against all known valid SSIDs
+            plugged_into_network (bool): AP ethernet MAC has been identified by an HP switch
+            monitored_time (int): Minimum amount of time in minutes that the AP has to be active to
+                consider it for classification
+            site_includes (list): Apply this classification rule only to APs that are part of
+                specified sites
+            site_excludes (list): Skip this classification rule to APs that are part of specified
+                sites. The same site must not be specified in both 'site_inlucdes' and
+                'site_excludes'.
+            radio_band (str): The radio band of the monitored AP  Valid Values: BAND_2_4_GHZ,
+                BAND_5_GHZ, BAND_6_GHZ
+            encryption (str): Minimum encryption type used by this AP  Valid Values: OPEN, WEP, WPA,
+                WPA2
+            valid_client_match (bool): Rogue BSSID matches exactly a known valid client MAC address
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
 
         json_data = {
-            'topology': topology
+            'min_signal': min_signal,
+            'detected_ap_count': detected_ap_count,
+            'wlan_classification': wlan_classification,
+            'ssid_includes': ssid_includes,
+            'ssid_excludes': ssid_excludes,
+            'known_ssid_match': known_ssid_match,
+            'plugged_into_network': plugged_into_network,
+            'monitored_time': monitored_time,
+            'site_includes': site_includes,
+            'site_excludes': site_excludes,
+            'radio_band': radio_band,
+            'encryption': encryption,
+            'valid_client_match': valid_client_match
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_topology_id13(
+    async def rds_config_get_aruba_match_criteria_id9(
         self,
         node_type: str,
         node_id: str,
+        rule_name: str,
     ) -> Response:
-        """Delete topology.
+        """Retrieve match criteria for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_topology_id22(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve topology.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_clusters_id8(
+    async def rds_config_delete_aruba_match_criteria_id5(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
-        new_cluster_group: str,
-        new_cluster_name: str,
+        rule_name: str,
     ) -> Response:
-        """Create/Update hub-clusters by identifier cluster-name cluster-group.
+        """Delete match criteria for given classification rule_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_name (str): Name of controller Cluster
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
+
+        return await self.delete(url)
+
+    async def rds_config_put_aruba_classification_rules_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+        new_rule_name: str,
+        is_predefined: bool,
+        rule_enabled: bool,
+        target_classification: str,
+        min_signal: int,
+        detected_ap_count: int,
+        wlan_classification: str,
+        ssid_includes: list,
+        ssid_excludes: list,
+        known_ssid_match: bool,
+        plugged_into_network: bool,
+        monitored_time: int,
+        site_includes: list,
+        site_excludes: list,
+        radio_band: str,
+        encryption: str,
+        valid_client_match: bool,
+    ) -> Response:
+        """Create/Update Classification rule by ruel_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            new_rule_name (str): Unique name for this set of conditions
+            is_predefined (bool): This is a read-only field that indicates if a rule is pre-defined.
+                Pre-defined rule cannot be modified or deleted . But it can be enabled or disabled
+                and re-ordered
+            rule_enabled (bool): Apply these rule criteria or not
+            target_classification (str): Classification to apply to the AP if all criteria are met
+                Valid Values: ROGUE, DOS, SUSPECT_ROGUE
+            min_signal (int): Indicates the minimum signal strength for the AP to be considered for
+                classification
+            detected_ap_count (int): Minimum number of detecting APs to consider this AP for
+                classification
+            wlan_classification (str): The classification value received from the detecting device
+                Valid Values: VALID, INTERFERING, KNOWN_INTERFERING, ROGUE, DOS, SUSPECT_ROGUE
+            ssid_includes (list): SSIDs to match for this classification rule. This criterion is
+                matched if any of the SSIDs in the list are matched (even partially). For example:
+                'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            ssid_excludes (list): List of SSIDs to that are to be excluded from this classification
+                rule. If if any of the SSIDs in the list are matched (even partially) the rule is
+                not applied. For example: 'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            known_ssid_match (bool): Match against all known valid SSIDs
+            plugged_into_network (bool): AP ethernet MAC has been identified by an HP switch
+            monitored_time (int): Minimum amount of time in minutes that the AP has to be active to
+                consider it for classification
+            site_includes (list): Apply this classification rule only to APs that are part of
+                specified sites
+            site_excludes (list): Skip this classification rule to APs that are part of specified
+                sites. The same site must not be specified in both 'site_inlucdes' and
+                'site_excludes'.
+            radio_band (str): The radio band of the monitored AP  Valid Values: BAND_2_4_GHZ,
+                BAND_5_GHZ, BAND_6_GHZ
+            encryption (str): Minimum encryption type used by this AP  Valid Values: OPEN, WEP, WPA,
+                WPA2
+            valid_client_match (bool): Rogue BSSID matches exactly a known valid client MAC address
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
 
         json_data = {
-            'new_cluster_group': new_cluster_group,
-            'new_cluster_name': new_cluster_name
+            'new_rule_name': new_rule_name,
+            'is_predefined': is_predefined,
+            'rule_enabled': rule_enabled,
+            'target_classification': target_classification,
+            'min_signal': min_signal,
+            'detected_ap_count': detected_ap_count,
+            'wlan_classification': wlan_classification,
+            'ssid_includes': ssid_includes,
+            'ssid_excludes': ssid_excludes,
+            'known_ssid_match': known_ssid_match,
+            'plugged_into_network': plugged_into_network,
+            'monitored_time': monitored_time,
+            'site_includes': site_includes,
+            'site_excludes': site_excludes,
+            'radio_band': radio_band,
+            'encryption': encryption,
+            'valid_client_match': valid_client_match
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_hub_clusters_id8(
+    async def rds_config_post_aruba_classification_rules_id6(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
-        new_cluster_group: str,
-        new_cluster_name: str,
+        rule_name: str,
+        new_rule_name: str,
+        is_predefined: bool,
+        rule_enabled: bool,
+        target_classification: str,
+        min_signal: int,
+        detected_ap_count: int,
+        wlan_classification: str,
+        ssid_includes: list,
+        ssid_excludes: list,
+        known_ssid_match: bool,
+        plugged_into_network: bool,
+        monitored_time: int,
+        site_includes: list,
+        site_excludes: list,
+        radio_band: str,
+        encryption: str,
+        valid_client_match: bool,
     ) -> Response:
-        """Create hub-clusters by identifier cluster-name cluster-group.
+        """Create Classification rule by ruel_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_group (str): Name of controller group to which the cluster belongs
-            new_cluster_name (str): Name of controller Cluster
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+            new_rule_name (str): Unique name for this set of conditions
+            is_predefined (bool): This is a read-only field that indicates if a rule is pre-defined.
+                Pre-defined rule cannot be modified or deleted . But it can be enabled or disabled
+                and re-ordered
+            rule_enabled (bool): Apply these rule criteria or not
+            target_classification (str): Classification to apply to the AP if all criteria are met
+                Valid Values: ROGUE, DOS, SUSPECT_ROGUE
+            min_signal (int): Indicates the minimum signal strength for the AP to be considered for
+                classification
+            detected_ap_count (int): Minimum number of detecting APs to consider this AP for
+                classification
+            wlan_classification (str): The classification value received from the detecting device
+                Valid Values: VALID, INTERFERING, KNOWN_INTERFERING, ROGUE, DOS, SUSPECT_ROGUE
+            ssid_includes (list): SSIDs to match for this classification rule. This criterion is
+                matched if any of the SSIDs in the list are matched (even partially). For example:
+                'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            ssid_excludes (list): List of SSIDs to that are to be excluded from this classification
+                rule. If if any of the SSIDs in the list are matched (even partially) the rule is
+                not applied. For example: 'hpe' will match 'aruba-hpe' and 'aruba-hpe-guest'
+            known_ssid_match (bool): Match against all known valid SSIDs
+            plugged_into_network (bool): AP ethernet MAC has been identified by an HP switch
+            monitored_time (int): Minimum amount of time in minutes that the AP has to be active to
+                consider it for classification
+            site_includes (list): Apply this classification rule only to APs that are part of
+                specified sites
+            site_excludes (list): Skip this classification rule to APs that are part of specified
+                sites. The same site must not be specified in both 'site_inlucdes' and
+                'site_excludes'.
+            radio_band (str): The radio band of the monitored AP  Valid Values: BAND_2_4_GHZ,
+                BAND_5_GHZ, BAND_6_GHZ
+            encryption (str): Minimum encryption type used by this AP  Valid Values: OPEN, WEP, WPA,
+                WPA2
+            valid_client_match (bool): Rogue BSSID matches exactly a known valid client MAC address
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
 
         json_data = {
-            'new_cluster_group': new_cluster_group,
-            'new_cluster_name': new_cluster_name
+            'new_rule_name': new_rule_name,
+            'is_predefined': is_predefined,
+            'rule_enabled': rule_enabled,
+            'target_classification': target_classification,
+            'min_signal': min_signal,
+            'detected_ap_count': detected_ap_count,
+            'wlan_classification': wlan_classification,
+            'ssid_includes': ssid_includes,
+            'ssid_excludes': ssid_excludes,
+            'known_ssid_match': known_ssid_match,
+            'plugged_into_network': plugged_into_network,
+            'monitored_time': monitored_time,
+            'site_includes': site_includes,
+            'site_excludes': site_excludes,
+            'radio_band': radio_band,
+            'encryption': encryption,
+            'valid_client_match': valid_client_match
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_clusters_id10(
+    async def rds_config_get_aruba_classification_rules_id10(
         self,
         node_type: str,
         node_id: str,
-        cluster_name: str,
-        cluster_group: str,
+        rule_name: str,
     ) -> Response:
-        """Delete hub-clusters by identifier cluster-name cluster-group.
+        """Retrieve Classification rule by ruel_name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
+
+        return await self.get(url)
+
+    async def rds_config_delete_aruba_classification_rules_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        rule_name: str,
+    ) -> Response:
+        """Delete Classification rule by ruel_name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rule_name (str): Unique name for this set of conditions
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_clusters_id18(
-        self,
-        node_type: str,
-        node_id: str,
-        cluster_name: str,
-        cluster_group: str,
-    ) -> Response:
-        """Retrieve hub-clusters by identifier cluster-name cluster-group.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            cluster_name (str): Name of controller Cluster
-            cluster_group (str): Name of controller group to which the cluster belongs
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_microbranch_dc_cluster_id9(
-        self,
-        node_type: str,
-        node_id: str,
-        hubs_type: str,
-        hub_clusters: list,
-    ) -> Response:
-        """Create/Update microbranch-dc-cluster.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
-                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
-                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
-            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
-
-        json_data = {
-            'hubs_type': hubs_type,
-            'hub_clusters': hub_clusters
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_microbranch_dc_cluster_id9(
-        self,
-        node_type: str,
-        node_id: str,
-        hubs_type: str,
-        hub_clusters: list,
-    ) -> Response:
-        """Create microbranch-dc-cluster.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
-                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
-                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
-            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
-
-        json_data = {
-            'hubs_type': hubs_type,
-            'hub_clusters': hub_clusters
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_microbranch_dc_cluster_id11(
+    async def rds_config_get_aruba_classification_rules_id11(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete microbranch-dc-cluster.
+        """Retrieve all Classification rules.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_microbranch_dc_cluster_id20(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve microbranch-dc-cluster.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a Microbranch
-                group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_route_policy_id36(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve route-policy.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_hub_mesh_id24(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-        hub_groups: list,
-        new_label: str,
-    ) -> Response:
-        """Create/Update hub-mesh by label.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-            hub_groups (list): List of hub groups (data centers) to form a mesh.
-            new_label (str): Hub-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
-
-        json_data = {
-            'hub_groups': hub_groups,
-            'new_label': new_label
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_hub_mesh_id24(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-        hub_groups: list,
-        new_label: str,
-    ) -> Response:
-        """Create hub-mesh by label.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-            hub_groups (list): List of hub groups (data centers) to form a mesh.
-            new_label (str): Hub-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
-
-        json_data = {
-            'hub_groups': hub_groups,
-            'new_label': new_label
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_hub_mesh_id28(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-    ) -> Response:
-        """Delete hub-mesh by label.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_hub_mesh_id41(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-    ) -> Response:
-        """Retrieve hub-mesh by label.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_hubs_id14(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve hubs.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_config_id44(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
                 node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_hub_aggregates_id11(
+    async def rds_config_put_aruba_config_id7(
         self,
         node_type: str,
         node_id: str,
+        rapids_enabled: bool,
+        classification_rules: list,
     ) -> Response:
-        """Retrieve hub-aggregates.
+        """Create/Update complete RAPIDS configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rapids_enabled (bool): Enable or disable rogue AP classification
+            classification_rules (list): List of RAPIDS classification rules that are applied on
+                APs.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_as_number_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        as_number: int,
-    ) -> Response:
-        """Create/Update as-number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            as_number (int): Autonomous System Number for the Overlay Route Orchestrator.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
-            'as_number': as_number
+            'rapids_enabled': rapids_enabled,
+            'classification_rules': classification_rules
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_as_number_id13(
+    async def rds_config_post_aruba_config_id7(
         self,
         node_type: str,
         node_id: str,
-        as_number: int,
+        rapids_enabled: bool,
+        classification_rules: list,
     ) -> Response:
-        """Create as-number.
+        """Create complete RAPIDS configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            as_number (int): Autonomous System Number for the Overlay Route Orchestrator.
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rapids_enabled (bool): Enable or disable rogue AP classification
+            classification_rules (list): List of RAPIDS classification rules that are applied on
+                APs.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
         json_data = {
-            'as_number': as_number
+            'rapids_enabled': rapids_enabled,
+            'classification_rules': classification_rules
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_as_number_id16(
+    async def rds_config_get_aruba_config_id12(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete as-number.
+        """Retrieve complete RAPIDS configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_as_number_id26(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve as-number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_hub_id17(
-        self,
-        node_type: str,
-        node_id: str,
-        distance_factor: int,
-        prefer_overlay_path: bool,
-        best_path_computation: bool,
-    ) -> Response:
-        """Create/Update hub.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            distance_factor (int): Value used to determine the distance from branch to the
-                corresponding hub devices. Range is 1..4294967295
-            prefer_overlay_path (bool): Prefer overlay path when a prefix has both overlay and
-                underlay paths when the corresponding overlay path is tagged with a special
-                attribute.
-            best_path_computation (bool): Indicates whether BGP-like best path computation is
-                enabled for data center prefixes. It is disabled by default. If it is disabled then
-                user provided preference (order of HUB devices) is used.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
-
-        json_data = {
-            'distance_factor': distance_factor,
-            'prefer_overlay_path': prefer_overlay_path,
-            'best_path_computation': best_path_computation
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_hub_id17(
-        self,
-        node_type: str,
-        node_id: str,
-        distance_factor: int,
-        prefer_overlay_path: bool,
-        best_path_computation: bool,
-    ) -> Response:
-        """Create hub.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            distance_factor (int): Value used to determine the distance from branch to the
-                corresponding hub devices. Range is 1..4294967295
-            prefer_overlay_path (bool): Prefer overlay path when a prefix has both overlay and
-                underlay paths when the corresponding overlay path is tagged with a special
-                attribute.
-            best_path_computation (bool): Indicates whether BGP-like best path computation is
-                enabled for data center prefixes. It is disabled by default. If it is disabled then
-                user provided preference (order of HUB devices) is used.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
-
-        json_data = {
-            'distance_factor': distance_factor,
-            'prefer_overlay_path': prefer_overlay_path,
-            'best_path_computation': best_path_computation
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_hub_id20(
+    async def rds_config_delete_aruba_config_id7(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete hub.
+        """Delete complete RAPIDS configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_hub_id30(
+    async def rds_config_get_aruba_node_list_id13(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve hub.
+        """Retrieve node_list by identifier node-type node-id.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                applied.  Valid Values: GLOBAL
+            node_id (str): The value of the identifier for the configuration container. This value
+                is interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_branch_mesh_id5(
-        self,
-        last_index: str = '0',
-        search_name: str = None,
-        offset: str = 0,
-        limit: int = 100,
-    ) -> Response:
-        """Retrieve branch-mesh.
-
-        Args:
-            last_index (str, optional): Last seen index returned part of the previous query . It can
-                be used instead of offset for seeking the table faster
-            search_name (str, optional): Specify partial/complete string that will be used to search
-                the primary-key (labels).
-            offset (str, optional): Offset value from where to start lookup in the table Defaults to
-                0.
-            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
-                and maximum value allowed is 10 Defaults to 100.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/sdwan-config/v1/branch-mesh/"
-
-        params = {
-            'last_index': last_index,
-            'search_name': search_name,
-            'offset': offset,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
-
-    async def sdwan_config_delete_aruba_hubs_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        identifier: str,
-    ) -> Response:
-        """Delete hubs by device serial number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-            identifier (str): VPNC device serial-number
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_hubs_id13(
-        self,
-        node_type: str,
-        node_id: str,
-        identifier: str,
-    ) -> Response:
-        """Retrieve hubs by device serial number.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-            identifier (str): VPNC device serial-number
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_rekey_interval_id21(
-        self,
-        node_type: str,
-        node_id: str,
-        rekey_interval: int,
-    ) -> Response:
-        """Create/Update rekey-interval.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
-                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
-                hours.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
-
-        json_data = {
-            'rekey_interval': rekey_interval
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_rekey_interval_id21(
-        self,
-        node_type: str,
-        node_id: str,
-        rekey_interval: int,
-    ) -> Response:
-        """Create rekey-interval.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
-                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
-                hours.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
-
-        json_data = {
-            'rekey_interval': rekey_interval
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_rekey_interval_id25(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete rekey-interval.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_rekey_interval_id37(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve rekey-interval.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_hub_groups_id40(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-    ) -> Response:
-        """Retrieve hub-groups.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/"
+        url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/"
 
         return await self.get(url)
 
@@ -23379,24 +24241,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_branch_devices_id1(
-        self,
-        label: str,
-        identifier: str,
-    ) -> Response:
-        """Delete branch-devices by device serial number.
-
-        Args:
-            label (str): branch-mesh label
-            identifier (str): Serial number of the device.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/{identifier}/"
-
-        return await self.delete(url)
-
     async def sdwan_config_get_aruba_branch_devices_id1(
         self,
         label: str,
@@ -23415,128 +24259,260 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_best_path_computation_id16(
+    async def sdwan_config_delete_aruba_branch_devices_id1(
         self,
-        node_type: str,
-        node_id: str,
-        best_path_computation: bool,
+        label: str,
+        identifier: str,
     ) -> Response:
-        """Create/Update best-path-computation.
+        """Delete branch-devices by device serial number.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            best_path_computation (bool): Indicates whether BGP-like best path computation is
-                enabled for data center prefixes. It is disabled by default. If it is disabled then
-                user provided preference (order of HUB devices) is used.
+            label (str): branch-mesh label
+            identifier (str): Serial number of the device.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/{identifier}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_branch_devices_id2(
+        self,
+        label: str,
+    ) -> Response:
+        """Retrieve all branch-devices for given branch-mesh label.
+
+        Args:
+            label (str): branch-mesh label
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_config_id2(
+        self,
+        label: str,
+        branch_devices: list,
+    ) -> Response:
+        """Create/Update branch-mesh config for given label.
+
+        Args:
+            label (str): branch-mesh label
+            branch_devices (list): List of branch devices to form a mesh.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
 
         json_data = {
-            'best_path_computation': best_path_computation
+            'branch_devices': branch_devices
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_best_path_computation_id16(
+    async def sdwan_config_post_aruba_config_id2(
         self,
-        node_type: str,
-        node_id: str,
-        best_path_computation: bool,
+        label: str,
+        branch_devices: list,
     ) -> Response:
-        """Create best-path-computation.
+        """Create branch-mesh config for given label.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            best_path_computation (bool): Indicates whether BGP-like best path computation is
-                enabled for data center prefixes. It is disabled by default. If it is disabled then
-                user provided preference (order of HUB devices) is used.
+            label (str): branch-mesh label
+            branch_devices (list): List of branch devices to form a mesh.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
 
         json_data = {
-            'best_path_computation': best_path_computation
+            'branch_devices': branch_devices
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_best_path_computation_id19(
+    async def sdwan_config_get_aruba_config_id3(
         self,
-        node_type: str,
-        node_id: str,
+        label: str,
     ) -> Response:
-        """Delete best-path-computation.
+        """Retrieve branch-mesh config for given label.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+            label (str): branch-mesh label
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_config_id2(
+        self,
+        label: str,
+    ) -> Response:
+        """Delete branch-mesh config for given label.
+
+        Args:
+            label (str): branch-mesh label
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_best_path_computation_id29(
+    async def sdwan_config_get_aruba_branch_mesh_id4(
         self,
-        node_type: str,
-        node_id: str,
+        label: str,
     ) -> Response:
-        """Retrieve best-path-computation.
+        """Retrieve branch-mesh by label.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+            label (str): branch-mesh label
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+        url = f"/sdwan-config/v1/branch-mesh/{label}/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_aggregates_id9(
+    async def sdwan_config_get_aruba_branch_mesh_id5(
         self,
-        node_type: str,
-        node_id: str,
-        segment: str,
+        last_index: str = 0,
+        search_name: str = None,
+        offset: str = 0,
+        limit: int = 100,
     ) -> Response:
-        """Retrieve aggregates for hub-aggregates.
+        """Retrieve branch-mesh config for all labels.
 
         Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
+            last_index (str, optional): Last seen index returned part of the previous query . It can
+                be used instead of offset for seeking the table faster
+            search_name (str, optional): Specify partial/complete string that will be used to search
+                the key('label') for this list
+            offset (str, optional): Offset value from where to start lookup in the table Defaults to
+                0.
+            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
+                and maximum value allowed is 10 Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/"
+        url = "/sdwan-config/v1/branch-mesh/"
+
+        params = {
+            'last_index': last_index,
+            'search_name': search_name,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def sdwan_config_put_aruba_transit_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        transit: bool,
+    ) -> Response:
+        """Create/Update transit.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            transit (bool): Ability to provide transit (inter-branch connectivity) services.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+
+        json_data = {
+            'transit': transit
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_transit_id3(
+        self,
+        node_type: str,
+        node_id: str,
+        transit: bool,
+    ) -> Response:
+        """Create transit.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            transit (bool): Ability to provide transit (inter-branch connectivity) services.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+
+        json_data = {
+            'transit': transit
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_transit_id7(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve transit.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
 
         return await self.get(url)
+
+    async def sdwan_config_delete_aruba_transit_id3(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete transit.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
+
+        return await self.delete(url)
 
     async def sdwan_config_put_aruba_aggregates_id4(
         self,
@@ -23550,10 +24526,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
+                node-id will be rejected.
             segment (str): Overlay network segment name
             prefix (str): Aggregate IPv4 prefix to be advertised
             new_prefix (str): Aggregate IPv4 prefix to be advertised
@@ -23581,10 +24557,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
+                node-id will be rejected.
             segment (str): Overlay network segment name
             prefix (str): Aggregate IPv4 prefix to be advertised
             new_prefix (str): Aggregate IPv4 prefix to be advertised
@@ -23600,31 +24576,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_aggregates_id4(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        prefix: str,
-    ) -> Response:
-        """Delete DC aggregate routes by prefix for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
-            prefix (str): Aggregate IPv4 prefix to be advertised
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/{prefix}/"
-
-        return await self.delete(url)
-
     async def sdwan_config_get_aruba_aggregates_id8(
         self,
         node_type: str,
@@ -23636,10 +24587,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
+                node-id will be rejected.
             segment (str): Overlay network segment name
             prefix (str): Aggregate IPv4 prefix to be advertised
 
@@ -23650,61 +24601,1129 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_delete_aruba_mesh_policy_id29(
+    async def sdwan_config_delete_aruba_aggregates_id4(
         self,
         node_type: str,
         node_id: str,
+        segment: str,
+        prefix: str,
     ) -> Response:
-        """Delete mesh-policy.
+        """Delete DC aggregate routes by prefix for given network segment.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            prefix (str): Aggregate IPv4 prefix to be advertised
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/{prefix}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_mesh_policy_id43(
+    async def sdwan_config_get_aruba_aggregates_id9(
         self,
         node_type: str,
         node_id: str,
+        segment: str,
     ) -> Response:
-        """Retrieve mesh-policy.
+        """Retrieve all DC aggregate route prefixes for given network segment.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
+            segment (str): Overlay network segment name
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/"
 
         return await self.get(url)
+
+    async def sdwan_config_put_aruba_hub_aggregates_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        new_segment: str,
+        aggregates: list,
+    ) -> Response:
+        """Create/Update DC aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            new_segment (str): Overlay network segment name
+            aggregates (list): List of IPv4 prefixes
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
+
+        json_data = {
+            'new_segment': new_segment,
+            'aggregates': aggregates
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_hub_aggregates_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        new_segment: str,
+        aggregates: list,
+    ) -> Response:
+        """Create DC aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            new_segment (str): Overlay network segment name
+            aggregates (list): List of IPv4 prefixes
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
+
+        json_data = {
+            'new_segment': new_segment,
+            'aggregates': aggregates
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_hub_aggregates_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+    ) -> Response:
+        """Retrieve DC aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_aggregates_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+    ) -> Response:
+        """Delete DC aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hub_aggregates_id11(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve DC aggregate routes for all network segments.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/"
+
+        return await self.get(url)
+
+    async def sdwan_config_get_aruba_hub_config_id12(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve global hub configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_config_id6(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete global hub configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hubs_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        identifier: str,
+    ) -> Response:
+        """Retrieve hubs by device serial number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            identifier (str): VPNC device serial-number
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hubs_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        identifier: str,
+    ) -> Response:
+        """Delete hubs by device serial number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            identifier (str): VPNC device serial-number
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hubs_id14(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve all hub devices for given branch group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_hub_clusters_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_name: str,
+        new_cluster_group: str,
+    ) -> Response:
+        """Create/Update hub-clusters by cluster name and cluster group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_name': new_cluster_name,
+            'new_cluster_group': new_cluster_group
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_hub_clusters_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_name: str,
+        new_cluster_group: str,
+    ) -> Response:
+        """Create hub-clusters by cluster name and cluster group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_name': new_cluster_name,
+            'new_cluster_group': new_cluster_group
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_hub_clusters_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Retrieve hub-clusters by cluster name and cluster group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_clusters_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Delete hub-clusters by cluster name and cluster group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hub_clusters_id16(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve all hubs-clusters for given branch group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_branch_config_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hubs: list,
+        dc_ordering_status: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create/Update branch/micro-branch configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list). Value 'HUB_TYPE_DEVICE' is
+                used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
+                'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
+                be ordered such that devices belonging to same group are contiguous
+            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
+                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
+                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
+                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
+                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hubs': hubs,
+            'dc_ordering_status': dc_ordering_status,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_branch_config_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hubs: list,
+        dc_ordering_status: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create branch/micro-branch configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list). Value 'HUB_TYPE_DEVICE' is
+                used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
+                'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
+                be ordered such that devices belonging to same group are contiguous
+            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
+                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
+                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
+                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
+                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hubs': hubs,
+            'dc_ordering_status': dc_ordering_status,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_branch_config_id17(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve branch/micro-branch configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_branch_config_id9(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete branch/micro-branch configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_hub_clusters_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_name: str,
+        new_cluster_group: str,
+    ) -> Response:
+        """Create/Update hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_name': new_cluster_name,
+            'new_cluster_group': new_cluster_group
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_hub_clusters_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+        new_cluster_name: str,
+        new_cluster_group: str,
+    ) -> Response:
+        """Create hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+            new_cluster_name (str): Name of controller Cluster
+            new_cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        json_data = {
+            'new_cluster_name': new_cluster_name,
+            'new_cluster_group': new_cluster_group
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_hub_clusters_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Retrieve hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_clusters_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        cluster_name: str,
+        cluster_group: str,
+    ) -> Response:
+        """Delete hub-clusters by identifier cluster-name cluster-group.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            cluster_name (str): Name of controller Cluster
+            cluster_group (str): Name of controller group to which the cluster belongs
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hub_clusters_id19(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve hub-clusters.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_microbranch_dc_cluster_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create/Update microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
+                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_microbranch_dc_cluster_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        hubs_type: str,
+        hub_clusters: list,
+    ) -> Response:
+        """Create microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
+                ('hubs' list) or VPNC Clusters ('hub-clusters' list).  Valid Values:
+                HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
+            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
+                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        json_data = {
+            'hubs_type': hubs_type,
+            'hub_clusters': hub_clusters
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_microbranch_dc_cluster_id20(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_microbranch_dc_cluster_id11(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete microbranch-dc-cluster.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_admin_status_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        admin_status: str,
+    ) -> Response:
+        """Create/Update admin-status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            admin_status (str): Administrative status  Valid Values: UP
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
+
+        json_data = {
+            'admin_status': admin_status
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_admin_status_id10(
+        self,
+        node_type: str,
+        node_id: str,
+        admin_status: str,
+    ) -> Response:
+        """Create admin-status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            admin_status (str): Administrative status  Valid Values: UP
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
+
+        json_data = {
+            'admin_status': admin_status
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_admin_status_id21(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve admin-status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_admin_status_id12(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete admin-status.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_topology_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        topology: str,
+    ) -> Response:
+        """Create/Update topology.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            topology (str): Overlay topology  Valid Values: HUB_AND_SPOKE
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+
+        json_data = {
+            'topology': topology
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_topology_id11(
+        self,
+        node_type: str,
+        node_id: str,
+        topology: str,
+    ) -> Response:
+        """Create topology.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            topology (str): Overlay topology  Valid Values: HUB_AND_SPOKE
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+
+        json_data = {
+            'topology': topology
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_topology_id22(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve topology.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_topology_id13(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete topology.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_network_segment_policy_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        new_name: str,
+        load_balance: bool,
+    ) -> Response:
+        """Create/Update network-segment-policy by segment name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            name (str): Overlay network segment name
+            new_name (str): Overlay network segment name
+            load_balance (bool): Enable/Disable load balance orchestration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'load_balance': load_balance
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_network_segment_policy_id12(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+        new_name: str,
+        load_balance: bool,
+    ) -> Response:
+        """Create network-segment-policy by segment name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            name (str): Overlay network segment name
+            new_name (str): Overlay network segment name
+            load_balance (bool): Enable/Disable load balance orchestration.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+
+        json_data = {
+            'new_name': new_name,
+            'load_balance': load_balance
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_network_segment_policy_id23(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Retrieve network-segment-policy by segment name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            name (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_network_segment_policy_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        name: str,
+    ) -> Response:
+        """Delete network-segment-policy by segment name.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            name (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+
+        return await self.delete(url)
 
     async def sdwan_config_get_aruba_network_segment_policy_id24(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve network-segment-policy.
+        """Retrieve network-segment-policy config for all segments.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
@@ -23712,6 +25731,1208 @@ class AllCalls(CentralApi):
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/"
 
         return await self.get(url)
+
+    async def sdwan_config_get_aruba_sdwan_global_id25(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve sdwan-global.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_sdwan_global_id15(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete sdwan-global.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_as_number_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        as_number: int,
+    ) -> Response:
+        """Create/Update as-number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            as_number (int): Autonomous System Number for the Overlay Route Orchestrator.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+
+        json_data = {
+            'as_number': as_number
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_as_number_id13(
+        self,
+        node_type: str,
+        node_id: str,
+        as_number: int,
+    ) -> Response:
+        """Create as-number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            as_number (int): Autonomous System Number for the Overlay Route Orchestrator.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+
+        json_data = {
+            'as_number': as_number
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_as_number_id26(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve as-number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_as_number_id16(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete as-number.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_timer_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        timer: int,
+    ) -> Response:
+        """Create/Update timer.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
+                cached information needs to be retained when connectivity between the devices and
+                overlay orchestrator is lost. The devices will flush the orchestrated information
+                and the overlay orchestrator will flush the advertised information from the devices
+                when the connectivity is not restored with in this interval. Value should be in the
+                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
+
+        json_data = {
+            'timer': timer
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_timer_id14(
+        self,
+        node_type: str,
+        node_id: str,
+        timer: int,
+    ) -> Response:
+        """Create timer.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
+                cached information needs to be retained when connectivity between the devices and
+                overlay orchestrator is lost. The devices will flush the orchestrated information
+                and the overlay orchestrator will flush the advertised information from the devices
+                when the connectivity is not restored with in this interval. Value should be in the
+                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
+
+        json_data = {
+            'timer': timer
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_timer_id27(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve timer.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_timer_id17(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete timer.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_graceful_restart_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        enabled: bool,
+        timer: int,
+    ) -> Response:
+        """Create/Update global graceful restart timer configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            enabled (bool): Indicates whether graceful-restart timer is enabled. Enabled by default.
+            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
+                cached information needs to be retained when connectivity between the devices and
+                overlay orchestrator is lost. The devices will flush the orchestrated information
+                and the overlay orchestrator will flush the advertised information from the devices
+                when the connectivity is not restored with in this interval. Value should be in the
+                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+
+        json_data = {
+            'enabled': enabled,
+            'timer': timer
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_graceful_restart_id15(
+        self,
+        node_type: str,
+        node_id: str,
+        enabled: bool,
+        timer: int,
+    ) -> Response:
+        """Create global graceful restart timer configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            enabled (bool): Indicates whether graceful-restart timer is enabled. Enabled by default.
+            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
+                cached information needs to be retained when connectivity between the devices and
+                overlay orchestrator is lost. The devices will flush the orchestrated information
+                and the overlay orchestrator will flush the advertised information from the devices
+                when the connectivity is not restored with in this interval. Value should be in the
+                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+
+        json_data = {
+            'enabled': enabled,
+            'timer': timer
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_graceful_restart_id28(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve global graceful restart timer configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_graceful_restart_id18(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete global graceful restart timer configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_best_path_computation_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        best_path_computation: bool,
+    ) -> Response:
+        """Create/Update best-path-computation.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            best_path_computation (bool): Indicates whether BGP-like best path computation is
+                enabled for data center prefixes. It is disabled by default. If it is disabled then
+                user provided preference (order of HUB devices) is used.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+
+        json_data = {
+            'best_path_computation': best_path_computation
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_best_path_computation_id16(
+        self,
+        node_type: str,
+        node_id: str,
+        best_path_computation: bool,
+    ) -> Response:
+        """Create best-path-computation.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            best_path_computation (bool): Indicates whether BGP-like best path computation is
+                enabled for data center prefixes. It is disabled by default. If it is disabled then
+                user provided preference (order of HUB devices) is used.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+
+        json_data = {
+            'best_path_computation': best_path_computation
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_best_path_computation_id29(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve best-path-computation.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_best_path_computation_id19(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete best-path-computation.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_hub_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        distance_factor: int,
+        best_path_computation: bool,
+        prefer_overlay_path: bool,
+    ) -> Response:
+        """Create/Update global hub route policy configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            distance_factor (int): Value used to determine the distance from branch to the
+                corresponding hub devices. Range is 1..4294967295
+            best_path_computation (bool): Indicates whether BGP-like best path computation is
+                enabled for data center prefixes. It is disabled by default. If it is disabled then
+                user provided preference (order of HUB devices) is used.
+            prefer_overlay_path (bool): Prefer overlay path when a prefix has both overlay and
+                underlay paths when the corresponding overlay path is tagged with a special
+                attribute.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
+
+        json_data = {
+            'distance_factor': distance_factor,
+            'best_path_computation': best_path_computation,
+            'prefer_overlay_path': prefer_overlay_path
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_hub_id17(
+        self,
+        node_type: str,
+        node_id: str,
+        distance_factor: int,
+        best_path_computation: bool,
+        prefer_overlay_path: bool,
+    ) -> Response:
+        """Create global hub route policy configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            distance_factor (int): Value used to determine the distance from branch to the
+                corresponding hub devices. Range is 1..4294967295
+            best_path_computation (bool): Indicates whether BGP-like best path computation is
+                enabled for data center prefixes. It is disabled by default. If it is disabled then
+                user provided preference (order of HUB devices) is used.
+            prefer_overlay_path (bool): Prefer overlay path when a prefix has both overlay and
+                underlay paths when the corresponding overlay path is tagged with a special
+                attribute.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
+
+        json_data = {
+            'distance_factor': distance_factor,
+            'best_path_computation': best_path_computation,
+            'prefer_overlay_path': prefer_overlay_path
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_hub_id30(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve global hub route policy configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_id20(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete global hub route policy configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_load_balance_orchestration_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        pre_emption: bool,
+        hold_time: int,
+        randomize_time: int,
+    ) -> Response:
+        """Create/Update global load-balance orchestration configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            pre_emption (bool): Enable/disable preemption. If enabled then the routing path is
+                switched back to the primary as soon as primary is available.
+            hold_time (int): Hold time, in seconds, before switching over to the alternate hub after
+                the connectivity to the active hub is lost. Range is 30..300 seconds
+            randomize_time (int): Random time after hold-time when failover occurs. Range is 30..300
+                seconds
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+
+        json_data = {
+            'pre_emption': pre_emption,
+            'hold_time': hold_time,
+            'randomize_time': randomize_time
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_load_balance_orchestration_id18(
+        self,
+        node_type: str,
+        node_id: str,
+        pre_emption: bool,
+        hold_time: int,
+        randomize_time: int,
+    ) -> Response:
+        """Create global load-balance orchestration configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            pre_emption (bool): Enable/disable preemption. If enabled then the routing path is
+                switched back to the primary as soon as primary is available.
+            hold_time (int): Hold time, in seconds, before switching over to the alternate hub after
+                the connectivity to the active hub is lost. Range is 30..300 seconds
+            randomize_time (int): Random time after hold-time when failover occurs. Range is 30..300
+                seconds
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+
+        json_data = {
+            'pre_emption': pre_emption,
+            'hold_time': hold_time,
+            'randomize_time': randomize_time
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_load_balance_orchestration_id31(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve global load-balance orchestration configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_load_balance_orchestration_id21(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete global load-balance orchestration configuration.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_aggregates_id19(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        prefix: str,
+        new_prefix: str,
+    ) -> Response:
+        """Create/Update global branch aggregate routes by prefix for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            prefix (str): Aggregate IPv4 prefix to be advertised
+            new_prefix (str): Aggregate IPv4 prefix to be advertised
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
+
+        json_data = {
+            'new_prefix': new_prefix
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_aggregates_id19(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        prefix: str,
+        new_prefix: str,
+    ) -> Response:
+        """Create global branch aggregate routes by prefix for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            prefix (str): Aggregate IPv4 prefix to be advertised
+            new_prefix (str): Aggregate IPv4 prefix to be advertised
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
+
+        json_data = {
+            'new_prefix': new_prefix
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_aggregates_id32(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        prefix: str,
+    ) -> Response:
+        """Retrieve global branch aggregate routes by prefix for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            prefix (str): Aggregate IPv4 prefix to be advertised
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_aggregates_id22(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        prefix: str,
+    ) -> Response:
+        """Delete global branch aggregate routes by prefix for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            prefix (str): Aggregate IPv4 prefix to be advertised
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_aggregates_id33(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+    ) -> Response:
+        """Retrieve all branch-aggregate prefixes for given segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_branch_aggregates_id20(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        new_segment: str,
+        aggregates: list,
+    ) -> Response:
+        """Create/Update global branch aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            new_segment (str): Overlay network segment name
+            aggregates (list): Aggregate prefixes
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
+
+        json_data = {
+            'new_segment': new_segment,
+            'aggregates': aggregates
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_branch_aggregates_id20(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+        new_segment: str,
+        aggregates: list,
+    ) -> Response:
+        """Create global branch aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+            new_segment (str): Overlay network segment name
+            aggregates (list): Aggregate prefixes
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
+
+        json_data = {
+            'new_segment': new_segment,
+            'aggregates': aggregates
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_branch_aggregates_id34(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+    ) -> Response:
+        """Retrieve global branch aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_branch_aggregates_id23(
+        self,
+        node_type: str,
+        node_id: str,
+        segment: str,
+    ) -> Response:
+        """Delete global branch aggregate routes for given network segment.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            segment (str): Overlay network segment name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_branch_aggregates_id35(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve branch-aggregate prefixes for all segments.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/"
+
+        return await self.get(url)
+
+    async def sdwan_config_get_aruba_route_policy_id36(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve route-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_route_policy_id24(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete route-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_rekey_interval_id21(
+        self,
+        node_type: str,
+        node_id: str,
+        rekey_interval: int,
+    ) -> Response:
+        """Create/Update rekey-interval.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
+                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
+                hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
+
+        json_data = {
+            'rekey_interval': rekey_interval
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_rekey_interval_id21(
+        self,
+        node_type: str,
+        node_id: str,
+        rekey_interval: int,
+    ) -> Response:
+        """Create rekey-interval.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
+                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
+                hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
+
+        json_data = {
+            'rekey_interval': rekey_interval
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_rekey_interval_id37(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve rekey-interval.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_rekey_interval_id25(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete rekey-interval.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_put_aruba_tunnel_policy_id22(
+        self,
+        node_type: str,
+        node_id: str,
+        type: str,
+        rekey_interval: int,
+    ) -> Response:
+        """Create/Update tunnel-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            type (str): Type of tunnel  Valid Values: IPSEC
+            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
+                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
+                hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+
+        json_data = {
+            'type': type,
+            'rekey_interval': rekey_interval
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def sdwan_config_post_aruba_tunnel_policy_id22(
+        self,
+        node_type: str,
+        node_id: str,
+        type: str,
+        rekey_interval: int,
+    ) -> Response:
+        """Create tunnel-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            type (str): Type of tunnel  Valid Values: IPSEC
+            rekey_interval (int): Time interval, in seconds, between rekeying. Value should be in
+                the range 1 minute (60 seconds) to 14 days (1209600 seconds) and default is 24
+                hours.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+
+        json_data = {
+            'type': type,
+            'rekey_interval': rekey_interval
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def sdwan_config_get_aruba_tunnel_policy_id38(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve tunnel-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_tunnel_policy_id26(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete tunnel-policy.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
+
+        return await self.delete(url)
 
     async def sdwan_config_put_aruba_hub_groups_id23(
         self,
@@ -23725,10 +26946,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
             label (str): Hub-mesh label
             name (str): Name of the hub group (data center). A hub group can only belong to one mesh
                 label
@@ -23758,10 +26979,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
             label (str): Hub-mesh label
             name (str): Name of the hub group (data center). A hub group can only belong to one mesh
                 label
@@ -23779,32 +27000,6 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_hub_groups_id27(
-        self,
-        node_type: str,
-        node_id: str,
-        label: str,
-        name: str,
-    ) -> Response:
-        """Delete hub-groups by name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            label (str): Hub-mesh label
-            name (str): Name of the hub group (data center). A hub group can only belong to one mesh
-                label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/{name}/"
-
-        return await self.delete(url)
-
     async def sdwan_config_get_aruba_hub_groups_id39(
         self,
         node_type: str,
@@ -23816,10 +27011,10 @@ class AllCalls(CentralApi):
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
             label (str): Hub-mesh label
             name (str): Name of the hub group (data center). A hub group can only belong to one mesh
                 label
@@ -23831,515 +27026,269 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_graceful_restart_id15(
+    async def sdwan_config_delete_aruba_hub_groups_id27(
         self,
         node_type: str,
         node_id: str,
-        enabled: bool,
-        timer: int,
+        label: str,
+        name: str,
     ) -> Response:
-        """Create/Update Global graceful restart timer.
+        """Delete hub-groups by name.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            enabled (bool): Indicates whether graceful-restart timer is enabled. Enabled by default.
-            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
-                cached information needs to be retained when connectivity between the devices and
-                overlay orchestrator is lost. The devices will flush the orchestrated information
-                and the overlay orchestrator will flush the advertised information from the devices
-                when the connectivity is not restored with in this interval. Value should be in the
-                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+                node-id will be rejected.
+            label (str): Hub-mesh label
+            name (str): Name of the hub group (data center). A hub group can only belong to one mesh
+                label
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/{name}/"
+
+        return await self.delete(url)
+
+    async def sdwan_config_get_aruba_hub_groups_id40(
+        self,
+        node_type: str,
+        node_id: str,
+        label: str,
+    ) -> Response:
+        """Retrieve all hub-groups for given hub-mesh label.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            label (str): Hub-mesh label
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/"
+
+        return await self.get(url)
+
+    async def sdwan_config_put_aruba_hub_mesh_id24(
+        self,
+        node_type: str,
+        node_id: str,
+        label: str,
+        new_label: str,
+        hub_groups: list,
+    ) -> Response:
+        """Create/Update hub-mesh by label.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            label (str): Hub-mesh label
+            new_label (str): Hub-mesh label
+            hub_groups (list): List of hub groups (data centers) to form a mesh.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
 
         json_data = {
-            'enabled': enabled,
-            'timer': timer
+            'new_label': new_label,
+            'hub_groups': hub_groups
         }
 
         return await self.put(url, json_data=json_data)
 
-    async def sdwan_config_post_aruba_graceful_restart_id15(
+    async def sdwan_config_post_aruba_hub_mesh_id24(
         self,
         node_type: str,
         node_id: str,
-        enabled: bool,
-        timer: int,
+        label: str,
+        new_label: str,
+        hub_groups: list,
     ) -> Response:
-        """Create Global graceful restart timer.
+        """Create hub-mesh by label.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            enabled (bool): Indicates whether graceful-restart timer is enabled. Enabled by default.
-            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
-                cached information needs to be retained when connectivity between the devices and
-                overlay orchestrator is lost. The devices will flush the orchestrated information
-                and the overlay orchestrator will flush the advertised information from the devices
-                when the connectivity is not restored with in this interval. Value should be in the
-                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
+                node-id will be rejected.
+            label (str): Hub-mesh label
+            new_label (str): Hub-mesh label
+            hub_groups (list): List of hub groups (data centers) to form a mesh.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
 
         json_data = {
-            'enabled': enabled,
-            'timer': timer
+            'new_label': new_label,
+            'hub_groups': hub_groups
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def sdwan_config_delete_aruba_graceful_restart_id18(
+    async def sdwan_config_get_aruba_hub_mesh_id41(
         self,
         node_type: str,
         node_id: str,
+        label: str,
     ) -> Response:
-        """Delete Global graceful restart timer.
+        """Retrieve hub-mesh by label.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
+            label (str): Hub-mesh label
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
+
+        return await self.get(url)
+
+    async def sdwan_config_delete_aruba_hub_mesh_id28(
+        self,
+        node_type: str,
+        node_id: str,
+        label: str,
+    ) -> Response:
+        """Delete hub-mesh by label.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL, GROUP
+            node_id (str): The value of the identifer for the configuration container. This value is
+                interpreted according to node-type above. Invalid combinations of node-type and
+                node-id will be rejected.
+            label (str): Hub-mesh label
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_graceful_restart_id28(
+    async def sdwan_config_get_aruba_hub_mesh_id42(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve Global graceful restart timer.
+        """Retrieve hub-mesh config for all labels.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/"
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_network_segment_policy_id12(
+    async def sdwan_config_get_aruba_mesh_policy_id43(
         self,
         node_type: str,
         node_id: str,
-        name: str,
-        new_name: str,
-        load_balance: bool,
     ) -> Response:
-        """Create/Update network-segment-policy by segment name.
+        """Retrieve mesh-policy.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            name (str): Overlay network segment name
-            new_name (str): Overlay network segment name
-            load_balance (bool): Enable/Disable load balance orchestration.
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
 
-        json_data = {
-            'new_name': new_name,
-            'load_balance': load_balance
-        }
+        return await self.get(url)
 
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_network_segment_policy_id12(
+    async def sdwan_config_delete_aruba_mesh_policy_id29(
         self,
         node_type: str,
         node_id: str,
-        name: str,
-        new_name: str,
-        load_balance: bool,
     ) -> Response:
-        """Create network-segment-policy by segment name.
+        """Delete mesh-policy.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            name (str): Overlay network segment name
-            new_name (str): Overlay network segment name
-            load_balance (bool): Enable/Disable load balance orchestration.
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
-
-        json_data = {
-            'new_name': new_name,
-            'load_balance': load_balance
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_network_segment_policy_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        name: str,
-    ) -> Response:
-        """Delete network-segment-policy by segment name.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            name (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
 
         return await self.delete(url)
 
-    async def sdwan_config_get_aruba_network_segment_policy_id23(
+    async def sdwan_config_get_aruba_config_id44(
         self,
         node_type: str,
         node_id: str,
-        name: str,
     ) -> Response:
-        """Retrieve network-segment-policy by segment name.
+        """Retrieve SDWAN global/group configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            name (str): Overlay network segment name
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
 
         return await self.get(url)
 
-    async def sdwan_config_get_aruba_aggregates_id33(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-    ) -> Response:
-        """Retrieve aggregates for branch-aggregates.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_branch_aggregates_id35(
+    async def sdwan_config_delete_aruba_config_id30(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve branch-aggregates.
+        """Delete SDWAN global/group configuration.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
+                applied.  Valid Values: GLOBAL, GROUP
             node_id (str): The value of the identifer for the configuration container. This value is
                 interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
+                node-id will be rejected.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_branch_config_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        hubs_type: str,
-        hubs: list,
-        hub_clusters: list,
-        dc_ordering_status: str,
-    ) -> Response:
-        """Create/Update branch-config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
-                ('hubs' list) or VPNC Clusters ('hub-clusters' list). Value 'HUB_TYPE_DEVICE' is
-                used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
-                'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
-            hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
-                be ordered such that devices belonging to same group are contiguous
-            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
-            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
-                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
-                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
-                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
-                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
-
-        json_data = {
-            'hubs_type': hubs_type,
-            'hubs': hubs,
-            'hub_clusters': hub_clusters,
-            'dc_ordering_status': dc_ordering_status
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_branch_config_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        hubs_type: str,
-        hubs: list,
-        hub_clusters: list,
-        dc_ordering_status: str,
-    ) -> Response:
-        """Create branch-config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-            hubs_type (str): This indicates whether DC Preference uses induvidual VPNC devices
-                ('hubs' list) or VPNC Clusters ('hub-clusters' list). Value 'HUB_TYPE_DEVICE' is
-                used to indicate 'hubs' is configured. Value 'HUB_TYPE_CLUSTER' is used to indicate
-                'hub-clusters' is configured  Valid Values: HUB_TYPE_DEVICE, HUB_TYPE_CLUSTER
-            hubs (list): An ordered list of VPNC device identifiers.This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_DEVICE' under branch-config. The VPNC devices must
-                be ordered such that devices belonging to same group are contiguous
-            hub_clusters (list): An ordered list of VPNC clusters. This can be configured only if
-                'hubs-type' is set to 'HUB_TYPE_CLUSTER' under branch-config
-            dc_ordering_status (str): Read-only field to indicate if VPNCs in 'hubs' list are in
-                correct order as per their Data-Center (Group) membership. VPNCs belonging to same
-                group must be consecutive entries in 'hubs' list. If not, the load-balancing will
-                not work as expected. The VPNCs in 'hubs' list should be re-ordered in such cases
-                Valid Values: CORRECT_ORDER, INCORRECT_ORDER
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
-
-        json_data = {
-            'hubs_type': hubs_type,
-            'hubs': hubs,
-            'hub_clusters': hub_clusters,
-            'dc_ordering_status': dc_ordering_status
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_branch_config_id9(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete branch-config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
+        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
 
         return await self.delete(url)
-
-    async def sdwan_config_get_aruba_branch_config_id17(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve branch-config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a
-                BranchGateway/Microbranch group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_timer_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        timer: int,
-    ) -> Response:
-        """Create/Update timer.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
-                cached information needs to be retained when connectivity between the devices and
-                overlay orchestrator is lost. The devices will flush the orchestrated information
-                and the overlay orchestrator will flush the advertised information from the devices
-                when the connectivity is not restored with in this interval. Value should be in the
-                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
-
-        json_data = {
-            'timer': timer
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_timer_id14(
-        self,
-        node_type: str,
-        node_id: str,
-        timer: int,
-    ) -> Response:
-        """Create timer.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            timer (int): Graceful restart timer (in seconds). This time indicates how long the the
-                cached information needs to be retained when connectivity between the devices and
-                overlay orchestrator is lost. The devices will flush the orchestrated information
-                and the overlay orchestrator will flush the advertised information from the devices
-                when the connectivity is not restored with in this interval. Value should be in the
-                range 1 minute (60 seconds) to 7 days (604800) and default is 12 hours.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
-
-        json_data = {
-            'timer': timer
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_timer_id17(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Delete timer.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_timer_id27(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve timer.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
-
-        return await self.get(url)
 
     async def sdwan_config_get_aruba_node_list_id45(
         self,
@@ -24362,511 +27311,14 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def sdwan_config_put_aruba_config_id2(
-        self,
-        label: str,
-        branch_devices: list,
-    ) -> Response:
-        """Create/Update branch-mesh config.
-
-        Args:
-            label (str): branch-mesh label
-            branch_devices (list): List of branch devices to form a mesh.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
-
-        json_data = {
-            'branch_devices': branch_devices
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_config_id2(
-        self,
-        label: str,
-        branch_devices: list,
-    ) -> Response:
-        """Create branch-mesh config.
-
-        Args:
-            label (str): branch-mesh label
-            branch_devices (list): List of branch devices to form a mesh.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
-
-        json_data = {
-            'branch_devices': branch_devices
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_config_id2(
-        self,
-        label: str,
-    ) -> Response:
-        """Delete branch-mesh config.
-
-        Args:
-            label (str): branch-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_config_id3(
-        self,
-        label: str,
-    ) -> Response:
-        """Retrieve branch-mesh config.
-
-        Args:
-            label (str): branch-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_hub_aggregates_id5(
+    async def ucc_config_put_aruba_skype4b_id1(
         self,
         node_type: str,
         node_id: str,
-        segment: str,
-        aggregates: list,
-        new_segment: str,
+        voice_priority: int,
+        video_priority: int,
     ) -> Response:
-        """Create/Update DC aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
-            aggregates (list): List of IPv4 prefixes
-            new_segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
-
-        json_data = {
-            'aggregates': aggregates,
-            'new_segment': new_segment
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_hub_aggregates_id5(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        aggregates: list,
-        new_segment: str,
-    ) -> Response:
-        """Create DC aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
-            aggregates (list): List of IPv4 prefixes
-            new_segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
-
-        json_data = {
-            'aggregates': aggregates,
-            'new_segment': new_segment
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_hub_aggregates_id5(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-    ) -> Response:
-        """Delete DC aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_hub_aggregates_id10(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-    ) -> Response:
-        """Retrieve DC aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-            segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_aggregates_id19(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        prefix: str,
-        new_prefix: str,
-    ) -> Response:
-        """Create/Update global branch aggregate routes by prefix for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            prefix (str): Aggregate IPv4 prefix to be advertised
-            new_prefix (str): Aggregate IPv4 prefix to be advertised
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
-
-        json_data = {
-            'new_prefix': new_prefix
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_aggregates_id19(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        prefix: str,
-        new_prefix: str,
-    ) -> Response:
-        """Create global branch aggregate routes by prefix for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            prefix (str): Aggregate IPv4 prefix to be advertised
-            new_prefix (str): Aggregate IPv4 prefix to be advertised
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
-
-        json_data = {
-            'new_prefix': new_prefix
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_aggregates_id22(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        prefix: str,
-    ) -> Response:
-        """Delete global branch aggregate routes by prefix for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            prefix (str): Aggregate IPv4 prefix to be advertised
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_aggregates_id32(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        prefix: str,
-    ) -> Response:
-        """Retrieve global branch aggregate routes by prefix for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            prefix (str): Aggregate IPv4 prefix to be advertised
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_sdwan_global_id25(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve sdwan-global.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
-
-        return await self.get(url)
-
-    async def sdwan_config_put_aruba_branch_aggregates_id20(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        aggregates: list,
-        new_segment: str,
-    ) -> Response:
-        """Create/Update global branch aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            aggregates (list): Aggregate prefixes
-            new_segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
-
-        json_data = {
-            'aggregates': aggregates,
-            'new_segment': new_segment
-        }
-
-        return await self.put(url, json_data=json_data)
-
-    async def sdwan_config_post_aruba_branch_aggregates_id20(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-        aggregates: list,
-        new_segment: str,
-    ) -> Response:
-        """Create global branch aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-            aggregates (list): Aggregate prefixes
-            new_segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
-
-        json_data = {
-            'aggregates': aggregates,
-            'new_segment': new_segment
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def sdwan_config_delete_aruba_branch_aggregates_id23(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-    ) -> Response:
-        """Delete global branch aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
-
-        return await self.delete(url)
-
-    async def sdwan_config_get_aruba_branch_aggregates_id34(
-        self,
-        node_type: str,
-        node_id: str,
-        segment: str,
-    ) -> Response:
-        """Retrieve global branch aggregate routes for given network segment.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GLOBAL  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must be GLOBAL
-            segment (str): Overlay network segment name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_branch_mesh_ui_id6(
-        self,
-        last_index: str = '0',
-        search_name: str = None,
-        offset: str = 0,
-        limit: int = 100,
-    ) -> Response:
-        """Retrieve branch-mesh-ui.
-
-        Args:
-            last_index (str, optional): Last seen index returned part of the previous query . It can
-                be used instead of offset for seeking the table faster
-            search_name (str, optional): Specify partial/complete string that will be used to search
-                the primary-key (labels).
-            offset (str, optional): Offset value from where to start lookup in the table Defaults to
-                0.
-            limit (int, optional): Max no.of Entries to be returned for Page. Default value is 10
-                and maximum value allowed is 10 Defaults to 100.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/sdwan-config/v1/branch-mesh-ui/"
-
-        params = {
-            'last_index': last_index,
-            'search_name': search_name,
-            'offset': offset,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
-
-    async def sdwan_config_get_aruba_hub_config_id12(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve hub-config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied. Note: This API is supported only on GROUP  Valid Values: GLOBAL, GROUP
-            node_id (str): The value of the identifer for the configuration container. This value is
-                interpreted according to node-type above. Invalid combinations of node-type and
-                node-id will be rejected. Note: For this API, node_id must refer to a VPNC group
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/"
-
-        return await self.get(url)
-
-    async def sdwan_config_get_aruba_branch_devices_id2(
-        self,
-        label: str,
-    ) -> Response:
-        """Retrieve branch-devices.
-
-        Args:
-            label (str): branch-mesh label
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/"
-
-        return await self.get(url)
-
-    async def ucc_config_get_aruba_skype4b_id1(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve skype4b.
+        """Create/Update DSCP Priority configuration for 'Skype for Business'.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -24874,13 +27326,22 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
+                application.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
-        return await self.get(url)
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.put(url, json_data=json_data)
 
     async def ucc_config_post_aruba_skype4b_id1(
         self,
@@ -24889,7 +27350,7 @@ class AllCalls(CentralApi):
         voice_priority: int,
         video_priority: int,
     ) -> Response:
-        """Create skype4b.
+        """Create DSCP Priority configuration for 'Skype for Business'.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -24914,14 +27375,12 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def ucc_config_put_aruba_skype4b_id1(
+    async def ucc_config_get_aruba_skype4b_id1(
         self,
         node_type: str,
         node_id: str,
-        voice_priority: int,
-        video_priority: int,
     ) -> Response:
-        """Create/Update skype4b.
+        """Retrieve DSCP Priority configuration for 'Skype for Business'.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -24929,29 +27388,20 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
-                application.
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
-        json_data = {
-            'voice_priority': voice_priority,
-            'video_priority': video_priority
-        }
-
-        return await self.put(url, json_data=json_data)
+        return await self.get(url)
 
     async def ucc_config_delete_aruba_skype4b_id1(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete skype4b.
+        """Delete DSCP Priority configuration for 'Skype for Business'.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -24966,65 +27416,6 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
         return await self.delete(url)
-
-    async def ucc_config_get_aruba_dns_patterns_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        dns_pattern: str,
-    ) -> Response:
-        """Retrieve dns_patterns by identifier dns_pattern.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
-                patterns can be configured; This is applicable only for Wifi Calling application.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_dns_patterns_id2(
-        self,
-        node_type: str,
-        node_id: str,
-        dns_pattern: str,
-        new_dns_pattern: str,
-        carrier_service_provider: str,
-    ) -> Response:
-        """Create dns_patterns by identifier dns_pattern.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
-                patterns can be configured; This is applicable only for Wifi Calling application.
-            new_dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
-                patterns can be configured; This is applicable only for Wifi Calling application.
-            carrier_service_provider (str): Enter service provider name for enhanced visibility.
-                Enter NA otherwise.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
-
-        json_data = {
-            'new_dns_pattern': new_dns_pattern,
-            'carrier_service_provider': carrier_service_provider
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def ucc_config_put_aruba_dns_patterns_id2(
         self,
@@ -25034,7 +27425,7 @@ class AllCalls(CentralApi):
         new_dns_pattern: str,
         carrier_service_provider: str,
     ) -> Response:
-        """Create/Update dns_patterns by identifier dns_pattern.
+        """Create/Update 'dns_patterns' config for given dns_pattern.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25061,13 +27452,72 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ucc_config_post_aruba_dns_patterns_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        dns_pattern: str,
+        new_dns_pattern: str,
+        carrier_service_provider: str,
+    ) -> Response:
+        """Create 'dns_patterns' config for given dns_pattern.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
+                patterns can be configured; This is applicable only for Wifi Calling application.
+            new_dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
+                patterns can be configured; This is applicable only for Wifi Calling application.
+            carrier_service_provider (str): Enter service provider name for enhanced visibility.
+                Enter NA otherwise.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
+
+        json_data = {
+            'new_dns_pattern': new_dns_pattern,
+            'carrier_service_provider': carrier_service_provider
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_dns_patterns_id2(
+        self,
+        node_type: str,
+        node_id: str,
+        dns_pattern: str,
+    ) -> Response:
+        """Retrieve 'dns_patterns' config for given dns_pattern.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            dns_pattern (str): Configure the DNS pattern for the carrier; A maximum of 10 DNS
+                patterns can be configured; This is applicable only for Wifi Calling application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
+
+        return await self.get(url)
+
     async def ucc_config_delete_aruba_dns_patterns_id2(
         self,
         node_type: str,
         node_id: str,
         dns_pattern: str,
     ) -> Response:
-        """Delete dns_patterns by identifier dns_pattern.
+        """Delete 'dns_patterns' config for given dns_pattern.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25090,7 +27540,7 @@ class AllCalls(CentralApi):
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Retrieve dns_patterns.
+        """Retrieve all configured DNS patterns.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25106,12 +27556,14 @@ class AllCalls(CentralApi):
 
         return await self.get(url)
 
-    async def ucc_config_get_aruba_wifi_calling_id4(
+    async def ucc_config_put_aruba_wifi_calling_id3(
         self,
         node_type: str,
         node_id: str,
+        voice_priority: int,
+        dns_patterns: list,
     ) -> Response:
-        """Retrieve wifi_calling.
+        """Create/Update DSCP Priority configuration for Wifi Calling.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25119,13 +27571,21 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of Wifi Calling
+                application.
+            dns_patterns (list): Wifi calling DNS patterns.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/"
 
-        return await self.get(url)
+        json_data = {
+            'voice_priority': voice_priority,
+            'dns_patterns': dns_patterns
+        }
+
+        return await self.put(url, json_data=json_data)
 
     async def ucc_config_post_aruba_wifi_calling_id3(
         self,
@@ -25134,7 +27594,7 @@ class AllCalls(CentralApi):
         voice_priority: int,
         dns_patterns: list,
     ) -> Response:
-        """Create wifi_calling.
+        """Create DSCP Priority configuration for Wifi Calling.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25158,14 +27618,12 @@ class AllCalls(CentralApi):
 
         return await self.post(url, json_data=json_data)
 
-    async def ucc_config_put_aruba_wifi_calling_id3(
+    async def ucc_config_get_aruba_wifi_calling_id4(
         self,
         node_type: str,
         node_id: str,
-        voice_priority: int,
-        dns_patterns: list,
     ) -> Response:
-        """Create/Update wifi_calling.
+        """Retrieve DSCP Priority configuration for Wifi Calling.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25173,28 +27631,20 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            voice_priority (int): DSCP priority to be applied to voice calls of Wifi Calling
-                application.
-            dns_patterns (list): Wifi calling DNS patterns.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/"
 
-        json_data = {
-            'voice_priority': voice_priority,
-            'dns_patterns': dns_patterns
-        }
-
-        return await self.put(url, json_data=json_data)
+        return await self.get(url)
 
     async def ucc_config_delete_aruba_wifi_calling_id3(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete wifi_calling.
+        """Delete DSCP Priority configuration for Wifi Calling.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25209,57 +27659,6 @@ class AllCalls(CentralApi):
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/"
 
         return await self.delete(url)
-
-    async def ucc_config_get_aruba_sip_id5(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_sip_id4(
-        self,
-        node_type: str,
-        node_id: str,
-        voice_priority: int,
-        video_priority: int,
-    ) -> Response:
-        """Create sip.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
-            video_priority (int): DSCP priority to be applied to video calls of SIP application.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
-
-        json_data = {
-            'voice_priority': voice_priority,
-            'video_priority': video_priority
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def ucc_config_put_aruba_sip_id4(
         self,
@@ -25268,7 +27667,7 @@ class AllCalls(CentralApi):
         voice_priority: int,
         video_priority: int,
     ) -> Response:
-        """Create/Update sip.
+        """Create/Update DSCP Priority configuration for SIP ALG.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25291,12 +27690,63 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
+    async def ucc_config_post_aruba_sip_id4(
+        self,
+        node_type: str,
+        node_id: str,
+        voice_priority: int,
+        video_priority: int,
+    ) -> Response:
+        """Create DSCP Priority configuration for SIP ALG.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of SIP application.
+            video_priority (int): DSCP priority to be applied to video calls of SIP application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_sip_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve DSCP Priority configuration for SIP ALG.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
+
+        return await self.get(url)
+
     async def ucc_config_delete_aruba_sip_id4(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete sip.
+        """Delete DSCP Priority configuration for SIP ALG.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25312,36 +27762,14 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_ucc_alg_id6(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve ucc_alg.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_ucc_alg_id5(
+    async def ucc_config_put_aruba_teams_id5(
         self,
         node_type: str,
         node_id: str,
         voice_priority: int,
         video_priority: int,
-        dns_patterns: list,
     ) -> Response:
-        """Create ucc_alg.
+        """Create/Update DSCP Priority configuration for MS Teams.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25349,26 +27777,94 @@ class AllCalls(CentralApi):
             node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
                 node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
                 group-name
-            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
-                application.
-            video_priority (int): DSCP priority to be applied to video calls of Skype for business
-                application.
-            dns_patterns (list): Wifi calling DNS patterns.
+            voice_priority (int): DSCP priority to be applied to voice calls of Teams application.
+            video_priority (int): DSCP priority to be applied to video calls of Teams application.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
 
         json_data = {
             'voice_priority': voice_priority,
-            'video_priority': video_priority,
-            'dns_patterns': dns_patterns
+            'video_priority': video_priority
+        }
+
+        return await self.put(url, json_data=json_data)
+
+    async def ucc_config_post_aruba_teams_id5(
+        self,
+        node_type: str,
+        node_id: str,
+        voice_priority: int,
+        video_priority: int,
+    ) -> Response:
+        """Create DSCP Priority configuration for MS Teams.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of Teams application.
+            video_priority (int): DSCP priority to be applied to video calls of Teams application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
+
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
         }
 
         return await self.post(url, json_data=json_data)
 
-    async def ucc_config_put_aruba_ucc_alg_id5(
+    async def ucc_config_get_aruba_teams_id6(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve DSCP Priority configuration for MS Teams.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
+
+        return await self.get(url)
+
+    async def ucc_config_delete_aruba_teams_id5(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete DSCP Priority configuration for MS Teams.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
+
+        return await self.delete(url)
+
+    async def ucc_config_put_aruba_ucc_alg_id6(
         self,
         node_type: str,
         node_id: str,
@@ -25403,7 +27899,63 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def ucc_config_delete_aruba_ucc_alg_id5(
+    async def ucc_config_post_aruba_ucc_alg_id6(
+        self,
+        node_type: str,
+        node_id: str,
+        voice_priority: int,
+        video_priority: int,
+        dns_patterns: list,
+    ) -> Response:
+        """Create ucc_alg.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            voice_priority (int): DSCP priority to be applied to voice calls of Skype for business
+                application.
+            video_priority (int): DSCP priority to be applied to video calls of Skype for business
+                application.
+            dns_patterns (list): Wifi calling DNS patterns.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
+
+        json_data = {
+            'voice_priority': voice_priority,
+            'video_priority': video_priority,
+            'dns_patterns': dns_patterns
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_ucc_alg_id7(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve ucc_alg.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
+
+        return await self.get(url)
+
+    async def ucc_config_delete_aruba_ucc_alg_id6(
         self,
         node_type: str,
         node_id: str,
@@ -25424,55 +27976,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_activate_id7(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve activate.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_activate_id6(
-        self,
-        node_type: str,
-        node_id: str,
-        activate: bool,
-    ) -> Response:
-        """Create activate.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            activate (bool): Specifies if UCC service is to be activated.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
-
-        json_data = {
-            'activate': activate
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_activate_id6(
+    async def ucc_config_put_aruba_activate_id7(
         self,
         node_type: str,
         node_id: str,
@@ -25499,7 +28003,55 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def ucc_config_delete_aruba_activate_id6(
+    async def ucc_config_post_aruba_activate_id7(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+    ) -> Response:
+        """Create activate.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
+
+        json_data = {
+            'activate': activate
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_activate_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Retrieve activate.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
+
+        return await self.get(url)
+
+    async def ucc_config_delete_aruba_activate_id7(
         self,
         node_type: str,
         node_id: str,
@@ -25520,66 +28072,14 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_ucc_settings_id8(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_ucc_settings_id7(
+    async def ucc_config_put_aruba_ucc_settings_id8(
         self,
         node_type: str,
         node_id: str,
         activate: bool,
         enable_call_prioritization: bool,
     ) -> Response:
-        """Create ucc_settings.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
-
-        json_data = {
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_ucc_settings_id7(
-        self,
-        node_type: str,
-        node_id: str,
-        activate: bool,
-        enable_call_prioritization: bool,
-    ) -> Response:
-        """Create/Update ucc_settings.
+        """Create/Update UCC settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25603,12 +28103,64 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def ucc_config_delete_aruba_ucc_settings_id7(
+    async def ucc_config_post_aruba_ucc_settings_id8(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+    ) -> Response:
+        """Create UCC settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_ucc_settings_id9(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete ucc_settings.
+        """Retrieve UCC settings.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
+
+        return await self.get(url)
+
+    async def ucc_config_delete_aruba_ucc_settings_id8(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete UCC settings.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25624,28 +28176,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_config_id9(
-        self,
-        node_type: str,
-        node_id: str,
-    ) -> Response:
-        """Retrieve config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        return await self.get(url)
-
-    async def ucc_config_post_aruba_config_id8(
+    async def ucc_config_put_aruba_config_id9(
         self,
         node_type: str,
         node_id: str,
@@ -25654,46 +28185,7 @@ class AllCalls(CentralApi):
         voice_priority: int = 46,
         video_priority: int = 34,
     ) -> Response:
-        """Create config.
-
-        Args:
-            node_type (str): Defines the type of configuration node to which the config is being
-                applied.  Valid Values: GLOBAL
-            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
-                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
-                group-name
-            activate (bool): Specifies if UCC service is to be activated.
-            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
-                applied; this configuration is also consumed by Device Config.
-            voice_priority (int, optional): DSCP priority to be applied to voice calls of Skype for
-                business application.
-            video_priority (int, optional): DSCP priority to be applied to video calls of Skype for
-                business application.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
-
-        json_data = {
-            'activate': activate,
-            'enable_call_prioritization': enable_call_prioritization,
-            'voice_priority': voice_priority,
-            'video_priority': video_priority
-        }
-
-        return await self.post(url, json_data=json_data)
-
-    async def ucc_config_put_aruba_config_id8(
-        self,
-        node_type: str,
-        node_id: str,
-        activate: bool,
-        enable_call_prioritization: bool,
-        voice_priority: int = 46,
-        video_priority: int = 34,
-    ) -> Response:
-        """Create/Update config.
+        """Create/Update complete UCC config.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25723,12 +28215,72 @@ class AllCalls(CentralApi):
 
         return await self.put(url, json_data=json_data)
 
-    async def ucc_config_delete_aruba_config_id8(
+    async def ucc_config_post_aruba_config_id9(
+        self,
+        node_type: str,
+        node_id: str,
+        activate: bool,
+        enable_call_prioritization: bool,
+        voice_priority: int = 46,
+        video_priority: int = 34,
+    ) -> Response:
+        """Create complete UCC config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+            activate (bool): Specifies if UCC service is to be activated.
+            enable_call_prioritization (bool): Specifies if UCC call prioritization has to be
+                applied; this configuration is also consumed by Device Config.
+            voice_priority (int, optional): DSCP priority to be applied to voice calls of Skype for
+                business application.
+            video_priority (int, optional): DSCP priority to be applied to video calls of Skype for
+                business application.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        json_data = {
+            'activate': activate,
+            'enable_call_prioritization': enable_call_prioritization,
+            'voice_priority': voice_priority,
+            'video_priority': video_priority
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def ucc_config_get_aruba_config_id10(
         self,
         node_type: str,
         node_id: str,
     ) -> Response:
-        """Delete config.
+        """Retrieve complete UCC config.
+
+        Args:
+            node_type (str): Defines the type of configuration node to which the config is being
+                applied.  Valid Values: GLOBAL
+            node_id (str): The identifer of the configuration node(aka group). For node-type GLOBAL,
+                node-id should be 'GLOBAL'. For node-type 'GROUP', node-id should be set to the
+                group-name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
+
+        return await self.get(url)
+
+    async def ucc_config_delete_aruba_config_id9(
+        self,
+        node_type: str,
+        node_id: str,
+    ) -> Response:
+        """Delete complete UCC config.
 
         Args:
             node_type (str): Defines the type of configuration node to which the config is being
@@ -25744,7 +28296,7 @@ class AllCalls(CentralApi):
 
         return await self.delete(url)
 
-    async def ucc_config_get_aruba_node_list_id10(
+    async def ucc_config_get_aruba_node_list_id11(
         self,
         node_type: str,
         node_id: str,
@@ -25941,7 +28493,7 @@ class AllCalls(CentralApi):
 
         Args:
             device_type (str): Specify one of "IAP" for swarm, "MAS" for MAS switches, "SWITCH" for
-                aruba switches, "CONTROLLER" for controllers respectively.
+                aruba switches,"CX" for CX switches, "CONTROLLER" for controllers respectively.
 
         Returns:
             Response: CentralAPI Response object
@@ -25954,25 +28506,6 @@ class AllCalls(CentralApi):
 
         return await self.get(url, params=params)
 
-    async def troubleshooting_get_cxcommands_list(
-        self,
-        Serial: str,
-    ) -> Response:
-        """List Troubleshooting CX Commands.
-
-        Args:
-            Serial (str): Serial of CX Device
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/troubleshooting/v1/cxcommands"
-
-        params = {
-            'Serial': Serial
-        }
-
-        return await self.get(url, params=params)
 
     async def troubleshooting_start_troubleshoot(
         self,
@@ -26043,29 +28576,6 @@ class AllCalls(CentralApi):
         }
 
         return await self.delete(url, params=params)
-
-    # NEW-ENDPOINT
-    async def troubleshooting_start_cx_troubleshoot(
-        self,
-        serial: str,
-        commands: List[str],
-    ) -> Response:
-        """Start Troubleshooting Session For CX Device.
-
-        Args:
-            serial (str): Serial of device
-            commands (List[str]): List of commands
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/troubleshooting/v1/cxdevices/{serial}"
-
-        json_data = {
-            'commands': commands
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def troubleshooting_get_session_id(
         self,
@@ -26561,7 +29071,7 @@ class AllCalls(CentralApi):
 
     async def platform_create_user_account(
         self,
-        username: str = None,
+        username: str,
         password: str = None,
         description: str = None,
         firstname: str = None,
@@ -26577,8 +29087,11 @@ class AllCalls(CentralApi):
         """Create a user account.
 
         Args:
-            username (str, optional): name of user
-            password (str, optional): password of user account
+            username (str): name of user
+            password (str, optional): Password (Password requirements are at least 8 characters, a lowercase
+                letter, an uppercase letter, a number, a symbol, no parts of your username, does not
+                include your first name, does not include your last name. Your password cannot be
+                any of your last 6 passwords.)
             description (str, optional): description of user
             firstname (str, optional): firstname
             lastname (str, optional): lastname
@@ -26586,7 +29099,7 @@ class AllCalls(CentralApi):
             street (str, optional): street
             city (str, optional): city
             state (str, optional): state
-            country (str, optional): country
+            country (str, optional): Country code in capital letters. Example IN, US, etc
             zipcode (str, optional): zipcode
             applications (list, optional): applications
 
@@ -26634,7 +29147,7 @@ class AllCalls(CentralApi):
 
         Args:
             user_id (str): User's email id is specified as the user id
-            username (str, optional): name of user
+            username (str): name of user
             description (str, optional): description of user
             firstname (str, optional): firstname
             lastname (str, optional): lastname
@@ -26642,7 +29155,7 @@ class AllCalls(CentralApi):
             street (str, optional): street
             city (str, optional): city
             state (str, optional): state
-            country (str, optional): country
+            country (str, optional): Country code in capital letters. Example IN, US, etc
             zipcode (str, optional): zipcode
             applications (list, optional): applications
 
@@ -26967,6 +29480,214 @@ class AllCalls(CentralApi):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def cgw_get_vgw_cloud_accounts_for_aws(
+        self,
+    ) -> Response:
+        """Configure Cloud account for provider AWS.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cgw/cloud_accounts/provider/AWS"
+
+        return await self.get(url)
+
+    async def cgw_get_vgw_cloud_accounts_for_azure(
+        self,
+    ) -> Response:
+        """Configure Cloud account for provider Azure.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cgw/cloud_accounts/provider/Azure"
+
+        return await self.get(url)
+
+    async def cgw_get_vgw_cloud_accounts_for_zscaler(
+        self,
+    ) -> Response:
+        """Configure Cloud account for provider Zscaler.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cgw/cloud_accounts/provider/Zscaler"
+
+        return await self.get(url)
+
+    async def cgw_create_cloud_account(
+        self,
+        account_name: str,
+        cloud_provider: str,
+        managed: bool,
+        aws_customer_arn: str,
+        aws_external_id: str,
+        aws_iam_type: str,
+        azure_application_id: str,
+        azure_secret_key: str,
+        azure_subscription_id: str,
+        azure_tenant_id: str,
+        zscaler_application_id: str,
+        zscaler_base_uri: str,
+        zscaler_secret_key: str,
+        zscaler_username: str,
+    ) -> Response:
+        """Create Cloud Account for Provider  (AWS/Azure/Zscaler).
+
+        Args:
+            account_name (str): account_name
+            cloud_provider (str): cloud_provider
+            managed (bool): managed
+            aws_customer_arn (str): aws_customer_arn
+            aws_external_id (str): aws_external_id
+            aws_iam_type (str): aws_iam_type
+            azure_application_id (str): azure_application_id
+            azure_secret_key (str): azure_secret_key
+            azure_subscription_id (str): azure_subscription_id
+            azure_tenant_id (str): azure_tenant_id
+            zscaler_application_id (str): zscaler_application_id
+            zscaler_base_uri (str): zscaler_base_uri
+            zscaler_secret_key (str): zscaler_secret_key
+            zscaler_username (str): zscaler_username
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cgw/cloud_accounts"
+
+        json_data = {
+            'account_name': account_name,
+            'cloud_provider': cloud_provider,
+            'managed': managed,
+            'aws_customer_arn': aws_customer_arn,
+            'aws_external_id': aws_external_id,
+            'aws_iam_type': aws_iam_type,
+            'azure_application_id': azure_application_id,
+            'azure_secret_key': azure_secret_key,
+            'azure_subscription_id': azure_subscription_id,
+            'azure_tenant_id': azure_tenant_id,
+            'zscaler_application_id': zscaler_application_id,
+            'zscaler_base_uri': zscaler_base_uri,
+            'zscaler_secret_key': zscaler_secret_key,
+            'zscaler_username': zscaler_username
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cgw_edit_cloud_account(
+        self,
+        account_name: str,
+        cloud_provider: str,
+        managed: bool,
+        aws_customer_arn: str,
+        aws_external_id: str,
+        aws_iam_type: str,
+        azure_application_id: str,
+        azure_secret_key: str,
+        azure_subscription_id: str,
+        azure_tenant_id: str,
+        zscaler_application_id: str,
+        zscaler_base_uri: str,
+        zscaler_secret_key: str,
+        zscaler_username: str,
+        account_id: str,
+    ) -> Response:
+        """Edit Cloud Account for Provider  (Azure/Zscaler).
+
+        Args:
+            account_name (str): account_name
+            cloud_provider (str): cloud_provider
+            managed (bool): managed
+            aws_customer_arn (str): aws_customer_arn
+            aws_external_id (str): aws_external_id
+            aws_iam_type (str): aws_iam_type
+            azure_application_id (str): azure_application_id
+            azure_secret_key (str): azure_secret_key
+            azure_subscription_id (str): azure_subscription_id
+            azure_tenant_id (str): azure_tenant_id
+            zscaler_application_id (str): zscaler_application_id
+            zscaler_base_uri (str): zscaler_base_uri
+            zscaler_secret_key (str): zscaler_secret_key
+            zscaler_username (str): zscaler_username
+            account_id (str): Cloud Account Id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cgw/cloud_accounts/edit/{account_id}"
+
+        json_data = {
+            'account_name': account_name,
+            'cloud_provider': cloud_provider,
+            'managed': managed,
+            'aws_customer_arn': aws_customer_arn,
+            'aws_external_id': aws_external_id,
+            'aws_iam_type': aws_iam_type,
+            'azure_application_id': azure_application_id,
+            'azure_secret_key': azure_secret_key,
+            'azure_subscription_id': azure_subscription_id,
+            'azure_tenant_id': azure_tenant_id,
+            'zscaler_application_id': zscaler_application_id,
+            'zscaler_base_uri': zscaler_base_uri,
+            'zscaler_secret_key': zscaler_secret_key,
+            'zscaler_username': zscaler_username
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cgw_delete_cloud_account(
+        self,
+        account_id: str,
+    ) -> Response:
+        """Delete cloud account for by account-id.
+
+        Args:
+            account_id (str): Cloud Account Id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cgw/cloud_accounts/{account_id}"
+
+        return await self.delete(url)
+
+    async def get_visualrf_v1_geofence(
+        self,
+    ) -> Response:
+        """Get status of geofence.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/geofence"
+
+        return await self.get(url)
+
+    async def post_visualrf_v1_geofence(
+        self,
+    ) -> Response:
+        """Enable geofence.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/geofence"
+
+        return await self.post(url)
+
+    async def delete_visualrf_v1_geofence(
+        self,
+    ) -> Response:
+        """Disable geofence.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/visualrf_api/v1/geofence"
+
+        return await self.delete(url)
 
     async def get_visualrf_v1_client_location(
         self,
