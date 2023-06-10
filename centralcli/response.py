@@ -595,7 +595,7 @@ class Session():
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
             # TODO no strip_none for these, may need to add if we determine a scenario needs it.
-            if params.get("offset", 99) == 0 and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
+            if params.get("offset", 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
                 if r.raw["total"] > len(r.output):
                     _limit = params.get("limit", 100)
                     _offset = params.get("offset", 0)
