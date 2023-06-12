@@ -5,7 +5,7 @@ import asyncio
 from aiohttp.client_exceptions import ContentTypeError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
-from typing import Union, List, Any
+from typing import Union, List, Any, Dict, Tuple
 from rich import print
 from yarl import URL
 
@@ -424,8 +424,8 @@ class Session():
             try:
                 req_log = LoggedRequests(_url.path_qs, method)
 
-                _start = time.monotonic()
-                now = time.monotonic() - INIT_TS
+                _start = time.perf_counter()
+                now = time.perf_counter() - INIT_TS
 
                 _try_cnt = [u.url for u in self.requests].count(_url.path_qs) + 1
                 self.rl_log += [
@@ -451,7 +451,7 @@ class Session():
                         ssl=self.ssl,
                         **kwargs
                     )
-                    elapsed = time.monotonic() - _start
+                    elapsed = time.perf_counter() - _start
                     self.requests += [req_log.update(resp)]
 
                     try:
@@ -493,11 +493,11 @@ class Session():
             else:
                 if resp.rl.near_sec:
                     self.rl_log += [
-                        f"{time.monotonic() - INIT_TS:.2f} [[bright_green]{resp.error}[/] but [dark_orange3]NEARING RATE LIMIT[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
+                        f"{time.perf_counter() - INIT_TS:.2f} [[bright_green]{resp.error}[/] but [dark_orange3]NEARING RATE LIMIT[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
                     ]
                 else:
                     self.rl_log += [
-                        f"{time.monotonic() - INIT_TS:.2f} [[bright_green]{resp.error}[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
+                        f"{time.perf_counter() - INIT_TS:.2f} [[bright_green]{resp.error}[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
                     ]
                 # This handles long running API calls where subsequent calls finish before the previous...
                 self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
@@ -509,9 +509,50 @@ class Session():
 
         return resp
 
+    async def handle_pagination(self, res: Response, paged_raw: Union[Dict, List, None] = None, paged_output: Union[Dict, List, None] = None,) -> Tuple:
+        if not paged_output:
+            paged_output = res.output
+        else:
+            if isinstance(res.output, dict):
+                paged_output = {**paged_output, **res.output}
+            else:  # FIXME paged_output += r.output was also changed contents of paged_raw dunno why
+                paged_output = paged_output + res.output
+
+        if not paged_raw:
+            paged_raw = res.raw
+        else:
+            if isinstance(res.raw, dict):
+                for outer_key in constants.STRIP_KEYS:
+                    if outer_key in res.raw and outer_key in paged_raw:
+                        if isinstance(res.raw[outer_key], dict):
+                            paged_raw[outer_key] = {**paged_raw[outer_key], **res.raw[outer_key]}
+                        else:  # TODO use response magic method to do adds have Response figure this out
+                            paged_raw[outer_key] += res.raw[outer_key]
+                        break
+            else:
+                paged_raw += res.raw
+
+        return paged_raw, paged_output
+
     async def api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
+        """Perform API calls and handle paging
+
+        Args:
+            url (str): The API Endpoint URL
+            data (dict, optional): Data passed to aiohttp.ClientSession. Defaults to None.
+            json_data (Union[dict, list], optional): passed to aiohttp.ClientSession. Defaults to None.
+            method (str, optional): Request Method (POST, GET, PUT,...). Defaults to "GET".
+            headers (dict, optional): headers dict passed to aiohttp.ClientSession. Defaults to {}.
+            params (dict, optional): url parameters passed to aiohttp.ClientSession. Defaults to {}.
+            callback (callable, optional): DEPRECATED callback to be performed on result prior to return. Defaults to None.
+            callback_kwargs (Any, optional): DEPRECATED kwargs to pass to the callback. Defaults to {}.
+            count (int, optional): upper limit on # of records to return (used to return last 'count' audit logs). Defaults to None.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
 
         # TODO cleanup, if we do strip_none here can remove from calling funcs.
         params = utils.strip_none(params)
@@ -548,28 +589,31 @@ class Session():
                 log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}")
                 r.output = callback(r.output, **callback_kwargs or {})
 
-            # -- // paging \\ --
-            if not paged_output:
-                paged_output = r.output
-            else:
-                if isinstance(r.output, dict):
-                    paged_output = {**paged_output, **r.output}
-                else:  # FIXME paged_output += r.output was also changed contents of paged_raw dunno why
-                    paged_output = paged_output + r.output
+            paged_raw, paged_output = await self.handle_pagination(r, paged_raw=paged_raw, paged_output=paged_output)
 
-            if not paged_raw:
-                paged_raw = r.raw
-            else:
-                if isinstance(r.raw, dict):
-                    for outer_key in constants.STRIP_KEYS:
-                        if outer_key in r.raw and outer_key in paged_raw:
-                            if isinstance(r.raw[outer_key], dict):
-                                paged_raw[outer_key] = {**paged_raw[outer_key], **r.raw[outer_key]}
-                            else:  # TODO use response magic method to do adds have Response figure this out
-                                paged_raw[outer_key] += r.raw[outer_key]
-                            break
-                else:
-                    paged_raw += r.raw
+
+            # On 1st call determine if remaining calls can be made in batch
+            # total is provided for some calls with the total # of records available
+            # TODO no strip_none for these, may need to add if we determine a scenario needs it.
+            if params.get("offset", 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
+                if r.raw["total"] > len(r.output):
+                    _limit = params.get("limit", 100)
+                    _offset = params.get("offset", 0)
+                    br = BatchRequest
+                    _reqs = [
+                        br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, "offset": i, "limit": _limit}, **kwargs)
+                        for i in range(len(r.output), r.raw["total"], _limit)
+                    ]
+                    batch_res = await self._batch_request(_reqs)
+                    if not batch_res[-1]:
+                        log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True)
+                        return batch_res[-1]
+                    page_res = [
+                        await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
+                        for res in batch_res
+                    ]
+                    r.raw, r.output = page_res[-1]
+                    break
 
             _limit = params.get("limit", 0)
             _offset = params.get("offset", 0)

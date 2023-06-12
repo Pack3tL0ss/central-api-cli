@@ -49,7 +49,7 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
     _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device type use [cyan]show <DEVICE TYPE>[/cyan]\n"
+    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]\n"
     if inventory:
         caption = f"{caption}  [italic dark_olive_green2]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
@@ -189,10 +189,12 @@ def inventory(
 
 
 # TODO --sort option for date fields sorts converted value, needs to be sorted by epoch before conversion
+# TODO sub command for subscription stats
 @app.command()
 def subscriptions(
-    _type: str = typer.Argument(None, metavar="[TYPE]", help="license type"),
-    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),
+    _type: str = typer.Argument(None, metavar='[TYPE|"stats"]', help="license type"),  # TODO enum for allowed types
+    service: str = typer.Option(None, hidden=True),  # TODO this is for show subscription stats also a couple more options we could allow
+    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),  # Need to adapt a bit for stats or make sub-command
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
@@ -208,7 +210,6 @@ def subscriptions(
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
     ),
-    verbose: bool = typer.Option(False, "-v", help="Gather additional details about device from cache.", show_default=False, hidden=True),
     verbose2: bool = typer.Option(
         False,
         "-vv",
@@ -216,19 +217,24 @@ def subscriptions(
         show_default=False,
     ),
 ) -> None:
-    """Show subscription/license details
+    """Show subscription/license details or stats
     """
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(cli.central.get_subscriptions, _type)
+    stat_type = "" if _type is None else _type.lower().strip()
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if stat_type != "stats" else "yaml")
+    if stat_type == "stats":
+        resp = cli.central.request(cli.central.get_subscription_stats)
+    else:
+        resp = cli.central.request(cli.central.get_subscriptions, _type)
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Subscriptions",
+        title="Subscriptions" if stat_type != "stats" else "subscription stats",
         sort_by=sort_by,
         reverse=reverse,
-        cleaner=cleaner.get_subscriptions,
+        cleaner=cleaner.get_subscriptions if stat_type != "stats" else None,
     )
+
 
 @app.command(short_help="Show All Devices")
 def all(

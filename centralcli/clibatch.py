@@ -988,6 +988,7 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
                     f"but we tried to delete {len(del_list)} sites.",
                     show=True
                 )
+            return resp
 
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
@@ -1050,12 +1051,12 @@ def delete(
 
     if what == "devices":
         resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
-        cli.display_results(resp, tablefmt="action")
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
         print("Batch Delete Groups is not implemented yet.")
         raise typer.Exit(1)
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
