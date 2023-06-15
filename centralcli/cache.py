@@ -1113,6 +1113,11 @@ class Cache:
                     _update_data = utils.listify(resp.output)
                     _update_data = cleaner.get_devices(_update_data)
 
+                    # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
+                    if "aps" in resp.raw.get("aps", [{}])[0]:
+                        _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
+                        _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swarm_id": _swarm_ids[d["serial"]]}} for d in _update_data]
+
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)
                     if False in update_res:
