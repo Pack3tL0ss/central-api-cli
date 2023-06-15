@@ -1089,6 +1089,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    # TODO cleanup the way raw is combined, see show wids all.
     async def get_all_devicesv2(self, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
@@ -3400,14 +3401,16 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    async def configuration_update_wlan_v2(self, group_name_or_guid: str, wlan_name: str,
-                                           essid: str, type: str, hide_ssid: bool, vlan: str,
-                                           zone: str, wpa_passphrase: str,
-                                           wpa_passphrase_changed: bool, is_locked: bool,
-                                           captive_profile_name: str, bandwidth_limit_up: str,
-                                           bandwidth_limit_down: str,
-                                           bandwidth_limit_peruser_up: str,
-                                           bandwidth_limit_peruser_down: str, access_rules: list) -> Response:
+    async def configuration_update_wlan_v2(
+            self, group_name_or_guid: str, wlan_name: str,
+            essid: str, type: str, hide_ssid: bool, vlan: str,
+            zone: str, wpa_passphrase: str,
+            wpa_passphrase_changed: bool, is_locked: bool,
+            captive_profile_name: str, bandwidth_limit_up: str,
+            bandwidth_limit_down: str,
+            bandwidth_limit_peruser_up: str,
+            bandwidth_limit_peruser_down: str, access_rules: list
+        ) -> Response:
         """Update an existing WLAN.
 
         Args:
@@ -3455,7 +3458,9 @@ class CentralApi(Session):
 
     # TODO changte to use consistent dev tpe ap gw cx sw
     # convert to the stuff apigw wants inside method
-    # API-FLAW no API to upgrade cluster, Not functional on CX
+    # API-FLAW no API to upgrade cluster
+    # https://internal-ui.central.arubanetworks.com/firmware/controller/clusters/upgrade is what the UI calls when you upgrade via UI
+    # payload: {"reboot":true,"firmware_version":"10.5.0.0-beta_87046","devices":[],"clusters":[72],"when":0,"timezone":"+00:00","partition":"primary"}
     # device_type CX is not valid
     async def upgrade_firmware(
         self,
