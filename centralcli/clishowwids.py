@@ -447,12 +447,18 @@ def all(
     }
 
     resp = central.request(central.wids_get_all, **kwargs)
+    if resp.raw.get("_counts"):
+        caption = f'Rogue APs: [cyan]{resp.raw["_counts"]["rogues"]}[/cyan] '
+        caption += f'Suspected Rogue APs: [cyan]{resp.raw["_counts"]["suspect"]}[/] '
+        caption += f'Interfering APs: [cyan]{resp.raw["_counts"]["interfering"]}[/] '
+        caption += f'Neighbor APs: [cyan]{resp.raw["_counts"]["neighbor"]}[/]'
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title="WIDS Report (All classification types)",
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by if not sort_by else sort_by.replace("_", " "),
