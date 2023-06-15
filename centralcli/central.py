@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import asyncio
 import base64
 from enum import Enum
 import json
@@ -11,6 +10,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Tuple, Union
 from datetime import datetime, timedelta
+from models import WIDS
 # buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
 
 # from aiohttp import ClientSession
@@ -4589,6 +4589,90 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def wids_get_all(
+        self,
+        group: List[str] = None,
+        label: List[str] = None,
+        site: List[str] = None,
+        start: int = None,
+        end: int = None,
+        swarm_id: str = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100
+    ) -> Response:
+        """List all wids classifications.
+
+        Args:
+            group (List[str], optional): List of group names
+            label (List[str], optional): List of label names
+            site (List[str], optional): List of site names
+            start (int, optional): Need information from this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp minus 3 hours
+            end (int, optional): Need information to this timestamp. Timestamp is epoch in
+                milliseconds. Default is current timestamp
+            swarm_id (str, optional): Filter by Swarm ID
+            from_timestamp (int, optional): This parameter supercedes start parameter. Need
+                information from this timestamp. Timestamp is epoch in seconds. Default is current
+                UTC timestamp minus 3 hours
+            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
+                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            offset (int, optional): Pagination offset (default = 0) Defaults to 0.
+            limit (int, optional): pagination size (default = 100) Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        params = {
+            'group': group,
+            'label': label,
+            'site': site,
+            'start': start,
+            'end': end,
+            'swarm_id': swarm_id,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        br = self.BatchRequest
+        funcs = [
+            self.wids_get_interfering_aps,
+            self.wids_get_neighbor_aps,
+            self.wids_get_suspect_aps,
+            self.wids_get_rogue_aps,
+        ]
+
+        batch_req = [
+            br(f, **params) for f in funcs
+        ]
+
+        batch_res = await self._batch_request(batch_req)
+        resp = batch_res[-1]
+        ok_res = [idx for idx, res in enumerate(batch_res) if res.ok]
+        if not len(ok_res) == len(funcs):
+            failed = [x for x in range(0, len(funcs)) if x not in ok_res]
+            for f in failed:
+                if f in range(0, len(batch_res)):
+                    log.error(f"{batch_res[f].method} {batch_res[f].url.path} Returned Error Status {batch_res[f].status}. {batch_res[f].output or batch_res[f].error}", show=True)
+        raw_keys = ["interfering_aps", "neighbor_aps", "suspect_aps"]
+        resp.raw = {"rogue_aps": resp.raw.get("rogue_aps", []), "_counts": {"rogues": resp.raw.get("total")}}
+        for idx, key in enumerate(raw_keys):
+            if idx in ok_res:
+                resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
+                resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
+                resp.output = [*resp.output, *batch_res[idx].output]
+        # resp.output = [*resp.output, *batch_res[0].output, *batch_res[1].output, *batch_res[2].output]
+        try:
+            resp.output = [WIDS(**d).dict() for d in resp.output]
+        except Exception as e:
+            log.warning(f"dev note. pydantic conversion did not work", show=True)
+
+        return resp
+
 
     async def get_alerts(
         self,
