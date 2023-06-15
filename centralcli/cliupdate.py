@@ -125,7 +125,7 @@ def template(
     typer.secho(str(_resp), fg="green" if _resp else "red")
 
 
-@app.command(short_help="Update existing or add new Variables for a device/template")
+@app.command(help="Update existing or add new Variables for a device/template")
 def variables(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
     var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
@@ -153,9 +153,9 @@ def variables(
                 vars += [var]
                 get_next = True
         else:
-            _ = var.split('=')
-            vars += _[0]
-            vals += _[1]
+            _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
+            vars += [_[0]]
+            vals += [_[1]]
             get_next = False
 
     if len(vars) != len(vals):
@@ -164,16 +164,17 @@ def variables(
 
     var_dict = {k: v for k, v in zip(vars, vals)}
 
-    msg = "Sending Update" if yes else "Please Confirm: Update"
-    typer.secho(f"{msg} {dev.name}|{dev.serial}", fg="cyan")
-    [typer.echo(f'    {k}: {v}') for k, v in var_dict.items()]
-    if yes or typer.confirm(typer.style("Proceed with these values", fg="cyan")):
+    con = Console(emoji=False)
+    msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
+    con.print(f"{msg} {dev.rich_help_text}")
+    [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(
             cli.central.update_device_template_variables,
             serial,
             dev.mac,
             var_dict=var_dict)
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(
