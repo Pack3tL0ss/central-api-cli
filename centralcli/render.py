@@ -46,7 +46,7 @@ RICH_FOLD_COLS = ["description"]
 console = Console(emoji=False)
 
 
-CUST_KEYS = ["customer_id", "customer_name", "cid"]
+CUST_KEYS = ["customer_id", "customer_name", "cid", "cust_id"]
 
 class Output:
     def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
@@ -362,13 +362,13 @@ def output(
                         [
                             ",".join(
                                 [
-                                    str(v) for k, v in d.items() if k not in CUST_KEYS
+                                    str(v) if "," not in str(v) else f'"{v}"' for k, v in d.items() if k not in CUST_KEYS
                                 ]
                             )
                             for d in outdata
                         ]
         )
-        raw_data = table_data = csv_data if not outdata else f"{','.join(outdata[0].keys())}\n{csv_data}\n"
+        raw_data = table_data = csv_data if not outdata else f"{','.join([k for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
