@@ -80,7 +80,7 @@ def _mdyt_timestamp(epoch: float) -> str:
 
 
 def _short_connection(value: str) -> str:
-    return value.replace("802.11", "")
+    return "" if value is None else value.replace("802.11", "")
 
 
 def _serial_to_name(sernum: str) -> str:
