@@ -4,6 +4,7 @@
 """
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 """
+from __future__ import annotations
 import functools
 import ipaddress
 import logging
@@ -207,6 +208,8 @@ _short_key = {
     "auth_type": "auth",
     "neighbor_count": "nbrs",
     "area_id": "area",
+    "intf_state_down_reason": "Down Reason",
+    "is_uplink": "Uplink",
 }
 
 
@@ -297,6 +300,33 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
+def simple_kv_formatter(data: List) -> List:
+    """Default simple formatter
+
+    runs all key/values through _short_key, _short_value
+
+    Args:
+        data (List): Data typically a list of dicts
+
+    Returns:
+        List: Formatted data
+    """
+    if not isinstance(data, list):
+        log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
+        return data
+
+    data = [
+        dict(
+            short_value(
+                k,
+                v,
+            )
+            for k, v in d.items()
+        )
+        for d in data
+    ]
+
+    return data
 
 def _get_group_names(data: List[List[str],]) -> list:
     """Convert list of single item lists to a list of strs
@@ -463,20 +493,41 @@ def get_clients(
     return data
 
 
-def strip_no_value(data: List[dict]) -> List[dict]:
-    """strip out any columns that have no value in any row"""
+def strip_no_value(data: List[dict] | Dict[dict]) -> List[dict] | Dict[dict]:
+    """strip out any columns that have no value in any row
+
+    Accepts either List of dicts, or a Dict where the value for each key is a dict
+    """
     no_val_strings = ["Unknown", "NA", "None", "--", ""]
-    no_val: List[List[int]] = [
-        [
-            idx
-            for idx, v in enumerate(id.values())
-            if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
+    if isinstance(data, list):
+        no_val: List[List[int]] = [
+            [
+                idx
+                for idx, v in enumerate(id.values())
+                if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
+            ]
+            for id in data
         ]
-        for id in data
-    ]
-    if no_val:
-        common_idx: set = set.intersection(*map(set, no_val))
-        data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+        if no_val:
+            common_idx: set = set.intersection(*map(set, no_val))
+            data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+
+    elif isinstance(data, dict) and all(isinstance(d, dict) for d in data.values()):
+        no_val: List[List[int]] = [
+            [
+                idx
+                for idx, v in enumerate(data[id].values())
+                if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
+            ]
+            for id in data
+        ]
+        if no_val:
+            common_idx: set = set.intersection(*map(set, no_val))
+            data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_idx} for id in data}
+    else:
+        log.error(
+            f"cleaner.strip_no_value recieved unexpected type {type(data)}. Expects List[dict], or Dict[dict]. Data was returned as is."
+        )
 
     return data
 
@@ -1150,3 +1201,45 @@ def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict
     ]
 
     return data
+
+def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+    data = utils.listify(data)
+
+    # TODO verbose and non-verbose
+    # TODO verify oper_state and status are always the same and only show one of them
+    key_order = [
+        "macaddr",
+        "type",
+        "phy_type",
+        "port",
+        "oper_state",
+        "admin_state",
+        "status",
+        "intf_state_down_reason",
+        "speed",
+        "duplex_mode",
+        "vlan",
+        "allowed_vlan",
+        "vlan_mode",
+        "mode",
+        "has_poe",
+        "poe_state",
+        "power_consumption",
+        "is_uplink",
+        "trusted",
+        "tx_usage",
+        "rx_usage",
+        "mux",
+        "vsx_enabled",
+    ]
+    strip_keys = ["port_number", "alignment",]
+
+    # Append any additional keys to the end
+    key_order = [*key_order, *data[-1].keys()]
+
+    # send all key/value pairs through formatters and convert List[Dict] to Dict where port_number is key
+    data = {
+        d["port_number"] if not all(d.isdigit() for d in d["port_number"]) else int(d["port_number"]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
+    }
+
+    return strip_no_value(data)
