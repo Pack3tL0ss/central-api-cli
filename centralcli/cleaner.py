@@ -19,12 +19,12 @@ import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import constants, utils
+    from centralcli import constants, utils, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import constants, utils
+        from centralcli import constants, utils, log
     else:
         print(pkg_dir.parts)
         raise e
