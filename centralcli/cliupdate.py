@@ -143,6 +143,7 @@ def variables(
 
     vars, vals, get_next = [], [], False
     for var in var_value:
+        var = var.rstrip(",")
         if var == '=':
             continue
         if '=' not in var:
