@@ -115,6 +115,11 @@ def _extract_event_details(details: List[dict]) -> dict:
 
 _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
+# TODO determine all modes possible (CX)
+vlan_modes = {
+    1: "Access",
+    3: "Trunk",
+}
 
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
@@ -152,6 +157,9 @@ _short_value = {
     "start_date": _mdyt_timestamp,
     "end_date": _mdyt_timestamp,
     "auth_type": lambda v: v if v != "None" else "-",
+    "vlan_mode": lambda v: vlan_modes.get(v, v),
+    "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)])
+    # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
 
 _short_key = {
@@ -297,6 +305,8 @@ def short_value(key: str, value: Any):
             value = _extract_names_from_id_name_dict(value)
         elif key in ["events_details"]:
             value = _extract_event_details(value)
+    elif key in _short_value:
+        value = _short_value[key](value)
 
     return short_key(key), _unlist(value)
 
@@ -1207,6 +1217,7 @@ def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
 
     # TODO verbose and non-verbose
     # TODO verify oper_state and status are always the same and only show one of them
+    # TODO determine if "mode" has any value, appears to always be Access on CX
     key_order = [
         "macaddr",
         "type",
