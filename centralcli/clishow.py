@@ -552,8 +552,8 @@ def interfaces(
     dev = cli.cache.get_dev_identifier(device,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
-    else:
-        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "CX")
+    else:       # TODO cx parameter is not used using same endpoint for cx and sw as the result is the same.  Should be able to remove.
+        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, cx=dev.type == "cx")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
