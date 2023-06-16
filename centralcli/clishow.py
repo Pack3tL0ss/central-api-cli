@@ -2413,6 +2413,17 @@ def guests(
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
+@app.command()
+def version(
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+) -> None:
+    """Show current cencli version, and latest available version.
+    """
+    cli.version_callback()
+
+
 # @app.command(short_help="Show config", hidden=True)
 def _get_cencli_config(
     default: bool = typer.Option(

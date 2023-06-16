@@ -9,6 +9,7 @@ from pathlib import Path
 from rich.console import Console
 from rich import print
 import json
+import pkg_resources
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -162,6 +163,28 @@ class CLICommon:
                     )
 
             raise typer.Exit(code=1)
+
+    def version_callback(self, ctx: typer.Context | None = None,):
+        if ctx is not None and ctx.resilient_parsing:  # tab completion, return without validating
+            return
+
+        current = pkg_resources.get_distribution('centralcli').version
+        resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
+        latest = max(resp.output["releases"])
+        if not resp:
+            print(current)
+        else:
+            msg = "[bold bright_green]centralcli[/] "
+            msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
+            msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'
+            msg += "\n".join([f'  {k}: [cyan]{v}[/]' for k, v in resp.output["info"]["project_urls"].items()])
+            msg += f'\n\nVersion: {current}'
+            if current == latest:
+                msg += " [italic green3]You are on the latest version.[reset]"
+            else:
+                msg += f'\nLatest Available Version: {latest}'
+
+            print(msg)
 
     @staticmethod
     def default_callback(ctx: typer.Context, default: bool):

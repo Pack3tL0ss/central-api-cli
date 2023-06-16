@@ -11,6 +11,7 @@ from typing import List
 
 from rich import print
 from rich.console import Console
+import pkg_resources
 
 try:
     import psutil
@@ -812,8 +813,10 @@ def convert(
 
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
     if not ctx.resilient_parsing:
-        account, debug, debugv, default, update_cache = None, None, None, None, None
+        version, account, debug, debugv, default, update_cache = None, None, None, None, None, None
         for idx, arg in enumerate(sys.argv):
+            if arg in ["-v", "-V", "--version"]:
+                version = True
             if arg == "--debug":
                 debug = True
             if arg == "--debugv":
@@ -833,6 +836,9 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
         account = account or os.environ.get("ARUBACLI_ACCOUNT")
         debug = debug or os.environ.get("ARUBACLI_DEBUG", False)
 
+        if version:
+            cli.version_callback(ctx)
+            raise typer.Exit(0)
         if default:
             default = cli.default_callback(ctx, True)
         # elif account:
@@ -851,9 +857,13 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
             pass
 
 
+# TODO See if possible to do all 3 version options as one typer.Option (--version -v -V)
 @app.callback()
 def callback(
     # ctx: typer.Context,``
+    version: bool = typer.Option(False, "--version", is_flag=True, help="Show current cencli version, and latest available version."),
+    _version: bool = typer.Option(False, "-V", is_flag=True, help="Show current cencli version, and latest available version.", case_sensitive=False, hidden=False),
+    __version: bool = typer.Option(False, "-v", is_flag=True, hidden=True),
     debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
                             #    callback=all_commands_callback),
     debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
