@@ -403,7 +403,7 @@ class CLICommon:
 
             # update caption with rate limit
             if resp[-1].rl:
-                rl_str = f"[italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
+                rl_str = f"[reset][italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
                 caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
 
             for idx, r in enumerate(resp):
@@ -420,7 +420,7 @@ class CLICommon:
                 fg = "bright_green" if r else "red"
                 conditions = [len(resp) > 1, tablefmt in ["action", "raw"], r.ok and not r.output]
                 if any(conditions):
-                    _url = r.url if not hasattr(r.url, "raw_path_qs") else r.url.path
+                    _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
                     print(
                         f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
