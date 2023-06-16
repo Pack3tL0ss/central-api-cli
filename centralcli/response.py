@@ -809,7 +809,7 @@ class Session():
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
+        f_url = url if url.startswith("http") else self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, params=params, headers=headers, **kwargs)
 
