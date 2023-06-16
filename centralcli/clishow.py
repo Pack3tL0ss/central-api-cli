@@ -49,9 +49,9 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
     _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]\n"
+    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
     if inventory:
-        caption = f"{caption}  [italic dark_olive_green2]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+        caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
 def show_devices(
@@ -1516,7 +1516,7 @@ def clients(
             _tot = len(resp)
             _wired = len([x for x in resp.output if x["client_type"] == "WIRED"])
             _wireless = len([x for x in resp.output if x["client_type"] == "WIRELESS"])
-            _count_text = f"{_tot} Clients, (Wired: {_wired}, Wireless: {_wireless})."
+            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{_wired}[/], [bright_green]Wireless[/]: [cyan]{_wireless}[/]"
 
     if not verbose2:
         _format = "rich" if not verbose else "yaml"
