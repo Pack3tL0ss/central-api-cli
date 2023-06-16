@@ -402,3 +402,23 @@ def output(
                                 )
 
     return Output(rawdata=raw_data, prettydata=table_data, config=config)
+
+
+def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
+    """Accept text or list of text with rich markups and return final colorized text with ascii control chars
+
+    This is temporary as the rich context handler stopped working.  Can revert once fixed upstream
+
+    Args:
+        text (str | List[str]): The text or list of text to capture.
+            If provided as list it will be converted to string (joined with \n)
+
+    Returns:
+        str: text with markups converted to ascii control chars
+    """
+    if isinstance(text, list):
+        "\n".join(text)
+    console = Console(record=True, emoji=emoji, **kwargs)
+    console.begin_capture()
+    console.print(text)
+    return console.end_capture()
