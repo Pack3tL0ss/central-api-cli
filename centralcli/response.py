@@ -386,7 +386,6 @@ class Session():
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
         resp = None
-        # _url = URL(url).with_query({k: v for k, v in params.items() if k in {"offset", "limit"}})
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' [{_url.path}]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
