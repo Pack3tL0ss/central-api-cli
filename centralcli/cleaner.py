@@ -435,7 +435,26 @@ def _client_concat_associated_dev(
     if verbose:
         data["connected device"] = _unlist(strip_no_value([_connected]))
     else:
-        data["connected device"] = f"{_connected['name']} ({_connected['type']})"
+        # More work than is prob warranted by if the device name includes the type, and the adjacent characters are
+        # not alpha then we don't append the type.  So an ap with a name of Zrm-655-ap will not have (AP) appended
+        # but Zrm-655-nap would have it appended
+        data["connected device"] = f"{_connected['name']}"
+        add_type = False
+        if _connected['type'].lower() in _connected['name'].lower():
+            t: str = _connected['type'].lower()
+            n: str = _connected['name'].lower()
+            for idx in set([n.find(t), n.rfind(t)]):
+                _start = idx
+                _end = _start + len(t)
+                _prev = None if _start == 0 else _start - 1
+                _next = None if _end + 1 > len(n) else _end + 1
+                if (_prev and n[_prev].isalpha()) or (_next and n[_next].isalpha()):
+                    add_type = True
+        else:
+            add_type = True
+
+        if add_type:
+            data["connected device"] = f"{data['connected device']} ({_connected['type']})"
 
     return data
 
@@ -482,7 +501,6 @@ def get_clients(
             "last_connection_time",
         ]
         if data and all([isinstance(d, dict) for d in data]):
-            # all_keys = set([k for d in data for k in d])
             data = [
                 dict(
                     short_value(
