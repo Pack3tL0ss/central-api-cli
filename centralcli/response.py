@@ -556,10 +556,10 @@ class Session():
         # TODO cleanup, if we do strip_none here can remove from calling funcs.
         params = utils.strip_none(params)
 
-        # Debugging flag to lower paging limit to test paging with smaller chunks.
+        # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
         if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
-            params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+            params["limit"] = config.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
