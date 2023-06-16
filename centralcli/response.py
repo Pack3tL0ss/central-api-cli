@@ -404,7 +404,7 @@ class Session():
                 f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
             )
             log.debug(
-                f"Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 else ''}"
+                f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
                 call_data = {
