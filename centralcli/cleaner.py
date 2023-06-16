@@ -63,8 +63,8 @@ def _duration_words(secs: Union[int, str]) -> str:
 
 
 @epoch_convert
-def _time_diff_words(epoch: float) -> str:
-    return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
+def _time_diff_words(epoch: float | None) -> str:
+    return "" if epoch is None else pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
 @epoch_convert
