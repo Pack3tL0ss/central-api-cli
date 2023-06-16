@@ -2,23 +2,26 @@
 # -*- coding: utf-8 -*-
 
 import base64
-from enum import Enum
 import json
 import time
 from asyncio.proactor_events import _ProactorBasePipeTransport
+from datetime import datetime, timedelta
+from enum import Enum
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Tuple, Union
-from datetime import datetime, timedelta
-from models import WIDS
-# buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
+from typing import Dict, List, Literal, Tuple, Union
 
 # from aiohttp import ClientSession
 import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
-from . import ArubaCentralBase, MyLogger, cleaner, config, log, utils, constants, models
+from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
+               models, utils)
 from .response import Response, Session
+# buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
+
+
+
 
 color = utils.color
 
@@ -4672,7 +4675,7 @@ class CentralApi(Session):
                 resp.output = [*resp.output, *batch_res[idx].output]
         # resp.output = [*resp.output, *batch_res[0].output, *batch_res[1].output, *batch_res[2].output]
         try:
-            resp.output = [WIDS(**d).dict() for d in resp.output]
+            resp.output = [models.WIDS(**d).dict() for d in resp.output]
         except Exception as e:
             log.warning(f"dev note. pydantic conversion did not work", show=True)
 
