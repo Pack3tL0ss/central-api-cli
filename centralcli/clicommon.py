@@ -10,6 +10,8 @@ from rich.console import Console
 from rich import print
 import json
 import pkg_resources
+import os
+from render import rich_capture
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -53,7 +55,12 @@ class CLICommon:
             if self.msg and hasattr(self, self.msg):
                 return getattr(self, self.msg)
             else:
-                return self.initial
+                return self.initial if not os.environ.get("ARUBACLI_ACCOUNT") else self.envvar
+
+        @property
+        def envvar(self):
+            envvar_msg = f'Using Account: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
+            return rich_capture(envvar_msg)
 
         @property
         def initial(self):
