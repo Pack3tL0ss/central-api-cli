@@ -874,26 +874,30 @@ def labels(
 
 @app.command(short_help="Show sites/details")
 def sites(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    sort_by: SortSiteOptions = typer.Option(None, "--sort"),
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
+    count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
+    count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
+    sort_by: SortSiteOptions = typer.Option("name", "--sort",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     central = cli.central
+    sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
 
     site = None if site and site.lower() == "all" else site
     if not site:
@@ -905,6 +909,22 @@ def sites(
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
 
+    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    if resp.ok:
+        for do, field in zip([count_state, count_country], ["state", "country"]):
+            if do:
+                _cnt_list = [site[field] for site in resp.output if site[field]]
+                _cnt_dict = {
+                    item: _cnt_list.count(item) for item in set(_cnt_list)
+                }
+                counts = {**counts, **_cnt_dict}
+
+            if counts:
+                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    if count_caption:
+        caption = f'[reset]{caption}, {count_caption}[reset][/]'
+
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     cli.display_results(
@@ -915,7 +935,11 @@ def sites(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        caption=caption,
     )
+
+    if counts and tablefmt != "rich":
+        print(caption)
 
 
 @app.command(short_help="Show templates/details")
