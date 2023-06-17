@@ -269,11 +269,6 @@ class BatchRenameArgs(str, Enum):
     groups = "groups"
 
 
-class RenameArgs(str, Enum):
-    group = "group"
-    ap = "ap"
-
-
 class DhcpArgs(str, Enum):
     clients = "clients"
     server = "server"
@@ -354,6 +349,7 @@ class ArgToWhat:
     def _init_rename(self):
         self.group = self.groups = "group"
         self.ap = self.aps = "ap"
+        self.site = self.sites = "site"
 
     def _init_delete(self):
         self.site = self.sites = "site"

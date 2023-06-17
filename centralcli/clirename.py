@@ -24,10 +24,7 @@ from centralcli.constants import IdenMetaVars # noqa
 iden = IdenMetaVars()
 app = typer.Typer()
 
-# TODO constant.RenameArgs should no longer be used anywhere (broke rename into own sub command)
 
-# XXX Doesn't actually appear to be valid for any group rename
-# TODO non batch rename AP
 @app.command()
 def site(
     site: str = typer.Argument(..., metavar=iden.site, autocompletion=cli.cache.site_completion, show_default=False,),
