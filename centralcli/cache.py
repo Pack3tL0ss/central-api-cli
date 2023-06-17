@@ -11,6 +11,7 @@ from tinydb import TinyDB, Query
 from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants, Response
 from pathlib import Path
+from render import rich_capture
 
 import asyncio
 import time
@@ -184,7 +185,7 @@ class CentralObject:
 
         return "[reset]" + "|".join(
             [
-                f"{'[cyan]' if idx > 0 else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
+                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
             ]
         )
 
@@ -1602,14 +1603,20 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
-                kwargs = {"dev_db": True}
-                if include_inventory:
-                    _word = " & Inventory "
-                    kwargs["inv_db"] = True
-                else:
-                    _word = " "
-                typer.secho(f"No Match Found for {query_str}, Updating Device{_word}Cache", fg="red")
-                self.check_fresh(refresh=True, **kwargs)
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
+                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.SiteDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    kwargs = {"dev_db": True}
+                    if include_inventory:
+                        _word = " & Inventory "
+                        kwargs["inv_db"] = True
+                    else:
+                        _word = " "
+                    typer.secho(f"No Match Found for {query_str}, Updating Device{_word}Cache", fg="red")
+                    self.check_fresh(refresh=True, **kwargs)
 
             if match:
                 match = [CentralObject("dev", dev) for dev in match]
@@ -1708,11 +1715,16 @@ class Cache:
                 )
 
             if retry and not match and self.central.get_all_sites not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
-                self.check_fresh(refresh=True, site_db=True)
+                if FUZZ and not completion:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
+                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.SiteDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
+                    self.check_fresh(refresh=True, site_db=True)
             if match:
                 match = [CentralObject("site", s) for s in match]
-                # raise ValueError(f'>{query_str}<, {type(query_str)}, {", ".join([m.name for m in match])}')
                 break
 
         if completion:
@@ -1866,10 +1878,11 @@ class Cache:
             if not match and retry and self.central.get_labels not in self.updated:
                 print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
-                    fuzz_resp = process.extract(query_str, [g["name"] for g in self.labels], limit=1)
+                    fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
+                        confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.LabelDB.search(self.Q.name == fuzz_match)
                 if not match:
                     typer.secho(f"No Match Found for {query_str}, Updating label Cache", fg="red")
@@ -1944,8 +1957,14 @@ class Cache:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_templates not in self.updated:
-                typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
-                self.check_fresh(refresh=True, template_db=True)
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
+                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.SiteDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
+                    self.check_fresh(refresh=True, template_db=True)
             if match:
                 match = [CentralObject("template", tmplt) for tmplt in match]
                 break
