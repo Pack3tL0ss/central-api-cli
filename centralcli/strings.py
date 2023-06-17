@@ -4,6 +4,8 @@
 from rich.console import Console
 from centralcli import log
 
+# TODO typer now supports markup_mode="rich" Don't need the help below, can just put the markup in the docstr
+
 # [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]  # TODO implement this device del
 # TODO document examples and uncomment below.  provide examples for all format/types
 # print("See https://central-api-cli.readthedocs.io for full examples.
@@ -14,6 +16,7 @@ from centralcli import log
 # provide estimate on number of API calls.
 
 # TODO pass examples through lexer
+
 common_add_delete_end = """
 [italic]Note: Batch add and batch delete operations are designed so the same import file can be used.[/]
 [italic]      The delete operation does not require as many fields, the cli will ignore the fields it does not need.[/]
