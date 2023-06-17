@@ -421,4 +421,5 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     console = Console(record=True, emoji=emoji, **kwargs)
     console.begin_capture()
     console.print(text)
-    return console.end_capture()
+    out = console.end_capture()
+    return out if len(out.splitlines()) > 1 else out.rstrip("\n")
