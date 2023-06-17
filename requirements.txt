@@ -21,3 +21,5 @@ uvicorn
 psutil
 pydantic
 ipaddress
+fuzzywuzzy
+levenshtein
