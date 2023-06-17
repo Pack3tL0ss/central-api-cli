@@ -25,14 +25,14 @@ import typer
 try:
     from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
                             clirefresh, clishow, clitest, cliupdate, cliupgrade,
-                            clitshoot, cliassign, cliunassign, models, cleaner, Response, config, log, utils)
+                            clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
                                 clirefresh, clishow, clitest, cliupdate, cliupgrade,
-                                clitshoot, cliassign, cliunassign, models, cleaner, Response, config, log, utils)
+                                clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -41,7 +41,7 @@ from centralcli.central import CentralApi  # noqa
 from centralcli.cache import CentralObject
 from centralcli.constants import (
     BlinkArgs, BounceArgs, IdenMetaVars,
-    KickArgs, LicenseTypes, RenameArgs, StartArgs
+    KickArgs, LicenseTypes, StartArgs
 )
 
 iden = IdenMetaVars()
@@ -51,7 +51,7 @@ CONTEXT_SETTINGS = {
     "help_option_names": ["?", "--help"]
 }
 
-app = typer.Typer(context_settings=CONTEXT_SETTINGS)
+app = typer.Typer(context_settings=CONTEXT_SETTINGS, rich_markup_mode="rich")
 app.add_typer(clishow.app, name="show",)
 app.add_typer(clidel.app, name="delete",)
 app.add_typer(cliadd.app, name="add",)
@@ -65,6 +65,7 @@ app.add_typer(clicaas.app, name="caas", hidden=True,)
 app.add_typer(clirefresh.app, name="refresh",)
 app.add_typer(clitest.app, name="test",)
 app.add_typer(clitshoot.app, name="tshoot",)
+app.add_typer(clirename.app, name="rename",)
 
 
 @app.command(
@@ -462,45 +463,6 @@ def sync(
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
     cli.display_results(resp, tablefmt="action")
-
-
-# XXX Doesn't actually appear to be valid for any group rename
-# TODO non batch rename AP
-@app.command(help="Rename an Access Point", hidden=False)
-def rename(
-    what: RenameArgs = typer.Argument(...,),
-    group_ap: str = typer.Argument(..., metavar=f"AP{iden.dev}", autocompletion=cli.cache.dev_kwarg_completion),
-    new_name: str = typer.Argument(...),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    yes = yes_ if yes_ else yes
-    if what == "group":
-        group_ap = cli.cache.get_group_identifier(group_ap)
-        print(f"Please Confirm: rename group [red]{group_ap.name}[/red] -> [bright_green]{new_name}[/bright_green]")
-        if yes or typer.confirm("proceed?", abort=True):
-            resp = cli.central.request(cli.central.update_group_name, group_ap.name, new_name)
-
-            # API-FLAW Doesn't actually appear to be valid for any group type
-            if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
-                resp.output["description"] = f"{group_ap.name} is an AOS_10X group, " \
-                    "rename only supported on AOS_8X groups. Use clone."
-
-            cli.display_results(resp, tablefmt="action")
-
-    elif what == "ap":
-        group_ap = cli.cache.get_dev_identifier(group_ap, dev_type="ap")
-        print(f"Please Confirm: rename ap [bright_red]{group_ap.name}[/] -> [bright_green]{new_name}[/]")
-        print("    [italic]Will result in 2 API calls[/italic]\n")
-        if yes or typer.confirm("Proceed?", abort=True):
-            resp = cli.central.request(cli.central.update_ap_settings, group_ap.serial, new_name)
-            cli.display_results(resp, tablefmt="action")
 
 
 # TODO cache show clients get details for client make this easier
