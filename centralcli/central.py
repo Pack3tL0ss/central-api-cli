@@ -198,19 +198,28 @@ class CentralApi(Session):
         url = "/monitoring/v1/aps"
         return await self.get(url)
 
-    async def get_swarms(self, group: str = None, status: str = None,
-                         public_ip_address: str = None, fields: str = None,
-                         calculate_total: bool = None,
-                         swarm_name: str = None, offset: int = 0, limit: int = 100) -> Response:
+    async def get_swarms(
+        self,
+        group: str = None,
+        status: str = None,
+        public_ip_address: str = None,
+        fields: str = None,
+        calculate_total: bool = None,
+        sort: str = None,
+        swarm_name: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
         """List Swarms.
 
         Args:
             group (str, optional): Filter by group name
             status (str, optional): Filter by Swarm status
             public_ip_address (str, optional): Filter by public ip address
-            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
-                status, ip_address, public_ip_address, firmware_version
+            fields (str, optional): Comma separated list of fields to be returned
+                Valid fields are: status, ip_address, public_ip_address, firmware_version
             calculate_total (bool, optional): Whether to calculate total Swarms
+            sort (str, optional): Sort parameter may be one of +swarm_id, -swarm_id
             swarm_name (str, optional): Filter by swarm name
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
@@ -226,10 +235,13 @@ class CentralApi(Session):
             'public_ip_address': public_ip_address,
             'fields': fields,
             'calculate_total': calculate_total,
+            'sort': sort,
             'swarm_name': swarm_name,
             'offset': offset,
-            'limit': limit,
+            'limit': limit
         }
+
+        params = utils.strip_none(params)
 
         return await self.get(url, params=params)
 
@@ -245,15 +257,6 @@ class CentralApi(Session):
         url = f"/monitoring/v1/swarms/{swarm_id}"
 
         return await self.get(url)
-
-    # async def get_swarms_by_group(self, group: str) -> Response:
-    #     url = "/monitoring/v1/swarms"
-    #     params = {"group": group}
-    #     return await self.get(url, params=params)
-
-    # async def get_swarm_details(self, swarm_id: str) -> Response:
-    #     url = f"/monitoring/v1/swarms/{swarm_id}"
-    #     return await self.get(url)
 
     async def get_clients(
         self,
@@ -2063,10 +2066,32 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
+    # async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
+    #     url = "/troubleshooting/v1/commands"
+    #     params = {"device_type": dev_type}
+    #     return await self.get(url, params=params)
+
+    async def get_ts_commands(
+        self,
+        device_type: Literal['iap', 'mas', 'switch', 'controller', 'cx'],
+    ) -> Response:
+        """List Troubleshooting Commands.
+
+        Args:
+            device_type (str): Specify one of "IAP" for swarm, "MAS" for MAS switches, "SWITCH" for
+                aruba switches,"CX" for CX switches, "CONTROLLER" for controllers respectively.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = "/troubleshooting/v1/commands"
-        params = {"device_type": dev_type}
+
+        params = {
+            'device_type': device_type
+        }
+
         return await self.get(url, params=params)
+
 
     async def start_ts_session(
         self,
