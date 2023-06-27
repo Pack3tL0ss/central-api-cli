@@ -7,7 +7,7 @@ This will replace the Output class and output func currently living in utils.py
 cleaner.py still normalizes the responses from the API
 render.py (this file) takes the normalized data, and displays it (various formats)
 '''
-
+from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Union
