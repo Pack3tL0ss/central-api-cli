@@ -20,12 +20,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, caas, cli, utils, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, caas, cli, utils, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -41,6 +41,7 @@ app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
 app.add_typer(clishowbranch.app, name="branch")
 app.add_typer(clishowospf.app, name="ospf")
+app.add_typer(clishowtshoot.app, name="tshoot")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -393,6 +394,49 @@ def aps(
         state=state, label=label, pub_ip=pub_ip, do_stats=do_stats,
         sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
+
+
+@app.command(short_help="Show Swarms (IAP Clusters)")
+def swarms(
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False,),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
+    up: bool = typer.Option(False, "--up", help="Filter by swarms that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
+    name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """
+    [cyan]Show Swarms (IAP Clusters)[/]
+    """
+    if down:
+        status = "Down"
+    elif up:
+        status = "Up"
+    else:
+        status = status or state
+
+    resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_interfaces)
 
 
 @app.command(short_help="Show switches/details")
@@ -1652,76 +1696,6 @@ def roaming(
         raise typer.Exit(1)
     resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
     cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt="rich", cleaner=cleaner.get_client_roaming_history)
-
-
-@app.command(short_help="Show Troubleshooting output")
-def tshoot(
-    device: str = typer.Argument(
-        ...,
-        metavar=iden_meta.dev,
-        help="Aruba Central Device",
-        autocompletion=cli.cache.dev_completion,
-    ),
-    session_id: str = typer.Argument(
-        None,
-        help="The troubleshooting session id.",
-    ),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-    ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-    """Show Troubleshooting results from an existing session.
-
-    Use cencli tshoot ... to start a troubleshooting session.
-
-    """
-    central = cli.central
-    con = Console(emoji=False)
-    dev = cli.cache.get_dev_identifier(device)
-
-    # Fetch session ID if not provided
-    if not session_id:
-        resp = central.request(central.get_ts_session_id, dev.serial)
-        if resp.ok and "session_id" in resp.output:
-            session_id = resp.output["session_id"]
-        else:
-            print(f"No session id provided, unable to find active session id for {dev.name}")
-            cli.display_results(resp)
-            raise typer.Exit(1)
-
-    title = f"Troubleshooting output for {dev.name} session {session_id}"
-    resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
-    if not resp or resp.output.get("status", "") != "COMPLETED":
-        cli.display_results(resp, title=title, tablefmt="rich",)
-    elif verbose2:
-        cli.display_results(resp)
-    else:
-        con.print(resp)
-        con.print(f"\n   {resp.rl}")
-
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
