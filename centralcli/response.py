@@ -433,6 +433,7 @@ class Session():
 
                 # TODO spinner steps on each other during long running requests
                 # need to check store prev msg when updating then restore it if that thread is still running
+                self.spinner.stop() # Fix spinner was not starting with below call to start until first stopping it.
                 self.spinner.start(spin_txt_run)
                 self.running_spinners += [spin_txt_run]
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
@@ -743,7 +744,7 @@ class Session():
     async def pause(start: float) -> None:
         _elapsed = time.perf_counter() - start
         _pause = (int(_elapsed) + 1) - _elapsed
-        log.debug("PAUSE {_pause:.2f}s...")
+        log.debug(f"PAUSE {_pause:.2f}s...")
         time.sleep(_pause)
 
     async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False,) -> List[Response]:
