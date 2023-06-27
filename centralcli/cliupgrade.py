@@ -179,6 +179,7 @@ def swarm(
         ...,
         metavar=iden.dev,
         help=f"Upgrade will be performed on the cluster the AP belongs to.",
+        autocompletion=cli.cache.dev_ap_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
     at: datetime = typer.Option(
