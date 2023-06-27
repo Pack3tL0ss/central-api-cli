@@ -195,6 +195,7 @@ _short_key = {
     "events_details": "details",
     "associated_device_count": "devices",
     "label_id": "id",
+    "command_id": "id",
     "label_name": "name",
     # "acknowledged": "ack",
     "acknowledged_by": "ack by",
@@ -1272,3 +1273,19 @@ def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     }
 
     return strip_no_value(data)
+
+def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+    key_order = [
+        "command_id",
+        "category",
+        "command",
+    ]
+    strip_keys = [
+        "summary"
+    ]
+    # data = simple_kv_formatter(data)
+    data = [
+        dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data if "arguments" not in d.keys()
+    ]
+
+    return data
