@@ -28,6 +28,8 @@ app = typer.Typer()
 # TODO reboot flag Applicable only on MAS, aruba switches and controller since IAP reboots automatically after firmware download.
 # can only specify one of group, swarm_id or serial parameters
 
+# You can only specify one of group, swarm_id or serial parameters
+
 @app.command(short_help="Upgrade firmware on a specific device",)
 def device(
     device: str = typer.Argument(
@@ -81,6 +83,8 @@ def device(
                                    firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
 
+# TODO individual AOS10 AP can't be upgraded with this, needs to use swarm with serial as swarm_id
+#      Need to automatically do that
 @app.command(short_help="Upgrade firmware by group",)
 def group(
     group: str = typer.Argument(
@@ -118,9 +122,13 @@ def group(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 ),
 ) -> None:
-    if dev_type == "cx":
-        print("[dark_orange]:warning:[/] CX is not currently supported by firmware API endpoint.")
-        raise typer.Exit(1)
+    """Update devices by group.
+
+    Device type must be provided.  For switches you can/should filter to a specific switch model via the --model flag.
+    """
+    # if dev_type == "cx":
+    #     print("[dark_orange]:warning:[/] CX is not currently supported by firmware API endpoint.")
+    #     raise typer.Exit(1)
     yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
     at = None if not at else int(round(at.timestamp()))
@@ -167,10 +175,11 @@ def group(
 
 @app.command(short_help="Upgrade firmware for an IAP cluster",)
 def swarm(
-    swarm: str = typer.Argument(
-        None,
-        metavar="[IAP VC NAME|IAP SWARM ID|AP NAME|AP SERIAL|AP MAC]",
-        help="Upgrade firmware on an IAP cluster.  For AP name,serial,mac it will upgrade the cluster that AP belongs to.",
+    device: str = typer.Argument(
+        ...,
+        metavar=iden.dev,
+        help=f"Upgrade will be performed on the cluster the AP belongs to.",
+        autocompletion=cli.cache.dev_ap_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
     at: datetime = typer.Option(
@@ -192,16 +201,18 @@ def swarm(
     at = None if not at else int(round(datetime.timestamp(at)))
 
     # swarm = cli.cache.get_swarm_identifier(swarm)
-    class SwarmTemp:  # Temporary until swarm cache built
-        def __init__(self, swarm_id):
-            self.id = swarm_id
-    swarm = SwarmTemp(swarm)
+    # class SwarmTemp:  # Temporary until swarm cache built
+    #     def __init__(self, swarm_id):
+    #         self.id = swarm_id
+    # swarm = SwarmTemp(swarm)
+    dev = cli.cache.get_dev_identifier(device, dev_type="ap")
+    swarm = dev.swarm_id
 
     ver_msg = [typer.style("Upgrade APs in swarm", fg="cyan")]
     if version:
-        _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
-    else:
         _version = [f"to {typer.style(version, fg='bright_green')}"]
+    else:
+        _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
     ver_msg += _version
 
     if reboot:
@@ -209,8 +220,8 @@ def swarm(
     ver_msg = " ".join(ver_msg)
 
     if yes or typer.confirm(ver_msg, abort=True):
-        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=swarm.id, reboot=reboot)
-        cli.display_results(resp)
+        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=swarm, reboot=reboot, firmware_version=version)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

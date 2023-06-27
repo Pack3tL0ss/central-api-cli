@@ -1,6 +1,6 @@
 cchardet
 colorama
-click>=7.1.2
+# click>=7.1.2
 pygments
 tabulate
 halo
@@ -21,3 +21,5 @@ uvicorn
 psutil
 pydantic
 ipaddress
+fuzzywuzzy
+levenshtein

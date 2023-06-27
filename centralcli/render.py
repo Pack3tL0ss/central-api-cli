@@ -284,15 +284,18 @@ def rich_output(
             table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
         if account or caption:
             table.caption_justify = 'left'
-            table.caption = '' if not account else f'[italic dark_olive_green2] Account: {account}'
-            if caption:
-                table.caption = f"[italic dark_olive_green2]{table.caption}  {caption}"
+            table.caption = '' if not account else f'[italic dark_olive_green2] Account: {account}[/]'
+            table.caption = table.caption if not caption else f"{table.caption}  {caption.lstrip()}"
 
         data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
 
         console.begin_capture()
         console.print(table)
         table_data = console.end_capture()
+
+        # rich is adding empty lines (full of spaces) to output on show clients, not sure why.  This will remove them
+        # it appears they are lines with just ascii formmating, but no real text.
+        table_data = "".join([line for line in str(table_data).splitlines(keepends=True) if typer.unstyle(line).strip()])
         raw_data = typer.unstyle(table_data)
 
         if customer_id:
@@ -372,6 +375,7 @@ def output(
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
+        ...
 
     elif tablefmt == "tabulate":
         raw_data, table_data = tabulate_output(outdata)
@@ -398,3 +402,24 @@ def output(
                                 )
 
     return Output(rawdata=raw_data, prettydata=table_data, config=config)
+
+
+def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
+    """Accept text or list of text with rich markups and return final colorized text with ascii control chars
+
+    This is temporary as the rich context handler stopped working.  Can revert once fixed upstream
+
+    Args:
+        text (str | List[str]): The text or list of text to capture.
+            If provided as list it will be converted to string (joined with \n)
+
+    Returns:
+        str: text with markups converted to ascii control chars
+    """
+    if isinstance(text, list):
+        "\n".join(text)
+    console = Console(record=True, emoji=emoji, **kwargs)
+    console.begin_capture()
+    console.print(text)
+    out = console.end_capture()
+    return out if len(out.splitlines()) > 1 else out.rstrip("\n")

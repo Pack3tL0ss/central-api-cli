@@ -31,6 +31,16 @@ class DevTypes(str, Enum):
     gw = "gw"
 
 
+class TSDevTypes(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    switch = "switch"
+    cx = "cx"
+    gateway = "gateway"
+    gw = "gw"
+    mas = "mas"
+
+
 class SendConfigDevIdens(str, Enum):
     ap = "ap"
     gw = "gw"
@@ -47,6 +57,7 @@ class ShowInventoryArgs(str, Enum):
     others = "others"
 
 
+#  TODO can move to lib_to_api class below
 SHOWINVENTORY_LIB_TO_API = {
     "all": "all",
     "ap": "all_ap",
@@ -126,6 +137,7 @@ STRIP_KEYS = [
     "interfaces",
     "areas",
     "lsas",
+    "commands",
 ]
 
 
@@ -269,11 +281,6 @@ class BatchRenameArgs(str, Enum):
     groups = "groups"
 
 
-class RenameArgs(str, Enum):
-    group = "group"
-    ap = "ap"
-
-
 class DhcpArgs(str, Enum):
     clients = "clients"
     server = "server"
@@ -354,6 +361,7 @@ class ArgToWhat:
     def _init_rename(self):
         self.group = self.groups = "group"
         self.ap = self.aps = "ap"
+        self.site = self.sites = "site"
 
     def _init_delete(self):
         self.site = self.sites = "site"
@@ -379,6 +387,14 @@ class ArgToWhat:
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"
+
+    def _init_tshoot(self):
+        self.ap = self.aps = self.iap = "ap"
+        self.gateway = self.gateways = self.gw = "gateway"
+        self.switch = self.switch = self.switches = "switch"
+        self.cx = "cx"
+        self.mas = "mas"
+
 
     def _init_clone(self):
         self.group = self.groups = "group"
@@ -410,6 +426,10 @@ APIMethodType = Literal[
     "site",
     "monitoring",
     "event",
+    "template",
+    "firmware",
+    "event",
+    "tshoot"
 ]
 
 
@@ -475,9 +495,12 @@ class LibToAPI:
         }
         self.tshoot_to_api = {
             "gw": "CONTROLLER",
+            "gateway": "CONTROLLER",
             "ap": "IAP",
             "cx": "CX",
-            "sw": "SWITCH"
+            "sw": "SWITCH",
+            "switch": "SWITCH",
+            "mas": "MAS"
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
@@ -728,6 +751,11 @@ class SortOspfDatabaseOptions(str, Enum):
     route_tag = "route_tag"
 
 
+class SortTsCmdOptions(str, Enum):
+    command_id = "id"
+    category = "category"
+
+
 class StatusOptions(str, Enum):
     up = "up"
     down = "down"
@@ -770,6 +798,7 @@ class IdenMetaVars:
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
         self.generic_dev_types = "[ap|gw|switch]"
         self.dev_types = "[ap|gw|cx|sw]"
+        self.dev_types_w_mas = "[ap|gw|cx|sw|mas]"
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
         self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"

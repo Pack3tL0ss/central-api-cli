@@ -39,13 +39,6 @@ else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
-# WORK_DIR = Path(__file__).parents[2]
-# if not Path.joinpath(WORK_DIR, "centralcli").exists():
-#     print(f"issue path append logic \n{Path(__file__).parts}\n{Path(__file__).parents[2]}")
-#     print(typer.get_app_dir(__name__))
-# else:
-#     sys.path.append(str(WORK_DIR / "centralcli"))
-
 from .logger import MyLogger
 from . import constants
 from .config import Config
@@ -104,7 +97,6 @@ if "--debug-limit" in sys.argv:
         print(f"Invalid Value ({sys.argv[_idx]}) for --debug-limit expected an int")
         sys.exit(1)
 
-# FIXME restore envvar functionality for account, verify debug
 central = CentralApi(config.account)
 cache = Cache(central)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)

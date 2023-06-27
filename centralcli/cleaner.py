@@ -19,12 +19,12 @@ import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import constants, utils
+    from centralcli import constants, utils, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import constants, utils
+        from centralcli import constants, utils, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -63,8 +63,8 @@ def _duration_words(secs: Union[int, str]) -> str:
 
 
 @epoch_convert
-def _time_diff_words(epoch: float) -> str:
-    return pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
+def _time_diff_words(epoch: float | None) -> str:
+    return "" if epoch is None else pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
 
 @epoch_convert
@@ -195,6 +195,7 @@ _short_key = {
     "events_details": "details",
     "associated_device_count": "devices",
     "label_id": "id",
+    "command_id": "id",
     "label_name": "name",
     # "acknowledged": "ack",
     "acknowledged_by": "ack by",
@@ -435,7 +436,26 @@ def _client_concat_associated_dev(
     if verbose:
         data["connected device"] = _unlist(strip_no_value([_connected]))
     else:
-        data["connected device"] = f"{_connected['name']} ({_connected['type']})"
+        # More work than is prob warranted by if the device name includes the type, and the adjacent characters are
+        # not alpha then we don't append the type.  So an ap with a name of Zrm-655-ap will not have (AP) appended
+        # but Zrm-655-nap would have it appended
+        data["connected device"] = f"{_connected['name']}"
+        add_type = False
+        if _connected['type'].lower() in _connected['name'].lower():
+            t: str = _connected['type'].lower()
+            n: str = _connected['name'].lower()
+            for idx in set([n.find(t), n.rfind(t)]):
+                _start = idx
+                _end = _start + len(t)
+                _prev = None if _start == 0 else _start - 1
+                _next = None if _end + 1 > len(n) else _end + 1
+                if (_prev and n[_prev].isalpha()) or (_next and n[_next].isalpha()):
+                    add_type = True
+        else:
+            add_type = True
+
+        if add_type:
+            data["connected device"] = f"{data['connected device']} ({_connected['type']})"
 
     return data
 
@@ -482,7 +502,6 @@ def get_clients(
             "last_connection_time",
         ]
         if data and all([isinstance(d, dict) for d in data]):
-            # all_keys = set([k for d in data for k in d])
             data = [
                 dict(
                     short_value(
@@ -1254,3 +1273,19 @@ def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     }
 
     return strip_no_value(data)
+
+def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+    key_order = [
+        "command_id",
+        "category",
+        "command",
+    ]
+    strip_keys = [
+        "summary"
+    ]
+    # data = simple_kv_formatter(data)
+    data = [
+        dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data if "arguments" not in d.keys()
+    ]
+
+    return data

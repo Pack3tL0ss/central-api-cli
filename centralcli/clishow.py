@@ -20,12 +20,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, caas, cli, utils, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, caas, cli, utils, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -41,6 +41,7 @@ app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
 app.add_typer(clishowbranch.app, name="branch")
 app.add_typer(clishowospf.app, name="ospf")
+app.add_typer(clishowtshoot.app, name="tshoot")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -49,9 +50,9 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
     _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]\n"
+    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
     if inventory:
-        caption = f"{caption}  [italic dark_olive_green2]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+        caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
 def show_devices(
@@ -393,6 +394,49 @@ def aps(
         state=state, label=label, pub_ip=pub_ip, do_stats=do_stats,
         sort_by=sort_by, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
+
+
+@app.command(short_help="Show Swarms (IAP Clusters)")
+def swarms(
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False,),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
+    up: bool = typer.Option(False, "--up", help="Filter by swarms that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
+    name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """
+    [cyan]Show Swarms (IAP Clusters)[/]
+    """
+    if down:
+        status = "Down"
+    elif up:
+        status = "Up"
+    else:
+        status = status or state
+
+    resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_interfaces)
 
 
 @app.command(short_help="Show switches/details")
@@ -874,26 +918,30 @@ def labels(
 
 @app.command(short_help="Show sites/details")
 def sites(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    sort_by: SortSiteOptions = typer.Option(None, "--sort"),
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
+    count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
+    count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
+    sort_by: SortSiteOptions = typer.Option("name", "--sort",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     central = cli.central
+    sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
 
     site = None if site and site.lower() == "all" else site
     if not site:
@@ -905,6 +953,22 @@ def sites(
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
 
+    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    if resp.ok:
+        for do, field in zip([count_state, count_country], ["state", "country"]):
+            if do:
+                _cnt_list = [site[field] for site in resp.output if site[field]]
+                _cnt_dict = {
+                    item: _cnt_list.count(item) for item in set(_cnt_list)
+                }
+                counts = {**counts, **_cnt_dict}
+
+            if counts:
+                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    if count_caption:
+        caption = f'[reset]{caption}, {count_caption}[reset][/]'
+
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     cli.display_results(
@@ -915,7 +979,11 @@ def sites(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        caption=caption,
     )
+
+    if counts and tablefmt != "rich":
+        print(caption)
 
 
 @app.command(short_help="Show templates/details")
@@ -1516,7 +1584,7 @@ def clients(
             _tot = len(resp)
             _wired = len([x for x in resp.output if x["client_type"] == "WIRED"])
             _wireless = len([x for x in resp.output if x["client_type"] == "WIRELESS"])
-            _count_text = f"{_tot} Clients, (Wired: {_wired}, Wireless: {_wireless})."
+            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{_wired}[/], [bright_green]Wireless[/]: [cyan]{_wireless}[/]"
 
     if not verbose2:
         _format = "rich" if not verbose else "yaml"
@@ -1628,76 +1696,6 @@ def roaming(
         raise typer.Exit(1)
     resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
     cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt="rich", cleaner=cleaner.get_client_roaming_history)
-
-
-@app.command(short_help="Show Troubleshooting output")
-def tshoot(
-    device: str = typer.Argument(
-        ...,
-        metavar=iden_meta.dev,
-        help="Aruba Central Device",
-        autocompletion=cli.cache.dev_completion,
-    ),
-    session_id: str = typer.Argument(
-        None,
-        help="The troubleshooting session id.",
-    ),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-    ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-    """Show Troubleshooting results from an existing session.
-
-    Use cencli tshoot ... to start a troubleshooting session.
-
-    """
-    central = cli.central
-    con = Console(emoji=False)
-    dev = cli.cache.get_dev_identifier(device)
-
-    # Fetch session ID if not provided
-    if not session_id:
-        resp = central.request(central.get_ts_session_id, dev.serial)
-        if resp.ok and "session_id" in resp.output:
-            session_id = resp.output["session_id"]
-        else:
-            print(f"No session id provided, unable to find active session id for {dev.name}")
-            cli.display_results(resp)
-            raise typer.Exit(1)
-
-    title = f"Troubleshooting output for {dev.name} session {session_id}"
-    resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
-    if not resp or resp.output.get("status", "") != "COMPLETED":
-        cli.display_results(resp, title=title, tablefmt="rich",)
-    elif verbose2:
-        cli.display_results(resp)
-    else:
-        con.print(resp)
-        con.print(f"\n   {resp.rl}")
-
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
@@ -2411,6 +2409,17 @@ def guests(
     resp = cli.central.request(cli.central.get_visitors, portal_id, )
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+
+
+@app.command()
+def version(
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+) -> None:
+    """Show current cencli version, and latest available version.
+    """
+    cli.version_callback()
 
 
 # @app.command(short_help="Show config", hidden=True)

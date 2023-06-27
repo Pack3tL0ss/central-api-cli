@@ -125,7 +125,7 @@ def template(
     typer.secho(str(_resp), fg="green" if _resp else "red")
 
 
-@app.command(short_help="Update existing or add new Variables for a device/template")
+@app.command(help="Update existing or add new Variables for a device/template")
 def variables(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
     var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
@@ -143,6 +143,7 @@ def variables(
 
     vars, vals, get_next = [], [], False
     for var in var_value:
+        var = var.rstrip(",")
         if var == '=':
             continue
         if '=' not in var:
@@ -153,9 +154,9 @@ def variables(
                 vars += [var]
                 get_next = True
         else:
-            _ = var.split('=')
-            vars += _[0]
-            vals += _[1]
+            _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
+            vars += [_[0]]
+            vals += [_[1]]
             get_next = False
 
     if len(vars) != len(vals):
@@ -164,16 +165,17 @@ def variables(
 
     var_dict = {k: v for k, v in zip(vars, vals)}
 
-    msg = "Sending Update" if yes else "Please Confirm: Update"
-    typer.secho(f"{msg} {dev.name}|{dev.serial}", fg="cyan")
-    [typer.echo(f'    {k}: {v}') for k, v in var_dict.items()]
-    if yes or typer.confirm(typer.style("Proceed with these values", fg="cyan")):
+    con = Console(emoji=False)
+    msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
+    con.print(f"{msg} {dev.rich_help_text}")
+    [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(
             cli.central.update_device_template_variables,
             serial,
             dev.mac,
             var_dict=var_dict)
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(
@@ -420,11 +422,11 @@ def webhook(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Update site details.", help=help_text.update_site)
+@app.command()
 def site(
-    site_name: str = typer.Argument(...),
-    address: str = typer.Argument(None, help="street address, (enclose in quotes)"),
-    city: str = typer.Argument(None,),
+    site_name: str = typer.Argument(..., show_default=False, autocompletion=cli.cache.site_completion, help="[green3]current[/] site name"),
+    address: str = typer.Argument(None, help="street address, [italic green4](enclose in quotes)[/]", show_default=False),
+    city: str = typer.Argument(None, show_default=False),
     state: str = typer.Argument(
         None,
         autocompletion=lambda incomplete: [
@@ -433,35 +435,54 @@ def site(
             *list(state_abbrev_to_pretty.values())
             ]
             if s.lower().startswith(incomplete.lower())
-        ]
+        ],
+        show_default=False
     ),
-    zipcode: int = typer.Argument(None,),
-    country: str = typer.Argument(None,),
-    lat: str = typer.Option(None, metavar="LATITUDE"),
-    lon: str = typer.Option(None, metavar="LONGITUDE"),
+    zipcode: int = typer.Argument(None, show_default=False),
+    country: str = typer.Argument(None, show_default=False),
+    new_name: str = typer.Option(None, show_default=False, help="Change Site Name"),
+    lat: str = typer.Option(None, metavar="LATITUDE", show_default=False),
+    lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+        False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
+        rich_help_panel="Common Options"
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"
     ),
 ) -> None:
+    """
+    [bright_green]Update details for an existing site.[/]
+
+    Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
+    [italic]Google Maps "Plus Codes" are supported for address field.[/]
+
+    If address is provided assoicated geo coordinates are automatically populated.
+    If geo coordinates are provided, any address associated with the site is cleared.
+
+    [italic green3]Wrap Arguments that contain spaces in quotes i.e. "5402 Champions Hill Dr"[/]
+    """
     yes = yes_ if yes_ else yes
 
     site_now = cli.cache.get_site_identifier(site_name)
 
     # These conversions just make the fields match what is used if done via GUI
+    # We also populate Country for US if it's one of the US states/territories
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)
-    if country and country.upper() in ["US", "USA"]:
+        if not country and state in state_abbrev_to_pretty.values():
+            country = "United States"
+    if country and (country.upper() in ["US", "USA"] or "united states" in country.lower()):
         country = "United States"
+    if city and city.endswith(","):
+        city = city.rstrip(",")
 
     kwargs = {
         "address": address,
@@ -474,13 +495,29 @@ def site(
     }
     address_fields = {k: v for k, v in kwargs.items() if v}
 
-    print(f"Updating Site: {site_now.rich_help_text}")
+    if not address_fields and not new_name:
+        print(" [red]No Update data provided[/]")
+        print(" [italic]Must provide address data and/or --new-name.")
+        raise typer.Exit(1)
+
+    print(f"Updating Site: {site_now.summary_text}")
     print(" [bright_green]Send the following updates:[reset]")
-    if site_now.name != site_name:
-        print(f"  Change Name [red]{site_now.name}[/] --> [bright_green]{site_name}[/]")
+    rename_only = False
+    if new_name and site_now.name != new_name:
+        # Only provided new name send current address info to endpoint along with new name (name alone not allowed)
+        if not address_fields:  # update requires either address fields or lon/lat even to change the name so send back existing data from cache with new name
+            rename_only = True
+            geo_keys = ["latitude", "longitude"]
+            address_fields = {k: v for k, v in site_now.data.items() if k in kwargs.keys() and k not in geo_keys and v}
+            if not address_fields:
+                address_fields = {k: v for k, v in site_now.data.items() if k in geo_keys and v}
+
+        print(f"  Change Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
+    if rename_only:
+        print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
     if yes or typer.confirm(f"\nProceed?", abort=True):
-        resp = cli.central.request(cli.central.update_site, site_now.id, site_name, **address_fields)
+        resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:
             # FIXME  this does a full cache update, not an update based on the change above

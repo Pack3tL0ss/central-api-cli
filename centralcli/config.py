@@ -326,7 +326,7 @@ class Config:
 
         Returns:
             str|None: The contents of the config file (yaml.safe_dump) or None if
-                user choses to bypass.
+                user chooses to bypass.
         """
         example_link = "https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/config/config.yaml.example"
         # populate example config file
@@ -341,15 +341,8 @@ class Config:
                 "\nEnter [cyan italic]abort[/cyan italic] at any prompt to exit this wizard and create the file manually.\n"
                 f"\nRefer to the example @ \n{example_link}\n\n"
             )
-            # print("Select Your Cluster?")
-            # print(
-            #     f"Please Enter {', '.join(_clusters)}\n"
-            #     "or 'other'."
-            # )
-            valid_clusters = _clusters + ["other"]
 
-            # get base_url
-            # choice = _get_user_input(valid_clusters)
+            valid_clusters = _clusters + ["other"]
             choice = ask("Central Cluster", choices=valid_clusters)
             if choice.lower() == "other":
                 print(f"Provide API gateway URL in the format [cyan]{CLUSTER_URLS['us4']}")
@@ -363,13 +356,10 @@ class Config:
             # so the file has the expected name.  Would be nice just to use the format tok_account_name.json
             print(f"\nYour [cyan]customer id[/cyan] can be found by clicking the user icon in the upper right of the Central UI")
             customer_id = ask("customer id")
-            # customer_id = choice
             print(f"\n[cyan]Client ID[reset] and [cyan]Client Secret[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
             print(f"You can double click the field in the table to select then copy, it will copy the entire token even with the token truncated with ...")
             client_id = ask("client id")
-            # client_id = choice
             client_secret = ask("client secret")
-            # client_secret = choice
 
             config_data = {
                 "central_info": {

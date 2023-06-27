@@ -386,7 +386,6 @@ class Session():
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
         resp = None
-        # _url = URL(url).with_query({k: v for k, v in params.items() if k in {"offset", "limit"}})
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' [{_url.path}]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
@@ -404,7 +403,7 @@ class Session():
                 f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
             )
             log.debug(
-                f"Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 else ''}"
+                f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
                 call_data = {
@@ -557,10 +556,10 @@ class Session():
         # TODO cleanup, if we do strip_none here can remove from calling funcs.
         params = utils.strip_none(params)
 
-        # Debugging flag to lower paging limit to test paging with smaller chunks.
+        # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
         if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
-            params["limit"] = config.limit  # for debugging can set a smaller limit in config to test paging
+            params["limit"] = config.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
@@ -809,7 +808,7 @@ class Session():
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
+        f_url = url if url.startswith("http") else self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
         return await self.api_call(f_url, params=params, headers=headers, **kwargs)
 
