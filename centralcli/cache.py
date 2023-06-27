@@ -9,9 +9,9 @@ from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
-from centralcli import log, utils, config, CentralApi, cleaner, constants, Response
+from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render
 from pathlib import Path
-from render import rich_capture
+# from render import rich_capture
 
 import asyncio
 import time
@@ -1605,7 +1605,7 @@ class Cache:
             if retry and not match and self.central.get_all_devicesv2 not in self.updated:
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
-                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.SiteDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -1717,7 +1717,7 @@ class Cache:
             if retry and not match and self.central.get_all_sites not in self.updated:
                 if FUZZ and not completion:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
-                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.SiteDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -1881,7 +1881,7 @@ class Cache:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.LabelDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -1959,7 +1959,7 @@ class Cache:
             if retry and not match and self.central.get_all_templates not in self.updated:
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
-                    confirm_str = rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.SiteDB.search(self.Q.name == fuzz_match)
                 if not match:

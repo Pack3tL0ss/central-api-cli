@@ -11,7 +11,6 @@ from rich import print
 import json
 import pkg_resources
 import os
-from render import rich_capture
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -60,7 +59,7 @@ class CLICommon:
         @property
         def envvar(self):
             envvar_msg = f'Using Account: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
-            return rich_capture(envvar_msg)
+            return render.rich_capture(envvar_msg)
 
         @property
         def initial(self):
@@ -177,10 +176,10 @@ class CLICommon:
 
         current = pkg_resources.get_distribution('centralcli').version
         resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
-        latest = max(resp.output["releases"])
         if not resp:
             print(current)
         else:
+            latest = max(resp.output["releases"])
             msg = "[bold bright_green]centralcli[/] "
             msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
             msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'
