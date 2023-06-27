@@ -1556,7 +1556,8 @@ TZDB = Literal[
 
 NO_LOAD_COMMANDS = [
     "show config cencli",
-    "show last"
+    "show last",
+    "convert"
 ]
 
 

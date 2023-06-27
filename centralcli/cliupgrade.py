@@ -50,41 +50,37 @@ def device(
     ),
     at: datetime = typer.Option(
         None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [Default: Now]",
+        help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [default: Now]",
         show_default=False,
         formats=["%m/%d/%Y_%H:%M", "%d_%H:%M"],
         ),
-    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](APs will reboot regardless)[/]"),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     if dev.generic_type == "ap":
         reboot = True
     at = None if not at else int(round(at.timestamp()))
 
     ver_msg = "Recommended version" if not version else version
-    ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
+    ver_msg = f'Upgrade [cyan]{dev.name}[/] to [green3]{ver_msg}[/]'
+    ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
-    if yes or typer.confirm(
-        typer.style(
-            f"Upgrade {dev.name} to {ver_msg}?",
-            fg="bright_green",
-        ),
-        abort=True,
-    ):
-        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial,
-                                   firmware_version=version, reboot=reboot)
+    print(ver_msg)
+    if yes or typer.confirm("\nProceed?", abort=True):
+        if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
+            # For AOS10 AP need to specifiy serial number as the swarm_id in payload to upgrade individual AP
+            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.serial, firmware_version=version, reboot=reboot)
+        else:
+            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
 
-# TODO individual AOS10 AP can't be upgraded with this, needs to use swarm with serial as swarm_id
-#      Need to automatically do that
+
 @app.command(short_help="Upgrade firmware by group",)
 def group(
     group: str = typer.Argument(
@@ -113,8 +109,7 @@ def group(
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type",),
     model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
     account: str = typer.Option("central_info",
@@ -126,10 +121,6 @@ def group(
 
     Device type must be provided.  For switches you can/should filter to a specific switch model via the --model flag.
     """
-    # if dev_type == "cx":
-    #     print("[dark_orange]:warning:[/] CX is not currently supported by firmware API endpoint.")
-    #     raise typer.Exit(1)
-    yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
     at = None if not at else int(round(at.timestamp()))
 
@@ -157,10 +148,7 @@ def group(
     else:
         ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
-    if yes or typer.confirm(
-        f"{ver_msg}?",
-        abort=True,
-    ):
+    if yes or typer.confirm(f"{ver_msg}?",abort=True,):
         resp = cli.central.request(
             cli.central.upgrade_firmware,
             scheduled_at=at,
@@ -189,22 +177,15 @@ def swarm(
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     at = None if not at else int(round(datetime.timestamp(at)))
 
-    # swarm = cli.cache.get_swarm_identifier(swarm)
-    # class SwarmTemp:  # Temporary until swarm cache built
-    #     def __init__(self, swarm_id):
-    #         self.id = swarm_id
-    # swarm = SwarmTemp(swarm)
     dev = cli.cache.get_dev_identifier(device, dev_type="ap")
     swarm = dev.swarm_id
 
