@@ -819,16 +819,13 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
             pass
 
 
-# TODO See if possible to do all 3 version options as one typer.Option (--version -v -V)
 @app.callback()
 def callback(
     # ctx: typer.Context,``
-    version: bool = typer.Option(False, "--version", is_flag=True, help="Show current cencli version, and latest available version."),
-    _version: bool = typer.Option(False, "-V", is_flag=True, help="Show current cencli version, and latest available version.", case_sensitive=False, hidden=False),
-    __version: bool = typer.Option(False, "-v", is_flag=True, hidden=True),
+    version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version."),
     debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
                             #    callback=all_commands_callback),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging", hidden=True,),
                             #    callback=all_commands_callback),
     default: bool = typer.Option(
         False,
