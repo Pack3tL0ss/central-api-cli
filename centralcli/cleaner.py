@@ -894,8 +894,7 @@ def wids(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     data = _unlist(data)
-    if "servers" in data:
-        data = data["servers"]
+    if "free_ip_addr_percent" in data[-1]:
         field_order = [
             "pool_name",
             "pool_size",
@@ -922,19 +921,8 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
-    data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
+    data = [dict(short_value(k, d.get(k)) for k in field_order if k in d) for d in data]
     data = strip_no_value(data)
-    # all_keys = set([k for d in data for k in d])
-    # data = [
-    #     dict(
-    #         short_value(
-    #             k,
-    #             d.get(k),
-    #         )
-    #         for k in all_keys
-    #     )
-    #     for d in data
-    # ]
     return data
 
 def get_template_details_for_device(data: str) -> dict:
