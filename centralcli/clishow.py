@@ -435,8 +435,8 @@ def swarms(
         status = status or state
 
     resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_interfaces)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 
 @app.command(short_help="Show switches/details")
@@ -1569,10 +1569,10 @@ def clients(
     if sort_by:
         sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
 
-    resp = central.request(central.get_clients, *args, **kwargs)
+    # resp = central.request(central.get_clients, *args, **kwargs)
+    resp = central.request(cli.cache.update_client_db, *args, **kwargs)
     if not resp:
-        cli.display_results(resp)
-        raise typer.Exit(1)
+        cli.display_results(resp, exit_on_fail=True)
 
     _count_text = ""
     if filter.value != "mac":
