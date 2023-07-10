@@ -448,7 +448,7 @@ def _client_concat_associated_dev(
                 _start = idx
                 _end = _start + len(t)
                 _prev = None if _start == 0 else _start - 1
-                _next = None if _end + 1 > len(n) else _end + 1
+                _next = None if _end + 1 >= len(n) else _end + 1
                 if (_prev and n[_prev].isalpha()) or (_next and n[_next].isalpha()):
                     add_type = True
         else:
