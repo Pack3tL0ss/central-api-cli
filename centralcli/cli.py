@@ -24,14 +24,14 @@ import typer
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                            clirefresh, clishow, clitest, cliupdate, cliupgrade,
+                            clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
                             clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                                clirefresh, clishow, clitest, cliupdate, cliupgrade,
+                                clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
                                 clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
     else:
         print(pkg_dir.parts)
@@ -66,6 +66,7 @@ app.add_typer(clirefresh.app, name="refresh",)
 app.add_typer(clitest.app, name="test",)
 app.add_typer(clitshoot.app, name="tshoot",)
 app.add_typer(clirename.app, name="rename",)
+app.add_typer(clikick.app, name="kick",)
 
 
 @app.command(
@@ -285,11 +286,10 @@ def move(
 
 @app.command(short_help="Bounce Interface or PoE on Interface")
 def bounce(
-    what: BounceArgs = typer.Argument(...),
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_completion),
-    port: str = typer.Argument(..., autocompletion=lambda incomplete: []),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    what: BounceArgs = typer.Argument(..., show_default=False),
+    device: str = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_switch_completion),
+    port: str = typer.Argument(..., autocompletion=lambda incomplete: [], show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -297,7 +297,6 @@ def bounce(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/] port [cyan]{port}[/]")
@@ -465,73 +464,18 @@ def sync(
     cli.display_results(resp, tablefmt="action")
 
 
-# TODO cache show clients get details for client make this easier
-# currently requires the serial of the device the client is connected to
-@app.command(help="Disconnect a WLAN client",)
-def kick(
-    device: str = typer.Argument(
-        ...,
-        metavar=f"CONNECTED_DEVICE{iden.dev}",
-        autocompletion=cli.cache.dev_ap_completion
-    ),
-    what: KickArgs = typer.Argument(...,),
-    who: str = typer.Argument(None, help="[<mac>|<wlan/ssid>]",),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
-) -> None:
-    """Disconnect a client.
-
-    This command currently only applies to APs
-    """
-    # TODO cache the client details so they don't have to specify the connected_device but can
-    # kick client by hostname/username/ip/mac/...
-    yes = yes_ if yes_ else yes
-    if device in ["all", "mac", "wlan"]:
-        typer.secho(f"Missing device parameter required before keyword {device}", fg="red")
-        raise typer.Exit(1)
-    dev = cli.cache.get_dev_identifier(device)
-    if what == "mac":
-        if not who:
-            typer.secho("Missing argument <mac address>", fg="red")
-            raise typer.Exit(1)
-        mac = utils.Mac(who)
-        who = mac.cols
-        if not mac:
-            typer.secho(f"{mac.orig} does not appear to be a valid mac address", fg="red")
-            raise typer.Exit(1)
-
-    _who = f" {who}" if who else " "
-    if yes or typer.confirm(typer.style(f"Please Confirm: kick {what}{_who} on {dev.name}", fg="cyan"), abort=True):
-        resp = cli.central.request(
-            cli.central.kick_users,
-            dev.serial,
-            kick_all=True if what == "all" else False,
-            mac=None if what != "mac" else mac.cols,
-            ssid=None if what != "wlan" else who,
-            )
-        cli.display_results(resp, tablefmt="action")
-        # typer.secho(str(resp), fg="green" if resp else "red")
-
-
 # TODO get the account, port and process details (start_time, pid) cache
 # add cache.RunDB or InfoDB to use to store this kind of stuff
 @app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
-        ...,
-        # metavar=f"hook-proxy",
+        "hook-proxy",
+        metavar=f"['hook-proxy']",
+        help="hook-proxy only now, optional arg is here for future listeners",
     ),
-    port: int = typer.Option(None, help="Port to listen on (overrides config value if provided"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    yes_both: bool = typer.Option(False, "-YY", help="Bypass all confirmations, including killing current process if running."),
-    yes_both_: bool = typer.Option(False, "-yy", hidden=True),
+    port: int = typer.Option(None, help="Port to listen on (overrides config value if provided)", show_default=False),
+    yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (including killing current process if running)", metavar="", show_default=False),
+    # yes_both: bool = typer.Option(False, "-YY", "-yy", help="Bypass all confirmations, including killing current process if running."),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -541,11 +485,11 @@ def start(
 ) -> None:
     """Start WebHook Proxy Service on this system in the background
 
-    Requires optional hook-proxy component 'pip3 install centralcli[hook-proxy]'
+    Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
 
     """
-    yes = yes_ if yes_ else yes
-    yes_both = yes_both_ if yes_both_ else yes_both
+    yes_both = True if yes > 1 else False
+    yes = True if yes else False
     def terminate_process(pid):
         p = psutil.Process(pid)
         for _ in range(2):
@@ -776,8 +720,8 @@ def convert(
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
     if not ctx.resilient_parsing:
         version, account, debug, debugv, default, update_cache = None, None, None, None, None, None
-        for idx, arg in enumerate(sys.argv):
-            if arg in ["-v", "-V", "--version"]:
+        for idx, arg in enumerate(sys.argv[1:]):
+            if idx == 0 and arg in ["-v", "-V", "--version"]:
                 version = True
             if arg == "--debug":
                 debug = True
