@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 import pendulum
-from pydantic import ConfigDict, BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator
 
 
 # fields from Response.output after cleaner
