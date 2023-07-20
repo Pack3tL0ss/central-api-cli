@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 import pendulum
-from pydantic import BaseModel, Field, validator
+from pydantic import ConfigDict, BaseModel, Field, validator
 
 
 # fields from Response.output after cleaner
@@ -46,6 +46,18 @@ class WIDS(BaseModel):
         json_encoders = {
             datetime: lambda v: pendulum.from_format(v.rstrip("Z"), "YYYY-MM-DDTHH:mm:s.SSS").to_day_datetime_string(),
         }
+    # TODO json_encoders above removed from pydantic in v2 below was what migration tool came up with but causes last command dump
+    # to file to puke [TypeError: keys must be str, int, float, bool or None, not type]
+    # json.dumps @ line 370 of clicommon _display_results
+            # if stash:
+            #     config.last_command_file.write_text(
+            # ==>        json.dumps({k: v for k, v in kwargs.items() if k != "config"})
+            #     )
+
+    # Pydantic v2 conversion result that causes the    !!! Pinning to pydantic <2 until fully migrated
+    # model_config = ConfigDict(json_encoders={
+    #     datetime: lambda v: pendulum.from_format(v.rstrip("Z"), "YYYY-MM-DDTHH:mm:s.SSS").to_day_datetime_string(),
+    # })
 
 class WIDS_LIST(BaseModel):
     rogue: Optional[List[WIDS]] = Field(default_factory=list)
