@@ -395,9 +395,11 @@ class ArgToWhat:
         self.cx = "cx"
         self.mas = "mas"
 
-
     def _init_clone(self):
         self.group = self.groups = "group"
+
+    def _init_kick(self):
+        self.client = self.clients = "client"
 
     def _init_bounce(self):
         self.interface = self.port = self.ports = self.interfaces = "interface"

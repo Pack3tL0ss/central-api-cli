@@ -55,7 +55,10 @@ class Convert:
         self.cols = cols
         self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
         self.dots = '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
-        self.dec = int(self.clean, 16) if self.ok else 0
+        try:
+            self.dec = 0 if not self.ok else int(self.clean, 16)
+        except ValueError:
+            self.dec = 0
         self.url = urllib.parse.quote_plus(cols)
 
     def __len__(self):

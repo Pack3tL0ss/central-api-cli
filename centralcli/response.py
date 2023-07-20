@@ -474,16 +474,18 @@ class Session():
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
-                # TODO handle the following... pause/retry
-                # Request 3 [POST: /platform/licensing/v1/subscriptions/unassign]
-                #     Response:
-                #     status code: 503
-                #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
                 self.spinner.fail(fail_msg)
                 self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
+                elif resp.status == 503:
+                    # Request 3 [POST: /platform/licensing/v1/subscriptions/unassign]
+                    #     Response:
+                    #     status code: 503
+                    #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
+                    spin_txt_retry == "(retry after 503: Service Unavailable)"
+                    log.warning(f'{resp.url} forced to retry after 503 from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
@@ -743,7 +745,8 @@ class Session():
     @staticmethod
     async def pause(start: float) -> None:
         _elapsed = time.perf_counter() - start
-        _pause = (int(_elapsed) + 1) - _elapsed
+        _pause = (int(_elapsed) + 1) - _elapsed # get the time between now and start of the next second
+        # _pause = (_elapsed + 1) - _elapsed
         log.debug(f"PAUSE {_pause:.2f}s...")
         time.sleep(_pause)
 

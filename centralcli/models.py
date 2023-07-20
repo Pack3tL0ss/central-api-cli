@@ -53,3 +53,15 @@ class WIDS_LIST(BaseModel):
     neighbor: Optional[List[WIDS]] = Field(default_factory=list)
     suspectrogue: Optional[List[WIDS]] = Field(default_factory=list)
 
+# Client Cache
+class Client(BaseModel):
+    mac: str = Field(default_factory=str)
+    name: str = Field(default_factory=str)
+    ip: str = Field(default_factory=str)
+    type: str = Field(default_factory=str)
+    connected_port: str = Field(default_factory=str)
+    connected_serial: str = Field(default_factory=str)
+    connected_name: str = Field(default_factory=str)
+    site: str = Field(default_factory=str)
+    group: str = Field(default_factory=str)
+    last_connected: datetime = Field(default=None)

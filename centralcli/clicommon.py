@@ -181,7 +181,9 @@ class CLICommon:
         if not resp:
             print(current)
         else:
-            latest = max(resp.output["releases"])
+            major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") < 2])
+            minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 1 and int(str(k).split(".")[0]) == major])
+            latest = f'{major}.{minor}'
             msg = "[bold bright_green]centralcli[/] "
             msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
             msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'

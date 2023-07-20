@@ -5,11 +5,12 @@
 # TODO keep addl attributes from return in cache with key prefixed with _ or under another internal use key
 # device results include site_id which we strip out as it's not useful for display, but it is useful for
 # internally.  Currently the site_id is being looked up from the site cache
+from __future__ import annotations
 from typing import Any, Literal, Dict, Sequence, Union, List
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
-from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render
+from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
 from pathlib import Path
 # from render import rich_capture
 
@@ -285,6 +286,7 @@ class Cache:
             self.GroupDB = self.DevDB.table("groups")
             self.TemplateDB = self.DevDB.table("templates")
             self.LabelDB = self.DevDB.table("labels")
+            self.ClientDB = self.DevDB.table("clients")  # Updated only when show clients is ran
             # log db is used to provide simple index to get details for logs
             # vs the actual log id in form 'audit_trail_2021_2,...'
             # it is updated anytime show logs is ran.
@@ -292,7 +294,7 @@ class Cache:
             self.EventDB = self.DevDB.table("events")
             self.HookConfigDB = self.DevDB.table("wh_config")
             self.HookDataDB = self.DevDB.table("wh_data")
-            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB]
+            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.ClientDB]
             self.Q = Query()
             if data:
                 self.insert(data)
@@ -334,6 +336,10 @@ class Cache:
     @property
     def labels(self) -> list:
         return self.LabelDB.all()
+
+    @property
+    def clients(self) -> list:
+        return self.ClientDB.all()
 
     @property
     def logs(self) -> list:
@@ -871,6 +877,38 @@ class Cache:
         for m in out:
             yield m
 
+    def client_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        # if not incomplete:
+        #     return [tuple([c["name"], f'{c["ip"]}|{c["mac"]} type: {c["type"]} connected to: {c["connected_name"]} ~ {c["connected_port"]}']) for c in self.clients]
+
+        match = self.get_client_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or []
+        if match:
+            # remove clients that are already on the command line
+            match = [m for m in match if m.name not in args]
+            for c in sorted(match, key=lambda i: i.name):
+                if c.name.startswith(incomplete):
+                    out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                    out += [tuple([c.mac, f'{c.name}|{c.ip} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                elif c.ip.startswith(incomplete):
+                    out += [tuple([c.mac, f'{c.name}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                else:
+                    # failsafe, shouldn't hit
+                    out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port} (fail-safe match)'])]
+
+
+        for c in out:
+            yield c
+
     def event_completion(
         self,
         incomplete: str,
@@ -1306,6 +1344,50 @@ class Cache:
                     log.error("Tiny DB returned an error during template db update")
         return resp
 
+    # TODO need a reset cache flag in "show clients"
+    async def update_client_db(self, *args, **kwargs):
+        """Update client DB
+
+        This is only updates when the user does a show clients
+
+        It returns the raw data from the API with whatever filters were provided by the user
+        then updates the db with the data returned
+
+        Currently users are never purged.
+        """
+        if self.central.get_clients not in self.updated:
+            client_resp = await self.central.get_clients(*args, **kwargs)
+            if not client_resp.ok:
+                return client_resp
+            else:
+                if len(client_resp) > 0:
+                    client_resp.output = utils.listify(client_resp.output)
+                    self.updated.append(self.central.get_clients)
+                    data = [
+                        {
+                            "mac": c.get("macaddr"),
+                            "name": c.get("name", c.get("macaddr")),
+                            "ip": c.get("ip_address", ""),
+                            "type": c["client_type"],
+                            "connected_port": c["network"] if c["client_type"] == "WIRELESS" else c.get("interface_port"),
+                            "connected_serial": c.get("associated_device"),
+                            "connected_name": c.get("associated_device_name"),
+                            "site": c.get("site"),
+                            "group": c.get("group_name"),
+                            "last_connected": c.get("last_connection_time")
+                        }
+                        for c in client_resp.output
+                    ]
+                    # self.ClientDB.truncate()
+                    Client = Query()
+                    upsert_res = [
+                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
+                        for c in data
+                    ]
+                    if False in upsert_res:
+                        log.error("Tiny DB returned an error during client db update")
+            return client_resp
+
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
         self.LogDB.truncate()
         return self.LogDB.insert_multiple(log_data)
@@ -1430,7 +1512,7 @@ class Cache:
 
     def handle_multi_match(
         self,
-        match: List[CentralObject],
+        match: List[CentralObject] | List[models.Client],
         query_str: str = None,
         query_type: str = "device",
     ) -> List[Dict[str, Any]]:
@@ -1448,10 +1530,18 @@ class Cache:
             fields = ("name",)
         elif query_type == "inventory":
             fields = ("serial", "mac")
+        elif query_type == "client":
+            fields = {"name", "mac", "ip", "connected_port", "connected_name", "site"}
         else:  # device
             fields = ("name", "serial", "mac", "type")
+
+        if isinstance(match[0], models.Client):
+            data = [{k: d.dict()[k] for k in d.dict() if k in fields} for d in match]
+        else:
+            data = [{k: d[k] for k in d.data if k in fields} for d in match]
+
         out = utils.output(
-            [{k: d[k] for k in d.data if k in fields} for d in match],
+            data,
             title=f"Ambiguous identifier. Select desired {query_type}.",
             set_width_cols=set_width_cols,
         )
@@ -1607,7 +1697,7 @@ class Cache:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.SiteDB.search(self.Q.name == fuzz_match)
+                        match = self.DevDB.search(self.Q.name == fuzz_match)
                 if not match:
                     kwargs = {"dev_db": True}
                     if include_inventory:
@@ -1833,7 +1923,7 @@ class Cache:
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject:
-        """Allows Case insensitive group match"""
+        """Allows Case insensitive label match"""
         retry = False if completion else retry
         for _ in range(0, 2):
             # TODO change all get_*_identifier functions to continue to look for matches when match is found when
@@ -1961,7 +2051,7 @@ class Cache:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
                     confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.SiteDB.search(self.Q.name == fuzz_match)
+                        match = self.TemplateDB.search(self.Q.name == fuzz_match)
                 if not match:
                     typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
                     self.check_fresh(refresh=True, template_db=True)
@@ -1993,6 +2083,91 @@ class Cache:
         else:
             if not completion and not silent:
                 log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
+
+    def get_client_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        exit_on_fail: bool = False,
+        silent: bool = False,
+    ) -> models.Client:
+        """Allows Case insensitive client match"""
+        retry = False if completion else retry
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        if completion and not query_str.strip():
+            return [models.Client(**c) for c in self.clients]
+
+        match = None
+        for _ in range(0, 2 if retry else 1):
+            # Try exact match
+            match = self.ClientDB.search(
+                (self.Q.name == query_str)
+                | (self.Q.mac == utils.Mac(query_str).cols)
+                | (self.Q.ip == query_str)
+            )
+
+            # retry with case insensitive name match if no match with original query
+            if not match:
+                match = self.ClientDB.search(
+                    (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
+                    | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
+                )
+
+            # retry name match swapping - for _ and _ for -
+            if not match:
+                if "-" in query_str:
+                    match = self.ClientDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+                elif "_" in query_str:
+                    match = self.ClientDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+
+            # Last Chance try to match name if it startswith provided value
+            if not match:
+                match = self.ClientDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.ip.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+                if not match:
+                    qry_mac = utils.Mac(query_str)
+                    qry_mac_fuzzy = utils.Mac(query_str, fuzzy=True)
+                    if qry_mac or len(qry_mac) == len(qry_mac_fuzzy):
+                        match = self.ClientDB.search(
+                            self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
+                        )
+
+            # no match found initiate cache update
+            if retry and not match and self.central.get_clients not in self.updated:
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
+                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.ClientDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Client Cache")
+                    asyncio.run(self.update_client_db("wireless"))  # on demand update only for WLAN as kick only applies to WLAN currently
+
+            if match:
+                match = [models.Client(**c) for c in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            # user selects which device if multiple matches returned
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type="client")
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Unable to gather client info from provided identifier {query_str}", show=not silent)
+            if exit_on_fail:
+                raise typer.Exit(1)
+            else:
+                return None
 
     def get_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:

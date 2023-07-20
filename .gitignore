@@ -188,3 +188,4 @@ tests/test_devices.json
 centralcli/dashboard/*
 
 *.ignore
+centralcli/_*
