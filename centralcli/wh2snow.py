@@ -32,10 +32,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
-log_file.parent.mkdir(exist_ok=True)
-log = MyLogger(log_file, debug=config.debug, show=True, verbose=config.debugv)
-print(f"Web Hook Proxy logging to [cyan]{log_file}[/]")
+def init_logs():
+    log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
+    log_file.parent.mkdir(exist_ok=True)
+    log = MyLogger(log_file, debug=config.debug, show=True, verbose=config.debugv)
+    print(f"Web Hook Proxy logging to [cyan]{log_file}[/]")
+
+    return log
 
 
 class HookResponse(BaseModel):
@@ -229,6 +232,7 @@ async def webhook(
 
 
 if __name__ == "__main__":
+    log = init_logs()
     port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
     # _ = get_current_branch_state()
     try:
