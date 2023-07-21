@@ -158,6 +158,7 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     """
     # Token obtained from Aruba Central Webhooks page as provided in the input
     token = config.tokens["webhook_token"]
+    log.debug(f'verifying token: {token}')
     token = token.encode('utf-8')
 
     # Construct HMAC digest message
@@ -231,6 +232,6 @@ if __name__ == "__main__":
     port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
     # _ = get_current_branch_state()
     try:
-        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=port or 8123, log_level="info")
     except Exception as e:
         log.exception(f"{e.__class__.__name__}\n{e}", show=True)
