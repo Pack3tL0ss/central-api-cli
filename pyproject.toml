@@ -28,7 +28,7 @@ classifiers = [
 cencli = "centralcli.cli:app"
 
 [tool.poetry.dependencies]
-python = ">=3.8"
+python = ">=3.8,<4.0"
 tabulate = ">=0.8"
 halo = "*"
 typer = ">=0.6"
