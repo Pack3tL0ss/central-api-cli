@@ -224,7 +224,7 @@ class Config:
 
     @property
     def wh_port(self):
-        return self.data.get("webclient_info", {}).get("port", "9443")
+        return self.data.get("webclient_info", {}).get("port", 9443)
 
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:
