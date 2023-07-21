@@ -232,6 +232,6 @@ if __name__ == "__main__":
     port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
     # _ = get_current_branch_state()
     try:
-        uvicorn.run(app, host="0.0.0.0", port=port or 8123, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=port or 8123, log_level="info" if not config.debug else "debug")
     except Exception as e:
         log.exception(f"{e.__class__.__name__}\n{e}", show=True)
