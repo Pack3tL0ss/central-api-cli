@@ -161,7 +161,7 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     """
     # Token obtained from Aruba Central Webhooks page as provided in the input
     token = config.tokens["webhook_token"]
-    log.debug(f'verifying token: {token}')
+    log.debug(f'verifying token: {token}', show=True)
     token = token.encode('utf-8')
 
     # Construct HMAC digest message
