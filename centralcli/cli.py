@@ -488,6 +488,7 @@ def start(
     Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
 
     """
+    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
     def terminate_process(pid):
@@ -501,7 +502,7 @@ def start(
 
     def get_pid():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
+            if p.info["cmdline"] and True in [svc in x for x in p.info["cmdline"][1:]]:
                 return p.pid # if p.ppid() == 1 else p.ppid()
 
     pid = get_pid()
@@ -519,7 +520,7 @@ def start(
         port = port or config.wh_port
         with console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
-                ["nohup", sys.executable, "-m", "centralcli.wh_proxy", str(port)],
+                ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT
             )
@@ -554,6 +555,7 @@ def stop(
 ) -> None:
     """Stop WebHook Proxy (background process).
     """
+    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes = yes_ if yes_ else yes
     def terminate_process(pid):
         console = Console(emoji=False)
@@ -581,7 +583,7 @@ def stop(
 
     def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if "wh_proxy" in str(p.cmdline()[1:]):
+            if svc in str(p.cmdline()[1:]):
                 return p.pid, p.cmdline()[-1]
 
     proc = _get_process_info()
@@ -619,17 +621,16 @@ def archive(
     Just use cencli deleve device ... or cencli batch delete devices
     """
     yes = yes_ if yes_ else yes
-    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
-    # TODO Check if one of the properties in CentralObject will work for the dev text below.
     _msg = f"[bright_green]Archive devices[/]:"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
+        _msg = f"{_msg} {dev.rich_help_text}"
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
@@ -653,17 +654,15 @@ def unarchive(
     To "unarchive" you would use cencli add device serial <serail> mac <mac> --license <license>
 
     """
-    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
-    # TODO add confirmation method builder to output class
-    # TODO Check if one of the properties in CentralObject will work for the dev text below.
     _msg = f"[bright_green]Unarchive devices[/]:"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
+        _msg = f"{_msg} {dev.rich_help_text}"
     print(_msg)
 
     resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in devices])

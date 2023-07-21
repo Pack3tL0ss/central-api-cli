@@ -99,6 +99,7 @@ class CertFormat(str, Enum):
 
 class StartArgs(str, Enum):
     hook_proxy = "hook-proxy"
+    hook2snow = "hook2snow"
 
 
 # wrapping keys from return for some calls that have no value
