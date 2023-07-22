@@ -13,6 +13,9 @@ from typing import Any, List, Union
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
+from pydantic import BaseModel, Field, HttpUrl, ValidationError
+from yarl import URL
+# from pydantic import ConfigDict  # pydantic 2 not supported yet
 
 import tablib
 import yaml
@@ -21,6 +24,40 @@ try:
     import readline  # noqa
 except Exception:
     pass
+
+# class BaseModel(PydanticBaseModel):
+#     class Config:
+#         arbitrary_types_allowed = True
+
+class Token(BaseModel):
+    access: str = Field(..., alias="access_token")
+    refresh : str = Field(..., alias="refresh_token")
+
+class WebHook(BaseModel):
+    token: str
+    port: int = 9443
+
+class ServiceNow(BaseModel):
+    # model_config = ConfigDict(arbitrary_types_allowed=True) pydantic 2 / not supported yet
+    id: str
+    base_url: HttpUrl = Field(..., alias="url")
+    port: int = None
+    incident_path: str
+    refresh_path: str = "oauth_token.do"
+    client_id: str
+    client_secret: str
+    token: Token = None
+    tok_file: Path = None
+
+    @property
+    def incident_url(self) -> URL:
+        return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.incident_path.lstrip('/')}?sysparm_display_value=true")
+
+    @property
+    def refresh_url(self) -> URL:
+        return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.refresh_path.lstrip('/')}")
+
+
 
 clear = Console().clear
 class ClusterName(str, Enum):
@@ -182,6 +219,16 @@ class Config:
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
+        try:
+            self.webhook = WebHook(**self.data[self.account].get("webhook", {}))
+        except ValidationError:
+            self.webhook = None
+        try:
+            snow_cache = f'{self.cache_dir}/snow_tok_{self.data[self.account]["customer_id"]}_{self.data[self.account]["client_id"]}.json'
+            self.snow = ServiceNow(**{**self.data[self.account].get("snow", {}), **{"tok_file": snow_cache}})
+        except ValidationError:
+            self.snow = None
+
         self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
 
     def __bool__(self):
@@ -224,7 +271,8 @@ class Config:
 
     @property
     def wh_port(self):
-        return self.data.get("webclient_info", {}).get("port", 9443)
+        _acct_specific = self.webhook.get("port")
+        return _acct_specific or self.data.get("webclient_info", {}).get("port", 9443)
 
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:

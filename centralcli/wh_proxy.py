@@ -257,6 +257,13 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     """
     # Token obtained from Aruba Central Webhooks page as provided in the input
     token = config.tokens["webhook_token"]
+    if token:
+        log.warning(
+            f"Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
+            show=True
+        )
+    else:
+        token = config.webhook.token
     token = token.encode('utf-8')
 
     # Construct HMAC digest message

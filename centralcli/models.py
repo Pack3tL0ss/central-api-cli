@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional, Union
 
@@ -77,3 +78,84 @@ class Client(BaseModel):
     site: str = Field(default_factory=str)
     group: str = Field(default_factory=str)
     last_connected: datetime = Field(default=None)
+
+# SNOW Response
+
+class SysTargetSysId(BaseModel):
+    display_value: Optional[str] = None
+    link: Optional[str] = None
+
+
+class SysImportSet(BaseModel):
+    display_value: Optional[str] = None
+    link: Optional[str] = None
+
+
+class ImportSetRun(BaseModel):
+    display_value: Optional[str] = None
+    link: Optional[str] = None
+
+
+class SysTransformMap(BaseModel):
+    display_value: Optional[str] = None
+    link: Optional[str] = None
+
+
+class Result(BaseModel):
+    u_comments_to_customer: Optional[str] = None
+    template_import_log: Optional[str] = None
+    u_service_offering: Optional[str] = None
+    sys_updated_on: Optional[str] = None
+    u_urgency: Optional[str] = None
+    sys_target_sys_id: SysTargetSysId
+    u_watch_list: Optional[str] = None
+    u_reported_by: Optional[str] = None
+    u_business_service: Optional[str] = None
+    sys_updated_by: Optional[str] = None
+    u_short_description: Optional[str] = None
+    sys_created_on: Optional[str] = None
+    sys_import_set: SysImportSet
+    u_additional_comments: Optional[str] = None
+    sys_created_by: Optional[str] = None
+    sys_import_row: Optional[str] = None
+    sys_row_error: Optional[str] = None
+    u_work_notes: Optional[str] = None
+    u_subcategory: Optional[str] = None
+    u_state: Optional[str] = None
+    u_attachment_type: Optional[str] = None
+    import_set_run: ImportSetRun
+    u_contact_type: Optional[str] = None
+    u_attachment_encoded_code: Optional[str] = None
+    u_description: Optional[str] = None
+    u_close_notes: Optional[str] = None
+    u_call_back: Optional[str] = None
+    sys_import_state_comment: Optional[str] = None
+    sys_class_name: Optional[str] = None
+    u_priority: Optional[str] = None
+    sys_id: Optional[str] = None
+    u_external_source: Optional[str] = None
+    sys_transform_map: SysTransformMap
+    u_external_ticket: Optional[str] = None
+    u_servicenow_number: Optional[str] = None
+    u_resolved_by_group: Optional[str] = None
+    u_assigned_to: Optional[str] = None
+    u_raised_severity: Optional[str] = None
+    u_hold_reason: Optional[str] = None
+    sys_target_table: Optional[str] = None
+    sys_mod_count: Optional[str] = None
+    u_assignment_group: Optional[str] = None
+    u_affected_user: Optional[str] = None
+    u_impact: Optional[str] = None
+    sys_tags: Optional[str] = None
+    sys_import_state: Optional[str] = None
+    u_contact_number: Optional[str] = None
+    u_category: Optional[str] = None
+    u_cause_code: Optional[str] = None
+    u_close_code: Optional[str] = None
+    u_configuration_item: Optional[str] = None
+    u_cause_sub_code: Optional[str] = None
+    u_attachment_name: Optional[str] = None
+
+
+class SnowResponse(BaseModel):
+    result: Result
