@@ -2150,6 +2150,64 @@ def alerts(
     )
 
 
+@app.command(short_help="Show alert/notification configuration.")
+def notifications(
+    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
+    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    reverse: bool = typer.Option(
+        True, "-r",
+        help="Reverse Output order Default order: newest on bottom.",
+        show_default=False
+    ),
+    # verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
+    verbose2: bool = typer.Option(False, "-vv", help="Show unformatted response from Central API Gateway"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show alert/notification configuration.
+
+    Display alerty types, notification targets, and rules.
+    """
+    central = cli.central
+    resp = central.request(central.central_get_notification_config, search=search)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    title = f"Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        # cleaner=cleaner.get_alerts if not verbose else None,
+    )
+
+
 @app.command(short_help="Re-display output from Last command.", help="Re-display output from Last command.  (No API Calls)")
 def last(
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),

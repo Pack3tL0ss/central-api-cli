@@ -4799,6 +4799,36 @@ class CentralApi(Session):
 
         return await self.post(url)
 
+    async def central_get_notification_config(
+        self,
+        search: str = None,
+        sort: str = '-created_ts',
+        offset: int = 0,
+        limit: int = 500,
+    ) -> Response:
+        """List Configuration/Settings for alerts that result in notification.
+
+        Args:
+            search (str, optional): term used to search in name, category of the alert
+            sort (str, optional): Sort parameter may be one of +created_ts, -created_ts, Default is
+                '-created_ts'  Valid Values: -created_ts, +created_ts
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/notifications/settings"
+
+        params = {
+            'search': search,
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
     async def get_ap_config(
         self,
         group_swarmid: str,
