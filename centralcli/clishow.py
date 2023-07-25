@@ -1205,6 +1205,30 @@ def certs(
         resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse
     )
 
+# TODO show task --device  look up task by device if possible
+@app.command(short_help="Show Task/Command status")
+def task(
+    task_id: str = typer.Argument(..., show_default=False),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show status of previously issued task/command.
+
+    Requires task_id which is provided in the response of the previously issued command.
+        Example: [cyan]cencli bounce interface idf1-6300-sw 1/1/11[/] will queue the command
+                and provide the task_id.
+    """
+    resp = cli.central.request(cli.central.get_task_status, task_id)
+
+    cli.display_results(
+        resp, tablefmt="action", title=f"Task {task_id} status")
+
 
 @app.command(short_help="Show last known running config for a device")
 def run(

@@ -1965,8 +1965,21 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def get_task_status(self, task_id):
-        return await self.get(f"/device_management/v1/status/{task_id}")
+    async def get_task_status(
+        self,
+        task_id: str,
+    ) -> Response:
+        """Status.
+
+        Args:
+            task_id (str): Unique task id to get response of command
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/device_management/v1/status/{task_id}"
+
+        return await self.get(url)
 
     async def get_switch_vlans(
         self,
