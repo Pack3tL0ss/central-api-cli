@@ -33,6 +33,10 @@ class Token(BaseModel):
     access: str = Field(..., alias="access_token")
     refresh : str = Field(..., alias="refresh_token")
 
+class SnowTokens(BaseModel):
+    config: Token
+    cache: Optional[Token] = None
+
 class WebHook(BaseModel):
     token: str
     port: int = 9443
@@ -46,7 +50,7 @@ class ServiceNow(BaseModel):
     refresh_path: str = "oauth_token.do"
     client_id: str
     client_secret: str
-    token: Token = None
+    token: SnowTokens = None
     tok_file: Path = None
 
     @property
@@ -223,9 +227,22 @@ class Config:
             self.webhook = WebHook(**self.data[self.account].get("webhook", {}))
         except ValidationError:
             self.webhook = None
+
         try:
-            snow_cache = f'{self.cache_dir}/snow_tok_{self.data[self.account]["customer_id"]}_{self.data[self.account]["client_id"]}.json'
-            self.snow = ServiceNow(**{**self.data[self.account].get("snow", {}), **{"tok_file": snow_cache}})
+            _snow_config = self.data[self.account].get("snow", {})
+            if _snow_config:
+                if _snow_config.get("token", {}):
+                    _config_token = _snow_config["token"]
+                    # del _snow_config["token"]
+                    _snow_config["token"] = {}
+                    _snow_config["token"]["config"] = _config_token
+                if self.snow_tok_file and self.snow_tok_file.exists():
+                    _cache_token = json.loads(self.snow_tok_file.read_text())
+                    _snow_config["token"]["cache"] = _cache_token
+                _snow_config["tok_file"] = Path(self.cache_dir / f'snow_{self.tok_file.name}')
+            # snow_cache = f'{self.cache_dir}/snow_tok_{self.data[self.account]["customer_id"]}_{self.data[self.account]["client_id"]}.json'
+            # self.snow = ServiceNow(**{**self.data[self.account].get("snow", {}), **{"tok_file": snow_cache}})
+            self.snow = ServiceNow(**_snow_config)
         except ValidationError:
             self.snow = None
 
@@ -260,6 +277,12 @@ class Config:
             "token_store",
             {"type": "local", "path": f"{self.dir.joinpath('.cache')}"}
         )
+
+    @property
+    def tok_file(self) -> Path:
+        cust_id = self.data.get(self.account, {}).get("customer_id")
+        client_id = self.data.get(self.account, {}).get("client_id")
+        return Path(self.cache_dir / f'tok_{cust_id}_{client_id}.json') if cust_id and client_id else None
 
     @property
     def cache_file(self):
