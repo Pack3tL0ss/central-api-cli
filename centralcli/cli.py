@@ -514,7 +514,8 @@ def start(
             print("[cyan]Process Terminated")
 
     # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
-    print(f"Webhook Proxy will listen on {port or config.wh_port}")
+    config_port = 9143 if not config.webhook else config.webhook.port
+    print(f"Webhook Proxy will listen on port {port or config_port}")
     if yes or yes_both or typer.confirm("\nProceed?", abort=True):
         console = Console()
         port = port or config.wh_port

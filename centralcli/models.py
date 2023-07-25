@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Union
 
 import pendulum
@@ -159,3 +160,179 @@ class Result(BaseModel):
 
 class SnowResponse(BaseModel):
     result: Result
+
+# WebHook Models
+class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
+    customer_id: Optional[str] = None
+    rule_number: Optional[str] = Field(None, alias="_rule_number")
+    name: Optional[str] = None
+    ap_model: Optional[str] = None
+    group: Optional[str] = None
+    labels: Optional[List[str]] = []
+    params: Optional[List[str]] = []
+    serial: Optional[str] = None
+    time: Optional[str] = None
+    duration: Optional[str] = None
+    threshold: Optional[str] = None
+    time: Optional[str] = None
+    site: Optional[str] = Field(None, alias="site_name")
+    device: Optional[str] = None
+    ssid: Optional[str] = None
+    sub_message: Optional[str] = None
+    labels: Optional[List[str]] = []  # sometimes a comma sep str
+    delay: Optional[str] = None
+    ts: Optional[str] = None
+    group_name: Optional[str] = None
+    conn_status: Optional[str] = None
+    unit: Optional[str] = None
+    ds_key: Optional[str] = None
+    _band: Optional[str] = None
+    _radio_num: Optional[str] = None
+    channel: Optional[str] = None
+    client_count: Optional[int] = None # converting from str
+    src_ip: Optional[str] = None
+    dst_ip: Optional[str] = None
+    alias_map_name: Optional[str] = None
+    mac: Optional[str] = None
+    ip: Optional[str] = Field(None, alias="ip_address")
+    max_value_for_percentage: Optional[str] = None
+    intf_name: Optional[str] = None
+    mode: Optional[str] = None
+    old_serial: Optional[str] = None
+    old_mac: Optional[str] = None
+    new_serial: Optional[str] = None
+    new_mac: Optional[str] = None
+    host: Optional[str] = Field(None, alias="hostname")
+    stack_id: Optional[str] = None
+    mem_id: Optional[str] = None
+    role: Optional[List[str]] = None
+    action: Optional[str] = None
+    pr1: Optional[str] = None
+    pr2: Optional[str] = None
+    host1: Optional[str] = None
+    host2: Optional[str] = None
+    ip1: Optional[str] = None
+    ip2: Optional[str] = None
+    serial1: Optional[str] = None
+    serial2: Optional[str] = None
+    type: Optional[str] = None
+    nbr_addr: Optional[str] = None
+    nbr_as: Optional[str] = None
+    nbr_id: Optional[str] = None
+    count: Optional[int] = None # convert from str
+    max: Optional[int] = None # convert from str
+    default_gw_status: Optional[str] = None
+    uplink_tag: Optional[str] = None
+    link_tag: Optional[str] = None
+    status: Optional[str] = None
+    current_status: Optional[str] = None
+    speed: Optional[str] = None
+    new_speed: Optional[str] = None
+    reason: Optional[str] = None
+    vm_id: Optional[str] = None
+    account_name: Optional[str] = None
+    region_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    health: Optional[str] = None
+    vpc_id: Optional[str] = None
+    provider_name: Optional[str] = None
+
+
+
+class WebHook(BaseModel):
+    id: Optional[str] = None
+    nid: Optional[int] = None
+    alert_type: Optional[str] = None
+    setting_id: Optional[str] = None
+    device_id: Optional[str] = None
+    description: Optional[str] = None
+    state: Optional[str] = None
+    severity: Optional[str] = None
+    operation: Optional[str] = None
+    timestamp: Optional[int] = None
+    details: Optional[WebHookDetails] = None
+    webhook: Optional[str] = None
+    text: Optional[str] = None
+
+_example_snow_payload = {
+        "u_affected_user": "blah",
+        "u_assignment_group":"TE-sn-servicenow",
+        "u_business_service": "",
+        "u_call_back": False,
+        "u_category": "",
+        "u_contact_type": "integration",
+        "u_description": "",
+        "u_configuration_item": "valid snow config item",
+        "u_external_source": "40 chars",
+        "u_external_ticket": "40 chars",
+        "u_raised_severity": 2,
+        "u_reported_by": "valid TE ID",
+        "u_servicenow_number": "Only on Update",
+        "u_service_offering": "snow valid service offering",
+        "u_short_description":"Test Ticket Mandatory Create 160 char",
+        "u_state": "resolved",
+        "u_subcategory": "must be valid sub cat of cat",
+        "u_work_notes": "4000 chars",
+        "u_attachment_name":"Integration_Sample.txt",
+        "u_attachment_type":"text/plain",
+        "u_attachment_encoded_code":"SW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA==",
+        "u_impact": 2,
+        "u_urgency": 2,
+        "u_watch_list":"TE308801,TE163762"
+    }
+
+class HighMedLow(str, Enum):
+    High = 1
+    Medium = 2
+    Low = 3
+
+class SnowCreate(BaseModel):
+    u_affected_user: Optional[str] = None
+    u_assignment_group: str
+    u_business_service: Optional[str] = None
+    u_call_back: Optional[bool] = None
+    u_category: Optional[str] = None
+    u_contact_type: Optional[str] = None
+    u_description: Optional[str] = None
+    u_configuration_item: Optional[str] = None
+    u_external_source: Optional[str] = None
+    u_external_ticket: Optional[str] = None
+    u_raised_severity: Optional[int] = None
+    u_reported_by: Optional[str] = None
+    u_service_offering: Optional[str] = None
+    u_short_description: str # = Field(..., le=160)
+    u_state: Optional[str] = None
+    u_subcategory: Optional[str] = None
+    u_work_notes: Optional[str] = None
+    u_attachment_name: Optional[str] = None
+    u_attachment_type: Optional[str] = None
+    u_attachment_encoded_code: Optional[str] = None
+    u_impact: Optional[HighMedLow] = None
+    u_urgency: Optional[HighMedLow] = None
+    u_watch_list: Optional[str] = None
+
+class SnowUpdate(BaseModel):
+    u_affected_user: Optional[str] = None
+    u_assignment_group: Optional[str] = None
+    u_business_service: Optional[str] = None
+    u_call_back: Optional[bool] = None
+    u_category: Optional[str] = None
+    u_contact_type: Optional[str] = None
+    u_description: Optional[str] = None
+    u_configuration_item: Optional[str] = None
+    u_external_source: Optional[str] = None
+    u_external_ticket: Optional[str] = None
+    u_raised_severity: Optional[int] = None
+    u_reported_by: Optional[str] = None
+    u_servicenow_number: str
+    u_service_offering: Optional[str] = None
+    u_short_description: Optional[str] = None
+    u_state: Optional[str] = None
+    u_subcategory: Optional[str] = None
+    u_work_notes: Optional[str] = None
+    u_attachment_name: Optional[str] = None
+    u_attachment_type: Optional[str] = None
+    u_attachment_encoded_code: Optional[str] = None
+    u_impact: Optional[HighMedLow] = None
+    u_urgency: Optional[HighMedLow] = None
+    u_watch_list: Optional[str] = None

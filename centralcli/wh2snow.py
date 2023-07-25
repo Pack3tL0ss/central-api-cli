@@ -170,21 +170,35 @@ class Hook2Snow:
         # include "u_servicenow_number": incident_num in subsequent post to update existing incident
         try:
             async with aiohttp.ClientSession() as session:
-                response = await session.post(str(config.snow.refresh_url), json=data)
+                response = await session.post(str(config.snow.incident_url), json=data)
                 return response
         except Exception as e:
             log.error(f'Exception during post to snow {e.__class__.__name__}', show=True)
             log.exception(e)
 
-    async def format_payload(self, data: dict) -> dict:
-        # adapt the wh to format for snow
-        return data
+    async def format_payload(self, data: dict) -> models.SnowCreate | models.SnowUpdate:
+        snow_data = {}
+        data = models.WebHook(data)
+        if data.state == "Open":
+            snow_data["u_assignment_group"] = config.snow.assignment_group  # TODO what assignment group???
+            snow_data["u_short_description"] = "".join(data.alert_type[0:161])
+            snow_data["u_description"] = data.description
+            snow_data["work_notes"] = "\n".join([f'{k}: {v}' for k, v in data.dict().items()])
+            snow_data["u_raised_severity"] = data.severity
+            snow_data["u_state"] = "New"
+            out_data = models.SnowCreate(snow_data)
+        else:
+            _id = cache.get_hook_id(data.id)  # TODO create cache
+            snow_data["u_servicenow_number"] = config.snow.assignment_group  # TODO what assignment group???
+            snow_data["u_state"] = "Resolved"
+            out_data = models.SnowUpdate(snow_data)
+        return out_data
 
     async def process_hook(self, data: dict):
-        word = "update" if data.get("u_servicenow_number") else "create"
+        word = "create" if data.get("state").lower() == "open" else "update"
         payload = await self.format_payload(data)
         for _ in range(0, 2):
-            response = await self.post2snow(data=payload)
+            response = await self.post2snow(data=payload.dict())
             if response is not None:
                 break
             else:
@@ -198,6 +212,7 @@ class Hook2Snow:
             res_payload = await response.json()
             res_model = models.SnowResponse(**res_payload)
             cache_res = await cache.update_hook_data_db(res_model)
+            # TODO verify cache_res response
 
 
     async def verify_header_auth(self, data: dict, svc: str, sig: str, ts: str, del_id: str):
@@ -227,42 +242,53 @@ class Hook2Snow:
             return True
         return False
 
+
     async def snow_token_refresh(self, refresh_token: str = None):
-        # Create a FormData object
-        form = aiohttp.FormData()
 
-        # Add some data to the form
-        form.add_field('grant_type', 'refresh_token')
-        form.add_field('client_id', config.snow.client_id)
-        form.add_field('client_secret', config.snow.client_secret)
-        form.add_field('refresh_token', refresh_token or config.snow.token.refresh)
+        forms = []
+        for tok in [config.snow.token.cache, config.snow.token.config]:
+            if tok is None:
+                continue
+            # Create a FormData object
+            _form = aiohttp.FormData()
 
-        # Send the form data to the server
-        async with aiohttp.ClientSession() as session:
-            response = await session.post(str(config.snow.refresh_url), data=form)
+            # Add some data to the form
+            _form.add_field('grant_type', 'refresh_token')
+            _form.add_field('client_id', config.snow.client_id)
+            _form.add_field('client_secret', config.snow.client_secret)
+            _form.add_field('refresh_token', tok.refresh)
+            forms += [_form]
 
-        # Check the response status code
-        if response.status == 200:
-            # The form was submitted successfully
-            log.info('SNOW token refresh success')
-            new_tokens = await response.text()
-            if not new_tokens:
-                raise Exception("SNOW token refresh refresh returned 200, but lacked text.")
+        for form in forms:
+            # Send the form data to the server
+            async with aiohttp.ClientSession() as session:
+                response = await session.post(str(config.snow.refresh_url), data=form)
 
-            write_res = config.snow.tok_file.write_text(new_tokens)
+            # Check the response status code
+            if response.status == 200:
+                # The form was submitted successfully
+                log.info('SNOW token refresh success')
+                new_tokens = await response.text()
+                if not new_tokens:
+                    raise Exception("SNOW token refresh refresh returned 200, but lacked text.")
 
-            if not write_res:
-                raise Exception(f"SNOW token refresh write to file ({config.snow.tok_file.name}) appears to have failed.")
-        else:
-            # The form was not submitted successfully
-            log.error(f'SNOW token refresh failed [{response.status}] {response.reason}')
-            # TODO custom exceptions
-            raise Exception(f"SNOW Token refresh failure. [{response.status}] {response.reason}")
+                write_res = config.snow.tok_file.write_text(new_tokens)
+
+                if not write_res:
+                    raise Exception(f"SNOW token refresh write to file ({config.snow.tok_file.name}) appears to have failed.")
+                break
+            elif response.status == 401:
+                continue  # try again with tokens from config  # verify it's a 401 could be 404
+            else:
+                # The form was not submitted successfully
+                log.error(f'SNOW token refresh failed [{response.status}] {response.reason}')
+                # TODO custom exceptions
+                raise Exception(f"SNOW Token refresh failure. [{response.status}] {response.reason}")
 
     @app.post("/webhook", status_code=200, response_model=HookResponse, responses=wh_resp_schema)
     async def webhook(
         self,
-        data: dict,
+        data: dict,  # models.WebHook
         request: Request,
         response: Response,
         content_length: int = Header(...),
@@ -317,10 +343,16 @@ class Hook2Snow:
 
 if __name__ == "__main__":
     log = init_logs()
-    port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
-    # _ = get_current_branch_state()
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        port = int(sys.argv[1])
+    elif config.webhook:
+        port = config.webhook.port
+    else:
+        port = 9143
+
+    h2s = Hook2Snow()
     try:
-        asyncio.run(snow_token_refresh())
+        asyncio.run(h2s.snow_token_refresh())
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info" if not config.debug else "debug")
     except Exception as e:
         log.exception(f"{e.__class__.__name__}\n{e}", show=True)
