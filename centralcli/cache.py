@@ -1994,6 +1994,7 @@ class Cache:
         elif retry:
             log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
             valid_labels = "\n".join(self.label_names)
+            # TODO convert all these to rich
             typer.secho(f"{query_str} appears to be invalid", fg="red")
             typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
             raise typer.Exit(1)
@@ -2091,7 +2092,7 @@ class Cache:
         completion: bool = False,
         exit_on_fail: bool = False,
         silent: bool = False,
-    ) -> models.Client:
+    ) -> models.Client | List[models.Client]:
         """Allows Case insensitive client match"""
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
