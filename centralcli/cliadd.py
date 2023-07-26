@@ -168,8 +168,7 @@ def group(
     mon_only_cx: bool = typer.Option(False, "--mon_only_cx", help="Monitor Only for ArubaOS-CX", hidden=True),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     debugv: bool = typer.Option(
         False, "--debugv",
@@ -183,7 +182,6 @@ def group(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     # if not group_password:
     #     group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
 
