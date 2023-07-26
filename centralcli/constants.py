@@ -252,6 +252,9 @@ class CacheArgs(str, Enum):
     labels = "labels"
     logs = "logs"
     events = "events"
+    hook_config = "hook_config"
+    hook_data = "hook_data"
+    hook_active = "hook_active"
 
 
 class KickArgs(str, Enum):
