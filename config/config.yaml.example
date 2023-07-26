@@ -5,10 +5,22 @@ central_info:
   username: "<Aruba Central Username>"
   password: "<aruba-central-account-password>"
   base_url: "https://central-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
-  token:
+  token:  # --- OPTIONAL CONFIG ITEMS --
     access_toke: <access token>     # tokens are not required if using user/pass  These tokens will be invalid
     refresh_token: <refresh token>  # soon after you start using them, but cencli auto refreshes and stores the new tokens
-    webhook_token: <webhook token>  # Optional used by optional hook-proxy feature.  "pip3 install centralcli[hook-proxy]"
+  webhook:  # Optional used by optional hook-proxy and hook2snow features.  "pip3 install centralcli[hook-proxy]"
+    token: <webhook token>  # Used to verify incoming webhooks
+    port: 8123  # Port this system would listen on for webhooks from Aruba Central
+  snow:  # Optional used by optional hook2snow feature (rcv webhook from central format then post to Service Now via REST API).  "pip3 install centralcli[hook-proxy]"
+    id: <snow_id>
+    url: <snow_base_url>  # i.e. https://example.service-now.com
+    incident_path: <incident_path>  # Path to the REST endpoint to POST (create/update) incidents i.e. /api/now/v1/table/u_integration_web_services_incident
+    client_id: <snow_client_id>
+    client_secret: <snow_client_secret>
+    assignment_group: <assignment_group>  # Valid service-now assignement_group incidents will be created and assigned to this group.
+    token:  # similar to central tokens in the config, the values are used to initially authenticate, during refresh tokens are stored in separate tok_ file
+      access_token: <snow_access_token>
+      refresh_token: <snow_refresh_token>
 
 #
 # You can pass the --account <customer_name> option to use different Aruba Central profiles.
@@ -39,8 +51,6 @@ central_info:
 #    base_url: "https://internal-apigw.central.arubanetworks.com"  # The base of the Aruba Central API GW *for the Cluster you belong to* Starts with https://, ends with arubanetworks.com
 
 # -- Optional Global Options --
-#webclient_info:            # Configuration specific to webhook proxy feature
-#  port: 8123               # Port this system would listen on for webhooks from Aruba Central
 # no_pager: true            # turns off the automatic paged output (for longer outputs).  There is also a `--no-pager` flag.
 # forget_account_after: 30  # The --account <account-name> flag allows you to switch between central accounts.  The setting is sticky
                             # so you don't have to keep re-entering the flag on every command.  This setting will cause it to revert
