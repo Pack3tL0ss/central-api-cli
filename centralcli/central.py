@@ -2571,7 +2571,7 @@ class CentralApi(Session):
         microbranch: bool = False,
         gw_role: constants.GatewayRole = "branch",
         monitor_only_sw: bool = False,
-        monitor_only_cx: bool = False,  # Not supported by central yet
+        monitor_only_cx: bool = False,
     ) -> Response:
         """Create new group with specified properties. v3
 
@@ -2592,7 +2592,7 @@ class CentralApi(Session):
             gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
                 Default: "branch"
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
-            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only (Future capability)
+            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
 
         Returns:
             Response: CentralAPI Response object
@@ -2618,17 +2618,16 @@ class CentralApi(Session):
         allowed_switch_types = []
         if "switch" in allowed_types or ("cx" in allowed_types and "sw" in allowed_types):
             allowed_switch_types += ["AOS_CX", "AOS_S"]
-        elif "sw" in allowed_types:
+        if "sw" in allowed_types and "AOS_S" not in allowed_switch_types:
             allowed_switch_types += ["AOS_S"]
-        elif "cx" in allowed_types:
-            allowed_switch_types += ["AOS_CX", "AOS_S"]
+        if "cx" in allowed_types and "AOS_CX" not in allowed_switch_types:
+            allowed_switch_types += ["AOS_CX"]
 
         mon_only_switches = []
         if monitor_only_sw:
             mon_only_switches += ["AOS_S"]
         if monitor_only_cx:
-            log.warning("monitor_only_cx not yet supported by Aruba Central", show=True)
-            # mon_only_switches += ["AOS_CX"]
+            mon_only_switches += ["AOS_CX"]
 
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
 
@@ -2639,8 +2638,7 @@ class CentralApi(Session):
             raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"')
         if microbranch and not aos10:
             raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
-        # if wired_tg and monitor_only_sw or monitor_only_cx:
-        if wired_tg and monitor_only_sw:
+        if wired_tg and (monitor_only_sw or monitor_only_cx):
             raise ValueError("Invalid combination, Monitor Only is not valid for Template Group")
 
         json_data = {
