@@ -4,17 +4,133 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import pendulum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, IPvAnyAddress
 
+
+class DeviceStatus(str, Enum):
+    Up = "Up"
+    Down = "Down"
+
+# TODO This is a dup of DevTypes from constants verify if can import w/out circular issues
+class DevType(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+
+class TemplateDevType(str, Enum):
+    MobilityController = "MobilityController"
+    IAP = "IAP"
+    CX = "CX"
+    ArubaSwitch = "ArubaSwitch"
 
 # fields from Response.output after cleaner
 class Inventory(BaseModel):
-    sku: str
     type: str
-    mac: str
     model: str
+    sku: str
+    mac: str
     serial: str
     services: Union[List[str], str]
+
+# Not used yet  None of the Cache models below are currently used.
+# TODO have Cache return model for attribute completion support in IDE
+class Device(BaseModel):
+    name: str
+    status: DeviceStatus
+    type: DevType
+    model: str
+    ip: IPvAnyAddress
+    mac: str
+    serial: str
+    group: str
+    site: str
+    version: str
+    swarm_id: Optional[str] = None
+
+class Site(BaseModel):
+    name: str
+    id: int
+    address: str
+    city: str
+    state: str
+    zipcode: str    # str because zip+4 with hyphen may be possible
+    country: str
+    longitude: str  # could do float here
+    latitude: str   # could do float here
+    associated_devices: int  # field in cache actually has space "associated devices"
+
+class Template_Group(BaseModel):
+    Wired: bool
+    Wireless: bool
+
+class Group(Template_Group):
+    name: str
+    template_group: Template_Group
+
+class Template(BaseModel):
+    device_type: TemplateDevType
+    group: str
+    model: str  # model as in sku here
+    name: str
+    template_hash: str
+    version: str
+
+class Label(BaseModel):
+    name: str
+
+
+class ClientType(str, Enum):
+    WIRED = "WIRED"
+    WIRELESS = "WIRELESS"
+
+# Client Cache
+class Client(BaseModel):
+    mac: str = Field(default_factory=str)
+    name: str = Field(default_factory=str)
+    ip: str = Field(default_factory=str)
+    type: str = Field(default_factory=str)
+    connected_port: str = Field(default_factory=str)
+    connected_serial: str = Field(default_factory=str)
+    connected_name: str = Field(default_factory=str)
+    site: str = Field(default_factory=str)
+    group: str = Field(default_factory=str)
+    last_connected: datetime = Field(default=None)
+
+
+
+class Event(BaseModel):
+    id: int
+    device: str  # formatted str from cleaner i.e. "av-655.21af-ap|CNXXYYZZN Group: WadeLab"
+    details: dict  # Not reliable source for the fields that are possible here
+    connected_port: str  # The Wired interface or WLAN SSID
+    connected_serial: str
+    connected_name: str
+
+class Logs(BaseModel):
+    """Audit logs model
+
+    We only store id and long_id so user can gather more details using long_id
+    actual Audit log details pulled from Central on demand, but not cached.
+    """
+    id: int
+    long_id: str
+
+class WebHookState(str, Enum):
+    Open = "Open"
+    Close = "Close"
+
+
+# This is what is in the cache for the hook-proxy
+class WebHookData(BaseModel):
+    id: str
+    snow_incident_num: Optional[str] = None
+    ok: bool
+    alert_type: str
+    device_id: str  # serial#
+    state: WebHookState
+    text: str
+    timestamp: int  # could use datetime here
 
 def pretty_dt(dt: datetime) -> str:
     return pendulum.from_timestamp(dt.timestamp(), tz="local").to_day_datetime_string()
@@ -66,19 +182,6 @@ class WIDS_LIST(BaseModel):
     interfering: Optional[List[WIDS]] = Field(default_factory=list)
     neighbor: Optional[List[WIDS]] = Field(default_factory=list)
     suspectrogue: Optional[List[WIDS]] = Field(default_factory=list)
-
-# Client Cache
-class Client(BaseModel):
-    mac: str = Field(default_factory=str)
-    name: str = Field(default_factory=str)
-    ip: str = Field(default_factory=str)
-    type: str = Field(default_factory=str)
-    connected_port: str = Field(default_factory=str)
-    connected_serial: str = Field(default_factory=str)
-    connected_name: str = Field(default_factory=str)
-    site: str = Field(default_factory=str)
-    group: str = Field(default_factory=str)
-    last_connected: datetime = Field(default=None)
 
 # SNOW Response
 
@@ -158,7 +261,7 @@ class Result(BaseModel):
     u_attachment_name: Optional[str] = None
 
 
-class SnowResponse(BaseModel):
+class SnowResponse(Result):
     result: Result
 
 # WebHook Models
