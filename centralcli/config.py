@@ -48,6 +48,7 @@ class ServiceNow(BaseModel):
     port: int = None
     incident_path: str
     refresh_path: str = "oauth_token.do"
+    assignment_group: str
     client_id: str
     client_secret: str
     token: SnowTokens = None

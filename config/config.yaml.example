@@ -15,6 +15,7 @@ central_info:
     id: <snow_id>
     url: <snow_base_url>  # i.e. https://example.service-now.com
     incident_path: <incident_path>  # Path to the REST endpoint to POST (create/update) incidents i.e. /api/now/v1/table/u_integration_web_services_incident
+    refresh_path: <refresh_path> # Optional defaults to oauth_token.do
     client_id: <snow_client_id>
     client_secret: <snow_client_secret>
     assignment_group: <assignment_group>  # Valid service-now assignement_group incidents will be created and assigned to this group.
