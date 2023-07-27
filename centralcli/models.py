@@ -353,7 +353,7 @@ class WebHook(BaseModel):
     severity: Optional[str] = None
     operation: Optional[str] = None
     timestamp: Optional[int] = None
-    details: Optional[WebHookDetails] = None
+    details: Optional[WebHookDetails] = None  # Prob need to use dict here or allow extra fields
     webhook: Optional[str] = None
     text: Optional[str] = None
 
