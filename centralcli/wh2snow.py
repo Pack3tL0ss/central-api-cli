@@ -359,6 +359,8 @@ if __name__ == "__main__":
     # need to determine if there is a way to pull all open incidents from snow at start
     # to rationalize snow with what is pulled from central.get_alerts
     # ... close any incidents that are open in snow but state:close from central.get_alerts
+    # When grabbing from central.get_alerts use wh_model = WebHook(**{**data, **{"text": data.get("text", data.get("description"))}})
+    # as the text field isn't supplied with the response from the REST endpoint.
     try:
         asyncio.run(h2s.snow_token_refresh())
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info" if not config.debug else "debug")
