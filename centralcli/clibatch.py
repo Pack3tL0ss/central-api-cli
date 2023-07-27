@@ -641,6 +641,14 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
         return resp
 
 
+def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
+    data = config.get_file_data(import_file)
+    if hasattr(data, "headers"):
+        headers = data.headers
+
+    raise NotImplemented("Batch Deploy is not implemented yet")
+
+
 @app.command(short_help="Validate a batch import")
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
@@ -755,6 +763,47 @@ def verify(
         print(f"\n[cyan]Writing output to {outfile}... ", end="")
         outfile.write_text(typer.unstyle(outdata))  # typer.unstyle(outdata) also works
         print("[italic green]Done")
+
+
+@app.command(short_help="Batch Deploy groups, sites, devices... from file", hidden=True)
+def deploy(
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Batch Deploy from import.
+
+    Will deploy, groups, sites, devices, labels, and group level configuration.
+    """
+    if show_example:
+        print(examples.deploy)
+        return
+
+    if not import_file:
+        _msg = [
+            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE",
+            "Try 'cencli batch add ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+
+    resp = batch_deploy(import_file, yes)
+    cli.display_results(resp, tablefmt="action")
+
 
 # FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
 @app.command(short_help="Perform Batch Add from file")
