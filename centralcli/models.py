@@ -264,7 +264,7 @@ class Result(BaseModel):
 class SnowResponse(Result):
     result: Result
 
-# WebHook Models
+# WebHook Models WebHookDetails no reliable source for all possible fields.
 class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     customer_id: Optional[str] = None
     rule_number: Optional[str] = Field(None, alias="_rule_number")
@@ -289,6 +289,7 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     conn_status: Optional[str] = None
     unit: Optional[str] = None
     ds_key: Optional[str] = None
+    alert_key: Optional[str] = None
     _band: Optional[str] = None
     _radio_num: Optional[str] = None
     channel: Optional[str] = None
@@ -314,6 +315,8 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     pr2: Optional[str] = None
     host1: Optional[str] = None
     host2: Optional[str] = None
+    gateway1: Optional[str] = None
+    gateway2: Optional[str] = None
     ip1: Optional[str] = None
     ip2: Optional[str] = None
     serial1: Optional[str] = None
@@ -339,6 +342,7 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     health: Optional[str] = None
     vpc_id: Optional[str] = None
     provider_name: Optional[str] = None
+    cluster_name: Optional[str] = Field(None, alias="cluster-name")
 
 
 
@@ -353,7 +357,7 @@ class WebHook(BaseModel):
     severity: Optional[str] = None
     operation: Optional[str] = None
     timestamp: Optional[int] = None
-    details: Optional[WebHookDetails] = None  # Prob need to use dict here or allow extra fields
+    details: Optional[dict] = None  # Prob need to use dict here or allow extra fields
     webhook: Optional[str] = None
     text: Optional[str] = None
 
