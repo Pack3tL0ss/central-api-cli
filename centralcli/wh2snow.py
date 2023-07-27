@@ -23,13 +23,13 @@ import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import MyLogger, cache, central, config, models
+    from centralcli import MyLogger, cache, utils, central, config, models, exceptions
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         import sys
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import MyLogger, cache, central, config, models  # type: ignore
+        from centralcli import MyLogger, cache, utils, central, config, models, exceptions  # type: ignore
     else:
         print(pkg_dir.parts)
         raise e
@@ -162,7 +162,9 @@ def _batch_resp_all_ok(responses: List[Response]) -> bool:
 
 class Hook2Snow:
     def __init__(self) -> None:
-        pass
+        self.created: List = []
+        self.fail_count: int = 0
+        self.total_hooks_in: int = 0
 
     async def post2snow(self, data: dict) -> aiohttp.ClientResponse | None:
         # success response = 201 for both create and update
@@ -180,18 +182,18 @@ class Hook2Snow:
         snow_data = {}
         data = models.WebHook(data)
         if data.state == "Open":
-            snow_data["u_assignment_group"] = config.snow.assignment_group  # TODO what assignment group???
+            snow_data["u_assignment_group"] = config.snow.assignment_group
             snow_data["u_short_description"] = "".join(data.alert_type[0:161])
             snow_data["u_description"] = data.description
             snow_data["work_notes"] = "\n".join([f'{k}: {v}' for k, v in data.dict().items()])
             snow_data["u_raised_severity"] = data.severity
             snow_data["u_state"] = "New"
-            out_data = models.SnowCreate(snow_data)
+            out_data = models.SnowCreate(**snow_data)
         else:
-            _id = cache.get_hook_id(data.id)  # TODO create cache
-            snow_data["u_servicenow_number"] = config.snow.assignment_group  # TODO what assignment group???
+            snow_cache = cache.get_hook_id(data.id)  # TODO create cache
+            snow_data["u_servicenow_number"] = snow_cache.u_servicenow_number
             snow_data["u_state"] = "Resolved"
-            out_data = models.SnowUpdate(snow_data)
+            out_data = models.SnowUpdate(**snow_data)
         return out_data
 
     async def process_hook(self, data: dict):
@@ -200,18 +202,21 @@ class Hook2Snow:
         for _ in range(0, 2):
             response = await self.post2snow(data=payload.dict())
             if response is not None:
-                break
+                break  # None indicates Exception during POST attempt
             else:
                 log.warning(f'Snow incident {word} failed... retrying.', show=True)
 
         if response is None:
                 log.error(f'Snow incident {word} failed. Giving Up', show=True)
+                self.fail_count += 1
         elif response.status != 201:
             log.error(f'SNOW incident {word} failed [{response.status}] {response.reason}', show=True)
+            self.fail_count += 1
         else:
             res_payload = await response.json()
             res_model = models.SnowResponse(**res_payload)
-            cache_res = await cache.update_hook_data_db(res_model)
+            self.created += [res_model.u_servicenow_number]
+            cache_res = await cache.update_hook_data_db(res_model.dict())  # TODO should we strip_none here?
             # TODO verify cache_res response
 
 
@@ -281,9 +286,8 @@ class Hook2Snow:
                 continue  # try again with tokens from config  # verify it's a 401 could be 404
             else:
                 # The form was not submitted successfully
-                log.error(f'SNOW token refresh failed [{response.status}] {response.reason}')
-                # TODO custom exceptions
-                raise Exception(f"SNOW Token refresh failure. [{response.status}] {response.reason}")
+                log.error(f'SNOW token refresh failed [{response.status}] {response.reason}', show=True)
+                raise exceptions.RefreshFailedException(f"SNOW Token refresh failure. [{response.status}] {response.reason}")
 
     @app.post("/webhook", status_code=200, response_model=HookResponse, responses=wh_resp_schema)
     async def webhook(
@@ -342,7 +346,7 @@ class Hook2Snow:
 
 
 if __name__ == "__main__":
-    log = init_logs()
+    log = init_logs()  # FIXME logs are still sent to generic cencli log file
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
         port = int(sys.argv[1])
     elif config.webhook:
@@ -351,6 +355,10 @@ if __name__ == "__main__":
         port = 9143
 
     h2s = Hook2Snow()
+    # TODO need to get status of alerts with central.get_alerts on start
+    # need to determine if there is a way to pull all open incidents from snow at start
+    # to rationalize snow with what is pulled from central.get_alerts
+    # ... close any incidents that are open in snow but state:close from central.get_alerts
     try:
         asyncio.run(h2s.snow_token_refresh())
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info" if not config.debug else "debug")
