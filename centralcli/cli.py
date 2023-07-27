@@ -472,12 +472,10 @@ def sync(
 def start(
     what: StartArgs = typer.Argument(
         "hook-proxy",
-        metavar=f"['hook-proxy']",
-        help="hook-proxy only now, optional arg is here for future listeners",
+        help="See documentation for info on what each webhook receiver does",
     ),
     port: int = typer.Option(None, help="Port to listen on (overrides config value if provided)", show_default=False),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (including killing current process if running)", metavar="", show_default=False),
-    # yes_both: bool = typer.Option(False, "-YY", "-yy", help="Bypass all confirmations, including killing current process if running."),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -488,8 +486,8 @@ def start(
     """Start WebHook Proxy Service on this system in the background
 
     Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
-
     """
+    # TODO add short description of each to help
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
@@ -536,9 +534,9 @@ def start(
         if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
             output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
             print("\n".join(output))
-            print(f"\n[red]WebHook Proxy Startup Failed")
+            print(f"\nWebHook Proxy Startup [red]Failed[/].")
         else:
-            print(f"[{p.pid}] WebHook Proxy Started.")
+            print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
 
 @app.command(short_help="Stop WebHook Proxy", hidden=not hook_enabled)
@@ -547,8 +545,7 @@ def stop(
         ...,
         # metavar=f"hook-proxy",
     ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -559,7 +556,7 @@ def stop(
     """Stop WebHook Proxy (background process).
     """
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
-    yes = yes_ if yes_ else yes
+    # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
         console = Console(emoji=False)
         with console.status("Terminating Webhook Proxy..."):
@@ -583,7 +580,6 @@ def stop(
 
         return False
 
-
     def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
             if svc in str(p.cmdline()[1:]):
@@ -600,7 +596,6 @@ def stop(
         print("WebHook Proxy is not running.")
         raise typer.Exit(0)
 
-# TODO Unhide once impact of archive is known post GreenLake... still licensed and shows in device list.
 @app.command(short_help="Archive devices", hidden=False)
 def archive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
@@ -641,7 +636,7 @@ def archive(
 
 
 
-@app.command(help="un-archive devices", hidden=True)
+@app.command(help="unarchive devices", hidden=False)
 def unarchive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -651,11 +646,9 @@ def unarchive(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Waning.  This API endpoint does not appear to do anything.
+    """unacrchive devices.
 
-    Archiving unassigns any license/subscriptions from the device and removes it from the inventory.
-    To "unarchive" you would use cencli add device serial <serail> mac <mac> --license <license>
-
+    Remove previously archived devices from archive.
     """
     devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
