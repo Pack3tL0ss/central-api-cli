@@ -390,11 +390,10 @@ def reboot(
 
 @app.command(short_help="Blink LED")
 def blink(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
-    action: BlinkArgs = typer.Argument(..., ),  # metavar="Device: [on|off|<# of secs to blink>]"),
-    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes", hidden=True),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    device: str = typer.Argument(..., show_default=False, metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
+    action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
+    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for {secs} seconds.", show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -402,7 +401,6 @@ def blink(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes  # Not using confirmation for blink but will allow -Y
     command = f'blink_led_{action}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
@@ -451,7 +449,7 @@ def save(
 
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
 def sync(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -459,7 +457,11 @@ def sync(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    dev = cli.cache.get_dev_identifier(device)
+    """Sync/Refresh device config with Aruba Central
+
+    Only valid for gateways (aka controllers)
+    """
+    dev = cli.cache.get_dev_identifier(device, dev_type="gw")
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
     cli.display_results(resp, tablefmt="action")
 

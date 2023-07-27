@@ -1911,10 +1911,11 @@ class CentralApi(Session):
         """
         url = f"/device_management/v1/device/{serial}/action/{command}"
 
+        # TODO cacth invalid actions (not supported on dev)
         resp = await self.post(url)
         if resp and duration and "blink_led" in command and "off" not in command:
             print(f"Blinking Led... {duration}. ", end="")
-            for i in range(1, duration):
+            for i in range(1, duration + 1):
                 time.sleep(1)
                 print(f"{duration - i}. ", end="" if i % 20 else "\n")
             resp = await self.post(url.replace("_on", "_off"))
