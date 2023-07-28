@@ -1639,27 +1639,36 @@ def clients(
 
 @app.command(short_help="Show client roaming history")
 def roaming(
-    client_mac: str = typer.Argument(..., case_sensitive=False, help="Client Mac Address",),
+    client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
     start: str = typer.Option(
         None,
         help="Start time of range to collect roaming history, format: yyyy-mm-ddThh:mm (24 hour notation), default past 3 hours.",
     ),
-    end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
-    past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h"),
-    sort_by: SortClientOptions = typer.Option(None, "--sort",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
+    past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
+    refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
+    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache."),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
+    sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Formatting", show_default=False,),
     verbose2: bool = typer.Option(
         False,
         "-vv",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
         help="Use default central account",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
     debug: bool = typer.Option(
         False,
@@ -1667,16 +1676,23 @@ def roaming(
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     """Show wireless client roaming history.
 
+    If ip or username are provided the client cache is used to lookup the clients mac address.
+    The cache is updated anytime a show clients ... is ran, or automatically if the client
+    is not found in the cache.
+
+    The -R flag can be used to force a cache refresh prior to performing the disconnect.
     """
     central = cli.central
     # TODO common time function this is re-used code from another func
@@ -1714,12 +1730,21 @@ def roaming(
         time_words = f'Roaming history from [cyan]{pendulum.from_timestamp(start, tz="local").diff_for_humans()}[/cyan] till [cyan]now[/cyan].'
 
     time_words = f"[cyan]{time_words}[reset]\n" if time_words else "[cyan]roaming history for past 24 hours.\n[reset]"
-    mac = utils.Mac(client_mac)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose2 else "json")
+
+    if refresh or drop:
+        resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
+        if not resp:
+            cli.display_results(resp, exit_on_fail=True)
+
+    mac = utils.Mac(client)
     if not mac.ok:
-        print(f"Mac Address {client_mac} appears to be invalid.")
-        raise typer.Exit(1)
+        client = cli.cache.get_client_identifier(client, exit_on_fail=True)
+        mac = utils.Mac(client.mac)
+
     resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
-    cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt="rich", cleaner=cleaner.get_client_roaming_history)
+    cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
