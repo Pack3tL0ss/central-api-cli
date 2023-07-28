@@ -624,6 +624,7 @@ class Cache:
         for m in out:
             yield m
 
+    # TODO put client names with spaces in quotes
     def dev_client_completion(
         self,
         incomplete: str,
