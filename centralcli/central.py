@@ -259,6 +259,7 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    # TODO not a fan of *args see if we can define all params
     async def get_clients(
         self,
         *args: Tuple[str],
