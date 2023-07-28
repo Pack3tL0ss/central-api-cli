@@ -1345,7 +1345,7 @@ class Cache:
         return resp
 
     # TODO need a reset cache flag in "show clients"
-    async def update_client_db(self, *args, **kwargs):
+    async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
         """Update client DB
 
         This is only updates when the user does a show clients
@@ -1353,7 +1353,7 @@ class Cache:
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
 
-        Currently users are never purged.
+        Past users are always retained, unless truncate=True
         """
         if self.central.get_clients not in self.updated:
             client_resp = await self.central.get_clients(*args, **kwargs)
@@ -1369,7 +1369,7 @@ class Cache:
                             "name": c.get("name", c.get("macaddr")),
                             "ip": c.get("ip_address", ""),
                             "type": c["client_type"],
-                            "connected_port": c["network"] if c["client_type"] == "WIRELESS" else c.get("interface_port"),
+                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
                             "connected_serial": c.get("associated_device"),
                             "connected_name": c.get("associated_device_name"),
                             "site": c.get("site"),
@@ -1378,7 +1378,9 @@ class Cache:
                         }
                         for c in client_resp.output
                     ]
-                    # self.ClientDB.truncate()
+                    if truncate:
+                        self.ClientDB.truncate()
+
                     Client = Query()
                     upsert_res = [
                         self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
