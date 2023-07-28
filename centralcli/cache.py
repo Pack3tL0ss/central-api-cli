@@ -1380,13 +1380,14 @@ class Cache:
                     ]
                     if truncate:
                         self.ClientDB.truncate()
-
-                    Client = Query()
-                    upsert_res = [
-                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
-                        for c in data
-                    ]
-                    if False in upsert_res:
+                        cache_update_res = self.ClientDB.insert_multiple(data)
+                    else:
+                        Client = Query()
+                        cache_update_res = [
+                            self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
+                            for c in data
+                        ]
+                    if False in cache_update_res:
                         log.error("Tiny DB returned an error during client db update")
             return client_resp
 
