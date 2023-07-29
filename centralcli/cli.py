@@ -474,7 +474,7 @@ def start(
         "hook-proxy",
         help="See documentation for info on what each webhook receiver does",
     ),
-    port: int = typer.Option(None, help="Port to listen on (overrides config value if provided)", show_default=False),
+    port: int = typer.Option(config.wh_port, help="Port to listen on (overrides config value if provided)", show_default=True),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (including killing current process if running)", metavar="", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -490,7 +490,7 @@ def start(
 
     [cyan]hook-proxy[/]: Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
     It then presents it's own REST API that can be polled for branch/tunnel status:
-    See [blue]
+    See [blue]http://localhost:port
     [blue]/api/v1.0/alerts[/] will an entry for any tunnel found to be down [blue]/api/v1.0/alerts/{gw serial}[/] return status for that branch/gw
     hook-proxy
 
