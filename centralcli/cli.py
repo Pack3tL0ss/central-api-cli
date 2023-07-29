@@ -486,16 +486,18 @@ def start(
     """Start WebHook Proxy Service on this system in the background
 
     Currently 2 webhook automations:
-    For Both automations the URL to configure as the webhook destination is /webhook (currently http)
+    For Both automations the URL to configure as the webhook destination is [cyan]http://localhost/api/webhook[/] (currently http)
 
-    [cyan]hook-proxy[/]: Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
-    It then presents it's own REST API that can be polled for branch/tunnel status:
-    See [blue]http://localhost:port
-    [blue]/api/v1.0/alerts[/] will an entry for any tunnel found to be down [blue]/api/v1.0/alerts/{gw serial}[/] return status for that branch/gw
-    hook-proxy
+    [cyan]hook-proxy[/]:
+      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
+      - Presents it's own REST API that can be polled for branch/tunnel status:
+        See [cyan]http://localhost:port/api/docs[/] for available endpoints / schema details.
 
+    [cyan]hook2snow[/]:
+      - Queries alerts API at launch to gather any "Open" items.
+      - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
 
-    Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
+    [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli\[hook-proxy][reset]'
     """
     if config.deprecation_warning:  # TODO remove at 2.0.0+
         print(config.deprecation_warning)
