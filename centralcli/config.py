@@ -248,7 +248,7 @@ class Config:
             self.snow = None
 
         self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
-        self.deprecation_shown = False  # TODO warning added 1.14.0
+        self.deprecation_warning = None  # TODO warning added 1.14.0
 
     def __bool__(self):
         return len(self.data) > 0 and self.account in self.data
@@ -297,12 +297,11 @@ class Config:
     @property
     def wh_port(self):
         _acct_specific = self.webhook.port if self.webhook.port != 9443 else None
-        if not self.deprecation_shown and self.data.get("webclient_info", {}).get("port"):
-            print(
+        if self.data.get("webclient_info", {}).get("port"):
+            self.deprecation_warning = (
                 '[bright_red]Deprecation Warning[/]: The webhook config location has changed, and is now account specific. '
                 'See https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/config/config.yaml.example and update config.'
             )
-            self.deprecation_shown = True  # TODO REMOVE @ 2.0.0 warning added 1.14.0
         return _acct_specific or self.data.get("webclient_info", {}).get("port", 9443)
 
 

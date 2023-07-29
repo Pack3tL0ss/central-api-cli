@@ -497,7 +497,8 @@ def start(
 
     Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
     """
-    # TODO add short description of each to help
+    if config.deprecation_warning:  # TODO remove at 2.0.0+
+        print(config.deprecation_warning)
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
