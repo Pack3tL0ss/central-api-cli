@@ -4,14 +4,12 @@
 import os
 import subprocess
 import sys
-from enum import Enum
 from pathlib import Path
 from time import sleep
 from typing import List
 
 from rich import print
 from rich.console import Console
-import pkg_resources
 
 try:
     import psutil
@@ -23,26 +21,28 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                            clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
-                            clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
+    from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+                            clibatch, clicaas, cliclone, clidel, clikick,
+                            clirefresh, clirename, clishow, clitest, clitshoot,
+                            cliunassign, cliupdate, cliupgrade, config, log,
+                            models, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                                clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
-                                clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
+        from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+                                clibatch, clicaas, cliclone, clidel, clikick,
+                                clirefresh, clirename, clishow, clitest,
+                                clitshoot, cliunassign, cliupdate, cliupgrade,
+                                config, log, models, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi  # noqa
 from centralcli.cache import CentralObject
-from centralcli.constants import (
-    BlinkArgs, BounceArgs, IdenMetaVars,
-    KickArgs, LicenseTypes, StartArgs
-)
+from centralcli.central import CentralApi  # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars,
+                                  KickArgs, LicenseTypes, StartArgs)
 
 iden = IdenMetaVars()
 
@@ -390,11 +390,10 @@ def reboot(
 
 @app.command(short_help="Blink LED")
 def blink(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
-    action: BlinkArgs = typer.Argument(..., ),  # metavar="Device: [on|off|<# of secs to blink>]"),
-    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for _ seconds."),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes", hidden=True),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    device: str = typer.Argument(..., show_default=False, metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
+    action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
+    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for {secs} seconds.", show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -402,7 +401,6 @@ def blink(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes  # Not using confirmation for blink but will allow -Y
     command = f'blink_led_{action}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
@@ -451,7 +449,7 @@ def save(
 
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
 def sync(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -459,7 +457,11 @@ def sync(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    dev = cli.cache.get_dev_identifier(device)
+    """Sync/Refresh device config with Aruba Central
+
+    Only valid for gateways (aka controllers)
+    """
+    dev = cli.cache.get_dev_identifier(device, dev_type="gw")
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
     cli.display_results(resp, tablefmt="action")
 
@@ -470,12 +472,10 @@ def sync(
 def start(
     what: StartArgs = typer.Argument(
         "hook-proxy",
-        metavar=f"['hook-proxy']",
-        help="hook-proxy only now, optional arg is here for future listeners",
+        help="See documentation for info on what each webhook receiver does",
     ),
-    port: int = typer.Option(None, help="Port to listen on (overrides config value if provided)", show_default=False),
+    port: int = typer.Option(config.wh_port, help="Port to listen on (overrides config value if provided)", show_default=True),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (including killing current process if running)", metavar="", show_default=False),
-    # yes_both: bool = typer.Option(False, "-YY", "-yy", help="Bypass all confirmations, including killing current process if running."),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -485,9 +485,23 @@ def start(
 ) -> None:
     """Start WebHook Proxy Service on this system in the background
 
-    Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
+    Currently 2 webhook automations:
+    For Both automations the URL to configure as the webhook destination is [cyan]http://localhost/api/webhook[/] (currently http)
 
+    [cyan]hook-proxy[/]:
+      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
+      - Presents it's own REST API that can be polled for branch/tunnel status:
+        See [cyan]http://localhost:port/api/docs[/] for available endpoints / schema details.
+
+    [cyan]hook2snow[/]:
+      - Queries alerts API at launch to gather any "Open" items.
+      - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
+
+    [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli\[hook-proxy][reset]'
     """
+    if config.deprecation_warning:  # TODO remove at 2.0.0+
+        print(config.deprecation_warning)
+    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
     def terminate_process(pid):
@@ -501,25 +515,26 @@ def start(
 
     def get_pid():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
+            if p.info["cmdline"] and True in [svc in x for x in p.info["cmdline"][1:]]:
                 return p.pid # if p.ppid() == 1 else p.ppid()
 
     pid = get_pid()
     if pid:
-        _abort = True if not port or port == int(config.wh_port) else False
+        _abort = True if not port or port == int(config.webhook.port) else False
         print(f"Webhook proxy is currently running (process id {pid}).")
         if yes_both or typer.confirm("Terminate existing process", abort=_abort):
             terminate_process(pid)
             print("[cyan]Process Terminated")
 
     # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
-    print(f"Webhook Proxy will listen on {port or config.wh_port}")
+    config_port = 9143 if not config.webhook else config.webhook.port
+    print(f"Webhook Proxy will listen on port {port or config_port}")
     if yes or yes_both or typer.confirm("\nProceed?", abort=True):
         console = Console()
-        port = port or config.wh_port
+        port = port or config.webhook.port
         with console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
-                ["nohup", sys.executable, "-m", "centralcli.wh_proxy", str(port)],
+                ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT
             )
@@ -532,9 +547,9 @@ def start(
         if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
             output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
             print("\n".join(output))
-            print(f"\n[red]WebHook Proxy Startup Failed")
+            print(f"\nWebHook Proxy Startup [red]Failed[/].")
         else:
-            print(f"[{p.pid}] WebHook Proxy Started.")
+            print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
 
 @app.command(short_help="Stop WebHook Proxy", hidden=not hook_enabled)
@@ -543,8 +558,7 @@ def stop(
         ...,
         # metavar=f"hook-proxy",
     ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -554,7 +568,8 @@ def stop(
 ) -> None:
     """Stop WebHook Proxy (background process).
     """
-    yes = yes_ if yes_ else yes
+    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
+    # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
         console = Console(emoji=False)
         with console.status("Terminating Webhook Proxy..."):
@@ -578,10 +593,9 @@ def stop(
 
         return False
 
-
     def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if "wh_proxy" in str(p.cmdline()[1:]):
+            if svc in str(p.cmdline()[1:]):
                 return p.pid, p.cmdline()[-1]
 
     proc = _get_process_info()
@@ -595,7 +609,6 @@ def stop(
         print("WebHook Proxy is not running.")
         raise typer.Exit(0)
 
-# TODO Unhide once impact of archive is known post GreenLake... still licensed and shows in device list.
 @app.command(short_help="Archive devices", hidden=False)
 def archive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
@@ -619,17 +632,16 @@ def archive(
     Just use cencli deleve device ... or cencli batch delete devices
     """
     yes = yes_ if yes_ else yes
-    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
-    # TODO Check if one of the properties in CentralObject will work for the dev text below.
     _msg = f"[bright_green]Archive devices[/]:"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
+        _msg = f"{_msg} {dev.rich_help_text}"
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
@@ -637,7 +649,7 @@ def archive(
 
 
 
-@app.command(help="un-archive devices", hidden=True)
+@app.command(help="unarchive devices", hidden=False)
 def unarchive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -647,23 +659,19 @@ def unarchive(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Waning.  This API endpoint does not appear to do anything.
+    """unacrchive devices.
 
-    Archiving unassigns any license/subscriptions from the device and removes it from the inventory.
-    To "unarchive" you would use cencli add device serial <serail> mac <mac> --license <license>
-
+    Remove previously archived devices from archive.
     """
-    devices = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
-    # TODO add confirmation method builder to output class
-    # TODO Check if one of the properties in CentralObject will work for the dev text below.
     _msg = f"[bright_green]Unarchive devices[/]:"
     if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]' for dev in devices])
+        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
         _msg = f"{_msg}\n    {_dev_msg}\n"
     else:
         dev = devices[0]
-        _msg = f"{_msg} [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]|[cyan]{dev.mac}[/]"
+        _msg = f"{_msg} {dev.rich_help_text}"
     print(_msg)
 
     resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in devices])

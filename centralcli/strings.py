@@ -171,6 +171,12 @@ Use '[dark_olive_green2]cencli batch add sites <IMPORT_FILE>[/]' to add multiple
 {_site_common}
 """
 
+clibatch_deploy = f"""
+[bright_green]Batch Deploy[/]
+
+This is a placeholder
+TODO add deploy example
+"""
 
 def do_capture(text: str) -> str:
     con = Console()
@@ -189,6 +195,7 @@ class ImportExamples:
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
         self.add_site = cliadd_site_help
+        self.deploy = clibatch_deploy
 
     def __getattr__(self, key: str):
         if not hasattr(self, key):

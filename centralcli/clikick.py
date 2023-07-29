@@ -59,10 +59,12 @@ def all(
         cli.display_results(resp, tablefmt="action")
 
 
+# TODO rather than drop option have cache remove users with last_connected > 30 days
 @app.command(short_help="Disconnect a WLAN client",)
 def client(
     client: str = typer.Argument(..., metavar=iden.client, autocompletion=cli.cache.client_completion, show_default=False),
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine what AP the client is connected to, which could be [red]stale[/]. This forces a cache update."),
+    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache."),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -79,8 +81,8 @@ def client(
 
     The [cyan]-R[/] flag can be used to force a cache refresh prior to performing the disconnect.
     """
-    if refresh:
-        resp = cli.central.request(cli.cache.update_client_db, "wireless")
+    if refresh or drop:
+        resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 

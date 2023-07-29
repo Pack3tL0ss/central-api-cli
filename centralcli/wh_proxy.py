@@ -118,10 +118,8 @@ wh_resp_schema = {
 
 app = FastAPI(
     title='Central CLI Webhook Proxy',
-    # docs_url='/api/docs',
-    # redoc_url="/api/redoc",
-    docs_url=None,
-    redoc_url=None,
+    docs_url='/api/docs',
+    redoc_url="/api/redoc",
     openapi_url='/api/openapi/openapi.json',
     version="1.0",
 )
@@ -257,6 +255,13 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     """
     # Token obtained from Aruba Central Webhooks page as provided in the input
     token = config.tokens["webhook_token"]
+    if token:
+        log.warning(
+            f"Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
+            show=True
+        )
+    else:
+        token = config.webhook.token
     token = token.encode('utf-8')
 
     # Construct HMAC digest message

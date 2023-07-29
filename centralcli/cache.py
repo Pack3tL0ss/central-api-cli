@@ -624,6 +624,7 @@ class Cache:
         for m in out:
             yield m
 
+    # TODO put client names with spaces in quotes
     def dev_client_completion(
         self,
         incomplete: str,
@@ -1345,7 +1346,7 @@ class Cache:
         return resp
 
     # TODO need a reset cache flag in "show clients"
-    async def update_client_db(self, *args, **kwargs):
+    async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
         """Update client DB
 
         This is only updates when the user does a show clients
@@ -1353,7 +1354,7 @@ class Cache:
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
 
-        Currently users are never purged.
+        Past users are always retained, unless truncate=True
         """
         if self.central.get_clients not in self.updated:
             client_resp = await self.central.get_clients(*args, **kwargs)
@@ -1369,7 +1370,7 @@ class Cache:
                             "name": c.get("name", c.get("macaddr")),
                             "ip": c.get("ip_address", ""),
                             "type": c["client_type"],
-                            "connected_port": c["network"] if c["client_type"] == "WIRELESS" else c.get("interface_port"),
+                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
                             "connected_serial": c.get("associated_device"),
                             "connected_name": c.get("associated_device_name"),
                             "site": c.get("site"),
@@ -1378,13 +1379,16 @@ class Cache:
                         }
                         for c in client_resp.output
                     ]
-                    # self.ClientDB.truncate()
-                    Client = Query()
-                    upsert_res = [
-                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
-                        for c in data
-                    ]
-                    if False in upsert_res:
+                    if truncate:
+                        self.ClientDB.truncate()
+                        cache_update_res = self.ClientDB.insert_multiple(data)
+                    else:
+                        Client = Query()
+                        cache_update_res = [
+                            self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
+                            for c in data
+                        ]
+                    if False in cache_update_res:
                         log.error("Tiny DB returned an error during client db update")
             return client_resp
 
@@ -1994,6 +1998,7 @@ class Cache:
         elif retry:
             log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
             valid_labels = "\n".join(self.label_names)
+            # TODO convert all these to rich
             typer.secho(f"{query_str} appears to be invalid", fg="red")
             typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
             raise typer.Exit(1)
@@ -2091,7 +2096,7 @@ class Cache:
         completion: bool = False,
         exit_on_fail: bool = False,
         silent: bool = False,
-    ) -> models.Client:
+    ) -> models.Client | List[models.Client]:
         """Allows Case insensitive client match"""
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):

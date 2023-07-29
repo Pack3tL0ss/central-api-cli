@@ -259,6 +259,7 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    # TODO not a fan of *args see if we can define all params
     async def get_clients(
         self,
         *args: Tuple[str],
@@ -1911,10 +1912,11 @@ class CentralApi(Session):
         """
         url = f"/device_management/v1/device/{serial}/action/{command}"
 
+        # TODO cacth invalid actions (not supported on dev)
         resp = await self.post(url)
         if resp and duration and "blink_led" in command and "off" not in command:
             print(f"Blinking Led... {duration}. ", end="")
-            for i in range(1, duration):
+            for i in range(1, duration + 1):
                 time.sleep(1)
                 print(f"{duration - i}. ", end="" if i % 20 else "\n")
             resp = await self.post(url.replace("_on", "_off"))
@@ -1965,8 +1967,21 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def get_task_status(self, task_id):
-        return await self.get(f"/device_management/v1/status/{task_id}")
+    async def get_task_status(
+        self,
+        task_id: str,
+    ) -> Response:
+        """Status.
+
+        Args:
+            task_id (str): Unique task id to get response of command
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/device_management/v1/status/{task_id}"
+
+        return await self.get(url)
 
     async def get_switch_vlans(
         self,
@@ -2558,7 +2573,7 @@ class CentralApi(Session):
         microbranch: bool = False,
         gw_role: constants.GatewayRole = "branch",
         monitor_only_sw: bool = False,
-        monitor_only_cx: bool = False,  # Not supported by central yet
+        monitor_only_cx: bool = False,
     ) -> Response:
         """Create new group with specified properties. v3
 
@@ -2579,7 +2594,7 @@ class CentralApi(Session):
             gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
                 Default: "branch"
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
-            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only (Future capability)
+            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
 
         Returns:
             Response: CentralAPI Response object
@@ -2605,17 +2620,16 @@ class CentralApi(Session):
         allowed_switch_types = []
         if "switch" in allowed_types or ("cx" in allowed_types and "sw" in allowed_types):
             allowed_switch_types += ["AOS_CX", "AOS_S"]
-        elif "sw" in allowed_types:
+        if "sw" in allowed_types and "AOS_S" not in allowed_switch_types:
             allowed_switch_types += ["AOS_S"]
-        elif "cx" in allowed_types:
-            allowed_switch_types += ["AOS_CX", "AOS_S"]
+        if "cx" in allowed_types and "AOS_CX" not in allowed_switch_types:
+            allowed_switch_types += ["AOS_CX"]
 
         mon_only_switches = []
         if monitor_only_sw:
             mon_only_switches += ["AOS_S"]
         if monitor_only_cx:
-            log.warning("monitor_only_cx not yet supported by Aruba Central", show=True)
-            # mon_only_switches += ["AOS_CX"]
+            mon_only_switches += ["AOS_CX"]
 
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
 
@@ -2626,8 +2640,7 @@ class CentralApi(Session):
             raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"')
         if microbranch and not aos10:
             raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
-        # if wired_tg and monitor_only_sw or monitor_only_cx:
-        if wired_tg and monitor_only_sw:
+        if wired_tg and (monitor_only_sw or monitor_only_cx):
             raise ValueError("Invalid combination, Monitor Only is not valid for Template Group")
 
         json_data = {
@@ -4798,6 +4811,36 @@ class CentralApi(Session):
         url = "/central/v1/notifications"
 
         return await self.post(url)
+
+    async def central_get_notification_config(
+        self,
+        search: str = None,
+        sort: str = '-created_ts',
+        offset: int = 0,
+        limit: int = 500,
+    ) -> Response:
+        """List Configuration/Settings for alerts that result in notification.
+
+        Args:
+            search (str, optional): term used to search in name, category of the alert
+            sort (str, optional): Sort parameter may be one of +created_ts, -created_ts, Default is
+                '-created_ts'  Valid Values: -created_ts, +created_ts
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v1/notifications/settings"
+
+        params = {
+            'search': search,
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_ap_config(
         self,

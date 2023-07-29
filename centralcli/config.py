@@ -13,6 +13,9 @@ from typing import Any, List, Union
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
+from pydantic import BaseModel, Field, HttpUrl, ValidationError
+from yarl import URL
+# from pydantic import ConfigDict  # pydantic 2 not supported yet
 
 import tablib
 import yaml
@@ -21,6 +24,45 @@ try:
     import readline  # noqa
 except Exception:
     pass
+
+# class BaseModel(PydanticBaseModel):
+#     class Config:
+#         arbitrary_types_allowed = True
+
+class Token(BaseModel):
+    access: str = Field(..., alias="access_token")
+    refresh : str = Field(..., alias="refresh_token")
+
+class SnowTokens(BaseModel):
+    config: Token
+    cache: Optional[Token] = None
+
+class WebHook(BaseModel):
+    token: Optional[str] = None
+    port: Optional[int] = 9443
+
+class ServiceNow(BaseModel):
+    # model_config = ConfigDict(arbitrary_types_allowed=True) pydantic 2 / not supported yet
+    id: str
+    base_url: HttpUrl = Field(..., alias="url")
+    port: int = None
+    incident_path: str
+    refresh_path: str = "oauth_token.do"
+    assignment_group: str
+    client_id: str
+    client_secret: str
+    token: SnowTokens = None
+    tok_file: Path = None
+
+    @property
+    def incident_url(self) -> URL:
+        return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.incident_path.lstrip('/')}?sysparm_display_value=true")
+
+    @property
+    def refresh_url(self) -> URL:
+        return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.refresh_path.lstrip('/')}")
+
+
 
 clear = Console().clear
 class ClusterName(str, Enum):
@@ -182,7 +224,31 @@ class Config:
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
+        try:
+            self.webhook = WebHook(**self.data[self.account].get("webhook", {}))
+        except ValidationError:
+            self.webhook = WebHook()
+
+        try:
+            _snow_config = self.data[self.account].get("snow", {})
+            if _snow_config:
+                if _snow_config.get("token", {}):
+                    _config_token = _snow_config["token"]
+                    # del _snow_config["token"]
+                    _snow_config["token"] = {}
+                    _snow_config["token"]["config"] = _config_token
+                if self.snow_tok_file and self.snow_tok_file.exists():
+                    _cache_token = json.loads(self.snow_tok_file.read_text())
+                    _snow_config["token"]["cache"] = _cache_token
+                _snow_config["tok_file"] = Path(self.cache_dir / f'snow_{self.tok_file.name}')
+            # snow_cache = f'{self.cache_dir}/snow_tok_{self.data[self.account]["customer_id"]}_{self.data[self.account]["client_id"]}.json'
+            # self.snow = ServiceNow(**{**self.data[self.account].get("snow", {}), **{"tok_file": snow_cache}})
+            self.snow = ServiceNow(**_snow_config)
+        except ValidationError:
+            self.snow = None
+
         self.defined_accounts: List[str] = [k for k in self.data if k not in NOT_ACCOUNT_KEYS]
+        self.deprecation_warning = None  # TODO warning added 1.14.0
 
     def __bool__(self):
         return len(self.data) > 0 and self.account in self.data
@@ -215,6 +281,12 @@ class Config:
         )
 
     @property
+    def tok_file(self) -> Path:
+        cust_id = self.data.get(self.account, {}).get("customer_id")
+        client_id = self.data.get(self.account, {}).get("client_id")
+        return Path(self.cache_dir / f'tok_{cust_id}_{client_id}.json') if cust_id and client_id else None
+
+    @property
     def cache_file(self):
         return self.default_cache_file if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}.json"
 
@@ -224,7 +296,14 @@ class Config:
 
     @property
     def wh_port(self):
-        return self.data.get("webclient_info", {}).get("port", "9443")
+        _acct_specific = self.webhook.port if self.webhook.port != 9443 else None
+        if self.data.get("webclient_info", {}).get("port"):
+            self.deprecation_warning = (
+                '[bright_red]Deprecation Warning[/]: The webhook config location has changed, and is now account specific. '
+                'See https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/config/config.yaml.example and update config.'
+            )
+        return _acct_specific or self.data.get("webclient_info", {}).get("port", 9443)
+
 
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:

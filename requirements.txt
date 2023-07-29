@@ -19,7 +19,7 @@ jinja2
 fastapi
 uvicorn
 psutil
-pydantic
+pydantic >=1.9.0,<2.0.0
 ipaddress
 fuzzywuzzy
 levenshtein
