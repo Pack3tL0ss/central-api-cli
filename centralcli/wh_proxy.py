@@ -118,6 +118,8 @@ wh_resp_schema = {
 
 app = FastAPI(
     title='Central CLI Webhook Proxy',
+    docs_url='/api/docs',
+    redoc_url="/api/redoc",
     openapi_url='/api/openapi/openapi.json',
     version="1.0",
 )
