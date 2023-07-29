@@ -4,14 +4,12 @@
 import os
 import subprocess
 import sys
-from enum import Enum
 from pathlib import Path
 from time import sleep
 from typing import List
 
 from rich import print
 from rich.console import Console
-import pkg_resources
 
 try:
     import psutil
@@ -23,26 +21,28 @@ import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                            clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
-                            clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
+    from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+                            clibatch, clicaas, cliclone, clidel, clikick,
+                            clirefresh, clirename, clishow, clitest, clitshoot,
+                            cliunassign, cliupdate, cliupgrade, config, log,
+                            models, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (cli, cliadd, clibatch, clicaas, cliclone, clidel,
-                                clirefresh, clishow, clitest, cliupdate, cliupgrade, clikick,
-                                clitshoot, cliassign, cliunassign, clirename, models, cleaner, Response, config, log, utils)
+        from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+                                clibatch, clicaas, cliclone, clidel, clikick,
+                                clirefresh, clirename, clishow, clitest,
+                                clitshoot, cliunassign, cliupdate, cliupgrade,
+                                config, log, models, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi  # noqa
 from centralcli.cache import CentralObject
-from centralcli.constants import (
-    BlinkArgs, BounceArgs, IdenMetaVars,
-    KickArgs, LicenseTypes, StartArgs
-)
+from centralcli.central import CentralApi  # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars,
+                                  KickArgs, LicenseTypes, StartArgs)
 
 iden = IdenMetaVars()
 
@@ -485,6 +485,16 @@ def start(
 ) -> None:
     """Start WebHook Proxy Service on this system in the background
 
+    Currently 2 webhook automations:
+    For Both automations the URL to configure as the webhook destination is /webhook (currently http)
+
+    [cyan]hook-proxy[/]: Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
+    It then presents it's own REST API that can be polled for branch/tunnel status:
+    See [blue]
+    [blue]/api/v1.0/alerts[/] will an entry for any tunnel found to be down [blue]/api/v1.0/alerts/{gw serial}[/] return status for that branch/gw
+    hook-proxy
+
+
     Requires optional hook-proxy component 'pip3 install -U centralcli\[hook-proxy]'
     """
     # TODO add short description of each to help
@@ -507,7 +517,7 @@ def start(
 
     pid = get_pid()
     if pid:
-        _abort = True if not port or port == int(config.wh_port) else False
+        _abort = True if not port or port == int(config.webhook.port) else False
         print(f"Webhook proxy is currently running (process id {pid}).")
         if yes_both or typer.confirm("Terminate existing process", abort=_abort):
             terminate_process(pid)
@@ -518,7 +528,7 @@ def start(
     print(f"Webhook Proxy will listen on port {port or config_port}")
     if yes or yes_both or typer.confirm("\nProceed?", abort=True):
         console = Console()
-        port = port or config.wh_port
+        port = port or config.webhook.port
         with console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
                 ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)],
