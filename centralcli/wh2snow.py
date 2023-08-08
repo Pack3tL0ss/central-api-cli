@@ -164,6 +164,21 @@ class Hook2Snow:
         self.fail_count: int = 0
         self.total_hooks_in: int = 0
 
+    async def get_current_alerts(self):
+        """Gather current alerts from Central REST API
+
+        This is ran on startup to collect any alerts that may have triggered
+        while script was not running.
+
+        Gathers last 30 days of alerts
+        """
+        # TODO need to see if there is a way to poll SNOW to see if incident already exists for any open alerts found
+        resp = await central._request(central.get_alerts)
+        if not resp:
+            log.error(f"Unable to gather alerts from Central REST API\n{resp}")
+        else:
+            return [models.WebHook(**{**data, **{"text": data.get("text", data.get("description"))}}) for data in resp.output]
+
     async def post2snow(self, data: dict) -> aiohttp.ClientResponse | None:
         # success response = 201 for both create and update
         # need to cache incident_num = res payload["result"]["display_value"].replace("Incident: ", "")
@@ -246,7 +261,7 @@ class Hook2Snow:
         return False
 
 
-    async def snow_token_refresh(self, refresh_token: str = None):
+    async def snow_token_refresh(self, refresh_token: str = None) -> bool:
 
         forms = []
         for tok in [config.snow.token.cache, config.snow.token.config]:
@@ -262,6 +277,7 @@ class Hook2Snow:
             _form.add_field('refresh_token', tok.refresh)
             forms += [_form]
 
+        tok_updated = False
         for form in forms:
             # Send the form data to the server
             async with aiohttp.ClientSession() as session:
@@ -276,6 +292,7 @@ class Hook2Snow:
                     raise Exception("SNOW token refresh refresh returned 200, but lacked text.")
 
                 write_res = config.snow.tok_file.write_text(new_tokens)
+                tok_updated = True
 
                 if not write_res:
                     raise Exception(f"SNOW token refresh write to file ({config.snow.tok_file.name}) appears to have failed.")
@@ -286,6 +303,8 @@ class Hook2Snow:
                 # The form was not submitted successfully
                 log.error(f'SNOW token refresh failed [{response.status}] {response.reason}', show=True)
                 raise exceptions.RefreshFailedException(f"SNOW Token refresh failure. [{response.status}] {response.reason}")
+
+        return tok_updated
 
     @app.post("/webhook", status_code=200, response_model=HookResponse, responses=wh_resp_schema)
     async def webhook(
@@ -342,6 +361,11 @@ class Hook2Snow:
                 "updated": True  #  if updated else False
             }
 
+    async def startup(self) -> List[models.WebHook] | None:
+        tok_updated, current_alerts = await asyncio.gather(self.snow_token_refresh(), self.get_current_alerts())
+        # TODO verify any closed alerts don't have open entry in cache, verify snow has incident for any open alerts
+        return current_alerts
+
 
 if __name__ == "__main__":
     log = init_logs()  # FIXME logs are still sent to generic cencli log file
@@ -360,7 +384,10 @@ if __name__ == "__main__":
     # When grabbing from central.get_alerts use wh_model = WebHook(**{**data, **{"text": data.get("text", data.get("description"))}})
     # as the text field isn't supplied with the response from the REST endpoint.
     try:
-        asyncio.run(h2s.snow_token_refresh())
+        current_alerts = asyncio.run(h2s.startup())
+        open_alerts = len([a for a in current_alerts if a.state == "Open"])
+        # closed_alerts = len(current_alerts) - open_alerts
+        print(f'Open Alerts from last 30 days: {open_alerts}')
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info" if not config.debug else "debug")
     except Exception as e:
         log.exception(f"{e.__class__.__name__}\n{e}", show=True)
