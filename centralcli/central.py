@@ -4356,13 +4356,12 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # API-NOTE: grabs All valid license types, display names...
-    async def get_services_config(
+    async def get_valid_subscription_names(
         self,
         service_category: str = None,
-        device_type: str = None
+        device_type: str = None,
     ) -> Response:
-        """Get services licensing config.
+        """Get Valid subscription names from Central.
 
         Args:
             service_category (str, optional): Service category - dm/network
