@@ -41,8 +41,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.cache import CentralObject
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars,
-                                  KickArgs, LicenseTypes, StartArgs)
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs)
 
 iden = IdenMetaVars()
 
