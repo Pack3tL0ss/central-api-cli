@@ -12,6 +12,7 @@ from tinydb import TinyDB, Query
 from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
 from pathlib import Path
+from enum import Enum
 # from render import rich_capture
 
 import asyncio
@@ -286,6 +287,7 @@ class Cache:
             self.GroupDB = self.DevDB.table("groups")
             self.TemplateDB = self.DevDB.table("templates")
             self.LabelDB = self.DevDB.table("labels")
+            self.LicenseDB = self.DevDB.table("licenses")
             self.ClientDB = self.DevDB.table("clients")  # Updated only when show clients is ran
             # log db is used to provide simple index to get details for logs
             # vs the actual log id in form 'audit_trail_2021_2,...'
@@ -294,7 +296,7 @@ class Cache:
             self.EventDB = self.DevDB.table("events")
             self.HookConfigDB = self.DevDB.table("wh_config")
             self.HookDataDB = self.DevDB.table("wh_data")
-            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.ClientDB]
+            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
                 self.insert(data)
@@ -338,6 +340,17 @@ class Cache:
         return self.LabelDB.all()
 
     @property
+    def licenses(self) -> list:
+        return self.LicenseDB.all()
+
+    @property
+    def LicenseTypes(self) -> constants.LicenseTypes:
+        if len(self.licenses) > 0:
+            return Enum("ValidLicenseTypes", {item["name"]: item["name"].replace("_", "-") for item in self.licenses}, type=str)
+        else:
+            return constants.LicenseTypes
+
+    @property
     def clients(self) -> list:
         return self.ClientDB.all()
 
@@ -360,6 +373,10 @@ class Cache:
     @property
     def label_names(self) -> list:
         return [g["name"] for g in self.LabelDB.all()]
+
+    @property
+    def license_names(self) -> list:
+        return [lic["name"] for lic in self.LicenseDB.all()]
 
     @property
     def templates(self) -> list:
@@ -1322,8 +1339,26 @@ class Cache:
                 self.LabelDB.truncate()
                 update_res = self.LabelDB.insert_multiple(resp.output)
                 if False in update_res:
-                    log.error("Tiny DB returned an error during group db update")
+                    log.error("Tiny DB returned an error during label db update")
             return resp
+
+    async def update_license_db(self) -> Response:
+        """Update License DB
+
+        License DB stores the valid license names accepted by GreenLake/Central
+
+        Returns:
+            Response: CentralAPI Response Object
+        """
+        resp = await self.central.get_valid_subscription_names()
+        if resp.ok:
+            resp.output = [{"name": k} for k in resp.output.keys()]
+            self.updated.append(self.central.get_valid_subscription_names)
+            self.LicenseDB.truncate()
+            update_res = self.LicenseDB.insert_multiple(resp.output)
+            if False in update_res:
+                log.error("Tiny DB returned an error during license db update")
+        return resp
 
     async def update_template_db(self):
         # groups = self.groups if self.central.get_all_groups in self.updated else None
@@ -1441,6 +1476,7 @@ class Cache:
         template_db: bool = False,
         group_db: bool = False,
         label_db: bool = False,
+        license_db: bool = False,
         ):
         update_funcs, db_res = [], []
         if dev_db:
@@ -1455,6 +1491,8 @@ class Cache:
             update_funcs += [self.update_group_db]
         if label_db:
             update_funcs += [self.update_label_db]
+        if license_db:
+            update_funcs += [self.update_license_db]
         async with ClientSession() as self.central.aio_session:
             if update_funcs:
                 db_res += [await update_funcs[0]()]
@@ -1475,7 +1513,8 @@ class Cache:
                                 self.update_inv_db(),
                                 self.update_site_db(),
                                 self.update_template_db(),
-                                self.update_label_db()
+                                self.update_label_db(),
+                                self.update_license_db()
                             )
                         ]
         return db_res
@@ -1489,9 +1528,10 @@ class Cache:
         template_db: bool = False,
         group_db: bool = False,
         label_db: bool = False,
+        license_db: bool = False,
     ) -> List[Response]:
         db_res = None
-        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db]:
+        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db, license_db]:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
@@ -1500,12 +1540,12 @@ class Cache:
 
             start = time.monotonic()
             db_res = asyncio.run(self._check_fresh(
-                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db
+                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db, license_db=license_db
                 )
             )
 
             if not all([r.ok for r in db_res]):
-                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db"]
+                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db", "license_db"]
                 res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
