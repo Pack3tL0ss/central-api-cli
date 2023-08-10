@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     ClientArgs, InventorySortOptions, ShowInventoryArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions,
-    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, lib_to_api, what_to_pretty  # noqa
+    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, lib_to_api, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -190,10 +190,10 @@ def inventory(
 
 
 # TODO --sort option for date fields sorts converted value, needs to be sorted by epoch before conversion
-# TODO sub command for subscription stats
+# TODO break into seperate command group if we can still all show subscription without an arg to default to details
 @app.command()
-def subscriptions(
-    _type: str = typer.Argument(None, metavar='[TYPE|"stats"]', help="license type"),  # TODO enum for allowed types
+def subscription(
+    what: SubscriptionArgs = typer.Argument("details"),
     service: str = typer.Option(None, hidden=True),  # TODO this is for show subscription stats also a couple more options we could allow
     sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),  # Need to adapt a bit for stats or make sub-command
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
@@ -220,20 +220,33 @@ def subscriptions(
 ) -> None:
     """Show subscription/license details or stats
     """
-    stat_type = "" if _type is None else _type.lower().strip()
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if stat_type != "stats" else "yaml")
-    if stat_type == "stats":
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
+    if what is None or what == "details":
+        resp = cli.central.request(cli.central.get_subscriptions)  # TODO might be useful to restore passing license type to subscriptions (filter option)
+        title = "Subscription Details"
+        _cleaner = cleaner.get_subscriptions
+        set_width_cols = {"name": 40}
+    elif what == "stats":
         resp = cli.central.request(cli.central.get_subscription_stats)
+        title = "Subscription Stats"
+        _cleaner = None
+        set_width_cols = None
+    elif what == "names":
+        resp = cli.central.request(cli.cache.update_license_db)
+        title = "Valid Subscription/License Names"
+        _cleaner = None
+        set_width_cols = {"name": 31}
     else:
-        resp = cli.central.request(cli.central.get_subscriptions, _type)
+        raise ValueError("Error in logic evaluating what")
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Subscriptions" if stat_type != "stats" else "subscription stats",
+        title=title,
         sort_by=sort_by,
         reverse=reverse,
-        cleaner=cleaner.get_subscriptions if stat_type != "stats" else None,
+        cleaner=_cleaner,
+        set_width_cols=set_width_cols
     )
 
 
@@ -816,7 +829,7 @@ def upgrade(
 
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
-    args: List[CacheArgs] = typer.Argument(None, hidden=False),
+    args: List[CacheArgs] = typer.Argument(None, show_default=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
