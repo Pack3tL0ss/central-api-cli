@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
+from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
 from centralcli.strings import LongHelp
 help_text = LongHelp()
 
@@ -69,9 +69,8 @@ def device(
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option(
@@ -81,7 +80,6 @@ def device(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    yes = yes_ if yes_ else yes
     kwd_vars = [kw1, kw2, kw3]
     vals = [arg1, arg2, arg3]
     kwargs = {
@@ -399,25 +397,23 @@ def site(
     #         Response: CentralAPI Response object
     #     """
 
-
+# TODO allow more than one label and use batch_request
 @app.command(help="Create a new label")
 def label(
     name: str = typer.Argument(..., ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     _msg = "Creating" if yes else "Create"
     print(f"{_msg} new label [cyan]{name}[/]")
     if yes or typer.confirm("Proceed?"):
         resp = cli.central.request(cli.central.create_label, name)
         cli.display_results(resp, cleaner=cleaner.get_labels)
-        if resp.ok:
+        if resp.ok:  # TODO pass data to cli.cache.update_label_db to update vs doing a subsequenct call
             asyncio.run(cli.cache.update_label_db(cleaner.get_labels(resp.output)))
 
 
