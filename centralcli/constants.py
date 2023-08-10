@@ -251,6 +251,7 @@ class CacheArgs(str, Enum):
     templates = "templates"
     groups = "groups"
     labels = "labels"
+    licenses = "licenses"
     logs = "logs"
     events = "events"
     hook_config = "hook_config"
@@ -272,12 +273,14 @@ class BatchAddArgs(str, Enum):
     sites = "sites"
     groups = "groups"
     devices = "devices"
+    labels = "labels"
 
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
     # groups = "groups"
     devices = "devices"
+    # labels = "labels"
 
 
 class BatchRenameArgs(str, Enum):
@@ -320,6 +323,11 @@ class LicenseTypes(str, Enum):
     vgw500m = "vgw500m"
 
 
+class SubscriptionArgs(str, Enum):
+    details = "details"
+    stats = "stats"
+    names = "names"
+
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
@@ -352,6 +360,7 @@ class ArgToWhat:
         self.routes = self.route = "routes"
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
+        self.subscription = self.subscriptions = "subscription"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
