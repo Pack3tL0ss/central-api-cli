@@ -401,9 +401,20 @@ def get_all_groups(
         dict,
     ]
 ) -> list:
+    """groups cleaner formats data for cache
+
+    Args:
+        data (List[ dict, ]): api response output from get_all_groups
+
+    Returns:
+        list: reformatted Data with keys/headers changed
+    """
+    # TODO use _short_key like others and combine show groups into this func
     _keys = {"group": "name", "template_details": "template group"}
     return [{_keys[k]: v for k, v in g.items()} for g in data]
 
+def show_groups(data: List[dict]) -> List[dict]:
+    return [{k: v if k != "template group" else ",".join([kk for kk, vv in v.items() if vv]) or "--" for k, v in inner.items()} for inner in data]
 
 def get_labels(
     data: Union[List[dict,], Dict]

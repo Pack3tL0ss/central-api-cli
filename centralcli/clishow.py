@@ -877,7 +877,7 @@ def groups(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose: bool = typer.Option(False, "-v", help="Verbose: adds AoS10 / Monitor only switch attributes", show_default=False,),
+    verbose: bool = typer.Option(False, "-v", help="Verbose: include additional group properties", show_default=False,),
     verbose2: bool = typer.Option(
         False,
         "-vv",
@@ -918,7 +918,7 @@ def groups(
             resp = verbose_resp
 
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile, cleaner=cleaner.show_groups)
 
 
 @app.command(short_help="Show labels/details")
