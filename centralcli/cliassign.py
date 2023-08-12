@@ -26,7 +26,7 @@ app = typer.Typer()
 
 @app.command(short_help="Assign License to device(s)", hidden=False)
 def license(
-    license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to apply to device(s).", show_default=False),
+    license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
     serial_nums: List[str] = typer.Argument(..., show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -38,8 +38,8 @@ def license(
 ) -> None:
     """Assign Licenses to devices by serial number.
 
-    Device must already be added to Central.  Use 'cencli show inventory' to see devices that have been added.
-    Use '--license' option with 'cencli add device ...' to add device and assign license in one command.
+    Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
+    Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
     """
     # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
