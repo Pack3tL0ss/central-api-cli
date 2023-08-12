@@ -6,7 +6,7 @@
 # device results include site_id which we strip out as it's not useful for display, but it is useful for
 # internally.  Currently the site_id is being looked up from the site cache
 from __future__ import annotations
-from typing import Any, Literal, Dict, Sequence, Union, List
+from typing import Any, Literal, Dict, Sequence, Union, List, Iterable
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
@@ -471,7 +471,7 @@ class Cache:
         out = []
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
-            args = [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+            args = [v for k, v in ctx.params.items() if v and k in ["serial", "mac", "group"]]
 
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
@@ -528,13 +528,12 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
                 elif m.serial.startswith(incomplete):
                     out += [tuple([m.serial, m.help_text])]
-                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
                     out += [tuple([m.mac, m.help_text])]
                 elif m.ip.startswith(incomplete):
                     out += [tuple([m.ip, m.help_text])]
                 else:
-                    # failsafe, shouldn't hit
-                    out += [tuple([m.name, m.help_text])]
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m
@@ -1185,12 +1184,18 @@ class Cache:
                 self.responses.dev = resp
             return resp
 
-    async def update_inv_db(self, data: Union[str, List[str]] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_inv_db(
+            self, data: Union[str, List[str]] = None,
+            *,
+            remove: bool = False,
+            dev_type: str = "all"
+        ) -> Union[List[int], Response]:
         """Update Inventory Database (local cache).
 
         Args:
             data (Union[str, List[str]], optional): serial number of list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
+            dev_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1233,14 +1238,19 @@ class Cache:
                 if False in db_res:
                     log.error(f"Tiny DB returned an error during Inventory db update {db_res}", show=True)
         else:
-            resp = await self.central.get_device_inventory()
+            resp = await self.central.get_device_inventory(sku_type=dev_type)
             if resp.ok:
                 if resp.output:
                     resp.output = utils.listify(resp.output)
                     resp.output = cleaner.get_device_inventory(resp.output)
-
-                    self.InvDB.truncate()
-                    db_res = self.InvDB.insert_multiple(resp.output)
+                    if dev_type == "all":
+                        self.InvDB.truncate()
+                        db_res = self.InvDB.insert_multiple(resp.output)
+                    else:
+                        db_res = [
+                            self.InvDB.upsert(d, self.Q.serial == d.get("serial", "--"))
+                            for d in resp.output
+                        ]
                     if False in db_res:
                         log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
 
@@ -1613,7 +1623,6 @@ class Cache:
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
         group: str = None,
-        multi_ok: bool = False,
         all: bool = False,
         completion: bool = False,
     ) -> Union[CentralObject, List[CentralObject]]:
@@ -1626,7 +1635,6 @@ class Cache:
                 Defaults to None.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
-            multi_ok (bool, optional): DEPRECATED, NO LONGER USED
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
                 When called for completion it will fail silently and will return multiple when multiple matches are found.
