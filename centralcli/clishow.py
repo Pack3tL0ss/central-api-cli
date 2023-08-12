@@ -51,6 +51,9 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
     caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
+    if "gw" in dev_types:
+        caption = f"{caption}\n  [magenta]Note[/]: GW firmware version has been simplified, the actual gw version is [cyan]aa.bb.cc.dd-aa.bb.cc.dd[-beta]_build[/]"
+        caption = f"{caption}\n  [italic]given the version is repeated it has been simplified.  You need to use the full version string when upgrading."
     if inventory:
         caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
@@ -114,6 +117,7 @@ def show_devices(
                 resp = cli.cache.responses.dev
         else:  # will only run if user specifies params (filters)
             resp = central.request(central.get_all_devicesv2, **params)
+            caption = _build_caption(resp)
     elif serial:
         api_dev_type = lib_to_api("monitoring", dev_type)
         resp = central.request(central.get_dev_details, api_dev_type, serial)
@@ -145,7 +149,7 @@ def show_devices(
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
 def inventory(
-    _type: ShowInventoryArgs = typer.Argument("all", metavar="[all|ap|gw|vgw|switch|others]"),
+    dev_type: ShowInventoryArgs = typer.Argument("all"),
     sub: bool = typer.Option(
         None,
         help="Show devices with applied subscription/license, or devices with no subscription/license applied."
@@ -157,7 +161,7 @@ def inventory(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -168,8 +172,23 @@ def inventory(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    if hasattr(dev_type, "value"):
+        dev_type = dev_type.value
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(cli.central.get_device_inventory, _type)
+    if dev_type == "all":
+        title = "Devices in Inventory"
+    elif dev_type in ["cx", "sw", "switch"]:
+        title = "Switches in Inventory"
+    elif dev_type == "gw":
+        title = "Gateways in Inventory"
+    elif dev_type == "ap":
+        title = "APs in Inventory"
+    elif dev_type == "vgw":
+        title = "Virtual Gateways in Inventory"
+    else:
+        title = "Inventory"
+
+    resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api("inventory", dev_type))
     if verbose:
         cache_devices = cli.cache.devices
         for idx, dev in enumerate(resp.output):
@@ -180,11 +199,11 @@ def inventory(
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Devices in Inventory",
+        title=title,
         sort_by=sort_by,
         reverse=reverse,
         caption="Inventory includes devices that have yet to connect to Central",
-        cleaner=cleaner.get_device_inventory,
+        cleaner=None,  # Cleaner is applied in cache update
         sub=sub
     )
 
@@ -252,7 +271,6 @@ def subscription(
 
 @app.command(short_help="Show All Devices")
 def all(
-    # args: str = typer.Argument(None, metavar=iden_meta.dev, hidden=True, autocompletion=cli.cache.null_completion),
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
     label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
