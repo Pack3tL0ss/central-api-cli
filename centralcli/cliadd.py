@@ -137,6 +137,7 @@ def device(
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
+        # TODO need to update inventory cache after device add
 
 
 @app.command(short_help="Add a group", help="Add a group")
