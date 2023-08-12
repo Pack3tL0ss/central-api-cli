@@ -63,6 +63,29 @@ def _duration_words(secs: Union[int, str]) -> str:
 
 
 @epoch_convert
+def _duration_words_short(secs: Union[int, str]) -> str:
+    words = pendulum.duration(seconds=int(secs)).in_words()
+    # a bit cheesy, but didn't want to mess with regex
+    replace_words = [
+        (" years", "y"),
+        (" year", "y"),
+        (" weeks", "w"),
+        (" week", "w"),
+        (" days", "d"),
+        (" day", "d"),
+        (" hours", "h"),
+        (" hour", "h"),
+        (" minutes", "m"),
+        (" minute", "m"),
+        (" seconds", "s"),
+        (" second", "s"),
+    ]
+    for orig, short in replace_words:
+        words = words.replace(orig, short)
+    return words
+
+
+@epoch_convert
 def _time_diff_words(epoch: float | None) -> str:
     return "" if epoch is None else pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
@@ -113,6 +136,17 @@ def _extract_event_details(details: List[dict]) -> dict:
     return "\n".join([f"{k}: {v}" for k, v in data.items()])
 
 
+def _format_memory(mem: int) -> str:
+    # gw and aps report memory in bytes
+    #
+    gmk = [(1_073_741_824, "GB"), (1_048_576, "MB"), (1024, "KB")]
+    if len(str(mem)) > 4:
+        for divisor, indicator in gmk:
+            if mem / divisor > 1:
+                return f'{round(mem / divisor, 2)} {indicator}'
+
+    return f'{mem}'
+
 _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
 # TODO determine all modes possible (CX)
@@ -125,7 +159,7 @@ _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
     "last_connection_time": _time_diff_words,
-    "uptime": _duration_words,
+    "uptime": _duration_words_short,
     "updated_at": _time_diff_words,
     "last_modified": _convert_epoch,
     "lease_start_ts": _log_timestamp,
@@ -158,7 +192,10 @@ _short_value = {
     "end_date": _mdyt_timestamp,
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
-    "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)])
+    "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
+    "mem_total": _format_memory,
+    "mem_free": _format_memory,
+    "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:])
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
 
@@ -177,6 +214,7 @@ _short_key = {
     "total_clients": "clients",
     "updated_at": "updated",
     "cpu_utilization": "cpu %",
+    "mem_pct": "mem %",
     "app_name": "app",
     "device_type": "type",
     "classification": "class",
@@ -574,6 +612,20 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
                 mask = ipaddress.IPv4Network((inner[ip_word], inner[mask_word]), strict=False).prefixlen
                 inner[ip_word] = f"{inner[ip_word]}/{mask}"
                 del inner[mask_word]
+
+    # calculate used memory percentage if ran with stats
+    if "mem_total" and "mem_free" in all_keys:
+        all_keys += ["mem_pct"]
+        for inner in data:
+            if inner["mem_total"] and inner["mem_free"]:
+                mem_pct = round(((inner["mem_total"] - inner["mem_free"]) / inner["mem_total"]) * 100, 2)
+            elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
+                mem_pct = inner["mem_total"]
+                inner["mem_total"], inner["mem_free"] = "--", "--"
+            else:
+                mem_pct = 0
+            inner["mem_pct"] = f'{mem_pct}%'
+
     if order:
         to_front = order
     else:
@@ -614,6 +666,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             'cpu_utilization',
             'mem_total',
             'mem_free',
+            'mem_pct',
             'firmware_version',
             'version',
             'firmware_backup_version',
