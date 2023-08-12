@@ -53,19 +53,10 @@ class ShowInventoryArgs(str, Enum):
     ap = "ap"
     gw = "gw"
     vgw = "vgw"
+    sw = "sw"
+    cx = "cx"
     switch = "switch"
-    others = "others"
 
-
-#  TODO can move to lib_to_api class below
-SHOWINVENTORY_LIB_TO_API = {
-    "all": "all",
-    "ap": "all_ap",
-    "switch": "switch",
-    "gw": "gateway",
-    "vgw": "vgw",
-    "others": "others"
-}
 
 class InventorySortOptions(str, Enum):
     type = "type"
@@ -445,7 +436,8 @@ APIMethodType = Literal[
     "template",
     "firmware",
     "event",
-    "tshoot"
+    "tshoot",
+    "inventory"
 ]
 
 
@@ -468,7 +460,7 @@ class LibToAPI:
         self.CX = self.cx = "cx"
         self.method_iden = None,
 
-        # from CentralApi consistent value to Random API value
+        # from CentralApi consistent value to Random API endpoint value
         self.monitoring_to_api = {
             "gw": "gateways",
             "ap": "aps",
@@ -482,7 +474,6 @@ class LibToAPI:
             "switch": "SWITCH",
             "cx": "SWITCH",
             "sw": "SWITCH",
-            "gateway": "CONTROLLER"  # TODO remove once cache is re-factored to use ['ap', 'cx', 'sw', 'gw']
         }
         self.template_to_api = {
             "gw": "MobilityController",
@@ -491,7 +482,6 @@ class LibToAPI:
             "cx": "CX",
             "sw": "ArubaSwitch"
         }
-        # TODO once cx is actually supported add it
         self.firmware_to_api = {
             "gw": "CONTROLLER",
             "ap": "IAP",
@@ -499,7 +489,6 @@ class LibToAPI:
             "cx": "CX",
             "sw": "HP"
         }
-        # Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
         self.event_to_api = {
             "gw": "GATEWAY",
             "ap": "ACCESS POINT",
@@ -517,6 +506,15 @@ class LibToAPI:
             "sw": "SWITCH",
             "switch": "SWITCH",
             "mas": "MAS"
+        }
+        self.inventory_to_api = {
+            "all": "all",
+            "ap": "all_ap",
+            "cx": "switch",
+            "sw": "switch",
+            "switch": "switch",
+            "gw": "all_controller",
+            "vgw": "vgw"
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
