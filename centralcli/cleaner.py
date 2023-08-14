@@ -645,6 +645,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             "vlan_id",
             "name",
             "status",
+            "client_count",
             "type",
             "model",
             'mode',
