@@ -46,6 +46,17 @@ def test_show_all():
     assert "serial" in result.stdout
 
 
+def test_show_all_w_client_counts():
+    """We Use csv output as rich will truncate cols and clients is last col
+
+    tty size for test runner is 80 cols, 24 rows
+    """
+    result = runner.invoke(app, ["show", "all", "--clients", "--csv"],)
+    assert result.exit_code == 0
+    assert "serial" in result.stdout.splitlines()[0]
+    assert "clients" in result.stdout.splitlines()[0]
+
+
 def test_show_switch_by_name():
     result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["name"], "--debug"],)
     assert result.exit_code == 0
