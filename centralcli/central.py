@@ -1098,6 +1098,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # TODO cleanup the way raw is combined, see show wids all.
+    # TODO add full kwargs and type-hints
     async def get_all_devicesv2(self, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
@@ -1122,8 +1123,13 @@ class CentralApi(Session):
             resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
             return resp
 
+
         resp = res[-1]
-        _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
+        # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
+        if kwargs.get("calculate_client_count"):
+            _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
+        else:
+            _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
         if _output:

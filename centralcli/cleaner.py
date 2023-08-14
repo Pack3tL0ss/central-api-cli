@@ -257,6 +257,7 @@ _short_key = {
     "area_id": "area",
     "intf_state_down_reason": "Down Reason",
     "is_uplink": "Uplink",
+    "client_count": "clients",
 }
 
 
