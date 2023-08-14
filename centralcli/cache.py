@@ -861,7 +861,7 @@ class Cache:
     def group_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = [],
     ):
         match = self.get_group_identifier(
             incomplete,
