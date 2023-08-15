@@ -90,16 +90,13 @@ def show_devices(
         params["status"] = state.title()
 
     params = {k: v for k, v in params.items() if v is not None}
+    dev_type == "all" if dev_type == "device" and not args else dev_type
 
     if dev_type == "device":
         if args:  # show devices [name|ip|mac|serial]
             dev = cli.cache.get_dev_identifier(args)
             _type = lib_to_api("monitoring", dev.type)
             resp = central.request(central.get_dev_details, _type, dev.serial)
-        else:  # show devices ... equiv to show all
-            _formatter = "rich"
-            resp = central.request(central.get_all_devicesv2, **params)
-
     elif dev_type == "all":
         _formatter = "rich"
         if include_inventory:
@@ -1306,15 +1303,13 @@ def config_(
         metavar=f"{iden_meta.group_dev_cencli}",
         autocompletion=cli.cache.group_dev_ap_gw_completion,
         help = "Device Identifier for (AP or GW), Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
+        show_default=False,
     ),
     device: str = typer.Argument(
         None,
-        autocompletion=cli.cache.dev_completion,
+        autocompletion=cli.cache.dev_ap_gw_completion,
         hidden=True,
-        # TODO dev type gw or ap only
-        # autocompletion=lambda incomplete: [
-        #    c for c in cli.cache.dev_completion(incomplete, dev_type="gw") if c.lower().startswith(incomplete.lower())
-        # ]
+        show_default=False,
     ),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
@@ -1325,7 +1320,7 @@ def config_(
         hidden=True,
     ),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -2461,41 +2456,6 @@ def archived(
     resp = cli.central.request(cli.central.get_archived_devices)
     cli.display_results(resp, tablefmt="yaml")
 
-# @app.command(short_help="Show config", hidden=True)
-def _get_cencli_config(
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-
-    try:
-        from centralcli import config
-    except (ImportError, ModuleNotFoundError):
-        pkg_dir = Path(__file__).absolute().parent
-        if pkg_dir.name == "centralcli":
-            sys.path.insert(0, str(pkg_dir.parent))
-            from centralcli import config
-
-    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items()}
-    resp = Response(output=out)
-
-    cli.display_results(resp, tablefmt="yaml")
-
 
 # TODO cahce portal/name ids
 @app.command()
@@ -2564,7 +2524,6 @@ def version(
     cli.version_callback()
 
 
-# @app.command(short_help="Show config", hidden=True)
 def _get_cencli_config(
     default: bool = typer.Option(
         False, "-d",
@@ -2594,10 +2553,14 @@ def _get_cencli_config(
             sys.path.insert(0, str(pkg_dir.parent))
             from centralcli import config
 
-    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items()}
+    omit = ["deprecation_warning", "webhook", "snow"]
+    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
+    out["webhook"] = None if not config.webhook else config.webhook.dict()
+    out["snow"] = None if not config.snow else config.snow.dict()
+
     resp = Response(output=out)
 
-    cli.display_results(resp, tablefmt="yaml")
+    cli.display_results(resp, stash=False, tablefmt="yaml")
 
 
 @app.callback()
