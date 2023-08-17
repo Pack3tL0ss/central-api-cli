@@ -19,17 +19,18 @@ import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import constants, utils, log
+    from centralcli import constants, utils, log, render
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import constants, utils, log
+        from centralcli import constants, utils, log, render
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import DevTypes
+from centralcli.render import Output
 
 def epoch_convert(func):
     @functools.wraps(func)
@@ -92,6 +93,12 @@ def _time_diff_words(epoch: float | None) -> str:
 
 @epoch_convert
 def _log_timestamp(epoch: float) -> str:
+    if isinstance(epoch, str):
+        try:
+            epoch = float(epoch)
+        except TypeError:
+            return epoch
+
     return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
 
 
@@ -119,6 +126,24 @@ def _serial_to_name(sernum: str) -> str:
         return sernum
 
     return match.name
+
+
+def _get_dev_name_from_mac(mac: str, dev_type: str | List[str] = None, summary_text: bool = False) -> str:
+    if mac.count(":") != 5:
+        return mac
+    else:
+        # TODO circular import if placed at top review import logic
+        from centralcli import cache
+        match = cache.get_dev_identifier(mac, dev_type=dev_type, retry=False, silent=True)
+        if not match:
+            return mac
+
+        match = utils.unlistify(match)
+
+        if isinstance(match, list) and len(match) > 1:
+            return mac
+
+        return match.name if not summary_text else f'{match.name}|{match.ip}|Site: {match.site}'
 
 
 def _extract_names_from_id_name_dict(id_name: dict) -> str:
@@ -195,7 +220,10 @@ _short_value = {
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
     "mem_total": _format_memory,
     "mem_free": _format_memory,
-    "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:])
+    "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
+    "learn_time": _log_timestamp,
+    "last_state_change": _log_timestamp,
+    "graceful_restart_timer": _duration_words
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
 
@@ -258,6 +286,8 @@ _short_key = {
     "intf_state_down_reason": "Down Reason",
     "is_uplink": "Uplink",
     "client_count": "clients",
+    "is_best": "best",
+    "num_routes": "routes",
 }
 
 
@@ -271,7 +301,7 @@ def strip_outer_keys(data: dict) -> Union[list, dict]:
         Union[list, dict]: typically list of dicts
     """
     # return unaltered payload if payload is not a dict, or if it has > 5 keys (wrapping typically has 2 sometimes 3)
-    if not isinstance(data, dict) or len(data.keys()) > 5:
+    if not isinstance(data, dict) or len([key for key in data.keys() if key not in ["cid", "status_code"]]) > 5:
         return data
 
     data = data if "result" not in data else data["result"]
@@ -620,7 +650,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     # concat ip_address & subnet_mask fields into single ip field ip/mask
     if ip_word in all_keys and mask_word in all_keys:
         for inner in data:
-            if inner[ip_word] and inner[mask_word]:
+            if inner.get(ip_word) and inner.get(mask_word):
                 mask = ipaddress.IPv4Network((inner[ip_word], inner[mask_word]), strict=False).prefixlen
                 inner[ip_word] = f"{inner[ip_word]}/{mask}"
                 del inner[mask_word]
@@ -629,6 +659,8 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     if "mem_total" and "mem_free" in all_keys:
         all_keys += ["mem_pct"]
         for inner in data:
+            if inner.get("mem_total") is None or inner.get("mem_free") is None:
+                continue
             if inner["mem_total"] and inner["mem_free"]:
                 mem_pct = round(((inner["mem_total"] - inner["mem_free"]) / inner["mem_total"]) * 100, 2)
             elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
@@ -1343,3 +1375,73 @@ def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     ]
 
     return data
+
+def get_overlay_routes(data: Union[List[dict], dict], format: str = "rich", simplify: bool = True) -> Union[List[dict], dict]:
+    if "routes" in data:
+        data = data["routes"]
+
+    data = utils.listify(data)
+    if "nexthop_list" in data[-1].keys():
+        base_data = [{"destination": f'{r["prefix"]}/{r["length"]}', **{k: v for k, v in r.items() if k not in ["prefix", "length", "nexthop_list"]}} for r in data]
+        outdata = base_data
+    else:
+        base_data = [{"destination": f'{r["prefix"]}/{r["length"]}', **{k: v for k, v in r.items() if k not in ["prefix", "length", "nexthop"]}} for r in data]
+        if isinstance(data[-1]["nexthop"], list):
+            next_hop_data = [[{"interface": "" if not hops.get("interface") else utils.unlistify(hops["interface"]), **{k if k != "address" else "nexthop": v for k, v in hops.items() if k != "interface"}} for hops in r["nexthop"]] for r in data]
+        else:
+            next_hop_data = [[{"nexthop": _get_dev_name_from_mac(r["nexthop"], dev_type=("gw", "ap",), summary_text=True)}] for r in data]
+
+        field_order = [
+            "destination",
+            "interface",
+            "nexthop",
+            "protocol",
+            "flags",
+            "learn_time",
+            "metric",
+            "is_best",
+        ]
+
+        # Collapse next_hop data into base dict
+        outdata = []
+        for base, nh in zip(base_data, next_hop_data):
+            for idx, route in enumerate(nh):
+                if idx == 0 or not simplify:
+                    route = {**base, **route}
+                else:
+                    route = {**{k: "" for k in base.keys()}, **route}
+                # outdata += [route]  # Put fields in desired order
+                outdata += [{k: route.get(k) for k in field_order if k in route.keys()}]  # Put fields in desired order
+
+        if format == "rich" and data and "is_best" in outdata[-1].keys():
+            outdata = [
+                {k: str(v).replace("True", "\u2705").replace("False", "") if k == "is_best" else v for k, v in d.items()}
+                for d in outdata
+            ]
+
+    _short_value["0.0.0.0"] = "0.0.0.0"  # OVERRIDE default
+    data = simple_kv_formatter(outdata)
+    # data = simple_kv_formatter(
+    #     [
+    #         {
+    #             **{k: v for k, v in r.items() if k != "nexthop"},
+    #             "nexthop": [{k: v if k != "interface" else utils.unlistify(v) for k, v in hops.items()} for hops in r["nexthop"]]
+    #         } for r in data
+    #     ]
+    # )
+
+    return data
+
+
+def get_overlay_interfaces(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
+    try:
+        data = [
+            {
+                k: v if k != "endpoint" else _get_dev_name_from_mac(v, dev_type="ap") for k, v in i.items()
+            }
+            for i in data
+        ]
+    except Exception as e:
+        log.error(f'get_overlay_interfaces cleaner threw {e.__class__.__name__} trying to get apo name from mac, skipping.', show=True)
+
+    return simple_kv_formatter(data)
