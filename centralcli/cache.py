@@ -6,7 +6,7 @@
 # device results include site_id which we strip out as it's not useful for display, but it is useful for
 # internally.  Currently the site_id is being looked up from the site cache
 from __future__ import annotations
-from typing import Any, Literal, Dict, Sequence, Union, List, Iterable
+from typing import Any, Literal, Dict, Sequence, Union, List, Set, Iterable
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
@@ -114,6 +114,9 @@ class CentralObject:
 
         log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
         raise typer.Exit(1)
+
+    def __fields__(self) -> List[str]:
+        return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
 
     @property
     def generic_type(self):
@@ -314,6 +317,10 @@ class Cache:
     @property
     def devices(self) -> list:
         return self.DevDB.all()
+
+    @property
+    def device_types(self) -> Set[str]:
+        return set([d["type"] if d["type"] not in ["cx", "sw"] else "switch" for d in self.DevDB.all()])
 
     @property
     def devices_by_serial(self) -> dict:
@@ -704,7 +711,14 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
         dev_types = ["ap", "gw"]
-        match = [m for m in self.dev_completion(incomplete) if m.generic_type in dev_types]
+        _match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+
+        match = []
+        for m in _match:
+            if m.name in args or m.serial in args or m.mac in args:
+                continue
+            else:
+                match += [m]
 
         out = []
         if match:
@@ -1188,7 +1202,8 @@ class Cache:
             self, data: Union[str, List[str]] = None,
             *,
             remove: bool = False,
-            dev_type: str = "all"
+            dev_type: str = "all",
+            sub: bool = None
         ) -> Union[List[int], Response]:
         """Update Inventory Database (local cache).
 
@@ -1196,6 +1211,7 @@ class Cache:
             data (Union[str, List[str]], optional): serial number of list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
             dev_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
+            sub (str, optional): whether or not to filter return by subscribed / not subscribed. Defaults to None (no filter)
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1251,6 +1267,8 @@ class Cache:
                             self.InvDB.upsert(d, self.Q.serial == d.get("serial", "--"))
                             for d in resp.output
                         ]
+                    if sub is not None:  # filtered response for display, no filter prior for benefit of cache.
+                        resp.output = [dev for dev in resp.output if bool(dev["services"]) is sub]
                     if False in db_res:
                         log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
 
@@ -1648,6 +1666,8 @@ class Cache:
         match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
+        if "dev" in qry_funcs:  # move dev query last
+            qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
         for _ in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()
@@ -1682,14 +1702,14 @@ class Cache:
 
     def get_dev_identifier(
         self,
-        query_str: Union[str, List[str], tuple],
-        dev_type: Union[constants.GenericDevTypes, List[constants.GenericDevTypes]] = None,
+        query_str: str | Iterable[str],
+        dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
-    ) -> CentralObject:
+    ) -> CentralObject | List[CentralObject] | None:
 
         retry = False if completion else retry
         # TODO dev_type currently not passed in or handled identifier for show switches would also
