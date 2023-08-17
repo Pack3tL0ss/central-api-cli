@@ -290,10 +290,7 @@ def test_show_clients_wireless():
 def test_show_client_by_mac():
     TEST_DEVICES["client_mac"] = TEST_DEVICES.get("client_mac", TEST_DEVICES["wlan_client_mac"])
     result = runner.invoke(app, ["show", "clients", "mac", TEST_DEVICES["client_mac"]],)
-    try:
-        TEST_DEVICES["client_mac"] = result.stdout.splitlines()[5].split()[1]
-    except Exception:
-        ...
+    assert TEST_DEVICES["client_mac"] == result.stdout.splitlines()[5].split()[1]
     assert result.exit_code == 0
     assert "client with MAC" in result.stdout
     assert "mac" in result.stdout
@@ -326,3 +323,44 @@ def test_show_ospf_neighbor():
     )
     assert result.exit_code == 0
     assert "Router ID" in result.stdout
+
+
+def test_show_overlay_routes_learned():
+    result = runner.invoke(app, [
+            "show",
+            "overlay",
+            "routes",
+            TEST_DEVICES["gateway"]["name"],
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "nexthop" in result.stdout
+
+
+def test_show_overlay_routes_advertised():
+    result = runner.invoke(app, [
+            "show",
+            "overlay",
+            "routes",
+            TEST_DEVICES["gateway"]["name"],
+            "-a",
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "nexthop" in result.stdout
+
+
+def test_show_overlay_interfaces():
+    result = runner.invoke(app, [
+            "show",
+            "overlay",
+            "interfaces",
+            TEST_DEVICES["gateway"]["name"],
+            "--debug"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "state" in result.stdout
+
