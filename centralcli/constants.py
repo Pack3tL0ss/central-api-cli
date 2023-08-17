@@ -58,7 +58,7 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
-class InventorySortOptions(str, Enum):
+class SortInventoryOptions(str, Enum):
     type = "type"
     model = "model"
     sku = "sku"
@@ -91,6 +91,10 @@ class CertFormat(str, Enum):
 class StartArgs(str, Enum):
     hook_proxy = "hook-proxy"
     hook2snow = "hook2snow"
+
+
+class ResetArgs(str, Enum):
+    overlay = "overlay"
 
 
 # wrapping keys from return for some calls that have no value
@@ -195,6 +199,7 @@ class ClientArgs(str, Enum):
     all = "all"
     mac = "mac"
     device = "device"
+    denylisted = "denylisted"
 
 
 class RefreshWhat(str, Enum):
@@ -648,6 +653,25 @@ class SortCertOptions(str, Enum):
     expired = "expired"
     md5_checksum = "md5_checksum"
     sha1_checksum = "sha1_checksum"
+
+
+class SortRouteOptions(str, Enum):
+    destination = "destination"
+    interface = "interface"
+    nexthop = "nexthop"
+    protocol = "protocol"
+    flags = "flags"
+    metric = "metric"
+    best = "best"
+    learn_time = "learn_time"
+
+
+class SortOverlayInterfaceOptions(str, Enum):
+    name = "name"
+    endpoint = "endpoint"
+    state = "state"
+    uptime = "uptime"
+    routes = "routes"
 
 
 class SendCmdArgs(str, Enum):
