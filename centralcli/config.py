@@ -230,7 +230,7 @@ class Config:
             self.webhook = WebHook()
 
         try:
-            _snow_config = self.data[self.account].get("snow", {})
+            _snow_config = self.data.get(self.account, {}).get("snow", {})
             if _snow_config:
                 if _snow_config.get("token", {}):
                     _config_token = _snow_config["token"]
