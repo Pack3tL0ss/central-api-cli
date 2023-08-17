@@ -443,3 +443,71 @@ class SnowUpdate(BaseModel):
     u_impact: Optional[HighMedLow] = None
     u_urgency: Optional[HighMedLow] = None
     u_watch_list: Optional[str] = None
+
+# TODO not currently used.  ROUTES ospf/overlay/etc
+class Summary(BaseModel):
+    admin_status: bool
+    oper_state: str
+    channel_state: str
+    site: str
+    up_count: int
+    down_count: int
+    last_state_change: datetime
+    num_interfaces: int
+    advertised_routes: int
+    learned_routes: int
+
+    _normalize_datetimes = validator("last_state_change", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
+        }
+
+#learned
+class NexthopItem(BaseModel):
+    address: str
+    protocol: str
+    flags: str
+    is_best: bool
+    metric: int
+    interface: List[str]
+
+# advertised
+class NexthopListItem(BaseModel):
+    address: str
+    protocol: str
+    flags: str
+    metric: int
+    interface: str
+
+
+class RouteLearned(BaseModel):
+    prefix: str
+    length: int
+    protocol: str
+    flags: str
+    nexthop: str
+    metric: int
+    interface: str
+    nexthop_list: List[NexthopItem]
+
+
+class RouteAdvertised(BaseModel):
+    prefix: str
+    length: int
+    protocol: str
+    flags: str
+    nexthop: str
+    metric: int
+    interface: str
+    nexthop_list: List[NexthopListItem]
+
+
+class RoutesLearned(BaseModel):
+    summary: Summary
+    routes: List[RouteLearned]
+
+class RoutesAdvertised(BaseModel):
+    summary: Summary
+    routes: List[RouteAdvertised]
