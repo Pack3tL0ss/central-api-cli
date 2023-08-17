@@ -225,7 +225,7 @@ class Config:
         self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
         try:
-            self.webhook = WebHook(**self.data[self.account].get("webhook", {}))
+            self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
             self.webhook = WebHook()
 
