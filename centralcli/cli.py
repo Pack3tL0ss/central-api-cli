@@ -41,7 +41,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.cache import CentralObject
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs)
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs)
 
 iden = IdenMetaVars()
 
@@ -363,7 +363,7 @@ def remove(
 
 @app.command(help="Reboot a device")
 def reboot(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion,),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -384,6 +384,33 @@ def reboot(
 
     if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'reboot')
+        cli.display_results(resp, tablefmt="action")
+
+
+@app.command()
+def reset(
+    what: ResetArgs = typer.Argument("overlay"),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Reset overlay control connection (OTO/ORO)
+    """
+    # Not sure this works on APs/MB AP
+    dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
+
+    console = Console(emoji=False)
+    _msg = "Reset" if not yes else "Resetting"
+    _msg = f"{_msg} ORO connection for [cyan]{dev.rich_help_text}[/]"
+    console.print(_msg)
+
+    if yes or typer.confirm("Proceed?", abort=True):
+        resp = cli.central.request(cli.central.reset_overlay_connection, dev.serial)
         cli.display_results(resp, tablefmt="action")
 
 
