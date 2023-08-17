@@ -87,6 +87,11 @@ def test_dev_completion_case_insensitive(incomplete: str = "BSmT"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+def test_dev_ap_gw_completion(incomplete: str = "ant"):
+    result = [c for c in cache.dev_ap_gw_completion(incomplete, ["show", "overlay", "summary"])]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 def test_group_completion(incomplete: str = ""):
     result = [c for c in cache.group_completion(incomplete)]
     assert len(result) > 0
@@ -94,5 +99,10 @@ def test_group_completion(incomplete: str = ""):
 
 def test_group_completion_case_insensitive(incomplete: str = "w"):
     result = [c for c in cache.group_completion(incomplete)]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_site_completion(incomplete: str = ""):
+    result = [c for c in cache.dev_site_completion(incomplete, ("show", "vlans",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
