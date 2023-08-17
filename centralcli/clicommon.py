@@ -500,7 +500,7 @@ class CLICommon:
                         r.output,
                         tablefmt=tablefmt,
                         title=title,
-                        caption=caption,
+                        caption=caption if idx == len(resp) - 1 else None,
                         pager=pager,
                         outfile=outfile,
                         sort_by=sort_by,
