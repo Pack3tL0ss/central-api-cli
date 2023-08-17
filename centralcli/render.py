@@ -259,8 +259,15 @@ def rich_output(
         )
 
         fold_cols = [*fold_cols, *RICH_FOLD_COLS]
+
         _min_max = {'min': 10, 'max': 30}
-        set_width_cols = set_width_cols or {'name': _min_max, 'model': _min_max}
+        if not set_width_cols:
+            set_width_cols = {'name': _min_max, 'model': _min_max}
+        else:
+            for col, value in set_width_cols.items():
+                if isinstance(value, int):  # allow simply specifying max width
+                    set_width_cols[col] = {"max": value}
+
         full_cols = [*full_cols, *RICH_FULL_COLS]
 
         for k in outdata[0].keys():
@@ -268,7 +275,7 @@ def rich_output(
                 table.add_column(k, overflow='fold', max_width=115, justify='left')
             elif k in set_width_cols:
                 table.add_column(
-                    k, min_width=set_width_cols[k]['min'],
+                    k, min_width=set_width_cols[k].get('min', 0),
                     max_width=set_width_cols[k]['max'],
                     justify='left'
                 )

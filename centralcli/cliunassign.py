@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.cache import CentralObject
-from centralcli.constants import LicenseTypes, IdenMetaVars
+from centralcli.constants import IdenMetaVars
 iden = IdenMetaVars()
 
 app = typer.Typer()
@@ -29,10 +29,9 @@ app = typer.Typer()
 
 @app.command(help="unassign License from device(s)")
 def license(
-    license: LicenseTypes = typer.Argument(..., help="License type to unassign from device(s)."),
+    license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -40,7 +39,6 @@ def license(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
     try:
         devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
     except typer.Exit:  # allows un-assignment of devices that never checked into Central

@@ -501,7 +501,6 @@ def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, v
         return PreConfig(name=node, config=config_out, request=br(cli.central.replace_ap_config, node, clis=commands))
 
 
-# TODO update cache after successful group add
 def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
     console = Console(emoji=False)
     br = cli.central.BatchRequest
@@ -624,29 +623,72 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
             # Validate license types
             for d in data:
                 if d["license"]:
-                    try:
-                        d["license"] = LicenseTypes(d["license"].lower().replace("_", "-")).name
-                    except ValueError:
-                        # TODO cache LicensTypes updating only when no match is found
-                        warn = True
-                        print(f"[bright_red]!![/] {d['license']} does not appear to be a valid license type")
+                    for idx in range(2):
+                        try:
+                            # d["license"] = LicenseTypes(d["license"].lower().replace("_", "-")).name
+                            d["license"] = cli.cache.LicenseTypes(d["license"].lower().replace("_", "-")).name
+                            break
+                        except ValueError:
+                            if idx == 0:
+                                print(f'[bright_red]!![/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
+                                resp = cli.central.request(cli.cache.update_license_db)
+                                if not resp:
+                                    cli.display_results(resp, exit_on_fail=True)
+                            else:
+                                print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
+                                warn = True
 
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
-    if not warn or typer.confirm("Warnings exist proceed?", abort=True):
+    msg_pfx = "" if not warn else "Warning exist "
+    if not warn or yes or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
-        # TODO use new configuration_preprovision to preassign to group
         _data = None if not all([r.ok for r in resp]) else data
         asyncio.run(cli.cache.update_inv_db(data=_data))
         return resp
 
 
-def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
+# TODO this has not been tested validated at all
+# TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
+def batch_add_labels(import_file: Path, yes: bool = False) -> List[Response]:
     data = config.get_file_data(import_file)
     if hasattr(data, "headers"):
         headers = data.headers
 
-    raise NotImplemented("Batch Deploy is not implemented yet")
+        data = data if not hasattr(data, "dict") else data.dict
+        if isinstance(data, dict) and "labels" in data:
+            data = data["labels"]
+
+    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
+    print(f'Creating the following Labels: [cyan]{data}[/]')
+    if yes or typer.confirm("Proceed?", abort=True):
+        reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
+        resp = cli.central.batch_request(reqs)
+        # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
+        _data = None if not all([r.ok for r in resp]) else data
+        asyncio.run(cli.cache.update_label_db(data=_data))  # TODO validate format
+        return resp
+
+
+# TODO TEST and complete.
+def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
+    print("Batch Deploy is new, and has not been completely tested yet.")
+    if typer.confirm("Proceed?"):
+        data = config.get_file_data(import_file)
+        # TODO add support for injecting group sites labels into deploy file by referencing another file (i.e. homeassistant <!groups.yaml)
+        if "groups" in data:
+            batch_add_groups(import_file=import_file, yes=yes)
+        if "sites" in data:
+            resp = batch_add_sites(import_file=import_file, yes=yes)
+            if resp is not None:
+                cli.display_results(resp)
+        if "labels" in data:
+            print("[bright_red]WARNING!![/]: batch add labels not tested yet.  Trying using untested function, as there is no real risk if it fails.")
+            resp = batch_add_labels(import_file=import_file, yes=yes)
+            cli.display_results(resp)
+        if "devices" in data:
+            resp = batch_add_devices(import_file=import_file, yes=yes)
+            cli.display_results(resp)
 
 
 @app.command(short_help="Validate a batch import")
@@ -785,8 +827,15 @@ def deploy(
 ) -> None:
     """Batch Deploy from import.
 
-    Will deploy, groups, sites, devices, labels, and group level configuration.
+    Batch Deploy can deploy the following:
+        - Groups (along with group level configs for APs and/or GWs if provided)
+        - Sites
+        - Labels
+        - Devices
+
+    Use --example to see example import file format.
     """
+    # TODO allow optional argument for --example to show example in various formats.
     if show_example:
         print(examples.deploy)
         return
@@ -811,8 +860,7 @@ def add(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, show_default=False,),
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
         callback=cli.default_callback,
@@ -827,8 +875,6 @@ def add(
     ),
 ) -> None:
     """Perform batch Add operations using import data from file."""
-    yes = yes_ if yes_ else yes
-
     if show_example:
         print(getattr(examples, f"add_{what}"))
         return
@@ -847,11 +893,14 @@ def add(
         resp = batch_add_sites(import_file, yes)
         cli.display_results(resp)
     elif what == "groups":
-        print(":warning: This flow is still in development.")
+        print(":warning: This flow is still in development.")  # TODO Test and remove
         if typer.confirm("Are you sure you want to proceed?", abort=True):
             batch_add_groups(import_file, yes)  # results displayed in batch_add_groups
     elif what == "devices":
         resp = batch_add_devices(import_file, yes)
+        cli.display_results(resp, tablefmt="action")
+    elif what == "labels":
+        resp = batch_add_labels(import_file, yes)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -1103,7 +1152,10 @@ def delete(
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
-        print("Batch Delete Groups is not implemented yet.")
+        print("Batch Delete Groups is not implemented yet.")  # TODO implement these
+        raise typer.Exit(1)
+    elif what == "labels":
+        print("Batch Delete Labels is not implemented yet.")
         raise typer.Exit(1)
     cli.display_results(resp, tablefmt="action")
 

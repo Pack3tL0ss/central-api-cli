@@ -290,36 +290,37 @@ def template(
 # TODO simplify do not allow batch delete via this command, only via batch delete
 @app.command(short_help="Delete devices.")
 def device(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed."),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
+    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  App assignment and subscriptions remain intact."),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",
     ),
     debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     """Delete devices.
 
-    Removes the devices assignment with the Aruba Central app in GreenLake.
-    Which makes it possible to add it to a different GL account.
+    Unassigns any subscriptions and removes the devices assignment with the Aruba Central app in GreenLake.
+    Which makes it possible to add it to a different GreenLake WorkSpace.
 
+    Devices are also removed from the Central monitoring views/UI (after waiting for them to disconnect).
 
-    Devices are also removed from  the monitoring views (after waiting for them to disconnect)
+    Use --ui-only to remove the device from monitoring views/UI only.
 
-    `cencli unassign license <LICENSE> <DEVICES>` can also be used to unassign a specific license
-    from a device(s), but to keep the assignment in GreenLake.
+    [cyan]cencli unassign license <LICENSE> <DEVICES>[/] can also be used to unassign a specific license
+    from a device(s), (device will remain associated with central App in GreenLake).
     """
-    yes = yes_ if yes_ else yes
     # TODO common string helpers
+    # TODO update cache earlier as there are early exits... make more elegant
 
     br = cli.central.BatchRequest
     console = Console(emoji=False)
@@ -363,13 +364,17 @@ def device(
             _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
         print("")
 
+    _total_reqs = len(reqs) + len(delayed_reqs) if not ui_only else len(reqs)
+
+    # None of the provided devices were found in cache or inventory
+    if not _total_reqs > 0:
+        print("Everything is as it should be, nothing to do.")
+        raise typer.Exit(0)
 
     # construnct confirmation msg
-    _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
+    _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"  # TODO Verify is it still possible for cache_devs to be empty here?
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-
-    _total_reqs = len(reqs) + len(delayed_reqs) if not ui_only else len(reqs)
 
     if ui_only:
         if delayed_reqs:
@@ -382,13 +387,6 @@ def device(
             _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
 
     _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
-
-
-    # None of the provided devices were found in cache or inventory
-    if not _total_reqs > 0:
-        print("Everything is as it should be, nothing to do.")
-        raise typer.Exit(0)
-
 
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
@@ -428,11 +426,14 @@ def device(
 
     batch_resp += del_resp or _del_resp
 
+    # FIXME cache update is flawed as this won't hit if there are not any delayed responses
     if batch_resp:
         with console.status("Performing cache updates..."):
             db_updates = []
             if devs_in_monitoring:  # Prepare db updates
                 db_updates += [br(cli.cache.update_dev_db, data=[d.serial for d in devs_in_monitoring], remove=True)]
+            if inv_del_serials:
+                db_updates += [br(cli.cache.update_inv_db, data=inv_del_serials, remove=True)]
             if all([r.ok for r in batch_resp]):
                 _ = cli.central.batch_request(db_updates)
             else:

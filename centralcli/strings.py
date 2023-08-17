@@ -89,6 +89,40 @@ name\nsite1\nsite2\nsite3
 {common_add_delete_end}
 """
 
+clibatch_add_labels = f"""
+[italic cyan]cencli batch add labels IMPORT_FILE[/]:
+For all formats, labels should be under a 'labels' key/header.
+
+-------------- [cyan]yaml[/] --------------------
+labels:
+  - example1
+  - example2
+  - example3
+
+[bright_green]- OR -[/]
+
+labels: \[example1, example2, example3]
+----------------------------------------
+[italic]Both are valid yaml[/]
+
+-------------- [cyan]json[/] --------------------
+"labels": [
+  "example1",
+  "example2",
+  "example3"
+]
+----------------------------------------
+
+-------------- [cyan]csv[/] ---------------------
+labels     [magenta]<-- this is the header column[/]
+example1       [magenta]<-- these are label names[/]
+example2
+example3
+----------------------------------------
+"""
+
+clibatch_delete_labels = clibatch_add_labels.replace('batch add labels', 'batch delete labels')
+
 # TODO verify aos10 default. make functional only tested with deploy yaml file need to make work for csv
 clibatch_add_groups = f"""
 
@@ -191,16 +225,18 @@ class ImportExamples:
         self.add_devices = clibatch_add_devices
         self.add_sites = clibatch_add_sites
         self.add_groups = clibatch_add_groups
+        self.add_labels = clibatch_add_labels
         self.delete_devices = clibatch_delete_devices
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
+        self.delete_labels = clibatch_delete_labels
         self.add_site = cliadd_site_help
         self.deploy = clibatch_deploy
 
     def __getattr__(self, key: str):
-        if not hasattr(self, key):
+        if key not in self.__dict__.keys():
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
-            return f":warning: Error no str defined  ImportExamples.{key}"
+            return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
 
 class LongHelp:
     def __init__(self):

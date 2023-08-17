@@ -329,6 +329,7 @@ class CLICommon:
                 if not all([True if sort_by in d else False for d in data]):
                     print(f":x: [dark_orange3]Error: [cyan]{sort_by}[reset] does not appear to be a valid field")
                     print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
+                    # print("Valid Fields:\n----------\n{}\n----------".format("\n".join([k.replace(" ", "_") for k in data[0].keys()])))  # TODO verify if sort field name is b4 or after cleaner and how sort handles space
                 else:
                     try:
                         type_ = str
@@ -499,7 +500,7 @@ class CLICommon:
                         r.output,
                         tablefmt=tablefmt,
                         title=title,
-                        caption=caption,
+                        caption=caption if idx == len(resp) - 1 else None,
                         pager=pager,
                         outfile=outfile,
                         sort_by=sort_by,

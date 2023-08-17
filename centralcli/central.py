@@ -1098,6 +1098,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # TODO cleanup the way raw is combined, see show wids all.
+    # TODO add full kwargs and type-hints
     async def get_all_devicesv2(self, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
@@ -1122,8 +1123,13 @@ class CentralApi(Session):
             resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
             return resp
 
+
         resp = res[-1]
-        _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
+        # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
+        if kwargs.get("calculate_client_count"):
+            _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
+        else:
+            _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
         if _output:
@@ -1150,22 +1156,17 @@ class CentralApi(Session):
 
         return resp
 
-    async def get_switch_ports(self, serial: str, slot: str = None, cx: bool = False) -> Response:
+    async def get_switch_ports(self, serial: str, slot: str = None) -> Response:
         """Switch Ports Details.
 
         Args:
             serial (str): Serial number of switch to be queried
             slot (str, optional): Slot name of the ports to be queried {For chassis type switches
                 only}.
-            cx (bool, optional): Set to True for ArubaOS-CX switches.
 
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO remove once confirmed the cx_ urls have been deprecated in favor of the logical route of having the
-        # one url work for both.
-        # sw_url = "cx_switches" if cx else "switches"
-        # url = f"/monitoring/v1/{sw_url}/{serial}/ports"
         url = f"/monitoring/v1/switches/{serial}/ports"
 
         params = {"slot": slot}
@@ -1426,6 +1427,8 @@ class CentralApi(Session):
                 'fields': fields,
             }
         }
+        dev_params["mobility_controllers"] = dev_params["gateways"]
+
         common_params = {
             "group": group,
             "label": label,
@@ -1439,6 +1442,35 @@ class CentralApi(Session):
         if dev_type == "aps":
             url = url.replace("v1", "v2")
         params = {**common_params, **dev_params[dev_type]}
+
+        return await self.get(url, params=params)
+
+    async def get_switch_stacks(
+        self,
+        hostname: str = None,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Switch Stacks.
+
+        Args:
+            hostname (str, optional): Filter by stack hostname
+            group (str, optional): Filter by group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v1/switch_stacks"
+
+        params = {
+            'hostname': hostname,
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
 
         return await self.get(url, params=params)
 
@@ -1987,7 +2019,6 @@ class CentralApi(Session):
         self,
         iden: str,
         stack: bool = False,
-        cx: bool = False,
         name: str = None,
         pvid: int = None,
         tagged_port: str = None,
@@ -2008,7 +2039,6 @@ class CentralApi(Session):
         Args:
             iden (str): Serial Number of Stack ID, Identifies the dev to return VLANs from.
             stack (bool, optional): Set to True for stack. Default: False
-            cx: (bool, optional): Set to True for ArubaOS-CX. Default: False
             name (str, optional): Filter by vlan name
             id (int, optional): Filter by vlan id
             tagged_port (str, optional): Filter by tagged port name
@@ -2027,14 +2057,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO looks like we can remove references to cx specific methods, they don't work
-        # schema not reflecting that wasted my time.
-        if not stack:
-            # sw_url = "cx_switches" if cx else "switches"
-            sw_url = "switches"
-        else:
-            sw_url = "cx_switch_stacks" if cx else "switch_stacks"
-
+        sw_url = "switches" if not stack else "switch_stacks"
         url = f"/monitoring/v1/{sw_url}/{iden}/vlan"
 
         params = {
@@ -4356,13 +4379,12 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # API-NOTE: grabs All valid license types, display names...
-    async def get_services_config(
+    async def get_valid_subscription_names(
         self,
         service_category: str = None,
-        device_type: str = None
+        device_type: str = None,
     ) -> Response:
-        """Get services licensing config.
+        """Get Valid subscription names from Central.
 
         Args:
             service_category (str, optional): Service category - dm/network
@@ -5368,6 +5390,152 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_overlay_connection(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Get information about overlay control connection.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/overlay/connection"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def reset_overlay_connection(
+        self,
+        device: str,
+    ) -> Response:
+        """Reset overlay control connection.
+
+        Args:
+            device (str): Device serial number
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/overlay/connection/reset"
+
+        params = {
+            'device': device
+        }
+
+        return await self.put(url, params=params)
+
+    async def get_overlay_routes_learned(
+        self,
+        device: str,
+        *,
+        best: bool = False,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List of learned routes from overlay.
+
+        Args:
+            device (str): Device serial number
+            best (bool): Return only best / preferred routes
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/overlay/route/learned"
+        if best:
+            url = f'{url}/best'
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_overlay_routes_advertised(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List of advertised routes to overlay.
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/overlay/route/advertised"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_overlay_interfaces(
+        self,
+        device: str,
+        marker: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """List of overlay interfaces (tunnels).
+
+        Args:
+            device (str): Device serial number
+            marker (str, optional): Opaque handle to fetch next page
+            limit (int, optional): page size Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/api/routing/v1/overlay/interface"
+
+        params = {
+            'device': device,
+            'marker': marker,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_denylist_clients(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get all denylist client mac address in device.
+
+        Args:
+            serial (str): Device id of virtual controller (AOS8 IAP) or serial of AOS10 ap.
+                Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/swarm/{serial}/blacklisting"
+
+        return await self.get(url)
 
     # // -- Not used by commands yet.  undocumented kms api -- //
     async def kms_get_synced_aps(self, mac: str) -> Response:

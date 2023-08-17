@@ -21,17 +21,14 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-
-from centralcli.constants import LicenseTypes
 app = typer.Typer()
 
 
 @app.command(short_help="Assign License to device(s)", hidden=False)
 def license(
-    license: LicenseTypes = typer.Argument(..., help="License type to apply to device(s)."),
-    serial_nums: List[str] = typer.Argument(...,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
+    serial_nums: List[str] = typer.Argument(..., show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -41,10 +38,9 @@ def license(
 ) -> None:
     """Assign Licenses to devices by serial number.
 
-    Device must already be added to Central.  Use 'cencli show inventory' to see devices that have been added.
-    Use '--license' option with 'cencli add device ...' to add device and assign license in one command.
+    Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
+    Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
     """
-    yes = yes_ if yes_ else yes
     # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     # TODO add confirmation method builder to output class

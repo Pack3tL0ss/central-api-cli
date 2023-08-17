@@ -44,8 +44,16 @@ def test_rate_limit():
     _ = [print(f"{r.ts} tr:{r.remain_day} psr: {r.remain_sec} ({r.reason}): [{r.method}] {r.url}") for r in central.requests]
     print(f"Time Elapsed for all calls: {end:.2f}")
     print(b_resp[-1].rl.text)
-    assert all([r.reason == "OK" for r in central.requests])
-    assert len(b_reqs) == len(central.requests)
+    failed = [r for r in central.requests if not r.ok]
+    successful_retries = [r for f in failed for r in central.requests if r.ok and r.url == f.url]
+    rate_limit_failures = [r for r in failed if r.status == 429]
+    print(f'Number of requests: {len(b_reqs)}, Number of Failures: {len(failed)}, Number failures successful on retry: {len(successful_retries)}')
+    if rate_limit_failures:
+        print(f"[bright_red]!![/] Rate Limit Failures {len(rate_limit_failures)}")
+    assert len(failed) == len(successful_retries)
+    assert len(b_reqs) == len([r for r in central.requests if r.ok])
+    assert len (rate_limit_failures) == 0
+    assert len(failed) < 2
 
 if __name__ == '__main__':
     test_rate_limit()

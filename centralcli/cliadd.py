@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, LicenseTypes, CertTypes, CertFormat, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
+from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
 from centralcli.strings import LongHelp
 help_text = LongHelp()
 
@@ -58,32 +58,31 @@ class AddGroupArgs(str, Enum):
 @app.command(short_help="Add a Device to Aruba Central.")
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
-    arg1: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    serial: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
-    arg2: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    mac: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    arg3: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
+    group: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    # arg4: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
+    # site: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    license: List[LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
-    yes = yes_ if yes_ else yes
     kwd_vars = [kw1, kw2, kw3]
-    vals = [arg1, arg2, arg3]
+    vals = [serial, mac, group]
     kwargs = {
         "mac": None,
         "serial": None,
@@ -138,6 +137,7 @@ def device(
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
+        # TODO need to update inventory cache after device add
 
 
 @app.command(short_help="Add a group", help="Add a group")
@@ -399,25 +399,23 @@ def site(
     #         Response: CentralAPI Response object
     #     """
 
-
+# TODO allow more than one label and use batch_request
 @app.command(help="Create a new label")
 def label(
     name: str = typer.Argument(..., ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     _msg = "Creating" if yes else "Create"
     print(f"{_msg} new label [cyan]{name}[/]")
     if yes or typer.confirm("Proceed?"):
         resp = cli.central.request(cli.central.create_label, name)
         cli.display_results(resp, cleaner=cleaner.get_labels)
-        if resp.ok:
+        if resp.ok:  # TODO pass data to cli.cache.update_label_db to update vs doing a subsequenct call
             asyncio.run(cli.cache.update_label_db(cleaner.get_labels(resp.output)))
 
 

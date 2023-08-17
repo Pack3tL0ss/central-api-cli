@@ -53,21 +53,12 @@ class ShowInventoryArgs(str, Enum):
     ap = "ap"
     gw = "gw"
     vgw = "vgw"
+    sw = "sw"
+    cx = "cx"
     switch = "switch"
-    others = "others"
 
 
-#  TODO can move to lib_to_api class below
-SHOWINVENTORY_LIB_TO_API = {
-    "all": "all",
-    "ap": "all_ap",
-    "switch": "switch",
-    "gw": "gateway",
-    "vgw": "vgw",
-    "others": "others"
-}
-
-class InventorySortOptions(str, Enum):
+class SortInventoryOptions(str, Enum):
     type = "type"
     model = "model"
     sku = "sku"
@@ -100,6 +91,10 @@ class CertFormat(str, Enum):
 class StartArgs(str, Enum):
     hook_proxy = "hook-proxy"
     hook2snow = "hook2snow"
+
+
+class ResetArgs(str, Enum):
+    overlay = "overlay"
 
 
 # wrapping keys from return for some calls that have no value
@@ -204,6 +199,7 @@ class ClientArgs(str, Enum):
     all = "all"
     mac = "mac"
     device = "device"
+    denylisted = "denylisted"
 
 
 class RefreshWhat(str, Enum):
@@ -251,6 +247,7 @@ class CacheArgs(str, Enum):
     templates = "templates"
     groups = "groups"
     labels = "labels"
+    licenses = "licenses"
     logs = "logs"
     events = "events"
     hook_config = "hook_config"
@@ -272,12 +269,14 @@ class BatchAddArgs(str, Enum):
     sites = "sites"
     groups = "groups"
     devices = "devices"
+    labels = "labels"
 
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
     # groups = "groups"
     devices = "devices"
+    # labels = "labels"
 
 
 class BatchRenameArgs(str, Enum):
@@ -320,6 +319,11 @@ class LicenseTypes(str, Enum):
     vgw500m = "vgw500m"
 
 
+class SubscriptionArgs(str, Enum):
+    details = "details"
+    stats = "stats"
+    names = "names"
+
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
@@ -352,6 +356,7 @@ class ArgToWhat:
         self.routes = self.route = "routes"
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
+        self.subscription = self.subscriptions = "subscription"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -436,7 +441,8 @@ APIMethodType = Literal[
     "template",
     "firmware",
     "event",
-    "tshoot"
+    "tshoot",
+    "inventory"
 ]
 
 
@@ -459,7 +465,7 @@ class LibToAPI:
         self.CX = self.cx = "cx"
         self.method_iden = None,
 
-        # from CentralApi consistent value to Random API value
+        # from CentralApi consistent value to Random API endpoint value
         self.monitoring_to_api = {
             "gw": "gateways",
             "ap": "aps",
@@ -473,7 +479,6 @@ class LibToAPI:
             "switch": "SWITCH",
             "cx": "SWITCH",
             "sw": "SWITCH",
-            "gateway": "CONTROLLER"  # TODO remove once cache is re-factored to use ['ap', 'cx', 'sw', 'gw']
         }
         self.template_to_api = {
             "gw": "MobilityController",
@@ -482,7 +487,6 @@ class LibToAPI:
             "cx": "CX",
             "sw": "ArubaSwitch"
         }
-        # TODO once cx is actually supported add it
         self.firmware_to_api = {
             "gw": "CONTROLLER",
             "ap": "IAP",
@@ -490,7 +494,6 @@ class LibToAPI:
             "cx": "CX",
             "sw": "HP"
         }
-        # Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
         self.event_to_api = {
             "gw": "GATEWAY",
             "ap": "ACCESS POINT",
@@ -508,6 +511,15 @@ class LibToAPI:
             "sw": "SWITCH",
             "switch": "SWITCH",
             "mas": "MAS"
+        }
+        self.inventory_to_api = {
+            "all": "all",
+            "ap": "all_ap",
+            "cx": "switch",
+            "sw": "switch",
+            "switch": "switch",
+            "gw": "all_controller",
+            "vgw": "vgw"
         }
 
     def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
@@ -641,6 +653,25 @@ class SortCertOptions(str, Enum):
     expired = "expired"
     md5_checksum = "md5_checksum"
     sha1_checksum = "sha1_checksum"
+
+
+class SortRouteOptions(str, Enum):
+    destination = "destination"
+    interface = "interface"
+    nexthop = "nexthop"
+    protocol = "protocol"
+    flags = "flags"
+    metric = "metric"
+    best = "best"
+    learn_time = "learn_time"
+
+
+class SortOverlayInterfaceOptions(str, Enum):
+    name = "name"
+    endpoint = "endpoint"
+    state = "state"
+    uptime = "uptime"
+    routes = "routes"
 
 
 class SendCmdArgs(str, Enum):

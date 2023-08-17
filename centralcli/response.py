@@ -60,13 +60,18 @@ class LoggedRequests:
         self.method = method
         self.reason = None
         self.ok = None
+        self.status = None
         self.remain_day = None
         self.remain_sec = None
 
-    def update(self, response: ClientResponse) -> None:
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.reason}) object at {hex(id(self))}>"
+
+    def update(self, response: ClientResponse):
         rh = response.headers
         self.reason = response.reason
         self.ok = response.ok
+        self.status = response.status
         self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
         self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
 
@@ -754,7 +759,7 @@ class Session():
         self.silent = True
         m_resp = []
         _tot_start = time.perf_counter()
-        chunked_calls = utils.chunker(api_calls, 7)
+        chunked_calls = utils.chunker(api_calls, 6)
         if not self.requests:  # only run vrfy first by itself if no calls have been made
             resp: Response = await api_calls[0].func(
                 *api_calls[0].args,
@@ -773,14 +778,20 @@ class Session():
         for chunk in chunked_calls:
             _start = time.perf_counter()
 
+            chunk_len = len(chunk)
+
+            # TODO verify this seems like the pause would need to be after the gather below, not within the gather
+            # as the pause could be processed at any time.... or send an asyncio.sleep(1) with each chunk to ensure they take a second
             if chunk != chunked_calls[-1]:
-                _br = self.BatchRequest(self.pause, (_start,))
-                chunk += [_br]
+                # _br = self.BatchRequest(self.pause, (_start,))
+                # chunk += [_br]
+                chunk += [self.BatchRequest(asyncio.sleep, (1.1,))]
             m_resp += await asyncio.gather(
                 *[call.func(*call.args, **call.kwargs) for call in chunk]
             )
             _elapsed = time.perf_counter() - _start
-            log.debug(f"chunk of {len(chunk)} took {_elapsed:.2f}.")
+            log.debug(f"chunk of {chunk_len} took {_elapsed:.2f}.")
+            # await self.pause(_start)  # pause to next second
 
         # strip out the pause/limiter responses (None)
         m_resp = utils.strip_none(m_resp)

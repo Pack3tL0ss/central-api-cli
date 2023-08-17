@@ -6,12 +6,13 @@
 # device results include site_id which we strip out as it's not useful for display, but it is useful for
 # internally.  Currently the site_id is being looked up from the site cache
 from __future__ import annotations
-from typing import Any, Literal, Dict, Sequence, Union, List
+from typing import Any, Literal, Dict, Sequence, Union, List, Set, Iterable
 from aiohttp.client import ClientSession
 from tinydb import TinyDB, Query
 from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
 from pathlib import Path
+from enum import Enum
 # from render import rich_capture
 
 import asyncio
@@ -113,6 +114,9 @@ class CentralObject:
 
         log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
         raise typer.Exit(1)
+
+    def __fields__(self) -> List[str]:
+        return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
 
     @property
     def generic_type(self):
@@ -286,6 +290,7 @@ class Cache:
             self.GroupDB = self.DevDB.table("groups")
             self.TemplateDB = self.DevDB.table("templates")
             self.LabelDB = self.DevDB.table("labels")
+            self.LicenseDB = self.DevDB.table("licenses")
             self.ClientDB = self.DevDB.table("clients")  # Updated only when show clients is ran
             # log db is used to provide simple index to get details for logs
             # vs the actual log id in form 'audit_trail_2021_2,...'
@@ -294,7 +299,7 @@ class Cache:
             self.EventDB = self.DevDB.table("events")
             self.HookConfigDB = self.DevDB.table("wh_config")
             self.HookDataDB = self.DevDB.table("wh_data")
-            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.ClientDB]
+            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
                 self.insert(data)
@@ -312,6 +317,10 @@ class Cache:
     @property
     def devices(self) -> list:
         return self.DevDB.all()
+
+    @property
+    def device_types(self) -> Set[str]:
+        return set([d["type"] if d["type"] not in ["cx", "sw"] else "switch" for d in self.DevDB.all()])
 
     @property
     def devices_by_serial(self) -> dict:
@@ -338,6 +347,17 @@ class Cache:
         return self.LabelDB.all()
 
     @property
+    def licenses(self) -> list:
+        return self.LicenseDB.all()
+
+    @property
+    def LicenseTypes(self) -> constants.LicenseTypes:
+        if len(self.licenses) > 0:
+            return Enum("ValidLicenseTypes", {item["name"]: item["name"].replace("_", "-") for item in self.licenses}, type=str)
+        else:
+            return constants.LicenseTypes
+
+    @property
     def clients(self) -> list:
         return self.ClientDB.all()
 
@@ -360,6 +380,10 @@ class Cache:
     @property
     def label_names(self) -> list:
         return [g["name"] for g in self.LabelDB.all()]
+
+    @property
+    def license_names(self) -> list:
+        return [lic["name"] for lic in self.LicenseDB.all()]
 
     @property
     def templates(self) -> list:
@@ -454,7 +478,7 @@ class Cache:
         out = []
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
-            args = [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
+            args = [v for k, v in ctx.params.items() if v and k in ["serial", "mac", "group"]]
 
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
@@ -511,13 +535,12 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
                 elif m.serial.startswith(incomplete):
                     out += [tuple([m.serial, m.help_text])]
-                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
                     out += [tuple([m.mac, m.help_text])]
                 elif m.ip.startswith(incomplete):
                     out += [tuple([m.ip, m.help_text])]
                 else:
-                    # failsafe, shouldn't hit
-                    out += [tuple([m.name, m.help_text])]
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m
@@ -688,7 +711,14 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
         dev_types = ["ap", "gw"]
-        match = [m for m in self.dev_completion(incomplete) if m.generic_type in dev_types]
+        _match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+
+        match = []
+        for m in _match:
+            if m.name in args or m.serial in args or m.mac in args:
+                continue
+            else:
+                match += [m]
 
         out = []
         if match:
@@ -845,7 +875,7 @@ class Cache:
     def group_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = [],
     ):
         match = self.get_group_identifier(
             incomplete,
@@ -1168,12 +1198,20 @@ class Cache:
                 self.responses.dev = resp
             return resp
 
-    async def update_inv_db(self, data: Union[str, List[str]] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_inv_db(
+            self, data: Union[str, List[str]] = None,
+            *,
+            remove: bool = False,
+            dev_type: str = "all",
+            sub: bool = None
+        ) -> Union[List[int], Response]:
         """Update Inventory Database (local cache).
 
         Args:
             data (Union[str, List[str]], optional): serial number of list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
+            dev_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
+            sub (str, optional): whether or not to filter return by subscribed / not subscribed. Defaults to None (no filter)
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1216,14 +1254,21 @@ class Cache:
                 if False in db_res:
                     log.error(f"Tiny DB returned an error during Inventory db update {db_res}", show=True)
         else:
-            resp = await self.central.get_device_inventory()
+            resp = await self.central.get_device_inventory(sku_type=dev_type)
             if resp.ok:
                 if resp.output:
                     resp.output = utils.listify(resp.output)
                     resp.output = cleaner.get_device_inventory(resp.output)
-
-                    self.InvDB.truncate()
-                    db_res = self.InvDB.insert_multiple(resp.output)
+                    if dev_type == "all":
+                        self.InvDB.truncate()
+                        db_res = self.InvDB.insert_multiple(resp.output)
+                    else:
+                        db_res = [
+                            self.InvDB.upsert(d, self.Q.serial == d.get("serial", "--"))
+                            for d in resp.output
+                        ]
+                    if sub is not None:  # filtered response for display, no filter prior for benefit of cache.
+                        resp.output = [dev for dev in resp.output if bool(dev["services"]) is sub]
                     if False in db_res:
                         log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
 
@@ -1322,8 +1367,26 @@ class Cache:
                 self.LabelDB.truncate()
                 update_res = self.LabelDB.insert_multiple(resp.output)
                 if False in update_res:
-                    log.error("Tiny DB returned an error during group db update")
+                    log.error("Tiny DB returned an error during label db update")
             return resp
+
+    async def update_license_db(self) -> Response:
+        """Update License DB
+
+        License DB stores the valid license names accepted by GreenLake/Central
+
+        Returns:
+            Response: CentralAPI Response Object
+        """
+        resp = await self.central.get_valid_subscription_names()
+        if resp.ok:
+            resp.output = [{"name": k} for k in resp.output.keys()]
+            self.updated.append(self.central.get_valid_subscription_names)
+            self.LicenseDB.truncate()
+            update_res = self.LicenseDB.insert_multiple(resp.output)
+            if False in update_res:
+                log.error("Tiny DB returned an error during license db update")
+        return resp
 
     async def update_template_db(self):
         # groups = self.groups if self.central.get_all_groups in self.updated else None
@@ -1441,6 +1504,7 @@ class Cache:
         template_db: bool = False,
         group_db: bool = False,
         label_db: bool = False,
+        license_db: bool = False,
         ):
         update_funcs, db_res = [], []
         if dev_db:
@@ -1455,6 +1519,8 @@ class Cache:
             update_funcs += [self.update_group_db]
         if label_db:
             update_funcs += [self.update_label_db]
+        if license_db:
+            update_funcs += [self.update_license_db]
         async with ClientSession() as self.central.aio_session:
             if update_funcs:
                 db_res += [await update_funcs[0]()]
@@ -1475,7 +1541,8 @@ class Cache:
                                 self.update_inv_db(),
                                 self.update_site_db(),
                                 self.update_template_db(),
-                                self.update_label_db()
+                                self.update_label_db(),
+                                self.update_license_db()
                             )
                         ]
         return db_res
@@ -1489,9 +1556,10 @@ class Cache:
         template_db: bool = False,
         group_db: bool = False,
         label_db: bool = False,
+        license_db: bool = False,
     ) -> List[Response]:
         db_res = None
-        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db]:
+        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db, license_db]:
             refresh = True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
@@ -1500,12 +1568,12 @@ class Cache:
 
             start = time.monotonic()
             db_res = asyncio.run(self._check_fresh(
-                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db
+                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db, license_db=license_db
                 )
             )
 
             if not all([r.ok for r in db_res]):
-                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db"]
+                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db", "license_db"]
                 res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
                 self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
             else:
@@ -1573,7 +1641,6 @@ class Cache:
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
         group: str = None,
-        multi_ok: bool = False,
         all: bool = False,
         completion: bool = False,
     ) -> Union[CentralObject, List[CentralObject]]:
@@ -1586,7 +1653,6 @@ class Cache:
                 Defaults to None.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
-            multi_ok (bool, optional): DEPRECATED, NO LONGER USED
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
                 When called for completion it will fail silently and will return multiple when multiple matches are found.
@@ -1600,6 +1666,8 @@ class Cache:
         match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
+        if "dev" in qry_funcs:  # move dev query last
+            qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
         for _ in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()
@@ -1634,14 +1702,14 @@ class Cache:
 
     def get_dev_identifier(
         self,
-        query_str: Union[str, List[str], tuple],
-        dev_type: Union[constants.GenericDevTypes, List[constants.GenericDevTypes]] = None,
+        query_str: str | Iterable[str],
+        dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
-    ) -> CentralObject:
+    ) -> CentralObject | List[CentralObject] | None:
 
         retry = False if completion else retry
         # TODO dev_type currently not passed in or handled identifier for show switches would also
