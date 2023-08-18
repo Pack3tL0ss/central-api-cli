@@ -163,25 +163,6 @@ class CentralApi(Session):
 
         return form
 
-    # TODO Verify deprecated and remove.  sort method in clicommon
-    @staticmethod
-    def _sorted(resp: Response, sort_by: str) -> Response:
-        if not resp:
-            return resp
-
-        type_error = True
-        if isinstance(resp, list):
-            if all([isinstance(d, dict) for d in resp.output]):
-                type_error = False
-                if sort_by in resp.output[-1].keys():
-                    resp.output = sorted(resp.output, key=lambda i: i[sort_by])
-                else:
-                    log.error(f"{sort_by} field not found in output.  No sort performed", show=True)
-        if type_error:
-            log.error("Unexpected response type no sort performed.", show=True)
-
-        return resp
-
     @staticmethod
     def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
         """strip all keys from a dict where value is NoneType"""
@@ -189,15 +170,6 @@ class CentralApi(Session):
             return _dict
 
         return {k: v for k, v in _dict.items() if v is not None}
-
-    # doesn't appear to work. referenced in swagger to get listing of types (New Device Inventory: Get Devices...)
-    async def get_dev_types(self):
-        url = "/platform/orders/v1/skus?sku_type=all"
-        return await self.get(url)
-
-    async def get_ap(self) -> Response:
-        url = "/monitoring/v1/aps"
-        return await self.get(url)
 
     async def get_swarms(
         self,
@@ -337,7 +309,6 @@ class CentralApi(Session):
             else:
                 return Response(error="INVALID MAC", output=f"The Provided MAC {_mac} Appears to be invalid.")
 
-        # if not args.count(str) > 0 or "all" in args:
         if not args or "all" in args:
             if mac:
                 return await self.get_client_details(mac,)
@@ -542,10 +513,6 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params,)
-        # if sort_by is None:
-        #     return resp
-        # else:
-        #     return self._sorted(resp, sort_by)
 
     async def get_wired_clients(
         self,
@@ -601,10 +568,6 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params,)
-        # if sort_by is None:
-        #     return resp
-        # else:
-        #     return self._sorted(resp, sort_by)
 
     async def get_client_details(
         self,
@@ -650,11 +613,6 @@ class CentralApi(Session):
             url = f"/monitoring/v1/clients/{dev_type}/{mac.url}"
             return await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
 
-        # if sort_by is None:
-        #     return resp
-        # else:
-        #     return self._sorted(resp, sort_by)
-
     async def get_certificates(
         self, q: str = None, offset: int = 0, limit: int = 20, callback: callable = None, callback_kwargs: dict = None
     ) -> Response:
@@ -675,39 +633,6 @@ class CentralApi(Session):
         params = {"q": q, "offset": offset, "limit": limit}
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
-
-    # async def upload_certificate(
-    #     self,
-    #     cert_name: str,
-    #     cert_type: Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"],
-    #     cert_format: Literal["PEM", "DER", "PKCS12"],
-    #     passphrase: str,
-    #     cert_data: str,
-    # ) -> Response:
-    #     """Upload a certificate.
-
-    #     Args:
-    #         cert_name (str): cert_name
-    #         cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
-    #             OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
-    #         cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
-    #         passphrase (str): passphrase
-    #         cert_data (str): Certificate content encoded in base64 for all format certificates.
-
-    #     Returns:
-    #         Response: CentralAPI Response object
-    #     """
-    #     url = "/configuration/v1/certificates"
-
-    #     json_data = {
-    #         'cert_name': cert_name,
-    #         'cert_type': cert_type,
-    #         'cert_format': cert_format,
-    #         'passphrase': passphrase,
-    #         'cert_data': cert_data
-    #     }
-
-    #     return await self.post(url, json_data=json_data)
 
     async def get_template(self, group: str, template: str) -> Response:
         url = f"/configuration/v1/groups/{group}/templates/{template}"
@@ -806,7 +731,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
-        formdata = aiohttp.FormData()
+        # formdata = aiohttp.FormData()
         if isinstance(template, bytes):
             # formdata.add_field("template", {"template": template}, filename="template.txt")
             # files = aiohttp.FormData([("template", ("template.txt", template),)])
@@ -830,6 +755,18 @@ class CentralApi(Session):
 
         # wr = formdata()
         # data = f'--{wr.boundary}\r\nContent-Disposition: form-data; name="template";filename="template.txt"{wr._parts[0][0]._value.decode()}\r\n--{wr.boundary}'.encode("utf-8")
+
+        # -- Working form from wh2snow
+        # # Create a FormData object
+        # _form = aiohttp.FormData()
+
+        # # Add some data to the form
+        # _form.add_field('grant_type', 'refresh_token')
+        # _form.add_field('client_id', config.snow.client_id)
+        # _form.add_field('client_secret', config.snow.client_secret)
+        # _form.add_field('refresh_token', tok.refresh)
+        # async with aiohttp.ClientSession() as session:
+        #     response = await session.post(str(config.snow.refresh_url), data=_form)
         device_type = device_type if not hasattr(device_type, "value") else device_type.value
         device_type = constants.lib_to_api("template", device_type)
 
@@ -4344,8 +4281,7 @@ class CentralApi(Session):
 
         Args:
             license_type (str, optional): Supports basic/special/all.
-                special - will fetch the statistics of special central services like presence
-                    analytics(pa), ucc, clarity etc.
+                special - will fetch the statistics of special central services like pa, ucc, clarity etc.
                 basic - will fetch the statistics of device management service licenses.
                 all - will fetch both of these license types.
 
