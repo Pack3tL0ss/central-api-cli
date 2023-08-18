@@ -270,6 +270,10 @@ class CacheResponses:
     def label(self, resp: Response):
         self._label = resp
 
+# class LicenseDB:
+#     def all(self):
+#         pass
+
 
 class Cache:
     def __init__(
@@ -283,6 +287,7 @@ class Cache:
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.responses = CacheResponses()
+        # self.LicenseDB = LicenseDB()  # for the benefit of sphinx
         if config.valid and config.cache_dir.exists():
             self.DevDB = TinyDB(config.cache_file)
             self.InvDB = self.DevDB.table("inventory")
@@ -347,13 +352,16 @@ class Cache:
         return self.LabelDB.all()
 
     @property
-    def licenses(self) -> list:
-        return self.LicenseDB.all()
+    def licenses(self) -> List[str]:
+        if hasattr(self, "LicenseDB"):
+            return [lic["name"] for lic in self.LicenseDB.all()]
+        else:
+            return [lic.value for lic in constants.LicenseTypes]
 
     @property
     def LicenseTypes(self) -> constants.LicenseTypes:
         if len(self.licenses) > 0:
-            return Enum("ValidLicenseTypes", {item["name"]: item["name"].replace("_", "-") for item in self.licenses}, type=str)
+            return Enum("ValidLicenseTypes", {item: item.replace("_", "-") for item in self.licenses}, type=str)
         else:
             return constants.LicenseTypes
 

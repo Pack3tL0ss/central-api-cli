@@ -10,16 +10,15 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
 import os
 import sys
-
+# Add past for custom extensions
+sys.path.insert(0, os.path.abspath("./_ext"))
+# path to project directory
 sys.path.insert(0, os.path.abspath(".."))
 
 # Make README the index
-# index_master = True  # didn't change anything
+index_master = True
 
 # -- Project information -----------------------------------------------------
 
@@ -43,6 +42,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "myst_parser",
     "sphinx_click",
+    # "richunstyle",
 ]
 source_suffix = [".rst", ".md"]
 
