@@ -75,7 +75,7 @@ def move(
     device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion),
     kw1: str = typer.Argument(
         None,
-        metavar="",
+        # metavar="",
         show_default=False,
         hidden=True,
     ),
@@ -85,7 +85,8 @@ def move(
         show_default=False,
     ),
     kw2: str = typer.Argument(
-        None, metavar="",
+        None,
+        # metavar="",
         show_default=False,
         hidden=True,
     ),

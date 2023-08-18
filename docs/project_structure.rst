@@ -7,17 +7,8 @@ Project Structure
 
     ├── centralcli
     │   ├── __init__.py
-    │   ├── boilerplate                 # Boilerplate code generated via custom script from JSON schema files.
+    │   ├── boilerplate           # Boilerplate code generated via custom script from JSON schema files.
     │   │   ├── allcalls.py             # Any methods used by centralcli are pulled out and placed in central.py
-    │   │   ├── configuration.py        # for now, central.py will eventually be broken out into diff modules.
-    │   │   ├── firmware.py
-    │   │   ├── guest.py
-    │   │   └── wlan.py
-    │   │   ├── 2.5.3                   # methods created from Central 2.5.3 Schema
-    │   │   │   ├── _allcalls_2_5_3.py
-    │   │   │   ├── _firmware_2_5_3.py
-    │   │   │   ├── _guest_2_5_3.py
-    │   │   │   └── _wlan_2_5_3.py
     │   ├── caas.py               # Working caas API module, `cencli caas ...` (hidden command)
     │   ├── cache.py              # Local caching module facilitates use of device name / fuzzy match
     │   ├── central.py            # Contains methods that build the API calls

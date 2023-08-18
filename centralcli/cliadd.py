@@ -55,14 +55,14 @@ class AddGroupArgs(str, Enum):
 # TODO update completion with mac oui, serial prefix
 # TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
-@app.command(short_help="Add a Device to Aruba Central.")
+@app.command()
 def device(
-    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="",),
-    serial: str = typer.Argument(..., metavar="serial [SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion),
-    mac: str = typer.Argument(..., metavar="mac [MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
-    group: str = typer.Argument(None, metavar="group [GROUP]", help="pre-assign device to group",
+    kw1: AddGroupArgs = typer.Argument(..., hidden=False, metavar="serial",),
+    serial: str = typer.Argument(..., metavar="[SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw2: str = typer.Argument(..., hidden=False, metavar="mac", autocompletion=cli.cache.smg_kw_completion),
+    mac: str = typer.Argument(..., metavar="[MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw3: str = typer.Argument(None, metavar="group", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    group: str = typer.Argument(None, metavar="[GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     # site: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
@@ -81,6 +81,8 @@ def device(
         rich_help_panel="Common Options",
     ),
 ) -> None:
+    """Add a Device to Aruba Central.
+    """
     kwd_vars = [kw1, kw2, kw3]
     vals = [serial, mac, group]
     kwargs = {
