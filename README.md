@@ -47,7 +47,7 @@ Refer to [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blo
 CentralCli will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>\\.centralcli.
 i.e. on Windows `c:\Users\wade\.centralcli` or on Linux `/home/wade/.config/centralcli`
 
-Once `config.yaml` is populated per [config.yaml.example](config/config.yaml.example), run some test commands to validate the config.
+Once `config.yaml` is populated per [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blob/master/config/config.yaml.example), run some test commands to validate the config.
 
 For Example `cencli show all`
 
