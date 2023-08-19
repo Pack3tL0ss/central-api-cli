@@ -281,8 +281,6 @@ class CentralApi(Session):
     ) -> Response:
         """Get Clients details.
 
-        // Used by show clients ... //
-
         Args:
             group (str, optional): Filter by Group. Defaults to None.
             swarm_id (str, optional): Filter by swarm. Defaults to None.
@@ -788,8 +786,6 @@ class CentralApi(Session):
     ) -> Response:
         """Create new template.
 
-        // Used by add template ... //
-
         Args:
             name (str): Name of template.
             group (str): Name of the group for which the template is to be created.
@@ -936,7 +932,7 @@ class CentralApi(Session):
         return await self.patch(url, params=params, payload=template_data)
 
     # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
-    # and it doesn't catch all exceptions so possible to get exception when eval resp... our Response object is better IMHO
+    # and it doesn't catch all exceptions so possible to get exception when eval resp our Response object is better IMHO
     async def _update_existing_template(
         self,
         group: str,
@@ -974,8 +970,6 @@ class CentralApi(Session):
         template: str,
     ) -> Response:
         """Delete existing template.
-
-        // Used by delete template ... //
 
         Args:
             group (str): Name of the group for which the template is to be deleted.
@@ -1680,7 +1674,7 @@ class CentralApi(Session):
     async def get_site_details(self, site_id):
         return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
 
-    # TODO make command this shows events from devices (User ack rec from DHCP server, EAP response for client...)
+    # TODO make command this shows events from devices (User ack rec from DHCP server, EAP response for client)
     async def get_events(
         self,
         group: str = None,
@@ -2394,8 +2388,6 @@ class CentralApi(Session):
         limit: int = 100,
     ) -> Response:
         """Get all audit events for all groups.
-
-        Currently not used for any commands added to compare output to .../platform/... path (get_audit_logs)
 
         Args:
             group_name (str, optional): Filter audit events by Group Name
@@ -4325,8 +4317,7 @@ class CentralApi(Session):
         """Get user subscription keys.
 
         Args:
-            license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing
-                types as well
+            license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing types as well
             offset (int, optional): offset or page number Defaults to 0.
             limit (int, optional): Number of subscriptions to get Defaults to 100.
 
@@ -4969,20 +4960,21 @@ class CentralApi(Session):
             name (str, optional): site / label name or part of its name
             column (int, optional): Column to sort on
             reverse (bool, optional): Sort in reverse order:
+                Valid Values: asc, desc
                 * asc - Ascending, from A to Z.
                 * desc - Descending, from Z to A.
-                Valid Values: asc, desc
+
+
             filters (str, optional): Site thresholds
-                * All properties of a site can be used as filter parameters with a threshold
-                * The range filters can be combined with the column names with "\__"  # noqa
-                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in  # noqa
-                down state
-                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan  # noqa
-                in down state
-                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10  # noqa
-                devices in up state
                 Valid Values: gt  (Greater than), lt  (Less than), gte (Greater than or equal to),
                 lte (Less than or equal to)
+                * All properties of a site can be used as filter parameters with a threshold
+                * The range filters can be combined with the column names with "\__"  # noqa
+                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in down state # noqa
+                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan in down state # noqa
+                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10 devices up # noqa
+
+
             offset (int, optional): pagination start index Defaults to 0.
             limit (int, optional): pagination size Defaults to 100.
 
@@ -5035,8 +5027,6 @@ class CentralApi(Session):
     ) -> Response:
         """Archive devices using Serial list.
 
-        // Used by archive dev ... //
-
         Args:
             serials (List[str]): serials
 
@@ -5057,8 +5047,6 @@ class CentralApi(Session):
         serials: List[str],
     ) -> Response:
         """Unarchive devices using Serial list.
-
-        // Used by unarchive dev ... //
 
         Args:
             serials (List[str]): serials
@@ -5081,8 +5069,6 @@ class CentralApi(Session):
         limit: int = 100,
     ) -> Response:
         """Get all portals with limited data.
-
-        // Used by show portals ... //
 
         Args:
             sort (str, optional): + is for ascending  and - for descending order , sorts by name for now
