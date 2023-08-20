@@ -42,7 +42,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "myst_parser",
     "sphinx_click",
-    # "richunstyle",
+    "richunstyle",
 ]
 source_suffix = [".rst", ".md"]
 

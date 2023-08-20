@@ -1102,8 +1102,7 @@ def delete(
         help="Show Example import file format.",
         show_default=False,
     ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
     ),
@@ -1117,8 +1116,8 @@ def delete(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    yes = yes_ if yes_ else yes
-    # TODO consider moving all example imports to cencli show import ...
+    """Batch delete Aruba Central Objects [devices|sites|groups|labels] based on input from file.
+    """
     if show_example:
         print(getattr(examples, f"delete_{what}"))
         return
@@ -1127,9 +1126,9 @@ def delete(
     elif not import_file:
         _msg = [
             "Usage: cencli batch delete [OPTIONS] ['devices'|'sites'|'groups'] IMPORT_FILE",
-            "Try 'cencli batch delete ?' for help.",
+            "Use [cyan]cencli batch delete --help[/] for help.",
             "",
-            "Error: Invalid combination of arguments / options.",
+            "[bright_red]Error[/]: Invalid combination of arguments / options.",
             "Provide IMPORT_FILE or --show-example"
         ]
         print("\n".join(_msg))
