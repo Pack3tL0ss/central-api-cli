@@ -914,12 +914,12 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def get_lldp_neighbor(data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    data = utils.listify(data)
     strip_keys = ["cid"]
     _short_val = {
         "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode": "1000BaseT FD"
     }
-    if len(data) > 1:
-        data = {k: _short_val.get(d[k], d[k]) for d in data for k in d if d["localPort"] != "bond0" and k not in strip_keys}
+    data = [{k: _short_val.get(d[k], d[k]) for k in d if d["localPort"] != "bond0" and k not in strip_keys} for d in data]
 
     return strip_no_value(utils.listify(data))
 
