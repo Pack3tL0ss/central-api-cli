@@ -19,12 +19,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
     else:
         print(pkg_dir.parts)
         raise e
@@ -168,8 +168,8 @@ def show_devices(
     )
 
 
-@app.command()
-def all(
+@app.command("all")
+def all_(
     group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
@@ -895,12 +895,14 @@ def upgrade(
 @app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, show_default=False),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),
+    update_cache: bool = typer.Option(False, "-U", hidden=True,),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option(
@@ -913,8 +915,17 @@ def cache_(
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_table=do_table, default="yaml")
-        cli.display_results(data=cache_out, tablefmt=tablefmt, tile=f"Cache {', '.join(args)}", pager=pager, outfile=outfile)
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich")
+        cli.display_results(
+            data=cache_out,
+            tablefmt=tablefmt,
+            title=f'Cache {arg.title().replace("_", " ")}',
+            pager=pager,
+            outfile=outfile,
+            sort_by=sort_by,
+            reverse=reverse,
+            stash=False,
+        )
 
 
 @app.command(short_help="Show groups/details")
@@ -1213,8 +1224,9 @@ def variables(
 def lldp(
     device: List[str] = typer.Argument(
         ...,
-        metavar=iden_meta.dev,
-        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete, args=["ap"])
+        metavar=iden_meta.dev_many,
+        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete, args=["ap"]),
+        show_default=False,
     ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
@@ -1240,20 +1252,18 @@ def lldp(
 ) -> None:
     central = cli.central
 
-    # We take last arg [-1] from list so they can type "neighbor" if they want.
-    dev = cli.cache.get_dev_identifier(device[-1], dev_type="ap")
-
-    if dev.type != "ap":
-        typer.secho(f"This command is currently only valid for APs.  {dev.name} is type: {dev.type}", fg="red")
-        raise typer.Exit(1)
-
-    resp = central.request(central.get_ap_lldp_neighbor, dev.serial)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    devs = [cli.cache.get_dev_identifier(_dev, dev_type="ap") for _dev in device if not _dev.lower().startswith("neighbor")]
+    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs]
+    batch_resp = central.batch_request(batch_reqs)
+    if all([res.ok for res in batch_resp]):
+        concat_resp = batch_resp[-1]
+        concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
     cli.display_results(
-        resp,
+        concat_resp,
         tablefmt=tablefmt,
-        title=f"{dev.name} lldp neighbor",
+        title=f"LLDP Neighbor Info",
         pager=pager,
         outfile=outfile,
         cleaner=cleaner.get_lldp_neighbor,
