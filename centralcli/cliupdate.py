@@ -443,8 +443,7 @@ def site(
     new_name: str = typer.Option(None, show_default=False, help="Change Site Name"),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False),
     lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"
     ),
@@ -469,8 +468,6 @@ def site(
 
     [italic green3]Wrap Arguments that contain spaces in quotes i.e. "5402 Champions Hill Dr"[/]
     """
-    yes = yes_ if yes_ else yes
-
     site_now = cli.cache.get_site_identifier(site_name)
 
     # These conversions just make the fields match what is used if done via GUI
@@ -501,7 +498,7 @@ def site(
         raise typer.Exit(1)
 
     print(f"Updating Site: {site_now.summary_text}")
-    print(" [bright_green]Send the following updates:[reset]")
+    print(f" [bright_green]Send{'ing' if yes else ''} the following updates:[reset]")
     rename_only = False
     if new_name and site_now.name != new_name:
         # Only provided new name send current address info to endpoint along with new name (name alone not allowed)
@@ -520,8 +517,7 @@ def site(
         resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:
-            # FIXME  this does a full cache update, not an update based on the change above
-            asyncio.run(cli.cache.update_site_db())
+            asyncio.run(cli.cache.update_site_db(data={"name": new_name or site_now.name, "id": site_now.id, **address_fields}))
 
 
 @app.callback()
