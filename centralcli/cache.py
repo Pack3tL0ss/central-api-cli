@@ -1184,8 +1184,8 @@ class Cache:
         """Update Device Database (local cache).
 
         Args:
-            data (Union[str, List[str]], List[dict] optional): serial number of list of serials numbers to add or remove. Defaults to None.
-            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
+            data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
+            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1197,9 +1197,14 @@ class Cache:
         if data:
             data = utils.listify(data)
             if not remove:
-                db_res = self.DevDB.insert_multiple(data)
-                if False in db_res:
+                upd = [self.DevDB.upsert(dev, cond=self.Q.serial == dev.get("serial")) for dev in data]
+                upd = [item for in_list in upd for item in in_list]
+                if False in upd:
                     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+                return upd
+                # db_res = self.DevDB.insert_multiple(data)
+                # if False in db_res:
+                #     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
             else:
                 doc_ids = []
                 for qry in data:
@@ -1334,7 +1339,10 @@ class Cache:
             data = utils.listify(data)
             if not remove:
                 data = [{k.replace("site_", ""): v for k, v in d.items()} for d in data]
-                return self.SiteDB.insert_multiple(data)
+                upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in data]
+                upd = [item for in_list in upd for item in in_list]
+                return upd
+                # return self.SiteDB.insert_multiple(data)
             else:
                 doc_ids = []
                 for qry in data:
