@@ -623,6 +623,13 @@ class SortOptions(str, Enum):
     serial_asc = "+serial"
     serial_des = "-serial"
 
+
+class SortWlanOptions(str, Enum):
+    ssid = "ssid"
+    security = "security"
+    type = "type"
+
+
 class SortDevOptions(str, Enum):
     name = "name"
     model = "model"
