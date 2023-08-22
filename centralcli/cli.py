@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from time import sleep
 from typing import List
+import asyncio
 
 from rich import print
 from rich.console import Console
@@ -116,8 +117,7 @@ def move(
         help="Reset group membership.  (move to the defined default group)",
     ),
     cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -125,7 +125,6 @@ def move(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
     central = cli.central
     console = Console()
 
@@ -137,11 +136,6 @@ def move(
             site = b
         else:
             device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site"]])
-
-    # Don't think it's possible to hit this (typer or cache lookup will fail first)
-    # if not device and not import_file:
-    #     print("Missing Required argument '[[name|ip|mac|serial] ...]'.")
-    #     raise typer.Exit(1)
 
     group = group or _group
 
@@ -259,7 +253,7 @@ def move(
     # only moving group via single API call
     elif confirmed and _group:
         resp = [
-            cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials)
+            cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials, cx_retain_config=cx_retain_config)
         ]
 
     # only moving site, potentially multiple calls (for each device_type)
@@ -267,14 +261,21 @@ def move(
     # the cache can get out of sync because this move op does not update the cache  Need to do that and part of that
     # problem is solved.  partial workup to avoid in scratch, but cache update should be done first
     elif confirmed and _site:
+        reqs, site_move_devs = [], []
         for _type in devs_by_type:
-            serials = [d.serial for d in devs_by_type[_type] if d.site != _site.name]
+            _this_devs = [d for d in devs_by_type[_type] if d.site != _site.name]
+            serials = [d.serial for d in _this_devs]
+            site_move_devs += _this_devs
+
             if serials:
-                reqs = [
+                reqs += [
                     central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
                 ]
 
-        resp = Response(url="Error", error=f"These devices are already in site {_site.name}") if not reqs else central.batch_request(reqs)
+        resp = [Response(url="Error", error=f"These devices are already in site {_site.name}")] if not reqs else central.batch_request(reqs)
+        if all([r.ok for r in resp]):
+            asyncio.run(cli.cache.update_dev_db(data=[{**dev.data, "site": _site.name} for dev in site_move_devs]))
+
 
     if site_rm_resp:
         resp = [*site_rm_resp, *resp]
