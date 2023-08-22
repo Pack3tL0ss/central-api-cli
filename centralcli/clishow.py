@@ -30,7 +30,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
+    ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions,
     DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, lib_to_api, what_to_pretty  # noqa
 )
@@ -60,7 +60,7 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
 
 def show_devices(
     devices: str | Iterable = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, outfile: Path = None,
-    update_cache: bool = False, group: str = None, status: str = None, state: str = None, label: Union[str, List[str]] = None, pub_ip: str = None,
+    update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
     do_clients: bool = False, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
 ) -> None:
@@ -74,10 +74,13 @@ def show_devices(
 
     if group:
         group = cli.cache.get_group_identifier(group)
+    if site:
+        site = cli.cache.get_site_identifier(site)
 
     resp = None
     params = {
         "group": None if not group else group.name,
+        "site": None if not site else site.name,
         "status": None if not status else status.title(),
         "label": label,
         "public_ip_address": pub_ip,
@@ -160,17 +163,19 @@ def show_devices(
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
+        reverse=reverse,
         cleaner=cleaner.get_devices
     )
 
 
 @app.command()
 def all(
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
-    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
@@ -207,7 +212,7 @@ def all(
     elif up:
         status = "Up"
     show_devices(
-        dev_type='all', outfile=outfile, include_inventory=verbose, update_cache=update_cache, group=group, status=status,
+        dev_type='all', outfile=outfile, include_inventory=verbose, update_cache=update_cache, group=group, site=site, status=status,
         state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -226,11 +231,12 @@ def devices(
         help="Show details for a specific device [grey42]\[default: show details for all devices][/]",
         show_default=False,
     ),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status both hidden to simplify as they can use --up or --down
-    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
@@ -274,8 +280,8 @@ def devices(
         dev_type = None
 
     show_devices(
-        devices, dev_type=dev_type, include_inventory=verbose, outfile=outfile, update_cache=update_cache,
-        group=group, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients,
+        devices, dev_type=dev_type, include_inventory=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
+        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
 
@@ -283,8 +289,9 @@ def devices(
 @app.command()
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
@@ -320,16 +327,17 @@ def aps(
         status = "Up"
 
     show_devices(
-        aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, do_ssids=do_ssids,
+        aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+        state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, do_ssids=do_ssids,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
 @app.command("switches")
 def switches_(
     switches: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
@@ -364,8 +372,8 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switches', outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
+        switches, dev_type='switches', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -373,8 +381,9 @@ def switches_(
 @app.command(name="gateways")
 def gateways_(
     gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
@@ -409,8 +418,8 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gateways', outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
+        gateways, dev_type='gateways', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -418,8 +427,9 @@ def gateways_(
 @app.command("controllers", hidden=True)
 def controllers_(
     controllers: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
@@ -456,10 +466,9 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='mobility_controllers', outfile=outfile, update_cache=update_cache, group=group, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
-        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_table=do_table)
+        controllers, dev_type='mobility_controllers', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
@@ -590,7 +599,7 @@ def subscription(
         set_width_cols=set_width_cols
     )
 
-
+# TODO need sort_by enum
 @app.command(short_help="Show Swarms (IAP Clusters)")
 def swarms(
     group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
@@ -667,7 +676,7 @@ def interfaces(
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:
-        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot)
+        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, aos_sw=dev.type == "sw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
@@ -677,9 +686,9 @@ def interfaces(
 
 @app.command(help="Show (switch) poe details for an interface")
 def poe(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion),
-    port: str = typer.Argument(None,),
-    _port: str = typer.Option(None, "--port"),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
+    port: str = typer.Argument(None, show_default=False,),
+    _port: str = typer.Option(None, "--port", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
@@ -698,7 +707,7 @@ def poe(
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
-    resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port)
+    resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
     resp.output = utils.unlistify(resp.output)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
@@ -706,12 +715,12 @@ def poe(
     # TODO output cleaner / sort & reverse options
 
 
-@app.command(short_help="Show VLANs for device or site")
+@app.command()
 def vlans(
     dev_site: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.dev} (vlans for a device) OR {iden_meta.site} (vlans for a site)",
-        autocompletion=cli.cache.dev_site_completion,
+        autocompletion=cli.cache.dev_gw_switch_site_completion,
         show_default=False,
     ),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
@@ -738,6 +747,10 @@ def vlans(
         rich_help_panel="Common Options",
     ),
 ) -> None:
+    """Show VLANs for device or site
+
+    Command applies to sites, gateways, or switches
+    """
     # TODO cli command lacks the filtering options available from method currently.
     central = cli.central
     obj = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"))
@@ -754,7 +767,7 @@ def vlans(
         resp = central.request(central.get_site_vlans, obj.id)
     elif obj.is_dev:
         if obj.generic_type == "switch":
-            resp = central.request(central.get_switch_vlans, obj.serial)
+            resp = central.request(central.get_switch_vlans, obj.serial, aos_sw=obj.type == "sw")
         elif obj.type.lower() == 'gw':
             resp = central.request(central.get_gateway_vlans, obj.serial)
         else:
@@ -1506,25 +1519,27 @@ def routes(
     )
 
 
-@app.command(short_help="Show WLAN(SSID)/details", help="Show WLAN(SSID)/details")
+@app.command()
 def wlans(
-    name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN"),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", ),
+    name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.label_completion, show_default=False,),
     site: str = typer.Option(
         None,
-        metavar="[site identifier]",
+        metavar="<site identifier>",
         help="Filter by device status",
-        autocompletion=cli.cache.site_completion
+        autocompletion=cli.cache.site_completion,
+        show_default=False,
     ),
-    swarm_id: str = typer.Option(None,),
+    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),
     do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
-    sort_by: SortOptions = typer.Option(None, "--sort", hidden=True),  # TODO Unhide once implemented for show wlans
+    sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1536,8 +1551,11 @@ def wlans(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show WLAN(SSID)/details
+    """
     central = cli.central
-
+    if sort_by and sort_by == "ssid":
+        sort_by = "essid"
 
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
@@ -1560,7 +1578,7 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_wlans, **params)
-    cli.display_results(resp, sort_by=sort_by, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
+    cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
 
 
 # FIXME show clients wireless <tab completion> does not filter based on type of device
