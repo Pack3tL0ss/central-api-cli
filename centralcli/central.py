@@ -1087,18 +1087,21 @@ class CentralApi(Session):
 
         return resp
 
-    async def get_switch_ports(self, serial: str, slot: str = None) -> Response:
+    # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for access)
+    async def get_switch_ports(self, serial: str, slot: str = None, aos_sw: bool = False) -> Response:
         """Switch Ports Details.
 
         Args:
             serial (str): Serial number of switch to be queried
             slot (str, optional): Slot name of the ports to be queried {For chassis type switches
                 only}.
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/switches/{serial}/ports"
+        sw_path = "cx_switches" if not aos_sw else "switches"
+        url = f"/monitoring/v1/{sw_path}/{serial}/ports"
 
         params = {"slot": slot}
 
@@ -1108,17 +1111,20 @@ class CentralApi(Session):
         self,
         serial: str,
         port: str = None,
+        aos_sw: bool = False,
     ) -> Response:
         """Get switch poe info.
 
         Args:
             serial (str): Switch serial
             port (str, optional): Filter by switch port
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/switches/{serial}/poe_detail"
+        sw_path = "cx_switches" if not aos_sw else "switches"
+        url = f"/monitoring/v1/{sw_path}/{serial}/poe_detail"
 
         params = {
             'port': str(port)
@@ -1962,6 +1968,7 @@ class CentralApi(Session):
         status: str = None,
         sort: str = None,
         calculate_total: bool = None,
+        aos_sw: bool = False,
         offset: int = 0,
         limit: int = 500,
     ) -> Response:
@@ -1982,6 +1989,7 @@ class CentralApi(Session):
             status (str, optional): Filter by status of VLAN. Status can be Up/Down
             sort (str, optional): Sort parameter may be one of +name, -name
             calculate_total (bool, optional): Whether to calculate total vlans
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
 
@@ -1989,6 +1997,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         sw_url = "switches" if not stack else "switch_stacks"
+        sw_url = sw_url if aos_sw else f'cx_{sw_url}'
         url = f"/monitoring/v1/{sw_url}/{iden}/vlan"
 
         params = {
