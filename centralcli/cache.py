@@ -634,8 +634,9 @@ class Cache:
 
     def dev_ap_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
-        args: List[str] = [],
+        args: List[str] = None,
     ):
         """Completion for argument where only APs are valid.
 
@@ -643,14 +644,32 @@ class Cache:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
+        if not args:
+            _last = ctx.command_path.split()[-1]
+            if _last in ctx.params:
+                args = ctx.params[_last]
+            else:
+                args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
+
         dev_types = ["ap"]
         match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
+        # TODO this completion complete using the type of iden they start, and omits any idens already on the command line regardless of iden type
+        # so they could put serial then auto-complete name and the name of the device whos serial is already on the cli would not appear.
+        # Make others like this.
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                if m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
+                idens = [m.name, m.serial, m.mac, m.ip]
+                if all([i not in args for i in idens]):
+                    if m.name.startswith(incomplete):
+                        out += [tuple([m.name, m.help_text])]
+                    elif m.serial.startswith(incomplete):
+                        out += [tuple([m.serial, m.help_text])]
+                    elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
+                        out += [tuple([m.mac, m.help_text])]
+                    elif m.ip.startswith(incomplete):
+                        out += [tuple([m.ip, m.help_text])]
 
         for m in out:
             yield m
@@ -1045,6 +1064,30 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_gw_switch_site_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        match = self.get_dev_identifier(
+            incomplete,
+            dev_type=["gw", "switch"],
+            completion=True,
+        )
+        match = match or []
+        match += self.get_site_identifier(
+            incomplete,
+            completion=True,
+        ) or []
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m not in args:
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
     def remove_completion(
         self,
         incomplete: str,
@@ -1388,7 +1431,8 @@ class Cache:
         """
         resp = await self.central.get_valid_subscription_names()
         if resp.ok:
-            resp.output = [{"name": k} for k in resp.output.keys()]
+            # licenses starting with enhanced_ or standard_ are compute/storage
+            resp.output = [{"name": k} for k in resp.output.keys() if not k.startswith("standard_") and not k.startswith("enhanced_")]
             self.updated.append(self.central.get_valid_subscription_names)
             self.LicenseDB.truncate()
             update_res = self.LicenseDB.insert_multiple(resp.output)
