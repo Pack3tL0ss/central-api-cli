@@ -102,7 +102,18 @@ def test_group_completion_case_insensitive(incomplete: str = "w"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_site_completion(incomplete: str = ""):
+def test_dev_site_completion(incomplete: str = "barn"):
     result = [c for c in cache.dev_site_completion(incomplete, ("show", "vlans",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_gw_switch_site_completion(incomplete: str = "barn"):
+    result = [c for c in cache.dev_gw_switch_site_completion(incomplete, ("show", "vlans",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
+    result = [c for c in cache.dev_ap_completion(incomplete, ("show", "aps",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
