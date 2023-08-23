@@ -31,6 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import DevTypes
 from centralcli.render import Output
+from centralcli.objects import DateTime
 
 def epoch_convert(func):
     @functools.wraps(func)
@@ -184,7 +185,7 @@ _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
     "last_connection_time": _time_diff_words,
-    "uptime": _duration_words_short,
+    "uptime": lambda x: DateTime(x, "durwords-short"),
     "updated_at": _time_diff_words,
     "last_modified": _convert_epoch,
     "lease_start_ts": _log_timestamp,
