@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
-# TODO keep addl attributes from return in cache with key prefixed with _ or under another internal use key
-# device results include site_id which we strip out as it's not useful for display, but it is useful for
-# internally.  Currently the site_id is being looked up from the site cache
 from __future__ import annotations
 from typing import Any, Literal, Dict, Sequence, Union, List, Set, Iterable
 from aiohttp.client import ClientSession
@@ -13,7 +9,9 @@ from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
 from pathlib import Path
 from enum import Enum
-# from render import rich_capture
+# Used to debug completion
+# from rich.console import Console
+# console = Console(stderr=True)
 
 import asyncio
 import time
@@ -516,9 +514,19 @@ class Cache:
 
     def dev_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
+
+        # HACK click 8.x broke args being passed to completion functions.
+        if not args:
+            if ctx.command_path == "cencli delete device":
+                args = ctx.params["devices"]
+            else:
+                _params = [{k: v} for k, v in ctx.params.items() if isinstance(v, tuple)]
+                args = list(_params[0].values())[-1]
+
         dev_type = None
         if args:
             if args[-1].lower() in ["gateways", "clients", "server"]:
@@ -606,10 +614,18 @@ class Cache:
         elif args and args[-1].lower() == "site":
             out = [m for m in self.site_completion(incomplete, args)]
             for m in out:
+                ##  This was required for completion to work in click 8.x when case doesn't match
+                ##  i.e. site: WadeLab incomplete: wade in click 7 completes wade -> WadeLab
+                ##  in click 8 it returns nothing.
+                ##  pinned click back to 7.1.2 until this and the other 2 issues are sorted upstream.
+                # if m[0].lower().startswith(incomplete):
+                #     # console.print(m[0].lower())
+                #     yield m[0].lower(), m[1]
+                # else:
                 yield m
 
         elif args and args[-1].lower() == "ap":
-            out = [m for m in self.dev_completion(incomplete, args)]
+            out = [m for m in self.dev_completion(ctx, incomplete, args)]
             for m in out:
                 yield m
 
@@ -624,7 +640,7 @@ class Cache:
                     out += [("group", _help)]
 
             if "site" not in args and "group" not in args:
-                out = [*out, *[m for m in self.dev_completion(incomplete, args)]]
+                out = [*out, *[m for m in self.dev_completion(ctx, incomplete, args)]]
             elif "site" in args and "group" in args:
                 incomplete = "NULL_COMPLETION"
                 out += ["|", "<cr>"]
@@ -940,9 +956,6 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
-        # if not incomplete:
-        #     return [tuple([c["name"], f'{c["ip"]}|{c["mac"]} type: {c["type"]} connected to: {c["connected_name"]} ~ {c["connected_port"]}']) for c in self.clients]
-
         match = self.get_client_identifier(
             incomplete,
             completion=True,
@@ -1104,7 +1117,7 @@ class Cache:
                     out += ("site", )
 
             if "site" not in args:
-                out += [m for m in self.dev_completion(incomplete)]
+                out += [m for m in self.dev_completion(incomplete=incomplete, args=args)]
             else:
                 out += [m for m in self.null_completion(incomplete)]
 
