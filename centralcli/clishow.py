@@ -6,7 +6,7 @@ import time
 import pendulum
 import asyncio
 import sys
-from typing import List, Union, Iterable, Literal
+from typing import List, Iterable, Literal
 from pathlib import Path
 from rich import print
 
@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions,
-    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, SortAlertOptions, AlertSeverity, AlertTypes, lib_to_api, what_to_pretty  # noqa
+    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, lib_to_api, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -915,7 +915,7 @@ def cache_(
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in str(args) else "yaml")
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
             tablefmt=tablefmt,
@@ -2190,7 +2190,7 @@ def alerts(
     severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category.", show_default=False,),
     ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
-    alert_type: str = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),  # TODO enum with alert types
+    alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),

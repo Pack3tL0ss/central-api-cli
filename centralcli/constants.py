@@ -642,6 +642,7 @@ class SortDevOptions(str, Enum):
     type = "type"
     labels = "labels"
     version = "version"
+    uptime = "uptime"
 
 
 class SortTemplateOptions(str, Enum):
@@ -652,6 +653,28 @@ class SortTemplateOptions(str, Enum):
     template_hash = "template_hash"
     version = "version"
 
+
+class AlertSeverity(str, Enum):
+    critical = "critical"
+    major = "major"
+    minor = "minor"
+    warning = "warning"
+    info = "info"  # cleaner will tag severity INFO if the alert lacks a severity
+
+
+class AlertTypes(str, Enum):
+    device = "device"
+    client = "client"
+    user = "user"
+    ids = "ids"
+
+
+class SortAlertOptions(str, Enum):
+    time = "time"
+    severity = "severity"
+    type = "type"
+    description = "description"
+    acknowledged = "acknowledged"
 
 class SortCertOptions(str, Enum):
     name = "name"
