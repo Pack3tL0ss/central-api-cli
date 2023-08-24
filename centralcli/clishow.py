@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions,
-    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, lib_to_api, what_to_pretty  # noqa
+    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, SortAlertOptions, AlertSeverity, AlertTypes, lib_to_api, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -915,7 +915,7 @@ def cache_(
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich")
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in str(args) else "yaml")
         cli.display_results(
             data=cache_out,
             tablefmt=tablefmt,
@@ -2174,58 +2174,74 @@ def events(
 
 @app.command(short_help="Show Alerts/Notifications. (last 24h default)", help="Show Alerts/Notifications (for past 24 hours by default).  Notification must be Configured.")
 def alerts(
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion,),
-    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion,),
-    start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)",),
-    end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)",),
-    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h Default: 24 hours"),
+    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion, show_default=False,),
+    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
+    end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
+    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h Default: 24 hours", show_default=False,),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
         help="Filter alerts by device",
         autocompletion=cli.cache.dev_completion,
+        show_default=False,
     ),
-    severity: str = typer.Option(None, help="Filter by alerts by severity."),  # TODO completion
-    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
-    ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts",),
-    alert_type: str = typer.Option(None, "--type", help="Filter by alert type",),  # TODO enum with alert types
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
+    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category.", show_default=False,),
+    ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
+    alert_type: str = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),  # TODO enum with alert types
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    sort_by: SortAlertOptions = typer.Option("time", "--sort", rich_help_panel="Formatting",),
     reverse: bool = typer.Option(
-        True, "-r",
-        help="Reverse Output order Default order: newest on bottom.",
-        show_default=False
+        False, "-r",
+        help="Reverse Output order",
+        show_default=False,
+        rich_help_panel="Formatting",
     ),
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
-    verbose2: bool = typer.Option(False, "-vv", help="Show alerts unformatted response from Central API Gateway"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
         help="Use default central account",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
     debug: bool = typer.Option(
         False,
         "--debug",
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
+        rich_help_panel="Common Options",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     if device:
         device = cli.cache.get_dev_identifier(device)
+
+    if alert_type:
+        alert_type = "user_management" if alert_type == "user" else alert_type
+        alert_type = "ids_events" if alert_type == "ids" else alert_type
+
+    if severity:
+        severity = severity.title() if severity != "info" else severity.upper()
+
+    # API returns alerts in reverse order newest on top we fix that unless they specify a sort field
+    # if reverse is None:
+    #     reverse = True if not sort_by else False
 
     # TODO move to common func for use be show logs and show events
     # if args:
@@ -2318,9 +2334,9 @@ def notifications(
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    sort_by: str = typer.Option("category", "--sort",),
     reverse: bool = typer.Option(
-        True, "-r",
+        False, "-r",
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
@@ -2365,7 +2381,7 @@ def notifications(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        # cleaner=cleaner.get_alerts if not verbose else None,
+        # TODO lacks cleaner cleaner=
     )
 
 
@@ -2430,7 +2446,7 @@ def webhooks(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
     reverse: bool = typer.Option(
-        True, "-r",
+        False, "-r",
         help="Reverse Output order Default order: newest on bottom.",
         show_default=False
     ),
