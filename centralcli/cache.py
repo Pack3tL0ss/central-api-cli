@@ -514,18 +514,18 @@ class Cache:
 
     def dev_completion(
         self,
-        ctx: typer.Context,
+        # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
 
         # HACK click 8.x broke args being passed to completion functions.
-        if not args:
-            if ctx.command_path == "cencli delete device":
-                args = ctx.params["devices"]
-            else:
-                _params = [{k: v} for k, v in ctx.params.items() if isinstance(v, tuple)]
-                args = list(_params[0].values())[-1]
+        # if args is not None:
+        #     if ctx is not None and ctx.command_path == "cencli delete device":
+        #         args = ctx.params["devices"]
+        #     else:
+        #         _params = [{k: v} for k, v in ctx.params.items() if isinstance(v, tuple)]
+        #         args = list(_params[0].values())[-1]
 
         dev_type = None
         if args:
