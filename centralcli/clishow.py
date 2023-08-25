@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
 import typer
 import time
 import pendulum
@@ -59,7 +60,7 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     return caption
 
 def show_devices(
-    devices: str | Iterable = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, outfile: Path = None,
+    devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, outfile: Path = None,
     update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
     do_clients: bool = False, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
