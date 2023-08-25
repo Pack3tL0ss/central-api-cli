@@ -368,9 +368,8 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
-def batch_add_sites(import_file: Path, yes: bool = False) -> Response:
+def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
     central = cli.central
-    name_aliases = ["site-name", "site", "name"]
     _site_aliases = {
         "site-name": "site_name",
         "site": "site_name",
@@ -389,14 +388,19 @@ def batch_add_sites(import_file: Path, yes: bool = False) -> Response:
         _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
         return _data
 
-    data = config.get_file_data(import_file)
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+    elif not data:
+        print("[red]Error!![/] No import file provided")
+        raise typer.Exit(1)
+
     if "sites" in data:
         data = data["sites"]
 
     resp = None
     verified_sites: List[SiteImport] = []
     # TODO test with csv ... NOT YET TESTED
-    if import_file.suffix in [".csv", ".tsv", ".dbf", ".xls", ".xlsx"]:
+    if import_file and import_file.suffix in [".csv", ".tsv", ".dbf"]:
         verified_sites = [SiteImport(**convert_site_key(i)) for i in data.dict]
     else:
         # We allow a list of flat dicts or a list of dicts where loc info is under
@@ -437,7 +441,7 @@ def batch_add_sites(import_file: Path, yes: bool = False) -> Response:
                     f"{len(cache_res)} but we added {len(data)} sites.",
                     show=True
                 )
-        return resp
+        return resp or Response(error="No Sites were added")
 
 # TODO REMOVE NOT USED (keeping for now in case I change my mind)
 # class BatchRequest(BaseModel):
@@ -501,10 +505,27 @@ def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, v
         return PreConfig(name=node, config=config_out, request=br(cli.central.replace_ap_config, node, clis=commands))
 
 
-def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
+def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
+    """Batch add groups to Aruba Central
+
+    Args:
+        import_file (Path, optional): import file containing group data. Defaults to None.
+        data (dict, optional): data Used internally, when import_file is already parsed by batch_deploy. Defaults to None.
+        yes (bool, optional): If True we bypass confirmation prompts. Defaults to False.
+
+    Raises:
+        typer.Exit: Exit if data is not in correct format.
+
+    Returns:
+        List[Response]: List[CentralApi.Response Object]
+    """
     console = Console(emoji=False)
     br = cli.central.BatchRequest
-    data = config.get_file_data(import_file)
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+    elif not data:
+        print("[red]Error!![/] No import file provided")
+        raise typer.Exit(1)
     # TODO handle csv
     if isinstance(data, dict) and "groups" in data:
         data = data["groups"]
@@ -580,27 +601,51 @@ def batch_add_groups(import_file: Path, yes: bool = False) -> List[Response]:
                 console.print(pc.config)
             console.rule(f" End {pc.name} config ")
 
+    resp = None
     if reqs and yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.batch_request(reqs)
         if all(r.ok for r in resp):
             cache_resp = asyncio.run(cli.cache.update_group_db(cache_data))
             log.debug(f"batch add group cache resp: {cache_resp}")
-        cli.display_results(resp)
+        # cli.display_results(resp)
+        config_reqs = []
         if gw_reqs:
-            print("\n[bright_green]Results from Group level gateway config push (CLI commands)[/]")
+            print("\n[bright_green]Sending Group level gateway config (CLI commands)[/]")
             print("\n  [italic]This can take some time.[/]")
-            resp = cli.central.batch_request(gw_reqs)
-            cli.display_results(resp, cleaner=cleaner.parse_caas_response)
+            config_reqs += gw_reqs
+        #     resp = cli.central.batch_request(gw_reqs)
+        #     cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         if ap_reqs:
-            print("\n[bright_green]Results from Group level AP config push (Replaces entire group level)[/]\n")
-            resp = cli.central.batch_request(ap_reqs)
-            cli.display_results(resp,  tablefmt="action")
+            print("\n[bright_green]Sending Group level AP config (Replaces entire group level)[/]\n")
+            config_reqs += ap_reqs
+            # resp = cli.central.batch_request(ap_reqs)
+            # cli.display_results(resp,  tablefmt="action")
+        if config_reqs:
+            for _ in track(range(10), description=f"Pausing to ensure groups are ready to accept configs."):
+                sleep(1)
+            resp += cli.central.batch_request(config_reqs, retry_failed=True)
+
+    return resp or Response(error="No Groups were added")
 
 
-def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
-    data = config.get_file_data(import_file)
+
+
+
+def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+    elif not data:
+        print("[red]Error!![/] No import file provided")
+        raise typer.Exit(1)
     # TODO Import object class with consistent return.  Accept pydantic model as param
     #      for validation...
+    if "devices" in data:
+        data = data["devices"]
+    if data and isinstance(data, dict):
+        if utils.isserial(list(data.keys())[0]):
+            data = [{"serial": k, **v} for k, v in data.items()]
+
+
     warn = False
     if hasattr(data, "headers"):
         headers = data.headers
@@ -640,18 +685,27 @@ def batch_add_devices(import_file: Path, yes: bool = False) -> List[Response]:
 
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     msg_pfx = "" if not warn else "Warning exist "
-    if not warn or yes or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
+    word = "Adding" if not warn and yes else "Add"
+    print(f'{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    resp = None
+    if (not warn and yes) or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
         asyncio.run(cli.cache.update_inv_db(data=_data))
-        return resp
+
+    return resp or Response(error="No Devices were added")
 
 
 # TODO this has not been tested validated at all
 # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
-def batch_add_labels(import_file: Path, yes: bool = False) -> List[Response]:
-    data = config.get_file_data(import_file)
+def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool = False) -> List[Response]:
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+    elif not data:
+        print("[red]Error!![/] No import file provided")
+        raise typer.Exit(1)
+
     if hasattr(data, "headers"):
         headers = data.headers
 
@@ -661,13 +715,15 @@ def batch_add_labels(import_file: Path, yes: bool = False) -> List[Response]:
 
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     print(f'Creating the following Labels: [cyan]{data}[/]')
+    resp = None
     if yes or typer.confirm("Proceed?", abort=True):
         reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
         resp = cli.central.batch_request(reqs)
         # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
         asyncio.run(cli.cache.update_label_db(data=_data))  # TODO validate format
-        return resp
+
+    return resp or Response(error="No labels were added")
 
 
 # TODO TEST and complete.
@@ -675,20 +731,20 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
     print("Batch Deploy is new, and has not been completely tested yet.")
     if typer.confirm("Proceed?"):
         data = config.get_file_data(import_file)
-        # TODO add support for injecting group sites labels into deploy file by referencing another file (i.e. homeassistant <!groups.yaml)
         if "groups" in data:
-            batch_add_groups(import_file=import_file, yes=yes)
+            # TODO have batch_add_groups return resp for consistency
+            resp = batch_add_groups(data=data["groups"], yes=yes)
+            cli.display_results(resp)
         if "sites" in data:
-            resp = batch_add_sites(import_file=import_file, yes=yes)
-            if resp is not None:
-                cli.display_results(resp)
+            resp = batch_add_sites(data=data["sites"], yes=yes)
+            cli.display_results(resp)
         if "labels" in data:
-            print("[bright_red]WARNING!![/]: batch add labels not tested yet.  Trying using untested function, as there is no real risk if it fails.")
-            resp = batch_add_labels(import_file=import_file, yes=yes)
-            cli.display_results(resp)
+            print("[bright_red]WARNING!![/]: batch add labels not tested yet.  Still here as there is no real risk if it fails.")
+            resp = batch_add_labels(data=data["labels"], yes=yes)
+            cli.display_results(resp, tablefmt="action")
         if "devices" in data:
-            resp = batch_add_devices(import_file=import_file, yes=yes)
-            cli.display_results(resp)
+            resp = batch_add_devices(data=data["devices"], yes=yes)
+            cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Validate a batch import")
@@ -850,8 +906,8 @@ def deploy(
         print("\n".join(_msg))
         raise typer.Exit(1)
 
-    resp = batch_deploy(import_file, yes)
-    cli.display_results(resp, tablefmt="action")
+    batch_deploy(import_file, yes)
+    # cli.display_results(resp, tablefmt="action")
 
 
 # FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
@@ -893,9 +949,9 @@ def add(
         resp = batch_add_sites(import_file, yes)
         cli.display_results(resp)
     elif what == "groups":
-        print(":warning: This flow is still in development.")  # TODO Test and remove
-        if typer.confirm("Are you sure you want to proceed?", abort=True):
-            batch_add_groups(import_file, yes)  # results displayed in batch_add_groups
+        batch_add_groups(import_file, yes)
+        # TODO put cleaner func in response object maybe??
+        cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
     elif what == "devices":
         resp = batch_add_devices(import_file, yes)
         cli.display_results(resp, tablefmt="action")
@@ -1204,7 +1260,7 @@ def rename(
         resp = None
         if what == "aps":
             # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
-            if import_file.suffix in [".csv", ".tsv", ".dbf", ".xls", ".xlsx"]:
+            if import_file.suffix in [".csv", ".tsv", ".dbf"]:
                 if data and len(data.headers) < 3:
                     if "name" in data.headers:
                         data = [{k if k != "name" else "hostname": d[k] for k in d} for d in data.dict]
