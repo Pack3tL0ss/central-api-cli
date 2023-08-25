@@ -4,23 +4,48 @@ from __future__ import annotations
 
 from typing import Literal
 from json import JSONEncoder
+from enum import Enum
 import pendulum
 
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log"]
 
+# class TimeFormat(str, Enum):
+#     day_datetime = "day-datetime"
+#     durwords = "durwords"
+#     durwords_short = "durwords-short"
+#     timediff = "timediff"
+#     mydt = "mydt"
+#     log = "log"
 
-
-def _convert_epoch(self, epoch: float) -> str:
-    # Thu, May 7, 2020 3:49 AM
+def _convert_epoch(epoch: float) -> str:
+    """Thu, May 7, 2020 3:49 AM"""
     return pendulum.from_timestamp(epoch, tz="local").to_day_datetime_string()
 
 
+def _log_timestamp(epoch: float) -> str:
+    """Jan 08 7:59:00 PM"""
+    if isinstance(epoch, str):
+        try:
+            epoch = float(epoch)
+        except TypeError:
+            return epoch
+
+    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
+
+
+def _mdyt_timestamp(epoch: float) -> str:
+    """May 07, 2020 3:49:24 AM"""
+    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD, YYYY h:mm:ss A")
+
+
 def _duration_words(secs: int | str) -> str:
+    """2 weeks 1 day 1 hour 21 minutes 2 seconds"""
     return pendulum.duration(seconds=int(secs)).in_words()
 
 
 def _duration_words_short(secs: int | str) -> str:
+    """2w 1d 1h 21m 2s"""
     words = pendulum.duration(seconds=int(secs)).in_words()
     # a bit cheesy, but didn't want to mess with regex
     replace_words = [
@@ -42,24 +67,10 @@ def _duration_words_short(secs: int | str) -> str:
     return words
 
 
-
 def _time_diff_words(epoch: float | None) -> str:
+    """47 minutes ago"""
     return "" if epoch is None else pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
 
-
-def _log_timestamp(epoch: float) -> str:
-    if isinstance(epoch, str):
-        try:
-            epoch = float(epoch)
-        except TypeError:
-            return epoch
-
-    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
-
-
-def _mdyt_timestamp(epoch: float) -> str:
-    # May 07, 2020 3:49:24 AM
-    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD, YYYY h:mm:ss A")
 
 TIME_FUNCS = {
     "day-datetime": _convert_epoch,
@@ -79,7 +90,7 @@ class DateTime():
         if str(epoch).isdigit() and len(str(int(epoch))) > 10:
             epoch = epoch / 1000
 
-        return epoch
+        return epoch if not str(epoch).endswith(".0") else int(epoch)
 
     def __str__(self):
         return self.pretty
