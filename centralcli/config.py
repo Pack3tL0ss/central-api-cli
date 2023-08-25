@@ -529,8 +529,11 @@ class Config:
                 print("[red]The OAUTH Flow does not work with hpe.com users (SSO).")
                 print(f"[red]ignoring username {username}.")
                 password = None
+            elif not username:
+                username = None
+                print()  # They did not enter a username.  CR is for correct format of config output
             else:
-                password = None if not username else ask("password", password=True)
+                password = ask("password", password=True)
 
             valid = False
             if access_token:
