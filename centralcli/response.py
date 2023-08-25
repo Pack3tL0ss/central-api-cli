@@ -490,7 +490,10 @@ class Session():
                     #     status code: 503
                     #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
                     spin_txt_retry == "(retry after 503: Service Unavailable)"
-                    log.warning(f'{resp.url} forced to retry after 503 from Central API gateway')
+                    log.warning(f'{resp.url} forced to retry after 503 (Service Unavailable) from Central API gateway')
+                elif resp.status == 504:
+                    spin_txt_retry == "(retry after 504: Gatewat Time-out)"
+                    log.warning(f'{resp.url} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
@@ -755,7 +758,8 @@ class Session():
         log.debug(f"PAUSE {_pause:.2f}s...")
         time.sleep(_pause)
 
-    async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False,) -> List[Response]:
+    async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
+        # TODO implement retry_failed
         self.silent = True
         m_resp = []
         _tot_start = time.perf_counter()
@@ -806,7 +810,8 @@ class Session():
 
     # TODO return a BatchResponse object (subclass Response) where OK indicates all OK
     # and method that returns merged output from all resp...
-    def batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False) -> List[Response]:
+    # TODO retry_failed not implemented remove if not going to use it.
+    def batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         """non async to async wrapper for multiple parallel API calls
 
         First entry is ran alone, if successful the remaining calls
@@ -816,11 +821,13 @@ class Session():
             api_calls (List[BatchRequest]): List of BatchRequest objects.
             continue_on_fail (bool, optional): Continue with subsequent requests if first request fails.
                 defaults to False.  Only the first request is validated for success.
+            retry_failed (bool, optional): Retry failed requests
+                some return codes result in retry regardless. Defaults to False
 
         Returns:
             List[Response]: List of centralcli.response.Response objects.
         """
-        return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail))
+        return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail, retry_failed=retry_failed))
 
     async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
         f_url = url if url.startswith("http") else self.auth.central_info["base_url"] + url
