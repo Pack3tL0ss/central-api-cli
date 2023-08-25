@@ -729,7 +729,7 @@ def convert(
     for a file with the same name and supported extension.
 
     cencli supports most common extension for variable import:
-    '.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx'
+    '.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf'
 
     """
     if not var_file:
