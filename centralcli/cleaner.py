@@ -11,6 +11,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Union
+from enum import Enum
 
 import pendulum
 from rich.console import Console
@@ -186,7 +187,7 @@ _short_value = {
     "No Authentication": "open",
     "last_connection_time": _time_diff_words,
     "uptime": lambda x: DateTime(x, "durwords-short"),
-    "updated_at": _time_diff_words,
+    "updated_at": lambda x: DateTime(x, "mdyt"),
     "last_modified": _convert_epoch,
     "lease_start_ts": _log_timestamp,
     "lease_end_ts": _log_timestamp,
@@ -194,8 +195,9 @@ _short_value = {
     "acknowledged_timestamp": _log_timestamp,
     "lease_time": _duration_words,
     "lease_time_left": _duration_words,
-    "ts": _log_timestamp,
-    "timestamp": _log_timestamp,
+    "token_created": lambda x: DateTime(x, "mdyt"),
+    "ts": lambda x: DateTime(x, format="log"),  # _log_timestamp,
+    "timestamp": lambda x: DateTime(x, format="log"),
     "Unknown": "?",
     "HPPC": "SW",
     "labels": _extract_names_from_id_name_dict,
@@ -807,9 +809,12 @@ def get_alerts(data: List[dict],) -> List[dict]:
         # d["device info"] = f"{d['details'].get('hostname', '')}|" \
         #     f"{d.get('device_id', '')}|Group: {d.get('group_name', '')}".lstrip("|")
         d["severity"] = d.get("severity", "INFO")
-        d["acknowledged"] = f'{"by " if d.get("acknowledged_by") else ""}' \
-            f'{d.get("acknowledged_by")}{" @ " if d.get("acknowledged_by") else ""}' \
-            f'{"" if not d.get("acknowledged_timestamp") else _log_timestamp(d["acknowledged_timestamp"])}' \
+        if d.get("acknowledged"):
+            d["acknowledged"] = f'{"by " if d.get("acknowledged_by") else ""}' \
+                f'{d.get("acknowledged_by")}{" @ " if d.get("acknowledged_by") else ""}' \
+                f'{"" if not d.get("acknowledged_timestamp") else _log_timestamp(d["acknowledged_timestamp"])}'
+        else:
+            d["acknowledged"] = None
 
     data = [dict(short_value(k, d[k]) for k in field_order if k in d) for d in data]
     data = strip_no_value(data)
@@ -1096,8 +1101,25 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
 
     return out
 
-def get_all_webhooks(data: list) -> list:
-    # TODO this is the default handling syntax
+def get_all_webhooks(data: List[dict]) -> List[dict]:
+    class HookRetryPolicy(Enum):
+        none = 0
+        important = 1  # Up to 5 retries over 6 minutes
+        critical = 2  # Up to 5 retries over 32 hours
+        notfound = 99  # indicates an error retrieving policy from payload
+
+    del_keys = ["retry_policy", "secure_token", "urls"]
+    # flatten dict
+    import typer
+    data = [
+        {**{k: v for k, v in d.items() if k not in del_keys},
+         "urls": "\n".join(d.get("urls", [])),
+         "retry_policy": HookRetryPolicy(d.get("retry_policy", {}).get("policy", 99)).name,
+         "token": d.get("secure_token", {}).get("token", ""), "token_created": d.get("secure_token", {}).get("ts", 0)
+         }
+         for d in data
+    ]
+
     data = [
         dict(short_value(k, d[k]) for k in d) for d in strip_no_value(data)
     ]
