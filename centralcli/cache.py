@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
-# TODO keep addl attributes from return in cache with key prefixed with _ or under another internal use key
-# device results include site_id which we strip out as it's not useful for display, but it is useful for
-# internally.  Currently the site_id is being looked up from the site cache
 from __future__ import annotations
 from typing import Any, Literal, Dict, Sequence, Union, List, Set, Iterable
 from aiohttp.client import ClientSession
@@ -13,7 +9,9 @@ from rich import print
 from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
 from pathlib import Path
 from enum import Enum
-# from render import rich_capture
+# Used to debug completion
+# from rich.console import Console
+# console = Console(stderr=True)
 
 import asyncio
 import time
@@ -516,9 +514,19 @@ class Cache:
 
     def dev_completion(
         self,
+        # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
+
+        # HACK click 8.x broke args being passed to completion functions.
+        # if args is not None:
+        #     if ctx is not None and ctx.command_path == "cencli delete device":
+        #         args = ctx.params["devices"]
+        #     else:
+        #         _params = [{k: v} for k, v in ctx.params.items() if isinstance(v, tuple)]
+        #         args = list(_params[0].values())[-1]
+
         dev_type = None
         if args:
             if args[-1].lower() in ["gateways", "clients", "server"]:
@@ -606,10 +614,18 @@ class Cache:
         elif args and args[-1].lower() == "site":
             out = [m for m in self.site_completion(incomplete, args)]
             for m in out:
+                ##  This was required for completion to work in click 8.x when case doesn't match
+                ##  i.e. site: WadeLab incomplete: wade in click 7 completes wade -> WadeLab
+                ##  in click 8 it returns nothing.
+                ##  pinned click back to 7.1.2 until this and the other 2 issues are sorted upstream.
+                # if m[0].lower().startswith(incomplete):
+                #     # console.print(m[0].lower())
+                #     yield m[0].lower(), m[1]
+                # else:
                 yield m
 
         elif args and args[-1].lower() == "ap":
-            out = [m for m in self.dev_completion(incomplete, args)]
+            out = [m for m in self.dev_completion(ctx, incomplete, args)]
             for m in out:
                 yield m
 
@@ -624,7 +640,7 @@ class Cache:
                     out += [("group", _help)]
 
             if "site" not in args and "group" not in args:
-                out = [*out, *[m for m in self.dev_completion(incomplete, args)]]
+                out = [*out, *[m for m in self.dev_completion(ctx, incomplete, args)]]
             elif "site" in args and "group" in args:
                 incomplete = "NULL_COMPLETION"
                 out += ["|", "<cr>"]
@@ -634,8 +650,9 @@ class Cache:
 
     def dev_ap_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
-        args: List[str] = [],
+        args: List[str] = None,
     ):
         """Completion for argument where only APs are valid.
 
@@ -643,14 +660,32 @@ class Cache:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
+        if not args:
+            _last = ctx.command_path.split()[-1]
+            if _last in ctx.params:
+                args = ctx.params[_last]
+            else:
+                args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
+
         dev_types = ["ap"]
         match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
+        # TODO this completion complete using the type of iden they start, and omits any idens already on the command line regardless of iden type
+        # so they could put serial then auto-complete name and the name of the device whos serial is already on the cli would not appear.
+        # Make others like this.
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                if m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
+                idens = [m.name, m.serial, m.mac, m.ip]
+                if all([i not in args for i in idens]):
+                    if m.name.startswith(incomplete):
+                        out += [tuple([m.name, m.help_text])]
+                    elif m.serial.startswith(incomplete):
+                        out += [tuple([m.serial, m.help_text])]
+                    elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
+                        out += [tuple([m.mac, m.help_text])]
+                    elif m.ip.startswith(incomplete):
+                        out += [tuple([m.ip, m.help_text])]
 
         for m in out:
             yield m
@@ -921,9 +956,6 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
-        # if not incomplete:
-        #     return [tuple([c["name"], f'{c["ip"]}|{c["mac"]} type: {c["type"]} connected to: {c["connected_name"]} ~ {c["connected_port"]}']) for c in self.clients]
-
         match = self.get_client_identifier(
             incomplete,
             completion=True,
@@ -1045,6 +1077,30 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_gw_switch_site_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        match = self.get_dev_identifier(
+            incomplete,
+            dev_type=["gw", "switch"],
+            completion=True,
+        )
+        match = match or []
+        match += self.get_site_identifier(
+            incomplete,
+            completion=True,
+        ) or []
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m not in args:
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
     def remove_completion(
         self,
         incomplete: str,
@@ -1061,7 +1117,7 @@ class Cache:
                     out += ("site", )
 
             if "site" not in args:
-                out += [m for m in self.dev_completion(incomplete)]
+                out += [m for m in self.dev_completion(incomplete=incomplete, args=args)]
             else:
                 out += [m for m in self.null_completion(incomplete)]
 
@@ -1141,8 +1197,8 @@ class Cache:
         """Update Device Database (local cache).
 
         Args:
-            data (Union[str, List[str]], List[dict] optional): serial number of list of serials numbers to add or remove. Defaults to None.
-            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
+            data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
+            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1154,9 +1210,14 @@ class Cache:
         if data:
             data = utils.listify(data)
             if not remove:
-                db_res = self.DevDB.insert_multiple(data)
-                if False in db_res:
+                upd = [self.DevDB.upsert(dev, cond=self.Q.serial == dev.get("serial")) for dev in data]
+                upd = [item for in_list in upd for item in in_list]
+                if False in upd:
                     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+                return upd
+                # db_res = self.DevDB.insert_multiple(data)
+                # if False in db_res:
+                #     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
             else:
                 doc_ids = []
                 for qry in data:
@@ -1291,7 +1352,10 @@ class Cache:
             data = utils.listify(data)
             if not remove:
                 data = [{k.replace("site_", ""): v for k, v in d.items()} for d in data]
-                return self.SiteDB.insert_multiple(data)
+                upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in data]
+                upd = [item for in_list in upd for item in in_list]
+                return upd
+                # return self.SiteDB.insert_multiple(data)
             else:
                 doc_ids = []
                 for qry in data:
@@ -1388,7 +1452,8 @@ class Cache:
         """
         resp = await self.central.get_valid_subscription_names()
         if resp.ok:
-            resp.output = [{"name": k} for k in resp.output.keys()]
+            # licenses starting with enhanced_ or standard_ are compute/storage
+            resp.output = [{"name": k} for k in resp.output.keys() if not k.startswith("standard_") and not k.startswith("enhanced_")]
             self.updated.append(self.central.get_valid_subscription_names)
             self.LicenseDB.truncate()
             update_res = self.LicenseDB.insert_multiple(resp.output)

@@ -29,8 +29,7 @@ app = typer.Typer()
 def site(
     site: str = typer.Argument(..., metavar=iden.site, autocompletion=cli.cache.site_completion, show_default=False,),
     new_name: str = typer.Argument(..., show_default=False,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -41,13 +40,12 @@ def site(
     """
     :office: [bright_green]Rename A Site.[/] :office:
     """
-    yes = yes_ if yes_ else yes
 
     site = cli.cache.get_site_identifier(site)
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if yes or typer.confirm("proceed?", abort=True):
         print()
-        cliupdate.site(site.name, address=None, city=None, state=None, zipcode=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, yes_=True, default=default, account=account)
+        cliupdate.site(site.name, address=None, city=None, state=None, zipcode=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, default=default, account=account)
 
 
 @app.command()

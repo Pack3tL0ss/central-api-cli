@@ -15,7 +15,8 @@ from typing import Any, Dict, List, Literal, Union
 import tabulate
 import typer
 import yaml
-from pygments import formatters, highlight, lexers
+import json
+from pygments import formatters, highlight
 from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
@@ -36,6 +37,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli import constants
 from centralcli.config import Config
+from centralcli.objects import Encoder
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
@@ -346,11 +348,9 @@ def output(
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)
-        # raw_data = json.dumps(outdata, indent=4)
-        # _lexer = lexers.JsonLexer
         console = Console(record=True, emoji=False)
         console.begin_capture()
-        console.print_json(data=outdata)
+        console.print_json(json.dumps(outdata, cls=Encoder))
         table_data = console.end_capture()
         console.begin_capture()
         console.print('[bright_red]"Down"[/],')
@@ -360,7 +360,8 @@ def output(
 
     elif tablefmt in ["yml", "yaml"]:
         outdata = utils.unlistify(outdata)
-        raw_data = yaml.dump(outdata, sort_keys=False)
+        # TODO custom yaml Representer
+        raw_data = yaml.dump(json.loads(json.dumps(outdata, cls=Encoder)), sort_keys=False)
         # _lexer = lexers.YamlLexer
         console = Console(record=True, emoji=False)
         console.begin_capture()

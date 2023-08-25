@@ -6,7 +6,7 @@ from __future__ import annotations
 import typer
 import sys
 import time
-from typing import Dict, List, Literal, Union, Tuple
+from typing import Dict, List, Literal, Union, Tuple, Any
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -17,17 +17,18 @@ import os
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, render
+    from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, render
+        from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi
+from centralcli.objects import DateTime, Encoder
 
 
 tty = utils.tty
@@ -315,6 +316,12 @@ class CLICommon:
         cleaner: callable = None,
         **cleaner_kwargs,
     ):
+        # @staticmethod
+        # def get_sort(sort_value: Any, type_):
+        #     if isinstance(sort_value, DateTime):
+        #         return sort_value.epoch
+        #     elif  type_ == int or all([v == "-" for v in d[sort_by]]):
+        #         return 0
         if data:
             data = utils.listify(data)
 
@@ -338,6 +345,7 @@ class CLICommon:
                                 type_ = type(d[sort_by])
                                 break
                         data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
+                        # data = sorted(data, key=get_sort(d[sort_by], type_=type_))
                     except TypeError as e:
                         print(
                             f":x: [dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "
@@ -368,7 +376,7 @@ class CLICommon:
 
             if stash:
                 config.last_command_file.write_text(
-                    json.dumps({k: v for k, v in kwargs.items() if k != "config"})
+                    json.dumps({k: v if not isinstance(v, DateTime) else v.epoch for k, v in kwargs.items() if k != "config"}, cls=Encoder)
                 )
 
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
@@ -468,6 +476,8 @@ class CLICommon:
                 if not r.output:
                     print(f"  Status Code: [{fg}]{r.status}[/]")
                     print(f"  :warning: Empty Response.  This may be normal.")
+                elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
+                    cleaner = clean.parse_caas_response
 
                 if not r or tablefmt in ["action", "raw"]:
 

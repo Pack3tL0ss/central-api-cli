@@ -58,6 +58,16 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
+class SortWebHookOptions(str, Enum):
+    name = "name"
+    updated = "updated"
+    wid = "wid"
+    urls = "urls"
+    retry_policy = "retry-policy"
+    token = "token"
+    token_created = "token-created"
+
+
 class SortInventoryOptions(str, Enum):
     type = "type"
     model = "model"
@@ -623,6 +633,13 @@ class SortOptions(str, Enum):
     serial_asc = "+serial"
     serial_des = "-serial"
 
+
+class SortWlanOptions(str, Enum):
+    ssid = "ssid"
+    security = "security"
+    type = "type"
+
+
 class SortDevOptions(str, Enum):
     name = "name"
     model = "model"
@@ -635,6 +652,7 @@ class SortDevOptions(str, Enum):
     type = "type"
     labels = "labels"
     version = "version"
+    uptime = "uptime"
 
 
 class SortTemplateOptions(str, Enum):
@@ -645,6 +663,28 @@ class SortTemplateOptions(str, Enum):
     template_hash = "template_hash"
     version = "version"
 
+
+class AlertSeverity(str, Enum):
+    critical = "critical"
+    major = "major"
+    minor = "minor"
+    warning = "warning"
+    info = "info"  # cleaner will tag severity INFO if the alert lacks a severity
+
+
+class AlertTypes(str, Enum):
+    device = "device"
+    client = "client"
+    user = "user"
+    ids = "ids"
+
+
+class SortAlertOptions(str, Enum):
+    time = "time"
+    severity = "severity"
+    type = "type"
+    description = "description"
+    acknowledged = "acknowledged"
 
 class SortCertOptions(str, Enum):
     name = "name"
