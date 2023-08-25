@@ -732,7 +732,7 @@ class Utils:
         template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
         var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
 
-        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf']
         if template_file.suffix == ".j2":
             if var_file is None or not var_file.exists():
                 _var_files = [template_file.parent / f"{template_file.stem}{sfx}" for sfx in valid_ext]
