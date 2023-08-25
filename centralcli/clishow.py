@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions,
-    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, lib_to_api, what_to_pretty  # noqa
+    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, lib_to_api, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -224,8 +224,9 @@ def devices(
         None,
         metavar=iden_meta.dev_many.replace("]", "|'all']"),
         hidden=False,
+        # HACK added ctx param to dev_completion
         autocompletion=lambda incomplete: [
-            m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete)]]
+            m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ],
         help="Show details for a specific device [grey42]\[default: show details for all devices][/]",
@@ -1180,7 +1181,7 @@ def variables(
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
         help="Default: 'all'",
         autocompletion=lambda incomplete: [
-            m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete)]]
+            m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ] or [],
         show_default=False,
@@ -1225,7 +1226,7 @@ def lldp(
     device: List[str] = typer.Argument(
         ...,
         metavar=iden_meta.dev_many,
-        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete, args=["ap"]),
+        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete=incomplete, args=["ap"]),
         show_default=False,
     ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
@@ -2441,21 +2442,24 @@ def last(
 
 @app.command(help="Show configured webhooks")
 def webhooks(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    sort_by: str = typer.Option(None, "--sort",),  # TODO create enum in constants.. Uses post formatting field headers
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    sort_by: SortWebHookOptions = typer.Option(None, "--sort", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(
         False, "-r",
         help="Reverse Output order Default order: newest on bottom.",
+        rich_help_panel="Formatting",
         show_default=False
     ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
         help="Use default central account",
+        rich_help_panel="Common Options",
         show_default=False,
     ),
     debug: bool = typer.Option(
@@ -2463,17 +2467,21 @@ def webhooks(
         "--debug",
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
+        rich_help_panel="Common Options",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
+    if sort_by is not None:
+        sort_by = sort_by.name
     ...
     resp = cli.central.request(cli.central.get_all_webhooks)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(
         resp,
         tablefmt=tablefmt,
