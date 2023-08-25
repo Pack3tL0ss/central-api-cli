@@ -9,7 +9,7 @@ import sys
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Union
+from typing import Any, List, Dict, Union, TypeVar, TextIO, overload
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
@@ -18,7 +18,9 @@ from yarl import URL
 # from pydantic import ConfigDict  # pydantic 2 not supported yet
 
 import tablib
+from tablib.exceptions import UnsupportedFormat
 import yaml
+
 
 try:
     import readline  # noqa
@@ -83,7 +85,7 @@ CLUSTER_URLS = {
 def get_cluster_url(cluster: ClusterName) -> str:
     return CLUSTER_URLS.get(cluster)
 
-valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf']
 NOT_ACCOUNT_KEYS = [
     "central_info",
     "ssl_verify",
@@ -96,6 +98,9 @@ NOT_ACCOUNT_KEYS = [
     "sanitize",
     "webclient_info",
 ]
+
+JSON_TYPE = Union[List, Dict, str]  # pylint: disable=invalid-name
+DICT_T = TypeVar("DICT_T", bound=Dict)  # pylint: disable=invalid-name
 
 def abort():
     print("Aborted")
@@ -159,6 +164,56 @@ def _get_user_input(valid: list) -> str:
     except (KeyboardInterrupt, EOFError):
         print("Aborted")
         sys.exit()
+
+
+class SafeLineLoader(yaml.SafeLoader):
+    """Loader class that keeps track of line numbers."""
+
+    def compose_node(self, parent: yaml.nodes.Node, index: int) -> yaml.nodes.Node:
+        """Annotate a node with the first line it was seen."""
+        last_line: int = self.line
+        node: yaml.nodes.Node = super().compose_node(parent, index)
+        node.__line__ = last_line + 1  # type: ignore
+        return node
+
+
+def load_yaml(fname: Path) -> JSON_TYPE:
+    """Load a YAML file."""
+    with fname.open(encoding="utf-8") as conf_file:
+        return parse_yaml(conf_file)
+
+
+def parse_yaml(content: Union[str, TextIO]) -> JSON_TYPE:
+    """Load a YAML file."""
+    # If configuration file is empty YAML returns None
+    # We convert that to an empty dict
+    return yaml.load(content, Loader=SafeLineLoader) or {}
+
+
+def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
+    """Load another YAML file and embeds it using the !include tag.
+
+    Example:
+        devices: !include devices.yaml
+        groups: !include groups.yaml
+        sites: !include sites.yaml
+
+    """
+    fname = Path(loader.name).parent / node.value
+    try:
+        if fname.suffix in ['.csv', '.tsv', '.dbf']:
+            csv_data = "".join([line for line in fname.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
+            try:
+                ds = tablib.Dataset().load(csv_data)
+            except UnsupportedFormat:
+                print(f'Unable to import data from {fname.name} verify formatting commas/headers/etc.')
+                sys.Exit(1)
+            return yaml.load(ds.yaml, Loader=SafeLineLoader) or {}
+        else:
+            return load_yaml(fname)
+    except FileNotFoundError as exc:
+        print(f"{node.start_mark}: Unable to read file {fname}.")
+        raise exc
 
 
 class Config:
@@ -304,7 +359,6 @@ class Config:
             )
         return _acct_specific or self.data.get("webclient_info", {}).get("port", 9443)
 
-
     def get(self, key: str, default: Any = None) -> Any:
         if key in self.data:
             return self.data.get(key, default)
@@ -322,35 +376,39 @@ class Config:
 
         Raises:
             UserWarning: Raises UserWarning when text_ok is False (default) and extension is
-                not in ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx']
+                not in ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf']
             UserWarning: Raises UserWarning when a failure occurs when parsing the file,
                 passes on the underlying exception.
 
         Returns:
             Union[dict, list]: Normally dict, list when text_ok and file extension not in
-                ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf', '.xls', '.xlsx'].
+                ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf'].
         """
         if import_file.exists() and import_file.stat().st_size > 0:
             with import_file.open() as f:
                 try:
                     if import_file.suffix == ".json":
                         return json.loads(f.read())
-                    elif import_file.suffix in [".yaml", ".yml"]:
-                        return yaml.load(f, Loader=yaml.SafeLoader)
-                    elif import_file.suffix in ['.csv', '.tsv', '.dbf', '.xls', '.xlsx']:
-                        with import_file.open('r') as fh:
-                            # TODO return consistent data type list/dict
-                            # tough given csv etc dictates a flat structure
-                            # TODO ignore lines starting with # in csv import
-                            return tablib.Dataset().load(fh)
-                    elif text_ok:
-                        return [line.rstrip() for line in import_file.read_text().splitlines()]
                     else:
-                        raise UserWarning(
-                            "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
-                        )
+                        yaml.SafeLoader.add_constructor("!include", _include_yaml)
+                        if import_file.suffix in [".yaml", ".yml"]:
+                            return yaml.load(f, Loader=yaml.SafeLoader)
+                        elif import_file.suffix in ['.csv', '.tsv', '.dbf']:
+                            csv_data = "".join([line for line in import_file.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
+                            try:
+                                ds = tablib.Dataset().load(csv_data)
+                            except UnsupportedFormat:
+                                print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
+                                sys.Exit(1)
+                            return yaml.load(ds.yaml, Loader=yaml.SafeLoader)
+                        elif text_ok:
+                            return [line.rstrip() for line in import_file.read_text().splitlines()]
+                        else:
+                            raise UserWarning(
+                                "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
+                            )
                 except Exception as e:
-                    raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__}\n\n{e}')
+                    raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__.__name__}\n\n{e}')
 
     def get_account_from_args(self) -> str:
         """Determine account to use based on arguments & last_account file.
