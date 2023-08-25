@@ -58,6 +58,16 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
+class SortWebHookOptions(str, Enum):
+    name = "name"
+    updated = "updated"
+    wid = "wid"
+    urls = "urls"
+    retry_policy = "retry-policy"
+    token = "token"
+    token_created = "token-created"
+
+
 class SortInventoryOptions(str, Enum):
     type = "type"
     model = "model"
