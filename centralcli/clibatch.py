@@ -637,53 +637,52 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     elif not data:
         print("[red]Error!![/] No import file provided")
         raise typer.Exit(1)
-    # TODO Import object class with consistent return.  Accept pydantic model as param
-    #      for validation...
+
     if "devices" in data:
         data = data["devices"]
+
+    # accept yaml/json keyed by serial #
     if data and isinstance(data, dict):
         if utils.isserial(list(data.keys())[0]):
             data = [{"serial": k, **v} for k, v in data.items()]
 
-
     warn = False
-    if hasattr(data, "headers"):
-        headers = data.headers
-        _reqd_cols = ["serial", "mac"]
-        for c in _reqd_cols:
-            if c not in data.headers:
-                print(f"[reset]::warning::[bright_red] !![/]Missing Required column header [cyan]{c}[/]")
-                print(f"\n.csv file is required to have the following headers:")
-                print("[cyan]serial[/], [cyan]mac[/]")
-                print(f"\nThe following headers/columns are optional:")
-                print("[cyan]group[/], [cyan]license[reset]")
-                # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
-                raise typer.Exit(1)
+    _reqd_cols = ["serial", "mac"]
+    if not all([len(_reqd_cols) == len([k for k in d.keys() if k in _reqd_cols]) for d in data]):
+        print(f"[reset]::warning::[bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
+        print(f"\nImport file must have the following keys for each device:")
+        print("[cyan]serial[/], [cyan]mac[/]")
+        print(f"\nThe following headers/columns are optional:")
+        print("[cyan]group[/], [cyan]license[reset]")
+        print("Use [cyan]cencli batch add devices --show-example[/] to see valid import file formats.")
+        # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
+        raise typer.Exit(1)
 
-        data = data if not hasattr(data, "dict") else data.dict
-        if isinstance(data, dict) and "devices" in data:
-            data = data["devices"]
+    if isinstance(data, dict) and "devices" in data:
+        data = data["devices"]
 
-        if "license" in headers:
-            # Validate license types
-            for d in data:
-                if d["license"]:
-                    for idx in range(2):
-                        try:
-                            # d["license"] = LicenseTypes(d["license"].lower().replace("_", "-")).name
-                            d["license"] = cli.cache.LicenseTypes(d["license"].lower().replace("_", "-")).name
-                            break
-                        except ValueError:
-                            if idx == 0:
-                                print(f'[bright_red]!![/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
-                                resp = cli.central.request(cli.cache.update_license_db)
-                                if not resp:
-                                    cli.display_results(resp, exit_on_fail=True)
-                            else:
-                                print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
-                                warn = True
+    sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
+    sub_key = None if not sub_key else sub_key[0]
+    if sub_key:
+        # Validate license types
+        for d in data:
+            if d[sub_key]:
+                for idx in range(2):
+                    try:
+                        d["license"] = cli.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
+                        if sub_key != "license":
+                            del d[sub_key]
+                        break
+                    except ValueError:
+                        if idx == 0:
+                            print(f'[bright_red]!![/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
+                            resp = cli.central.request(cli.cache.update_license_db)
+                            if not resp:
+                                cli.display_results(resp, exit_on_fail=True)
+                        else:
+                            print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
+                            warn = True
 
-    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     msg_pfx = "" if not warn else "Warning exist "
     word = "Adding" if not warn and yes else "Add"
     print(f'{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
@@ -692,7 +691,21 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
-        asyncio.run(cli.cache.update_inv_db(data=_data))
+        if _data:
+            try:
+                _data = [models.Inventory(**d).dict() for d in _data]
+            except ValidationError as e:
+                log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
+                _data = None
+        # asyncio.run(cli.cache.update_inv_db(data=_data))
+        # always perform full dev_db update as we don't know the other fields.
+        console = Console()
+        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
+            cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
+        with console.status("Allowing time for devices to appear in Central"):
+            sleep(5)
+        with console.status('Performing full device cache update after device edition.'):
+            cache_res += [cli.central.request(cli.cache.update_dev_db)]
 
     return resp or Response(error="No Devices were added")
 
@@ -946,30 +959,29 @@ def add(
         raise typer.Exit(1)
 
     if what == "sites":
-        resp = batch_add_sites(import_file, yes)
+        resp = batch_add_sites(import_file, yes=yes)
         cli.display_results(resp)
     elif what == "groups":
-        batch_add_groups(import_file, yes)
+        batch_add_groups(import_file, yes=yes)
         # TODO put cleaner func in response object maybe??
         cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
     elif what == "devices":
-        resp = batch_add_devices(import_file, yes)
+        resp = batch_add_devices(import_file, yes=yes)
         cli.display_results(resp, tablefmt="action")
     elif what == "labels":
-        resp = batch_add_labels(import_file, yes)
+        resp = batch_add_labels(import_file, yes=yes)
         cli.display_results(resp, tablefmt="action")
 
 
 def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
-    resp = None
 
-    serials_in = [dev["serial"].upper() for dev in data]
-
-    if not serials_in:
+    if not data:
         print(f"[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
         raise typer.Exit(1)
+
+    serials_in = [dev["serial"].upper() for dev in data]
 
     # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
     # to avoid duplication ... # FIXME update clidel with corrections made below
@@ -1017,10 +1029,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
-
-
     # construnct confirmation msg
-    # TODO need to break this up into inv del / mon del as it was prior, could have mon del w/ no inv del
     _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
@@ -1045,9 +1054,36 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         batch_resp = cli.central.batch_request([*reqs, *mon_del_reqs])
         if not all([r.ok for r in batch_resp]):
             console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
+            console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
             cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.")
 
     if not delayed_mon_del_reqs:
+        # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
+        all_ok = True if all(r.ok for r in batch_resp) else False
+
+        cache_update_reqs = []
+        if cache_devs:
+            if all_ok:
+                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+            else:
+                cache_update_reqs += [br(cli.cache.update_dev_db)]
+
+        if cache_devs or inv_del_serials and not ui_only:
+            if all_ok:
+                cache_update_reqs += [
+                    br(
+                        cli.cache.update_inv_db,
+                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
+                        remove=True
+                    )
+                ]
+            else:
+                cache_update_reqs += [br(cli.cache.update_inv_db)]
+
+        # Update cache remove deleted items
+        if cache_update_reqs:
+            batch_res = cli.central.batch_request(cache_update_reqs)
+
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
 
@@ -1192,15 +1228,9 @@ def delete(
 
     # TODO consistent model and structure for config.get_file_data (pass in a pydantic model)
     data = config.get_file_data(import_file)
-    if hasattr(data, "dict"):  # csv
-        data = data.dict
+
     if data and isinstance(data, dict) and "devices" in data:
         data = data["devices"]
-
-    # -- // Gather data from import file \\ --
-    data = config.get_file_data(import_file)
-    if hasattr(data, "dict"):  # csv
-        data = [dict(d) for d in data.dict]  # adapts from OrderedDict to dict
 
     if what == "devices":
         resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
@@ -1212,6 +1242,171 @@ def delete(
     elif what == "labels":
         print("Batch Delete Labels is not implemented yet.")
         raise typer.Exit(1)
+    cli.display_results(resp, tablefmt="action")
+
+
+# TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
+def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchRequest]:
+    if "'license': " in str(devices):
+        devices = [{**d, "services": d["license"]} for d in devices]
+    elif "'subscription': " in str(devices):
+        devices = [{**d, "services": d["subscription"]} for d in devices]
+
+    subs = set([d["services"] for d in devices if d["services"]])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    devices = [d for d in devices if d["services"]]  # filter any devs tghat currently do not have subscription
+
+    try:
+        subs = [cli.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
+    except ValueError as e:
+        sub_names = "\n".join(cli.cache.license_names)
+        print("[bright_red]Error[/]: " + str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
+        raise typer.Exit(1)
+
+    devs_by_sub = {s: [] for s in subs}
+    for d in devices:
+        devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
+
+    func = cli.central.unassign_licenses if unsub else cli.central.assign_licenses
+    return [
+        BatchRequest(func, serials=serials, services=sub) for sub, serials in devs_by_sub.items()
+    ]
+
+@app.command()
+def subscribe(
+    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
+    show_example: bool = typer.Option(
+        False, "--example",
+        help="Show Example import file format.",
+        show_default=False,
+    ),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Batch subscribe devices
+
+    Assign subscription license to devices specified in import file.
+
+    [italic]This command assumes devices have already been added to GreenLake,
+    to add devices and assign subscription use [cyan]cencli batch add devices <IMPORT_FILE>[/][/]
+    """
+    if show_example:
+        print(getattr(examples, f"subscribe"))  # TODO need example should be same as add devices
+        return
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch subscribe [OPTIONS] IMPORT_FILE",
+            "Use [cyan]cencli batch subscribe --help[/] for help.",
+            "",
+            "[bright_red]Error[/]: Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or --show-example flag."
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    elif import_file:
+        devices = config.get_file_data(import_file)
+        if "devices" in devices:
+            devices = devices["devices"]
+
+        sub_reqs = _build_sub_requests(devices)
+
+        cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
+        print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+        if yes or typer.confirm("\nProceed?", abort=True):
+            resp = cli.central.batch_request(sub_reqs)
+
+    cli.display_results(resp, tablefmt="action")
+
+@app.command()
+def unsubscribe(
+    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
+    never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
+    dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Dissasociate the device from the Aruba Central App in Green Lake"),
+    show_example: bool = typer.Option(
+        False, "--example",
+        help="Show Example import file format.",
+        show_default=False,
+    ),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Batch Unsubscribe devices
+
+    Can Unsubscribe devices specified in import file or all devices in the inventory that
+    have never connected to Aruba Central (-N | --never-connected)
+
+    Use (-D | --dis-cen) flag to also dissasociate the devices from the Aruba Central app in Green Lake.
+    """
+    if show_example:
+        print(getattr(examples, f"unsubscribe"))  # TODO need example should be same as add devices
+        return
+    elif never_connected:
+        resp = cli.cache.get_devices_with_inventory()
+        if not resp:
+            cli.display_results(resp, exit_on_fail=True)
+        else:
+            devices = [d for d in resp.output if d.get("status") is None and d["services"]]
+            if dis_cen:
+                resp = batch_delete_devices(devices, yes=yes)
+            else:
+                unsub_reqs = _build_sub_requests(devices, unsub=True)
+
+                cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
+                print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
+                if yes or typer.confirm("\nProceed?", abort=True):
+                    resp = cli.central.batch_request(unsub_reqs)
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch unsubscribe [OPTIONS] IMPORT_FILE",
+            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
+            "",
+            "[bright_red]Error[/]: Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or at least one of: -N, --never-connected, --show-example flags."
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    elif import_file:
+        devices = config.get_file_data(import_file)
+        if "devices" in devices:
+            devices = devices["devices"]
+
+        unsub_reqs = _build_sub_requests(devices, unsub=True)
+
+        cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
+        print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
+        if yes or typer.confirm("\nProceed?", abort=True):
+            resp = cli.central.batch_request(unsub_reqs)
+
+    if not dis_cen and all([r.ok for r in resp]):
+        inv_devs = [{**d, "services": None} for d in devices]
+        cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
+        if len(inv_devs) != len(cache_resp):
+            log.warning(
+                f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
+                )
+
+
     cli.display_results(resp, tablefmt="action")
 
 
