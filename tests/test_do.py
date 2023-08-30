@@ -21,13 +21,14 @@ def do_nothing():
 @pytest.fixture(scope='session', autouse=True)
 def cleanup():
     # Will be executed before the first test
-    yield do_nothing
+    yield do_nothing()
     # executed after test is run
     result = runner.invoke(app, ["show", "cache", "groups", "--json"])
     del_groups = [g for g in json.loads(result.stdout) if g.startswith("cencli_test_")]
-    result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
-    assert "Success" in result.stdout
-    assert result.exit_code == 0
+    if del_groups:
+        result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
+        assert "Success" in result.stdout
+        assert result.exit_code == 0
 
 def test_bounce_interface():
     result = runner.invoke(app, ["bounce",  "interface", TEST_DEVICES["switch"]["name"].lower(),
