@@ -185,35 +185,35 @@ def test_show_variables():
 
 
 def test_show_variables_by_serial():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["serial"]],)
+    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["template_switch"]["serial"]],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_variables_by_name():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["switch"]["name"].title()],)
+    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["template_switch"]["name"].title()],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_templates_by_group():
-    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["switch"]["group"]],)
+    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["template_switch"]["group"]],)
     assert result.exit_code == 0
     assert "group" in result.stdout
     assert "version" in result.stdout
 
 
 def test_show_template_by_dev_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["name"].lower()],)
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template_switch"]["name"].lower()],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
 
 
 def test_show_template_by_dev_serial():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["switch"]["serial"]],)
+    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template_switch"]["serial"]],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
