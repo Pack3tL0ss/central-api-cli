@@ -397,6 +397,26 @@ def device(
             cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.")
 
     if not delayed_reqs:
+        # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
+        all_ok = True if all(r.ok for r in batch_resp) else False
+
+        cache_update_reqs = []
+        if cache_devs:
+            if all_ok:
+                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+            else:
+                cache_update_reqs += [br(cli.cache.update_dev_db)]
+
+        if inv_del_serials:
+            if all_ok:
+                cache_update_reqs += [br(cli.cache.update_inv_db, (inv_del_serials,), remove=True)]
+            else:
+                cache_update_reqs += [br(cli.cache.update_inv_db)]
+
+        # Update cache remove deleted items
+        if cache_update_reqs:
+            batch_res = cli.central.batch_request(cache_update_reqs)
+
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
 
