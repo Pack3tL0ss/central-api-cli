@@ -141,13 +141,17 @@ class CentralObject:
                 self.serial,
                 self.mac,
                 self.ip,
-                self.group,
-                self.site,
             ]
+            # TODO Inventory only devices don't have group attribute
+            if "group" in self.data.keys():
+                parts += [self.group]
+            if "site" in self.data.keys():
+                parts += [self.site]
+
             parts = utils.strip_none(parts, strip_empty_obj=True)
             if self.site:
                 parts[-1] = f"s:{parts[-1]}"
-            if self.group:
+            if "group" in self.data.keys() and self.group:
                 parts[-2 if self.site else -1] = f"g:{parts[-2 if self.site else -1]}"
         elif self.cache == "group":
             parts = ["Group", self.name]
@@ -625,7 +629,7 @@ class Cache:
                 yield m
 
         elif args and args[-1].lower() == "ap":
-            out = [m for m in self.dev_completion(ctx, incomplete, args)]
+            out = [m for m in self.dev_completion(incomplete, args)]
             for m in out:
                 yield m
 
@@ -640,7 +644,7 @@ class Cache:
                     out += [("group", _help)]
 
             if "site" not in args and "group" not in args:
-                out = [*out, *[m for m in self.dev_completion(ctx, incomplete, args)]]
+                out = [*out, *[m for m in self.dev_completion(incomplete, args)]]
             elif "site" in args and "group" in args:
                 incomplete = "NULL_COMPLETION"
                 out += ["|", "<cr>"]
@@ -650,7 +654,7 @@ class Cache:
 
     def dev_ap_completion(
         self,
-        ctx: typer.Context,
+        # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
@@ -660,12 +664,12 @@ class Cache:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
         """
-        if not args:
-            _last = ctx.command_path.split()[-1]
-            if _last in ctx.params:
-                args = ctx.params[_last]
-            else:
-                args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
+        # if not args:
+        #     _last = ctx.command_path.split()[-1]
+        #     if _last in ctx.params:
+        #         args = ctx.params[_last]
+        #     else:
+        #         args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
 
         dev_types = ["ap"]
         match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
@@ -1268,7 +1272,8 @@ class Cache:
             return resp
 
     async def update_inv_db(
-            self, data: Union[str, List[str]] = None,
+            self,
+            data: Union[str, List[str]] = None,
             *,
             remove: bool = False,
             dev_type: str = "all",
@@ -1277,7 +1282,7 @@ class Cache:
         """Update Inventory Database (local cache).
 
         Args:
-            data (Union[str, List[str]], optional): serial number of list of serials numbers to add or remove. Defaults to None.
+            data (Union[str, List[str]], optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
             dev_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
             sub (str, optional): whether or not to filter return by subscribed / not subscribed. Defaults to None (no filter)
@@ -1311,13 +1316,17 @@ class Cache:
                     if not utils.isserial(qry):
                         raise ValueError("Provided str does not appear to be a serial number.")
                     else:
-                        doc_ids += [self.InvDB.get((self.Q.serial == qry)).doc_id]
+                        match = self.InvDB.get((self.Q.serial == qry))
+                        if match:
+                            doc_ids += [match.doc_id]
+                        else:
+                            log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
 
-                if len(doc_ids) != len(data):
-                    log.error(
-                        f"Warning update_inv_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
-                        show=True
-                    )
+                # if len(doc_ids) != len(data):
+                #     log.error(
+                #         f"Warning update_inv_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
+                #         show=True
+                #     )
 
                 db_res = self.InvDB.remove(doc_ids=doc_ids)
                 if False in db_res:
