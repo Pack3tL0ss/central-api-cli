@@ -95,6 +95,7 @@ Use `cencli ?` to become familiar with the command options.
 ### Auto Completion
 
 The CLI supports auto-completion.  To configure auto-completion run `cencli --install-completion`.  This will auto-detect the type of shell you are running in, and install the necessary completion into your profile.  You'll need to exit the shell and start a new session for it to take effect.
+> Note for OSX 11: Additional step, edit .zshrc and add "autoload -Uz compinit && compinit -i" then exit and start new session.
 
 ## Usage Notes
 
