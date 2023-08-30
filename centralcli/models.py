@@ -2,9 +2,11 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Union
+from pathlib import Path
 
 import pendulum
 from pydantic import BaseModel, Field, validator, IPvAnyAddress
+
 
 
 class DeviceStatus(str, Enum):
@@ -27,11 +29,11 @@ class TemplateDevType(str, Enum):
 # fields from Response.output after cleaner
 class Inventory(BaseModel):
     type: str
-    model: str
-    sku: str
+    model: Optional[str]
+    sku: Optional[str]
     mac: str
     serial: str
-    services: Union[List[str], str]
+    services: Union[List[str], str] = Field(alias="license")
 
 # Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE

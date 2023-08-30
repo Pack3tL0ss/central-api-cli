@@ -521,7 +521,7 @@ def inventory(
         title = "Inventory"
 
     resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api("inventory", dev_type), sub=sub)
-    if verbose:
+    if verbose:  # TODO just pass this to all_() so output is consistent
         cache_devices = cli.cache.devices
         for idx, dev in enumerate(resp.output):
             from_cache = [d for d in cache_devices if d["serial"] == dev["serial"]]

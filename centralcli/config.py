@@ -366,13 +366,14 @@ class Config:
             return self.data[self.account].get(key, default)
 
     @staticmethod
-    def get_file_data(import_file: Path, text_ok: bool = False) -> Union[dict, list]:
+    def get_file_data(import_file: Path, text_ok: bool = False, model: Any = None) -> Union[dict, list]:
         """Returns dict from yaml/json/csv or list of lines from file when text_ok=True.
 
         Args:
             import_file (Path): import file.
             text_ok (bool, optional): When file extension is not one of yaml/yml/json/csv/tsv...
                 parse file as text and return list of lines. Defaults to False.
+            model (Any, optional): Pydantic Model to return, dict from import is passed into model for validation.
 
         Raises:
             UserWarning: Raises UserWarning when text_ok is False (default) and extension is
@@ -388,20 +389,27 @@ class Config:
             with import_file.open() as f:
                 try:
                     if import_file.suffix == ".json":
-                        return json.loads(f.read())
+                        return json.loads(f.read()) if not model else model(**json.loads(f.read()))
                     else:
                         yaml.SafeLoader.add_constructor("!include", _include_yaml)
                         if import_file.suffix in [".yaml", ".yml"]:
-                            return yaml.load(f, Loader=yaml.SafeLoader)
+                            import_data = yaml.load(f, Loader=yaml.SafeLoader)
+                            if not model:
+                                return import_data
+                            # return yaml.load(f, Loader=yaml.SafeLoader) if not model else model(*yaml.load(f, Loader=yaml.SafeLoader))
                         elif import_file.suffix in ['.csv', '.tsv', '.dbf']:
                             csv_data = "".join([line for line in import_file.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
                             try:
                                 ds = tablib.Dataset().load(csv_data)
                             except UnsupportedFormat:
                                 print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
-                                sys.Exit(1)
-                            return yaml.load(ds.yaml, Loader=yaml.SafeLoader)
+                                sys.exit(1)
+                            import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)
+                            if not model:
+                                return import_data
                         elif text_ok:
+                            if model:
+                                raise UserWarning(f'text_ok=True, and model={model.__class__.__name__} are mutually exclusive.')
                             return [line.rstrip() for line in import_file.read_text().splitlines()]
                         else:
                             raise UserWarning(
@@ -409,6 +417,13 @@ class Config:
                             )
                 except Exception as e:
                     raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__.__name__}\n\n{e}')
+
+                if isinstance(import_data, list):
+                    return model(**{list(model.__fields__.keys())[0]: import_data})
+                elif isinstance(import_data, dict):
+                    return model(**import_data)
+                else:
+                    raise TypeError(f'{model.__class__.__name__} model provided but data from import is unexpected type {type(import_data)}')
 
     def get_account_from_args(self) -> str:
         """Determine account to use based on arguments & last_account file.
@@ -529,8 +544,11 @@ class Config:
                 print("[red]The OAUTH Flow does not work with hpe.com users (SSO).")
                 print(f"[red]ignoring username {username}.")
                 password = None
+            elif not username:
+                username = None
+                print()  # They did not enter a username.  CR is for correct format of config output
             else:
-                password = None if not username else ask("password", password=True)
+                password = ask("password", password=True)
 
             valid = False
             if access_token:

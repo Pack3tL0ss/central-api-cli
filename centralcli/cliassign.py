@@ -55,6 +55,7 @@ def license(
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
         cli.display_results(resp, tablefmt="action")
+    # TODO cache update similar to batch unsubscribe
 
 
 @app.command(help="Assign label to device(s)", hidden=False)

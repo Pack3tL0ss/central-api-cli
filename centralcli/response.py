@@ -716,6 +716,7 @@ class Session():
                 auth.central_info.get("password") is None
             ]
 
+            # TODO allow new client_id client_secret and accept paste from "Download Tokens"
             if True in token_only:
                 prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
                         f"\n    customer_id: {auth.central_info['customer_id']}" \
@@ -728,8 +729,10 @@ class Session():
                 token_data = utils.get_multiline_input(prompt, return_type="dict")
             else:
                 auth.handleTokenExpiry()
+                token_data = auth.getToken()
         else:
             auth.handleTokenExpiry()
+            token_data = auth.getToken()
 
         return token_data
 

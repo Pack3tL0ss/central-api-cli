@@ -640,8 +640,7 @@ def stop(
 @app.command(short_help="Archive devices", hidden=False)
 def archive(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -659,7 +658,6 @@ def archive(
 
     Just use cencli deleve device ... or cencli batch delete devices
     """
-    yes = yes_ if yes_ else yes
     devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
@@ -670,16 +668,18 @@ def archive(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.rich_help_text}"
-    print(_msg)
+
+    console = Console(emoji=False)
+    console.print(_msg)
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
         cli.display_results(resp, tablefmt="action")
 
 
 
-@app.command(help="unarchive devices", hidden=False)
+@app.command()
 def unarchive(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    serials: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -690,19 +690,29 @@ def unarchive(
     """unacrchive devices.
 
     Remove previously archived devices from archive.
+
+    Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
     """
-    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
+    # TODO maybe remnove all this, archived devs not in Inventory so prob not in cache.
+    # We have to make the call blind, best we can do is run them through utils.is_serial()
+    serials: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
     _msg = f"[bright_green]Unarchive devices[/]:"
-    if len(devices) > 1:
-        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
-        _msg = f"{_msg}\n    {_dev_msg}\n"
+    if serials and all([isinstance(d, CentralObject) for d in serials]):
+        serials = [d.serial for d in serials]
+        if len(serials) > 1:
+            _dev_msg = '\n    '.join([dev.rich_help_text for dev in serials])
+            _msg = f"{_msg}\n    {_dev_msg}\n"
+        else:
+            dev = serials[0]
+            _msg = f"{_msg} {dev.rich_help_text}"
     else:
-        dev = devices[0]
-        _msg = f"{_msg} {dev.rich_help_text}"
+        _dev_msg = '\n    '.join(serials)
+        _msg = f"{_msg}\n    {_dev_msg}\n"
+        serials = serials
     print(_msg)
 
-    resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in devices])
+    resp = cli.central.request(cli.central.unarchive_devices, serials)
     cli.display_results(resp, tablefmt="action")
 
 

@@ -337,8 +337,7 @@ def site(
     country: str = typer.Argument(None,),
     lat: str = typer.Option(None, metavar="LATITUDE"),
     lon: str = typer.Option(None, metavar="LONGITUDE"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False
     ),
@@ -351,8 +350,6 @@ def site(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    yes = yes_ if yes_ else yes
-
     # These conversions just make the fields match what is used if done via GUI
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)
@@ -424,11 +421,12 @@ def label(
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
 # This worked: cencli add certificate lejun23 securelogin.kabrew.com.all.pem -pem -svr  (no passphrase, entering passphrase caused error above)
+# TODO options should prob be --pem to be consistent with other commands
 @app.command(hidden=False)
 def certificate(
-    cert_name: str = typer.Argument(...),
-    cert_file: Path = typer.Argument(None,),
-    passphrase: str = typer.Option(None,),
+    cert_name: str = typer.Argument(..., show_default=False),
+    cert_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False,),
+    passphrase: str = typer.Option(None, help="optional passphrase"),
     # cert_type: CertTypes = typer.Argument(...),
     # cert_format: CertFormat = typer.Argument(None,),
     pem: bool = typer.Option(False, "-pem", help="upload certificate in PEM format", show_default=False,),
@@ -441,8 +439,7 @@ def certificate(
     ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp", help="Type: OCSP responder", show_default=False,),
     ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer", help="Type: OCSP signer", show_default=False,),
     ssh_pub_key: bool = typer.Option(False, "-public", help="Type: SSH Public cert", show_default=False, hidden=True,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False
     ),
@@ -457,7 +454,6 @@ def certificate(
 ) -> None:
     """Upload a Certificate to Aruba Central
     """
-    yes = yes_ if yes_ else yes
     passphrase = "" if passphrase is None else passphrase
     cert_format_params = [pem, der, pkcs12]
     cert_formats = ["PEM", "DER", "PKCS12"]
