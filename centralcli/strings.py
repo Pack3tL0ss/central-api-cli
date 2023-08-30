@@ -17,6 +17,8 @@ from centralcli import log
 
 # TODO pass examples through lexer
 
+# TODO build csv examples for all the below, send through tablib and use .json .yaml .csv methods of tablib to generate examples for each
+
 common_add_delete_end = """
 [italic]Note: Batch add and batch delete operations are designed so the same import file can be used.[/]
 [italic]      The delete operation does not require as many fields, the cli will ignore the fields it does not need.[/]
@@ -212,6 +214,66 @@ This is a placeholder
 TODO add deploy example
 """
 
+# TODO playing with formatting ... determine how to get highlighting and apply to all
+import tablib, yaml
+console = Console(emoji=False)
+from rich.highlighter import JSONHighlighter
+json_highligher = JSONHighlighter()
+data = """serial,license
+CN12345678,foundation_switch_6300
+CN12345679,advanced_ap
+CN12345680,advanced_ap"""
+ds = tablib.Dataset().load(data)
+console.begin_capture()
+console.print_json(ds.json)
+json_data = console.end_capture()
+
+clibatch_subscribe = f"""
+[italic cyan]cencli batch subscribe devices IMPORT_FILE[/]:
+Requires the following keys (include as header row for csv import):
+    If importing yaml or json the following fields can optionally be under a 'devices' key
+    [italic]Other keys/columns are allowed, but will be ignored.
+
+[cyan]serial[/],[cyan]license[/] (both are required)
+
+{"-":{"-"}<21}[bright_green] .csv example[reset]: {"-":{"-"}<21}
+{ds.csv.rstrip()}
+---------------------------------------------------------
+
+{"-":{"-"}<21}[bright_green] .json example[reset]: {"-":{"-"}<20}
+{json_data.replace("[1;34m", "[deep_sky_blue3]").replace("[32m", "[green]").replace("[0m", "[reset]").replace("[1m", "[normal]").rstrip()}
+---------------------------------------------------------
+
+{"-":{"-"}<21}[bright_green] .yaml example[reset]: {"-":{"-"}<20}
+{yaml.safe_dump(yaml.safe_load(ds.json)).rstrip()}
+---------------------------------------------------------
+
+NOTE: Most batch operations are designed so the same file can be used for multiple automations
+      the fields not required for a particular automation will be ignored.
+"""
+
+clibatch_unsubscribe = f"""
+[italic cyan]cencli batch unsubscribe IMPORT_FILE[/]:
+Accepts the following keys (include as header row for csv import):
+    If importing yaml or json the following fields can optionally be under a 'devices' key
+
+[cyan]serial[/]
+
+[italic]Other fields can be included, but only serial, is evaluated
+any subscriptions associated with the serial will be removed.
+
+[bright_green].csv example[reset]:
+-------------------------- csv --------------------------
+serial
+CN12345678
+CN12345679
+CN12345680
+---------------------------------------------------------
+
+NOTE: Most batch operations are designed so the same file can be used for multiple automations
+      the fields not required for a particular automation will be ignored.
+"""
+
 def do_capture(text: str) -> str:
     con = Console()
     con.begin_capture()
@@ -232,6 +294,8 @@ class ImportExamples:
         self.delete_labels = clibatch_delete_labels
         self.add_site = cliadd_site_help
         self.deploy = clibatch_deploy
+        self.subscribe = clibatch_subscribe
+        self.unsubscribe = clibatch_unsubscribe
 
     def __getattr__(self, key: str):
         if key not in self.__dict__.keys():
