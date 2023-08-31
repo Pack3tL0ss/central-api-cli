@@ -1603,7 +1603,7 @@ class Cache:
             update_funcs += [self.update_label_db]
         if license_db:
             update_funcs += [self.update_license_db]
-        async with ClientSession() as self.central.aio_session:
+        async with self.central.aio_session:
             if update_funcs:
                 db_res += [await update_funcs[0]()]
                 if db_res[-1]:
