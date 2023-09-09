@@ -122,6 +122,30 @@ class WebHookState(str, Enum):
     Open = "Open"
     Close = "Close"
 
+# TODO 2 enums below are repeats of what is already defined in constants.  import or move all to here?
+class AllowedGroupDevs(str, Enum):
+    ap = "ap"
+    gw = "gw"
+    cx = "cx"
+    sw = "sw"
+
+class GatewayRole(str, Enum):
+    branch = "branch"
+    vpnc = "vpnc"
+    wlan = "wlan"
+
+# TODO clibranch already had a model built for this, this isn't used, but consider moving models out of clibatch to here
+class GroupImport(BaseModel):
+    group: str = Field(..., alias="name")
+    allowed_types: List[AllowedGroupDevs] = ["ap", "gw", "cx"]
+    wired_tg: bool = False
+    wlan_tg: bool = False
+    aos10: bool = False
+    microbranch: bool = False
+    gw_role: GatewayRole = False
+    monitor_only_sw: bool = False
+    monitor_only_cx: bool = False
+
 
 # This is what is in the cache for the hook-proxy
 class WebHookData(BaseModel):
