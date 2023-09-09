@@ -1,6 +1,6 @@
 # Boilerplate functions
 
-**Last Updated with Central 2.5.6 9/20/2022 (internal)**
+**Last Updated with Central 2.5.7 9/8/2023 (internal)**
 
 - The files in this directory contain python functions for each API endpoint available in Aruba Central.
 - The functions are designed to fit within the framework used by centralcli, but can easily be adjusted to suite other needs.
