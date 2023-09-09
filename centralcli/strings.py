@@ -166,7 +166,7 @@ name\nsite1\nsite2\nsite3
 {common_add_delete_end}
 """
 
-clibatch_add_labels = f"""
+clibatch_add_labels = """
 [italic cyan]cencli batch add labels IMPORT_FILE[/]:
 For all formats, labels should be under a 'labels' key/header.
 
@@ -190,8 +190,8 @@ labels: \[example1, example2, example3]
 ]
 ----------------------------------------
 
--------------- [cyan]csv[/] ---------------------
-labels     [magenta]<-- this is the header column[/]
+----------- [cyan]csv or txt[/] -----------------
+labels     [magenta]<-- this is the header column[/] [grey42](optional for txt)[/]
 example1       [magenta]<-- these are label names[/]
 example2
 example3
