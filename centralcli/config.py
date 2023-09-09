@@ -402,8 +402,12 @@ class Config:
                             try:
                                 ds = tablib.Dataset().load(csv_data)
                             except UnsupportedFormat:
-                                print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
-                                sys.exit(1)
+                                try:
+                                    # TODO if csv is single column maybe we should convert all to single list
+                                    ds = tablib.Dataset().load(csv_data, format=import_file.suffix.lstrip("."))
+                                except UnsupportedFormat:
+                                    print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
+                                    sys.exit(1)
                             import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)
                             if not model:
                                 return import_data
