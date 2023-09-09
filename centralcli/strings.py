@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 from rich.console import Console
+from rich.json import JSON
 from centralcli import log
+import tablib, yaml
+console = Console(emoji=False)
 
 # TODO typer now supports markup_mode="rich" Don't need the help below, can just put the markup in the docstr
 
@@ -18,6 +22,53 @@ from centralcli import log
 # TODO pass examples through lexer
 
 # TODO build csv examples for all the below, send through tablib and use .json .yaml .csv methods of tablib to generate examples for each
+# TODO These Examples run on import need to make properties of class or something to avoid running on import
+
+class Example:
+    """
+    convert csv data as string into csv, json, and yaml
+    """
+    def __init__(self, data: list | dict) -> None:
+        self.data = data.strip()
+        self.ds = tablib.Dataset().load(self.data)
+        self.json = self.get_json()
+        self.yaml = self.get_yaml()
+        self.csv = self.get_csv()
+
+    @staticmethod
+    def _capture(text: str) -> str:
+        console.begin_capture()
+        console.print(text)
+        return console.end_capture()
+
+
+    def __str__(self):
+        return "\n".join(
+            [
+                f'{"-":{"-"}<21}[bright_green] .csv example[reset]: {"-":{"-"}<21}',
+                self.csv,
+                "-" * 57,
+                "",
+                f'{"-":{"-"}<21}[bright_green] .json example[reset]: {"-":{"-"}<20}',
+                self.json,
+                "-" * 57,
+                "",
+                f'{"-":{"-"}<21}[bright_green] .yaml example[reset]: {"-":{"-"}<20}',
+                self.yaml,
+                "-" * 57
+            ]
+        )
+
+    def get_json(self):
+        return JSON(self.ds.json).text.markup
+
+    def get_yaml(self):
+        return yaml.safe_dump(yaml.safe_load(self.ds.json)).rstrip()
+
+    def get_csv(self):
+        return self.ds.csv.rstrip()
+
+
 
 common_add_delete_end = """
 [italic]Note: Batch add and batch delete operations are designed so the same import file can be used.[/]
@@ -40,6 +91,30 @@ CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
 CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
 CN12345680,aabb-ccdd-8899,chi-access,advanced_ap
 ---------------------------------------------------------
+[italic]MAC Address can be nearly any format imaginable.[/]
+{common_add_delete_end}
+"""
+
+data="""
+serial,mac,group,site,label
+CN12345678,aabbccddeeff,phl-access,snantx-1201,
+CN12345679,aa:bb:cc:00:11:22,phl-access,pontmi-102,label1
+CN12345680,aabb-ccdd-8899,chi-access,main,core-devs
+"""
+
+clibatch_move_devices = f"""
+[italic cyan]cencli batch move devices IMPORT_FILE[/]:
+Accepts the following keys (include as header row for csv import):
+    [italic grey42]If importing yaml or json the following fields can optionally be under a 'devices' key[/italic grey42]
+
+[cyan]serial[/],[cyan]group[/],[cyan]site[/],[cyan]label[/]
+Where '[cyan]group[/]' Move device to specified group
+      '[cyan]site[/]' Move device to specified site
+            [italic]If device is currently in a different site it will be removed from that site[/]
+      '[cyan]label[/]' Assign specified label to device
+
+{Example(data)}
+
 [italic]MAC Address can be nearly any format imaginable.[/]
 {common_add_delete_end}
 """
@@ -214,19 +289,10 @@ This is a placeholder
 TODO add deploy example
 """
 
-# TODO playing with formatting ... determine how to get highlighting and apply to all
-import tablib, yaml
-console = Console(emoji=False)
-from rich.highlighter import JSONHighlighter
-json_highligher = JSONHighlighter()
-data = """serial,license
+data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap"""
-ds = tablib.Dataset().load(data)
-console.begin_capture()
-console.print_json(ds.json)
-json_data = console.end_capture()
 
 clibatch_subscribe = f"""
 [italic cyan]cencli batch subscribe devices IMPORT_FILE[/]:
@@ -236,17 +302,7 @@ Requires the following keys (include as header row for csv import):
 
 [cyan]serial[/],[cyan]license[/] (both are required)
 
-{"-":{"-"}<21}[bright_green] .csv example[reset]: {"-":{"-"}<21}
-{ds.csv.rstrip()}
----------------------------------------------------------
-
-{"-":{"-"}<21}[bright_green] .json example[reset]: {"-":{"-"}<20}
-{json_data.replace("[1;34m", "[deep_sky_blue3]").replace("[32m", "[green]").replace("[0m", "[reset]").replace("[1m", "[normal]").rstrip()}
----------------------------------------------------------
-
-{"-":{"-"}<21}[bright_green] .yaml example[reset]: {"-":{"-"}<20}
-{yaml.safe_dump(yaml.safe_load(ds.json)).rstrip()}
----------------------------------------------------------
+{Example(data)}
 
 NOTE: Most batch operations are designed so the same file can be used for multiple automations
       the fields not required for a particular automation will be ignored.
@@ -296,6 +352,7 @@ class ImportExamples:
         self.deploy = clibatch_deploy
         self.subscribe = clibatch_subscribe
         self.unsubscribe = clibatch_unsubscribe
+        self.move_devices = clibatch_move_devices
 
     def __getattr__(self, key: str):
         if key not in self.__dict__.keys():

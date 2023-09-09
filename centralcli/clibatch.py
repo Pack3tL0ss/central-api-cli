@@ -60,6 +60,7 @@ class GroupImport(BaseModel):
     class Config:
         use_enum_values = True
 
+# TODO move to models.py
 class SiteImport(BaseModel):
     site_name: str
     address: str = None
@@ -71,7 +72,7 @@ class SiteImport(BaseModel):
     longitude: str = Field(None, min_length=5, alias="lon")
 
     class Config:
-        extra = Extra.forbid
+        extra = Extra.allow
         use_enum_values = True
         allow_population_by_alias = True
 
@@ -368,8 +369,8 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
-def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
-    central = cli.central
+
+def _convert_site_key(_data: dict) -> dict:
     _site_aliases = {
         "site-name": "site_name",
         "site": "site_name",
@@ -379,42 +380,39 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         "zipcode": "zip",
     }
 
-    def convert_site_key(_data: dict) -> dict:
-        _data = {
-            **_data.get("site_address", {}),
-            **_data.get("geolocation", {}),
-            **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
-        }
-        _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
-        return _data
+    _data = {
+        **_data.get("site_address", {}),
+        **_data.get("geolocation", {}),
+        **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
+    }
+    _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
+    return _data
 
+def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
+    if all([d is None for d in [import_file, data]]):
+        raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
+    
+    central = cli.central
     if import_file is not None:
         data = config.get_file_data(import_file)
-    elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
 
-    if "sites" in data:
+    if isinstance(data, dict) and "sites" in data:
         data = data["sites"]
 
     resp = None
     verified_sites: List[SiteImport] = []
-    # TODO test with csv ... NOT YET TESTED
-    if import_file and import_file.suffix in [".csv", ".tsv", ".dbf"]:
-        verified_sites = [SiteImport(**convert_site_key(i)) for i in data.dict]
-    else:
-        # We allow a list of flat dicts or a list of dicts where loc info is under
-        # "site_address" or "geo_location"
-        # can be keyed on name or flat.
-        for i in data:
-            if isinstance(i, str) and isinstance(data[i], dict):
-                out_dict = convert_site_key(
-                    {"site_name": i, **data[i]}
-                )
-            else:
-                out_dict = convert_site_key(i)
+    # We allow a list of flat dicts or a list of dicts where loc info is under
+    # "site_address" or "geo_location"
+    # can be keyed on name or flat.
+    for i in data:
+        if isinstance(i, str) and isinstance(data[i], dict):
+            out_dict = _convert_site_key(
+                {"site_name": i, **data[i]}
+            )
+        else:
+            out_dict = _convert_site_key(i)
 
-            verified_sites += [SiteImport(**out_dict)]
+        verified_sites += [SiteImport(**out_dict)]
 
     site_names = [
         f"  [cyan]{s.site_name}[/]" for s in verified_sites
@@ -719,14 +717,9 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
         print("[red]Error!![/] No import file provided")
         raise typer.Exit(1)
 
-    if hasattr(data, "headers"):
-        headers = data.headers
+    if isinstance(data, dict) and "labels" in data:
+        data = data["labels"]
 
-        data = data if not hasattr(data, "dict") else data.dict
-        if isinstance(data, dict) and "labels" in data:
-            data = data["labels"]
-
-    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
     print(f'Creating the following Labels: [cyan]{data}[/]')
     resp = None
     if yes or typer.confirm("Proceed?", abort=True):
@@ -1128,47 +1121,34 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
                 _ = cli.central.request(cli.cache.update_dev_db)
         cli.display_results(batch_resp, tablefmt="action")
 
-
-
+    
 def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
-    _msg_list = []
+    verified_sites: List[SiteImport] = []
     for i in data:
         if isinstance(i, str) and isinstance(data[i], dict):
-            i = {"site_name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
-
-        if "site_id" not in i and "id" not in i:
-            if "site_name" in i or "name" in i:
-                _name = i.get("site_name", i.get("name"))
-                _id = cli.cache.get_site_identifier(_name).id
-                found = True
-                _msg_list += [_name]
-                del_list += [_id]
+            out_dict = _convert_site_key(
+                {"site_name": i, **data[i]}
+            )
         else:
-            found = False
-            for key in ["site_id", "id"]:
-                if key in i:
-                    del_list += [i[key]]
-                    _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
-                    found = True
-                    break
+            out_dict = _convert_site_key(i)
 
-        if not found:
-            if i.get("site_name", i.get("site", i.get("name"))):
-                site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
-                _msg_list += [site.name]
-                del_list += [site.id]
-                break
-            else:
-                typer.secho("Error getting site ids from import, unable to find required key", fg="red")
-                raise typer.Exit(1)
+        verified_sites += [SiteImport(**out_dict)]
 
-    if len(_msg_list) > 7:
-        _msg_list = [*_msg_list[0:3], "...", *_msg_list[-3:]]
+    site_names = [
+        f"  [cyan]{s.site_name}[/]" for s in verified_sites
+    ]
+    if len(site_names) > 7:
+        site_names = [*site_names[0:3], "  ...", *site_names[-3:]]
+
+    for site in verified_sites:
+        cache_site = cli.cache.get_site_identifier(site.site_name)
+        del_list += [cache_site.id]
+
     print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
-    print("\n".join([f"  [cyan]{m}[/]" for m in _msg_list]))
-    if yes or typer.confirm(f"Proceed?", abort=True):
+    _ = [print(s) for s in site_names]    
+    if yes or typer.confirm("Proceed?", abort=True):
         resp = central.request(central.delete_site, del_list)
         if resp:
             cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
@@ -1226,15 +1206,15 @@ def delete(
         print("\n".join(_msg))
         raise typer.Exit(1)
 
-    # TODO consistent model and structure for config.get_file_data (pass in a pydantic model)
     data = config.get_file_data(import_file)
 
-    if data and isinstance(data, dict) and "devices" in data:
-        data = data["devices"]
-
     if what == "devices":
+        if isinstance(data, dict) and "devices" in data:
+            data = data["devices"]        
         resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
     elif what == "sites":
+        if isinstance(data, dict) and "sites" in data:
+            data = data["sites"]        
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
         print("Batch Delete Groups is not implemented yet.")  # TODO implement these
@@ -1496,6 +1476,71 @@ def rename(
 
     cli.display_results(resp, tablefmt="action")
 
+
+def batch_move_devices(import_file: Path, yes: bool = False):
+    # TODO improve logic.  if they are moving to a group we can use inventory as backup
+    # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
+    devices = config.get_file_data(import_file)
+
+    dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+    if "INVALID" in dev_idens:
+        print(f'[bright_red]Error[/]: missing required field for {dev_idens.index("INVALID") + 1} device in import file.')
+        raise typer.Exit(1)
+
+    cache_devs = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
+    site_rm_reqs, group_mv_reqs, site_mv_reqs = [], [], []
+    for cd, d in zip(cache_devs, devices):
+        to_site = d.get("site")
+        now_site = cd.get("site")
+        to_group = d.get("group")
+        retain_config = d.get("retain_config")
+        if to_site:
+            to_site = cli.cache.get_site_identifier(to_site)
+            if now_site:
+                now_site = cli.cache.get_site_identifier(now_site)
+                if now_site.name != to_site.name:  # need to remove from current site
+                    key = f'{cd.site}~|~{cd.generic_type}'
+                    if key not in site_rm_reqs:
+                        site_rm_reqs += {key: [cd.serial]}
+                    else:
+                        site_rm_reqs[key] += [cd.serial]
+
+
+@app.command()
+def move(
+    # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Perform batch Move devices to group and/or site based on import data from file."""
+    if show_example:
+        print(examples.move_devices)
+        return
+
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch move [OPTIONS] WHAT:[devices] IMPORT_FILE",
+            "Try 'cencli batch add ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    else:
+        batch_move_devices(import_file, yes=yes)
 
 @app.callback()
 def callback():
