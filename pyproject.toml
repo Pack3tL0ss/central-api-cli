@@ -79,6 +79,9 @@ filterwarnings = [
     "ignore::DeprecationWarning"
 ]
 
+[tool.ruff]
+line-length = 181
+
 [tool.poetry.extras]
 hook-proxy = [
     "fastapi",
