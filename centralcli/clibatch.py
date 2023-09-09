@@ -13,6 +13,7 @@ from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.progress import track
+import centralcli
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -34,13 +35,16 @@ from centralcli.constants import (
     SiteStates, state_abbrev_to_pretty, arg_to_what
 )
 from centralcli.strings import ImportExamples, LongHelp
+from centralcli.exceptions import MissingFieldException, ImportException
+# from centralcli.models import GroupImport
 examples = ImportExamples()
 help_text = LongHelp()
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject  # NoQA
 
 iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
+
 
 class GroupImport(BaseModel):
     group: str
@@ -391,7 +395,7 @@ def _convert_site_key(_data: dict) -> dict:
 def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
     if all([d is None for d in [import_file, data]]):
         raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
-    
+
     central = cli.central
     if import_file is not None:
         data = config.get_file_data(import_file)
@@ -524,9 +528,10 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     elif not data:
         print("[red]Error!![/] No import file provided")
         raise typer.Exit(1)
-    # TODO handle csv
+
     if isinstance(data, dict) and "groups" in data:
         data = data["groups"]
+
     reqs, gw_reqs, ap_reqs = [], [], []
     pre_cfgs = []
     _pre_config_msg = ""
@@ -571,7 +576,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 else:
                     ap_reqs += [pc.request]
 
-    print(f"[bright_green]The following groups will be created:[/]")
+    print("[bright_green]The following groups will be created:[/]")
     _ = [print(f"  [cyan]{g}[/]") for g in data]
 
     _pre_config_msg = (
@@ -583,7 +588,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     for idx in range(len(pre_cfgs) + 1):
         if idx > 0:
             print(_pre_config_msg)
-        print(f"Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
+        print("Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
         ch = utils.ask(
             ">",
             console=console,
@@ -619,7 +624,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
             # resp = cli.central.batch_request(ap_reqs)
             # cli.display_results(resp,  tablefmt="action")
         if config_reqs:
-            for _ in track(range(10), description=f"Pausing to ensure groups are ready to accept configs."):
+            for _ in track(range(10), description="Pausing to ensure groups are ready to accept configs."):
                 sleep(1)
             resp += cli.central.batch_request(config_reqs, retry_failed=True)
 
@@ -720,14 +725,23 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     if isinstance(data, dict) and "labels" in data:
         data = data["labels"]
 
-    print(f'Creating the following Labels: [cyan]{data}[/]')
+    # TODO common func for this type of multi-element confirmation, we do this a lot.
+    _msg = "\n".join([f"  [cyan]{name}[/]" for name in data])
+    _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
+    _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
+    print(_msg)
+
     resp = None
-    if yes or typer.confirm("Proceed?", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
         resp = cli.central.batch_request(reqs)
         # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
-        _data = None if not all([r.ok for r in resp]) else data
-        asyncio.run(cli.cache.update_label_db(data=_data))  # TODO validate format
+        try:
+            _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
+            asyncio.run(cli.cache.update_label_db(data=_data))
+        except Exception as e:
+            log.exception(f'Exception during label cache update in batch_add_labels]n{e}')
+            print(f'[bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
     return resp or Response(error="No labels were added")
 
@@ -955,7 +969,7 @@ def add(
         resp = batch_add_sites(import_file, yes=yes)
         cli.display_results(resp)
     elif what == "groups":
-        batch_add_groups(import_file, yes=yes)
+        resp = batch_add_groups(import_file, yes=yes)
         # TODO put cleaner func in response object maybe??
         cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
     elif what == "devices":
@@ -971,7 +985,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     console = Console(emoji=False)
 
     if not data:
-        print(f"[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
+        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
         raise typer.Exit(1)
 
     serials_in = [dev["serial"].upper() for dev in data]
@@ -1121,7 +1135,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
                 _ = cli.central.request(cli.cache.update_dev_db)
         cli.display_results(batch_resp, tablefmt="action")
 
-    
+
 def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
@@ -1147,7 +1161,7 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
         del_list += [cache_site.id]
 
     print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
-    _ = [print(s) for s in site_names]    
+    _ = [print(s) for s in site_names]
     if yes or typer.confirm("Proceed?", abort=True):
         resp = central.request(central.delete_site, del_list)
         if resp:
@@ -1159,6 +1173,56 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
                     show=True
                 )
             return resp
+
+# TODO copy/paste logic from clidel.py groups()
+def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False, del_groups: bool = None, del_labels: bool = None) -> List[Response]:
+    if all([not arg for arg in [del_groups, del_labels]]):
+        del_groups = True  # Default to group delete
+    group_name_aliases = ["name", "group_name", "group"]
+    label_name_aliases = ["name", "label_name", "label"]
+    name_aliases = group_name_aliases if del_groups else label_name_aliases
+    cache_func = cli.cache.get_group_identifier if del_groups else cli.cache.get_label_identifier
+    del_func = cli.central.delete_group if del_groups else cli.central.delete_label
+    cache_del_func = cli.cache.update_group_db if del_groups else cli.cache.update_label_db
+    word = "group" if del_groups else "label"
+
+    _names = None
+    if isinstance(data, list):
+        if isinstance(data[0], dict):
+            _names = [g.get(name_aliases[0], g.get(name_aliases[1], g.get(name_aliases[2]))) for g in data]
+            # We allow simply using "labels" header for labels. With csv this is converted to List[dict] where each label has "labels" as key
+            if del_labels and all([x is None for x in _names]):
+                _names = [label.get("labels") for label in data]
+            if None in _names:
+                raise MissingFieldException("Data is missing 'name' field")
+        elif all([isinstance(item, str) for item in data]):
+            _names = data
+    if isinstance(data, dict):
+        _names = list(data.keys())
+
+    if _names is None:
+        raise ImportException(f'Unable to get {word} names from provided import data')
+
+    cache_objs = [cache_func(g) for g in _names]
+    reqs = [cli.central.BatchRequest(del_func, (g.name if del_groups else g.id, )) for g in cache_objs]
+
+    _msg = "\n".join([f"  [cyan]{g.name}[/]" for g in cache_objs])
+    _msg = _msg.lstrip() if len(cache_objs) == 1 else f"\n{_msg}"
+    if del_groups:
+        _msg = f"[bright_red]Delete[/] {'group ' if len(cache_objs) == 1 else f'{len(reqs)} groups:'}{_msg}"
+    elif del_labels:
+        _msg = f"[bright_red]Delete[/] {'label ' if len(cache_objs) == 1 else f'{len(reqs)} labels:'}{_msg}"
+    print(_msg)
+
+    if len(reqs) > 1:
+        print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.batch_request(reqs)
+        cli.display_results(resp, tablefmt="action")
+        if resp:
+            upd_res = asyncio.run(cache_del_func(data=[{"name": g.name} for g in cache_objs], remove=True))
+            log.debug(f"cache update to remove deleted {'groups' if del_groups else 'labels'} returns {upd_res}")
 
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
@@ -1206,22 +1270,27 @@ def delete(
         print("\n".join(_msg))
         raise typer.Exit(1)
 
-    data = config.get_file_data(import_file)
+    data = config.get_file_data(import_file, text_ok=what == "labels")
 
     if what == "devices":
         if isinstance(data, dict) and "devices" in data:
-            data = data["devices"]        
+            data = data["devices"]
         resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
     elif what == "sites":
         if isinstance(data, dict) and "sites" in data:
-            data = data["sites"]        
+            data = data["sites"]
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
-        print("Batch Delete Groups is not implemented yet.")  # TODO implement these
-        raise typer.Exit(1)
+        if isinstance(data, dict) and "groups" in data:
+            data = data["groups"]
+        resp = batch_delete_groups_or_labels(data, yes=yes, del_groups=True)
     elif what == "labels":
-        print("Batch Delete Labels is not implemented yet.")
-        raise typer.Exit(1)
+        if isinstance(data, dict) and "labels" in data:
+            data = data["labels"]
+        elif isinstance(data, list) and all([isinstance(item, str) for item in data]):
+            if data[0] == "labels":
+                data = data[1:]
+        resp = batch_delete_groups_or_labels(data, yes=yes, del_labels=True)
     cli.display_results(resp, tablefmt="action")
 
 
