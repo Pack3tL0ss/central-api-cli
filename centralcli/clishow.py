@@ -50,7 +50,7 @@ iden_meta = IdenMetaVars()
 def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
     devs_by_type = {_type: [t for t in resp.output if t.get("type", "ERR") == _type] for _type in dev_types}
-    status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t["status"] == "Up"]), "down": len([t for t in devs_by_type[_type] if t["status"] == "Down"])} for _type in devs_by_type}
+    status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t.get("status", "") == "Up"]), "down": len([t for t in devs_by_type[_type] if t.get("status", "") == "Down"])} for _type in devs_by_type}
     _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
     caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
