@@ -1372,7 +1372,8 @@ class CentralApi(Session):
             'site': site,
             'status': None if not status else status.title(),
             'offset': offset,
-            'limit': limit
+            'limit': limit,
+            "calculate_total": "true"
         }
 
         url = f"/monitoring/v1/{dev_type}"
@@ -3771,8 +3772,7 @@ class CentralApi(Session):
 
         Args:
             label_id (int): Label ID
-            device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
-                ap, gw, switch
+            device_type (str): Device type. Valid Values: ap, gw, switch
             serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
