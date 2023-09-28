@@ -70,7 +70,7 @@ def show_devices(
     caption = None
     central = cli.central
     if update_cache:
-        cli.cache.update_dev_db()
+        cli.central.request(cli.cache.update_dev_db)
 
     # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
     _formatter = "yaml"
