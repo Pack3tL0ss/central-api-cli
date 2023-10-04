@@ -13,6 +13,7 @@ from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.progress import track
+import centralcli
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -34,13 +35,16 @@ from centralcli.constants import (
     SiteStates, state_abbrev_to_pretty, arg_to_what
 )
 from centralcli.strings import ImportExamples, LongHelp
+from centralcli.exceptions import MissingFieldException, ImportException
+# from centralcli.models import GroupImport
 examples = ImportExamples()
 help_text = LongHelp()
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject  # NoQA
 
 iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
+
 
 class GroupImport(BaseModel):
     group: str
@@ -60,6 +64,7 @@ class GroupImport(BaseModel):
     class Config:
         use_enum_values = True
 
+# TODO move to models.py
 class SiteImport(BaseModel):
     site_name: str
     address: str = None
@@ -71,7 +76,7 @@ class SiteImport(BaseModel):
     longitude: str = Field(None, min_length=5, alias="lon")
 
     class Config:
-        extra = Extra.forbid
+        extra = Extra.allow
         use_enum_values = True
         allow_population_by_alias = True
 
@@ -368,8 +373,8 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
-def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
-    central = cli.central
+
+def _convert_site_key(_data: dict) -> dict:
     _site_aliases = {
         "site-name": "site_name",
         "site": "site_name",
@@ -379,42 +384,39 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         "zipcode": "zip",
     }
 
-    def convert_site_key(_data: dict) -> dict:
-        _data = {
-            **_data.get("site_address", {}),
-            **_data.get("geolocation", {}),
-            **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
-        }
-        _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
-        return _data
+    _data = {
+        **_data.get("site_address", {}),
+        **_data.get("geolocation", {}),
+        **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
+    }
+    _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
+    return _data
 
+def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
+    if all([d is None for d in [import_file, data]]):
+        raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
+
+    central = cli.central
     if import_file is not None:
         data = config.get_file_data(import_file)
-    elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
 
-    if "sites" in data:
+    if isinstance(data, dict) and "sites" in data:
         data = data["sites"]
 
     resp = None
     verified_sites: List[SiteImport] = []
-    # TODO test with csv ... NOT YET TESTED
-    if import_file and import_file.suffix in [".csv", ".tsv", ".dbf"]:
-        verified_sites = [SiteImport(**convert_site_key(i)) for i in data.dict]
-    else:
-        # We allow a list of flat dicts or a list of dicts where loc info is under
-        # "site_address" or "geo_location"
-        # can be keyed on name or flat.
-        for i in data:
-            if isinstance(i, str) and isinstance(data[i], dict):
-                out_dict = convert_site_key(
-                    {"site_name": i, **data[i]}
-                )
-            else:
-                out_dict = convert_site_key(i)
+    # We allow a list of flat dicts or a list of dicts where loc info is under
+    # "site_address" or "geo_location"
+    # can be keyed on name or flat.
+    for i in data:
+        if isinstance(i, str) and isinstance(data[i], dict):
+            out_dict = _convert_site_key(
+                {"site_name": i, **data[i]}
+            )
+        else:
+            out_dict = _convert_site_key(i)
 
-            verified_sites += [SiteImport(**out_dict)]
+        verified_sites += [SiteImport(**out_dict)]
 
     site_names = [
         f"  [cyan]{s.site_name}[/]" for s in verified_sites
@@ -526,9 +528,10 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     elif not data:
         print("[red]Error!![/] No import file provided")
         raise typer.Exit(1)
-    # TODO handle csv
+
     if isinstance(data, dict) and "groups" in data:
         data = data["groups"]
+
     reqs, gw_reqs, ap_reqs = [], [], []
     pre_cfgs = []
     _pre_config_msg = ""
@@ -573,7 +576,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 else:
                     ap_reqs += [pc.request]
 
-    print(f"[bright_green]The following groups will be created:[/]")
+    print("[bright_green]The following groups will be created:[/]")
     _ = [print(f"  [cyan]{g}[/]") for g in data]
 
     _pre_config_msg = (
@@ -585,7 +588,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     for idx in range(len(pre_cfgs) + 1):
         if idx > 0:
             print(_pre_config_msg)
-        print(f"Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
+        print("Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
         ch = utils.ask(
             ">",
             console=console,
@@ -621,7 +624,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
             # resp = cli.central.batch_request(ap_reqs)
             # cli.display_results(resp,  tablefmt="action")
         if config_reqs:
-            for _ in track(range(10), description=f"Pausing to ensure groups are ready to accept configs."):
+            for _ in track(range(10), description="Pausing to ensure groups are ready to accept configs."):
                 sleep(1)
             resp += cli.central.batch_request(config_reqs, retry_failed=True)
 
@@ -632,6 +635,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
 
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
+    # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
     if import_file is not None:
         data = config.get_file_data(import_file)
     elif not data:
@@ -702,7 +706,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         console = Console()
         with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
             cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-        with console.status("Allowing time for devices to appear in Central"):
+        with console.status("Allowing time for devices to populate before updating dev cache."):
             sleep(5)
         with console.status('Performing full device cache update after device edition.'):
             cache_res += [cli.central.request(cli.cache.update_dev_db)]
@@ -719,22 +723,26 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
         print("[red]Error!![/] No import file provided")
         raise typer.Exit(1)
 
-    if hasattr(data, "headers"):
-        headers = data.headers
+    if isinstance(data, dict) and "labels" in data:
+        data = data["labels"]
 
-        data = data if not hasattr(data, "dict") else data.dict
-        if isinstance(data, dict) and "labels" in data:
-            data = data["labels"]
+    # TODO common func for this type of multi-element confirmation, we do this a lot.
+    _msg = "\n".join([f"  [cyan]{name}[/]" for name in data])
+    _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
+    _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
+    print(_msg)
 
-    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
-    print(f'Creating the following Labels: [cyan]{data}[/]')
     resp = None
-    if yes or typer.confirm("Proceed?", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
         resp = cli.central.batch_request(reqs)
         # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
-        _data = None if not all([r.ok for r in resp]) else data
-        asyncio.run(cli.cache.update_label_db(data=_data))  # TODO validate format
+        try:
+            _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
+            asyncio.run(cli.cache.update_label_db(data=_data))
+        except Exception as e:
+            log.exception(f'Exception during label cache update in batch_add_labels]n{e}')
+            print(f'[bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
     return resp or Response(error="No labels were added")
 
@@ -962,7 +970,7 @@ def add(
         resp = batch_add_sites(import_file, yes=yes)
         cli.display_results(resp)
     elif what == "groups":
-        batch_add_groups(import_file, yes=yes)
+        resp = batch_add_groups(import_file, yes=yes)
         # TODO put cleaner func in response object maybe??
         cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
     elif what == "devices":
@@ -978,7 +986,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     console = Console(emoji=False)
 
     if not data:
-        print(f"[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
+        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
         raise typer.Exit(1)
 
     serials_in = [dev["serial"].upper() for dev in data]
@@ -997,6 +1005,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
     devs_in_monitoring = [*aps, *switches, *gws]
 
+    # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
@@ -1129,46 +1138,33 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         cli.display_results(batch_resp, tablefmt="action")
 
 
-
 def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
-    _msg_list = []
+    verified_sites: List[SiteImport] = []
     for i in data:
         if isinstance(i, str) and isinstance(data[i], dict):
-            i = {"site_name": i, **data[i]} if "name" not in i and "site_name" not in i else data[i]
-
-        if "site_id" not in i and "id" not in i:
-            if "site_name" in i or "name" in i:
-                _name = i.get("site_name", i.get("name"))
-                _id = cli.cache.get_site_identifier(_name).id
-                found = True
-                _msg_list += [_name]
-                del_list += [_id]
+            out_dict = _convert_site_key(
+                {"site_name": i, **data[i]}
+            )
         else:
-            found = False
-            for key in ["site_id", "id"]:
-                if key in i:
-                    del_list += [i[key]]
-                    _msg_list += [i.get("site_name", i.get("site", i.get("name", f"id: {i[key]}")))]
-                    found = True
-                    break
+            out_dict = _convert_site_key(i)
 
-        if not found:
-            if i.get("site_name", i.get("site", i.get("name"))):
-                site = cli.cache.get_site_identifier(i.get("site_name", i.get("site", i.get("name"))))
-                _msg_list += [site.name]
-                del_list += [site.id]
-                break
-            else:
-                typer.secho("Error getting site ids from import, unable to find required key", fg="red")
-                raise typer.Exit(1)
+        verified_sites += [SiteImport(**out_dict)]
 
-    if len(_msg_list) > 7:
-        _msg_list = [*_msg_list[0:3], "...", *_msg_list[-3:]]
+    site_names = [
+        f"  [cyan]{s.site_name}[/]" for s in verified_sites
+    ]
+    if len(site_names) > 7:
+        site_names = [*site_names[0:3], "  ...", *site_names[-3:]]
+
+    for site in verified_sites:
+        cache_site = cli.cache.get_site_identifier(site.site_name)
+        del_list += [cache_site.id]
+
     print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
-    print("\n".join([f"  [cyan]{m}[/]" for m in _msg_list]))
-    if yes or typer.confirm(f"Proceed?", abort=True):
+    _ = [print(s) for s in site_names]
+    if yes or typer.confirm("Proceed?", abort=True):
         resp = central.request(central.delete_site, del_list)
         if resp:
             cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
@@ -1179,6 +1175,56 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
                     show=True
                 )
             return resp
+
+# TODO copy/paste logic from clidel.py groups()
+def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False, del_groups: bool = None, del_labels: bool = None) -> List[Response]:
+    if all([not arg for arg in [del_groups, del_labels]]):
+        del_groups = True  # Default to group delete
+    group_name_aliases = ["name", "group_name", "group"]
+    label_name_aliases = ["name", "label_name", "label"]
+    name_aliases = group_name_aliases if del_groups else label_name_aliases
+    cache_func = cli.cache.get_group_identifier if del_groups else cli.cache.get_label_identifier
+    del_func = cli.central.delete_group if del_groups else cli.central.delete_label
+    cache_del_func = cli.cache.update_group_db if del_groups else cli.cache.update_label_db
+    word = "group" if del_groups else "label"
+
+    _names = None
+    if isinstance(data, list):
+        if isinstance(data[0], dict):
+            _names = [g.get(name_aliases[0], g.get(name_aliases[1], g.get(name_aliases[2]))) for g in data]
+            # We allow simply using "labels" header for labels. With csv this is converted to List[dict] where each label has "labels" as key
+            if del_labels and all([x is None for x in _names]):
+                _names = [label.get("labels") for label in data]
+            if None in _names:
+                raise MissingFieldException("Data is missing 'name' field")
+        elif all([isinstance(item, str) for item in data]):
+            _names = data
+    if isinstance(data, dict):
+        _names = list(data.keys())
+
+    if _names is None:
+        raise ImportException(f'Unable to get {word} names from provided import data')
+
+    cache_objs = [cache_func(g) for g in _names]
+    reqs = [cli.central.BatchRequest(del_func, (g.name if del_groups else g.id, )) for g in cache_objs]
+
+    _msg = "\n".join([f"  [cyan]{g.name}[/]" for g in cache_objs])
+    _msg = _msg.lstrip() if len(cache_objs) == 1 else f"\n{_msg}"
+    if del_groups:
+        _msg = f"[bright_red]Delete[/] {'group ' if len(cache_objs) == 1 else f'{len(reqs)} groups:'}{_msg}"
+    elif del_labels:
+        _msg = f"[bright_red]Delete[/] {'label ' if len(cache_objs) == 1 else f'{len(reqs)} labels:'}{_msg}"
+    print(_msg)
+
+    if len(reqs) > 1:
+        print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.batch_request(reqs)
+        cli.display_results(resp, tablefmt="action")
+        if resp:
+            upd_res = asyncio.run(cache_del_func(data=[{"name": g.name} for g in cache_objs], remove=True))
+            log.debug(f"cache update to remove deleted {'groups' if del_groups else 'labels'} returns {upd_res}")
 
 # TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
 # need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
@@ -1226,22 +1272,27 @@ def delete(
         print("\n".join(_msg))
         raise typer.Exit(1)
 
-    # TODO consistent model and structure for config.get_file_data (pass in a pydantic model)
-    data = config.get_file_data(import_file)
-
-    if data and isinstance(data, dict) and "devices" in data:
-        data = data["devices"]
+    data = config.get_file_data(import_file, text_ok=what == "labels")
 
     if what == "devices":
+        if isinstance(data, dict) and "devices" in data:
+            data = data["devices"]
         resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
     elif what == "sites":
+        if isinstance(data, dict) and "sites" in data:
+            data = data["sites"]
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
-        print("Batch Delete Groups is not implemented yet.")  # TODO implement these
-        raise typer.Exit(1)
+        if isinstance(data, dict) and "groups" in data:
+            data = data["groups"]
+        resp = batch_delete_groups_or_labels(data, yes=yes, del_groups=True)
     elif what == "labels":
-        print("Batch Delete Labels is not implemented yet.")
-        raise typer.Exit(1)
+        if isinstance(data, dict) and "labels" in data:
+            data = data["labels"]
+        elif isinstance(data, list) and all([isinstance(item, str) for item in data]):
+            if data[0] == "labels":
+                data = data[1:]
+        resp = batch_delete_groups_or_labels(data, yes=yes, del_labels=True)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -1496,6 +1547,272 @@ def rename(
 
     cli.display_results(resp, tablefmt="action")
 
+
+def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):
+    """Batch move devices based on contents of import file
+
+    Args:
+        import_file (Path): Import file
+        yes (bool, optional): Bypass confirmation prompts. Defaults to False.
+        do_group (bool, optional): Process group moves based on import. Defaults to False.
+        do_site (bool, optional): Process site moves based on import. Defaults to False.
+        do_label (bool, optional): Process label assignment based on import. Defaults to False.
+
+    Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
+
+    Raises:
+        typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
+    """
+    # TODO improve logic.  if they are moving to a group we can use inventory as backup
+    # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
+    if all([arg is False for arg in [do_site, do_label, do_group]]):
+        do_site = do_label = do_group = True
+    devices = config.get_file_data(import_file)
+
+    dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+    if "INVALID" in dev_idens:
+        print(f'[bright_red]Error[/]: missing required field for {dev_idens.index("INVALID") + 1} device in import file.')
+        raise typer.Exit(1)
+
+    cache_devs = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
+
+    site_rm_reqs, site_rm_msgs = {}, {}
+    site_mv_reqs, site_mv_msgs = {}, {}
+    pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
+    group_mv_reqs, group_mv_msgs = {}, {}
+    group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
+    label_ass_reqs, label_ass_msgs = {}, {}
+
+    console = Console(emoji=False)
+    for cd, d in zip(cache_devs, devices):
+        has_connected = True if cd.get("status") else False
+        if do_group:
+            _skip = False
+            to_group = d.get("group")
+            retain_config = d.get("retain_config")
+            if retain_config:
+                if str(retain_config).lower() in ["false", "no", "0"]:
+                    retain_config = False
+                elif str(retain_config).lower() in ["true", "yes", "1"]:
+                    retain_config = True
+                else:
+                    print(f'{cd.help_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                    raise typer.Exit(1)
+            if to_group:
+                if to_group not in cli.cache.group_names:
+                    to_group = cli.cache.get_group_identifier(to_group)
+                    to_group = to_group.name
+
+                if to_group == cd.get("group"):
+                    console.print(f'{cd.rich_help_text}: is already in group [magenta]{to_group}[/]. Ignoring.')
+                    _skip = True
+
+                # Determine if device is in inventory only determines use of pre-provision group vs move to group
+                if not has_connected:
+                    _dict = pregroup_mv_reqs
+                    msg_dict = pregroup_mv_msgs
+                    if retain_config:
+                        console.print(f'[bright_red]WARNING[/]: {cd.rich_help_text} Group assignment is being ignored.')
+                        console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                        console.print(f'  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central.')
+                        _skip = True
+                else:
+                    _dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
+                    msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+
+                if not _skip:
+                    if to_group not in _dict:
+                        _dict[to_group] = [cd.serial]
+                        msg_dict[to_group] = [cd.rich_help_text]
+                    else:
+                        _dict[to_group] += [cd.serial]
+                        msg_dict[to_group] += [cd.rich_help_text]
+
+
+        if do_site:
+            to_site = d.get("site")
+            now_site = cd.get("site")
+            if to_site:
+                to_site = cli.cache.get_site_identifier(to_site)
+                if now_site and now_site == to_site.name:
+                    console.print(f'{cd.rich_help_text} Already in site [magenta]{to_site.name}[/].  Ignoring.')
+                elif not has_connected:
+                    console.print(f'{cd.rich_help_text} Has not checked-in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
+                else:
+                    key = f'{to_site.id}~|~{cd.generic_type}'
+                    if key not in site_rm_reqs:
+                        site_mv_reqs[key] = [cd.serial]
+                    else:
+                        site_mv_reqs[key] += [cd.serial]
+
+                    if to_site.name not in site_mv_msgs:
+                        site_mv_msgs[to_site.name] = [cd.rich_help_text]
+                    else:
+                        site_mv_msgs[to_site.name] += [cd.rich_help_text]
+
+                if now_site:
+                    now_site = cli.cache.get_site_identifier(now_site)
+                    if now_site.name != to_site.name:  # need to remove from current site
+                        console.print(f'{cd.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                        key = f'{now_site.id}~|~{cd.generic_type}'
+                        if key not in site_rm_reqs:
+                            site_rm_reqs[key] = [cd.serial]
+                        else:
+                            site_rm_reqs[key] += [cd.serial]
+
+                        if to_site.name not in site_rm_msgs:
+                            site_rm_msgs[to_site.name] = [cd.rich_help_text]
+                        else:
+                            site_rm_msgs[to_site.name] += [cd.rich_help_text]
+
+        if do_label:
+            to_label = d.get("label", d.get("labels"))
+            if to_label:
+                to_label = utils.listify(to_label)
+                for label in to_label:
+                    clabel = cli.cache.get_label_identifier(to_label)
+                    if clabel.name in cd.get("labels"):
+                        console.print(f'{cd.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
+                    else:
+                        key = f'{clabel.id}~|~{cd.generic_type}'
+                        if key not in label_ass_reqs:
+                            label_ass_reqs[key] = [cd.serial]
+                        else:
+                            label_ass_reqs[key] += [cd.serial]
+
+                        if clabel.name not in label_ass_msgs:
+                            label_ass_msgs[clabel.name] = [cd.rich_help_text]
+                        else:
+                            label_ass_msgs[clabel.name] += [cd.rich_help_text]
+
+    site_rm_reqs = []
+    if site_rm_reqs:
+        for k, v in site_rm_reqs.items():
+            site_id, dev_type = k.split("~|~")
+            site_rm_reqs += [cli.central.BatchRequest(cli.central.remove_devices_from_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+
+    batch_reqs = []
+    if site_mv_reqs:
+        for k, v in site_mv_reqs.items():
+            site_id, dev_type = k.split("~|~")
+            batch_reqs += [cli.central.BatchRequest(cli.central.move_devices_to_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+    if pregroup_mv_reqs:  # TODO fix inconsistency in param group_name vs group used on other similar funcs
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.preprovision_device_to_group, group_name=k, serial_nums=v) for k, v in pregroup_mv_reqs.items()]]
+    if group_mv_reqs:
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]]
+    if group_mv_cx_retain_reqs:
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_reqs.items()]]
+    if label_ass_reqs:
+        for k, v in label_ass_reqs.items():
+            label_id, dev_type = k.split("~|~")  # TODO fix inconsistency device_type serial_nums param order vs similar funcs.
+            batch_reqs += [cli.central.BatchRequest(cli.central.assign_label_to_devices, label_id=int(label_id), device_type=dev_type, serial_nums=v)]
+
+    _tot_req = len(site_rm_reqs) + len(batch_reqs)
+    if not _tot_req:
+        print("Nothing to do")
+        raise typer.Exit(0)
+
+    _msg = [""]
+    if pregroup_mv_msgs:
+        for group, devs in pregroup_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be pre-provisioned to group [cyan]{group}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if group_mv_msgs:
+        for group, devs in group_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if group_mv_cx_retain_msgs:
+        for group, devs in group_mv_cx_retain_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/].  CX config will be preserved.']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if site_mv_msgs:
+        for site, devs in site_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to site [cyan]{site}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if site_rm_msgs:
+        for site, devs in site_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be [red]removed[/] to site [cyan]{site}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if label_ass_msgs:
+        for label, devs in label_ass_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be assigned [cyan]{label}[/] label']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+
+    _msg += [f'\n{_tot_req} API calls will be performed.']
+
+    console.print("\n".join(_msg))
+    if yes or typer.confirm("\nProceed?", abort=True):
+        site_rm_res = []
+        if site_rm_reqs:
+            site_rm_res = cli.central.batch_request(site_rm_reqs)
+            if not all([r.ok for r in site_rm_res]):
+                print("[bright_red]WARNING[/]: Some site remove requests failed, Aborting...")
+                return site_rm_res
+        batch_res = cli.central.batch_request(batch_reqs)
+
+        # TODO need to update cache if successful
+        return [*site_rm_res, *batch_res]
+
+
+@app.command()
+def move(
+    # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    do_group: bool = typer.Option(False, "-G", "--group", help="process site move from import."),
+    do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
+    do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Perform batch Move devices to group and/or site based on import data from file.
+
+    By default group/site/label assignment will be processed if found in the import file.
+    Use -G|--group, -S|--site, -L|--label flags to only process specified moves, and ignore
+    others even if found in the import.
+
+    i.e. if import includes a definition for group, site, and label, and you only want to
+    process the site move. Use the -S|--site flag, to ignore the other columns.
+    """
+    if show_example:
+        print(examples.move_devices)
+        return
+
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch move [OPTIONS] WHAT:[devices] IMPORT_FILE",
+            "Try 'cencli batch add ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    else:
+        resp = batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
+        cli.display_results(resp, tablefmt="action")
 
 @app.callback()
 def callback():

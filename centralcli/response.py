@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-from aiohttp.client_exceptions import ContentTypeError
+from aiohttp.client_exceptions import ContentTypeError, ClientOSError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
 from typing import Union, List, Any, Dict, Tuple
@@ -381,7 +381,8 @@ class Session():
                 return ClientSession()
             return self._aio_session
         else:
-            return ClientSession()
+            self._aio_session = ClientSession()
+            return self._aio_session
 
     @aio_session.setter
     def aio_session(self, session: ClientSession):
@@ -473,8 +474,11 @@ class Session():
 
                     resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
 
+            except ClientOSError as e:
+                log.exception(f'[{method}:{URL(url).path}]{e}')
+                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
             except Exception as e:
-                resp = Response(error=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"

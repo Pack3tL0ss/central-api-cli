@@ -42,6 +42,7 @@ class MyLogger:
         self._log = self.get_logger()
         self.name = self._log.name
         self.show = show  # Sets default log behavior (other than debug)
+        self._caption = []  # Log messages will be logged and displayed in caption output
 
     def __getattr__(self, name: str):
         if hasattr(self, "_log") and hasattr(self._log, name):
@@ -89,7 +90,16 @@ class MyLogger:
                 except (KeyboardInterrupt, EOFError):
                     break
 
-    def log_print(self, msgs, log: bool = False, show: bool = False, level: str = 'info', *args, **kwargs):
+    @property
+    def caption(self):
+        """render log messages queued for display in output caption
+        """
+        if not self._caption:
+            return
+        else:
+            return "\n".join([f'  {msg}' for msg in self._caption])
+
+    def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs):
         # TODO can prob remove log_msgs, used by another project I re-used this object from (ConsolePi)
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         _msgs = []
@@ -112,6 +122,9 @@ class MyLogger:
                     typer.secho(m, fg=log_colors.get(level))
             self.log_msgs = []
 
+        if caption:
+            self._caption = [*self._caption, *msgs]
+
     @property
     def level_name(self):
         return logging.getLevelName(self._log.level)
@@ -129,9 +142,9 @@ class MyLogger:
     def show(self, msgs: Union[list, str], log: bool = False, show: bool = True, *args, **kwargs) -> None:
         self.log_print(msgs, show=show, log=log, *args, **kwargs)
 
-    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
-        # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
+    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+
+        self.log_print(msgs, log=log, show=show, caption=caption, level='debug', *args, **kwargs)
 
     def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
         """more verbose debugging - primarily to get json dumps, set via debugv: True in config
@@ -140,29 +153,29 @@ class MyLogger:
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
-    def info(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def info(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, *args, **kwargs)
 
-    def warning(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def warning(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='warning', *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, level='warning', *args, **kwargs)
 
-    def error(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def error(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='error', *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, level='error', *args, **kwargs)
 
-    def exception(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def exception(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='exception', *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, level='exception', *args, **kwargs)
 
-    def critical(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def critical(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='critical', *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, level='critical', *args, **kwargs)
 
-    def fatal(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def fatal(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         # show = show or self.show
-        self.log_print(msgs, log=log, show=show, level='fatal', *args, **kwargs)
+        self.log_print(msgs, log=log, show=show, caption=caption, level='fatal', *args, **kwargs)
 
     def setLevel(self, level):
         getattr(self._log, 'setLevel')(level)

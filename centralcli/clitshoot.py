@@ -260,7 +260,7 @@ def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,
                     ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
 
                     if ts_resp.output.get("status", "") == "COMPLETED":
-                        print(ts_resp.output["output"])
+                        console.print(ts_resp.output["output"])
                         complete = True
                         break
                     else:

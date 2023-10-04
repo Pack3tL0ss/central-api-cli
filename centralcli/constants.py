@@ -284,9 +284,9 @@ class BatchAddArgs(str, Enum):
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
-    # groups = "groups"
+    groups = "groups"
     devices = "devices"
-    # labels = "labels"
+    labels = "labels"
 
 
 class BatchRenameArgs(str, Enum):

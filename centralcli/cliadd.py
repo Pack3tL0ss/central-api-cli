@@ -144,7 +144,7 @@ def device(
 
 @app.command(short_help="Add a group", help="Add a group")
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
+    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
     # group_password: str = typer.Argument(
     #     None,
     #     show_default=False,
@@ -153,8 +153,8 @@ def group(
     # ),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, metavar="[branch|vpnc|wlan]"),
-    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default Instant)", show_default=False),
+    gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: branch][/]", show_default=False,),
+    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group [grey42]\[default: AOS8 IAP][/]", show_default=False),
     microbranch: bool = typer.Option(
         None,
         "--mb",
@@ -167,7 +167,7 @@ def group(
     cx: bool = typer.Option(None, "--cx", help="Allow ArubaOS-CX switches in group."),
     gw: bool = typer.Option(None, "--gw", help="Allow gateways in group."),
     mon_only_sw: bool = typer.Option(False, "--mon-only-sw", help="Monitor Only for ArubaOS-SW"),
-    mon_only_cx: bool = typer.Option(False, "--mon_only_cx", help="Monitor Only for ArubaOS-CX", hidden=True),
+    mon_only_cx: bool = typer.Option(False, "--mon-only-cx", help="Monitor Only for ArubaOS-CX"),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
@@ -212,7 +212,7 @@ def group(
     if (mon_only_sw or mon_only_cx) and wired_tg:
         print(":x: [bright_red]Error: Monitor only is not valid for template group.")
         raise typer.Exit(1)
-    if not [t for t in allowed_types if allowed_types in ["cx", "sw"]] and (mon_only_sw or mon_only_cx):
+    if mon_only_sw and "sw" not in allowed_types or mon_only_cx and "cx" not in allowed_types:
         print(":x: [bright_red]Error: Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
         raise typer.Exit(1)
     if gw_role and gw_role == "wlan" and not aos10:
@@ -220,7 +220,7 @@ def group(
         raise typer.Exit(1)
     if all([x is None for x in [ap, sw, cx, gw]]):
         print("[green]No Allowed devices provided. Allowing all device types.")
-        print("[reset]  NOTE: Device Types can be added once group is created, but not removed.\n")
+        print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
 
     _arch_msg = f"[bright_green]{_arch} "
     _msg = f"[cyan]Create {'' if aos10 is None else _arch_msg}[cyan]group [bright_green]{group}[/bright_green]"
@@ -240,7 +240,7 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
     print(f"{_msg}\n")
 
-    if yes or typer.confirm("Proceed with values?"):
+    if yes or typer.confirm("Proceed?"):
         resp = cli.central.request(
             cli.central.create_group,
             group,

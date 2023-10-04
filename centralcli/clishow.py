@@ -49,7 +49,9 @@ iden_meta = IdenMetaVars()
 
 def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
-    _cnt_str = ", ".join([f'[bright_green]{_type}[/]: [cyan]{[t.get("type", "ERR") for t in resp.output].count(_type)}[/]' for _type in dev_types])
+    devs_by_type = {_type: [t for t in resp.output if t.get("type", "ERR") == _type] for _type in dev_types}
+    status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t.get("status", "") == "Up"]), "down": len([t for t in devs_by_type[_type] if t.get("status", "") == "Down"])} for _type in devs_by_type}
+    _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
     caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
     if "gw" in dev_types:
@@ -68,7 +70,7 @@ def show_devices(
     caption = None
     central = cli.central
     if update_cache:
-        cli.cache.update_dev_db()
+        cli.central.request(cli.cache.update_dev_db)
 
     # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
     _formatter = "yaml"

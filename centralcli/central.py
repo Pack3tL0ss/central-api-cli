@@ -248,7 +248,7 @@ class CentralApi(Session):
         mac: str = None,
         # sort_by: str = None,
         offset: int = 0,
-        limit: int = 500,
+        limit: int = 1000,
         # **kwargs,
     ) -> Response:
         """Get Clients details.
@@ -266,7 +266,7 @@ class CentralApi(Session):
             band (str, optional): Filter by band. Defaults to None.
             mac (str, optional): Filter by client MAC. Defaults to None.
             offset (int, optional): API Paging offset. Defaults to 0.
-            limit (int, optional): API record limit per request. Defaults to 500.
+            limit (int, optional): API record limit per request. Defaults to 1000 Max 1000.
 
         Returns:
             Response: CentralAPI Response Object
@@ -344,7 +344,7 @@ class CentralApi(Session):
         band: str = None,
         # sort_by: str = None,
         offset: int = 0,
-        limit: int = 500,
+        limit: int = 1000,
         # **kwargs,
     ) -> Response:
         """Get All clients
@@ -365,7 +365,7 @@ class CentralApi(Session):
             band (str, optional): Return (WLAN) clients connected to provided band. Defaults to None.
             FIXME sort_by (str, optional): Sort Output on provided key field. Defaults to None.
             offset (int, optional): API offset. Defaults to 0.
-            limit (int, optional): API record limit. Defaults to 500.
+            limit (int, optional): API record limit. Defaults to 1000, Max 1000.
 
         Returns:
             Response: CentralCli.Response object
@@ -381,6 +381,7 @@ class CentralApi(Session):
             # 'sort_by': sort_by,
             "offset": offset,
             "limit": limit,
+            "calculate_total": True
         }
         wlan_only_params = {"network": network, "os_type": os_type, "band": band}
         wired_only_params = {"stack_id": stack_id}
@@ -433,7 +434,7 @@ class CentralApi(Session):
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. Default is 1000, max is 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -462,10 +463,10 @@ class CentralApi(Session):
         cluster_id: str = None,
         band: str = None,
         fields: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         # sort_by: str = None,
         offset: int = 0,
-        limit: int = 500,
+        limit: int = 1000,
         # **kwargs,
     ) -> Response:
         """List Wireless Clients.
@@ -488,7 +489,7 @@ class CentralApi(Session):
             sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
                 '+macaddr'
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+            limit (int, optional): Pagination limit. Default is 1000, max 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -506,7 +507,7 @@ class CentralApi(Session):
             "cluster_id": cluster_id,
             "band": band,
             "fields": fields,
-            "calculate_total": calculate_total,
+            "calculate_total": str(calculate_total).lower(),
             # 'sort': sort_by,
             "offset": offset,
             "limit": limit,
@@ -524,10 +525,10 @@ class CentralApi(Session):
         cluster_id: str = None,
         stack_id: str = None,
         fields: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         # sort_by: str = None,
         offset: int = 0,
-        limit: int = 500,
+        limit: int = 1000,
         # **kwargs,
     ) -> Response:
         """List Wired Clients.
@@ -545,7 +546,7 @@ class CentralApi(Session):
             calculate_total (bool, optional): Whether to calculate total wired Clients
             FIXME sort (str, optional): Field to sort on.  Defaults to mac
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 500.
+            limit (int, optional): Pagination limit. Default 1000, max 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -561,7 +562,7 @@ class CentralApi(Session):
             "cluster_id": cluster_id,
             "stack_id": stack_id,
             "fields": fields,
-            "calculate_total": calculate_total,
+            "calculate_total": str(calculate_total).lower(),
             # 'sort': sort_by,
             "offset": offset,
             "limit": limit,
@@ -1052,7 +1053,13 @@ class CentralApi(Session):
         if _failure_idxs:
             resp = res[_failure_idxs[-1]]
             resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
-            return resp
+            if len(res) == len(_failure_idxs):  # all calls failed
+                return resp
+            else:
+                failed_calls = [r for r in res if not r.ok]
+                res = [r for r in res if r.ok]
+                for r in failed_calls:
+                    log.error(f'API call failed to [{r.method}]{r.url.path}: status code: {r.status}, Error: {r.error}', log=False, caption=True)
 
 
         resp = res[-1]
@@ -1372,12 +1379,15 @@ class CentralApi(Session):
             'site': site,
             'status': None if not status else status.title(),
             'offset': offset,
-            'limit': limit
+            'limit': limit,
+            "calculate_total": "true"
         }
 
         url = f"/monitoring/v1/{dev_type}"
         if dev_type == "aps":
             url = url.replace("v1", "v2")
+        elif dev_type == "gateways" and not config.base_url.lower().endswith(".arubanetworks.com"):  # indicates it's COP
+            url = url.replace("v1/gateways", "v2/mobility_controllers")
         params = {**common_params, **dev_params[dev_type]}
 
         return await self.get(url, params=params)
@@ -3771,8 +3781,7 @@ class CentralApi(Session):
 
         Args:
             label_id (int): Label ID
-            device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
-                ap, gw, switch
+            device_type (str): Device type. Valid Values: ap, gw, switch
             serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
