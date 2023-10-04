@@ -448,6 +448,9 @@ class CLICommon:
                 rl_str = f"[reset][italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
                 caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
 
+            if log.caption:
+                caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
+
             for idx, r in enumerate(resp):
                 # Multi request url line (example below)
                 # Request 1 [POST: /platform/device_inventory/v1/devices]
