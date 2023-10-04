@@ -635,6 +635,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
 
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
+    # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
     if import_file is not None:
         data = config.get_file_data(import_file)
     elif not data:
@@ -705,7 +706,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         console = Console()
         with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
             cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-        with console.status("Allowing time for devices to appear in Central"):
+        with console.status("Allowing time for devices to populate before updating dev cache."):
             sleep(5)
         with console.status('Performing full device cache update after device edition.'):
             cache_res += [cli.central.request(cli.cache.update_dev_db)]
@@ -1004,6 +1005,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
     devs_in_monitoring = [*aps, *switches, *gws]
 
+    # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
@@ -1546,9 +1548,25 @@ def rename(
     cli.display_results(resp, tablefmt="action")
 
 
-def batch_move_devices(import_file: Path, yes: bool = False):
+def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):
+    """Batch move devices based on contents of import file
+
+    Args:
+        import_file (Path): Import file
+        yes (bool, optional): Bypass confirmation prompts. Defaults to False.
+        do_group (bool, optional): Process group moves based on import. Defaults to False.
+        do_site (bool, optional): Process site moves based on import. Defaults to False.
+        do_label (bool, optional): Process label assignment based on import. Defaults to False.
+
+    Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
+
+    Raises:
+        typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
+    """
     # TODO improve logic.  if they are moving to a group we can use inventory as backup
     # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
+    if all([arg is False for arg in [do_site, do_label, do_group]]):
+        do_site = do_label = do_group = True
     devices = config.get_file_data(import_file)
 
     dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
@@ -1557,28 +1575,204 @@ def batch_move_devices(import_file: Path, yes: bool = False):
         raise typer.Exit(1)
 
     cache_devs = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
-    site_rm_reqs, group_mv_reqs, site_mv_reqs = [], [], []
+
+    site_rm_reqs, site_rm_msgs = {}, {}
+    site_mv_reqs, site_mv_msgs = {}, {}
+    pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
+    group_mv_reqs, group_mv_msgs = {}, {}
+    group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
+    label_ass_reqs, label_ass_msgs = {}, {}
+
+    console = Console(emoji=False)
     for cd, d in zip(cache_devs, devices):
-        to_site = d.get("site")
-        now_site = cd.get("site")
-        to_group = d.get("group")
-        retain_config = d.get("retain_config")
-        if to_site:
-            to_site = cli.cache.get_site_identifier(to_site)
-            if now_site:
-                now_site = cli.cache.get_site_identifier(now_site)
-                if now_site.name != to_site.name:  # need to remove from current site
-                    key = f'{cd.site}~|~{cd.generic_type}'
-                    if key not in site_rm_reqs:
-                        site_rm_reqs += {key: [cd.serial]}
+        has_connected = True if cd.get("status") else False
+        if do_group:
+            _skip = False
+            to_group = d.get("group")
+            retain_config = d.get("retain_config")
+            if retain_config:
+                if str(retain_config).lower() in ["false", "no", "0"]:
+                    retain_config = False
+                elif str(retain_config).lower() in ["true", "yes", "1"]:
+                    retain_config = True
+                else:
+                    print(f'{cd.help_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                    raise typer.Exit(1)
+            if to_group:
+                if to_group not in cli.cache.group_names:
+                    to_group = cli.cache.get_group_identifier(to_group)
+                    to_group = to_group.name
+
+                if to_group == cd.get("group"):
+                    console.print(f'{cd.rich_help_text}: is already in group [magenta]{to_group}[/]. Ignoring.')
+                    _skip = True
+
+                # Determine if device is in inventory only determines use of pre-provision group vs move to group
+                if not has_connected:
+                    _dict = pregroup_mv_reqs
+                    msg_dict = pregroup_mv_msgs
+                    if retain_config:
+                        console.print(f'[bright_red]WARNING[/]: {cd.rich_help_text} Group assignment is being ignored.')
+                        console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                        console.print(f'  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central.')
+                        _skip = True
+                else:
+                    _dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
+                    msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+
+                if not _skip:
+                    if to_group not in _dict:
+                        _dict[to_group] = [cd.serial]
+                        msg_dict[to_group] = [cd.rich_help_text]
                     else:
-                        site_rm_reqs[key] += [cd.serial]
+                        _dict[to_group] += [cd.serial]
+                        msg_dict[to_group] += [cd.rich_help_text]
+
+
+        if do_site:
+            to_site = d.get("site")
+            now_site = cd.get("site")
+            if to_site:
+                to_site = cli.cache.get_site_identifier(to_site)
+                if now_site and now_site == to_site.name:
+                    console.print(f'{cd.rich_help_text} Already in site [magenta]{to_site.name}[/].  Ignoring.')
+                elif not has_connected:
+                    console.print(f'{cd.rich_help_text} Has not checked-in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
+                else:
+                    key = f'{to_site.id}~|~{cd.generic_type}'
+                    if key not in site_rm_reqs:
+                        site_mv_reqs[key] = [cd.serial]
+                    else:
+                        site_mv_reqs[key] += [cd.serial]
+
+                    if to_site.name not in site_mv_msgs:
+                        site_mv_msgs[to_site.name] = [cd.rich_help_text]
+                    else:
+                        site_mv_msgs[to_site.name] += [cd.rich_help_text]
+
+                if now_site:
+                    now_site = cli.cache.get_site_identifier(now_site)
+                    if now_site.name != to_site.name:  # need to remove from current site
+                        console.print(f'{cd.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                        key = f'{now_site.id}~|~{cd.generic_type}'
+                        if key not in site_rm_reqs:
+                            site_rm_reqs[key] = [cd.serial]
+                        else:
+                            site_rm_reqs[key] += [cd.serial]
+
+                        if to_site.name not in site_rm_msgs:
+                            site_rm_msgs[to_site.name] = [cd.rich_help_text]
+                        else:
+                            site_rm_msgs[to_site.name] += [cd.rich_help_text]
+
+        if do_label:
+            to_label = d.get("label", d.get("labels"))
+            if to_label:
+                to_label = utils.listify(to_label)
+                for label in to_label:
+                    clabel = cli.cache.get_label_identifier(to_label)
+                    if clabel.name in cd.get("labels"):
+                        console.print(f'{cd.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
+                    else:
+                        key = f'{clabel.id}~|~{cd.generic_type}'
+                        if key not in label_ass_reqs:
+                            label_ass_reqs[key] = [cd.serial]
+                        else:
+                            label_ass_reqs[key] += [cd.serial]
+
+                        if clabel.name not in label_ass_msgs:
+                            label_ass_msgs[clabel.name] = [cd.rich_help_text]
+                        else:
+                            label_ass_msgs[clabel.name] += [cd.rich_help_text]
+
+    site_rm_reqs = []
+    if site_rm_reqs:
+        for k, v in site_rm_reqs.items():
+            site_id, dev_type = k.split("~|~")
+            site_rm_reqs += [cli.central.BatchRequest(cli.central.remove_devices_from_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+
+    batch_reqs = []
+    if site_mv_reqs:
+        for k, v in site_mv_reqs.items():
+            site_id, dev_type = k.split("~|~")
+            batch_reqs += [cli.central.BatchRequest(cli.central.move_devices_to_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+    if pregroup_mv_reqs:  # TODO fix inconsistency in param group_name vs group used on other similar funcs
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.preprovision_device_to_group, group_name=k, serial_nums=v) for k, v in pregroup_mv_reqs.items()]]
+    if group_mv_reqs:
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]]
+    if group_mv_cx_retain_reqs:
+        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_reqs.items()]]
+    if label_ass_reqs:
+        for k, v in label_ass_reqs.items():
+            label_id, dev_type = k.split("~|~")  # TODO fix inconsistency device_type serial_nums param order vs similar funcs.
+            batch_reqs += [cli.central.BatchRequest(cli.central.assign_label_to_devices, label_id=int(label_id), device_type=dev_type, serial_nums=v)]
+
+    _tot_req = len(site_rm_reqs) + len(batch_reqs)
+    if not _tot_req:
+        print("Nothing to do")
+        raise typer.Exit(0)
+
+    _msg = [""]
+    if pregroup_mv_msgs:
+        for group, devs in pregroup_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be pre-provisioned to group [cyan]{group}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if group_mv_msgs:
+        for group, devs in group_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if group_mv_cx_retain_msgs:
+        for group, devs in group_mv_cx_retain_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/].  CX config will be preserved.']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if site_mv_msgs:
+        for site, devs in site_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be moved to site [cyan]{site}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if site_rm_msgs:
+        for site, devs in site_mv_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be [red]removed[/] to site [cyan]{site}[/]']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+    if label_ass_msgs:
+        for label, devs in label_ass_msgs.items():
+            _msg += [f'The following {len(devs)} devices will be assigned [cyan]{label}[/] label']
+            if len(devs) > 6:
+                devs = [*devs[0:3], "...", *devs[-3:]]
+            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
+
+    _msg += [f'\n{_tot_req} API calls will be performed.']
+
+    console.print("\n".join(_msg))
+    if yes or typer.confirm("\nProceed?", abort=True):
+        site_rm_res = []
+        if site_rm_reqs:
+            site_rm_res = cli.central.batch_request(site_rm_reqs)
+            if not all([r.ok for r in site_rm_res]):
+                print("[bright_red]WARNING[/]: Some site remove requests failed, Aborting...")
+                return site_rm_res
+        batch_res = cli.central.batch_request(batch_reqs)
+
+        # TODO need to update cache if successful
+        return [*site_rm_res, *batch_res]
 
 
 @app.command()
 def move(
     # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    do_group: bool = typer.Option(False, "-G", "--group", help="process site move from import."),
+    do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
+    do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
@@ -1594,7 +1788,15 @@ def move(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Move devices to group and/or site based on import data from file."""
+    """Perform batch Move devices to group and/or site based on import data from file.
+
+    By default group/site/label assignment will be processed if found in the import file.
+    Use -G|--group, -S|--site, -L|--label flags to only process specified moves, and ignore
+    others even if found in the import.
+
+    i.e. if import includes a definition for group, site, and label, and you only want to
+    process the site move. Use the -S|--site flag, to ignore the other columns.
+    """
     if show_example:
         print(examples.move_devices)
         return
@@ -1609,7 +1811,8 @@ def move(
         print("\n".join(_msg))
         raise typer.Exit(1)
     else:
-        batch_move_devices(import_file, yes=yes)
+        resp = batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
+        cli.display_results(resp, tablefmt="action")
 
 @app.callback()
 def callback():
