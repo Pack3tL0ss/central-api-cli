@@ -4028,6 +4028,25 @@ class CentralApi(Session):
         else:
             return await self.post(url, json_data=json_data)
 
+    async def cop_delete_device_from_inventory(
+        self,
+        devices: List[str] = None,
+    ) -> Response:
+        """Delete devices using Serial number.  Only applies to CoP deployments.
+
+        Args:
+            devices (list, optional): List of devices to be deleted from
+                GreenLake inventory.  Only applies to CoP
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/device_inventory/v1/devices"
+
+        devices = [{"serial": serial} for serial in devices]
+
+        return await self.delete(url, json_data=devices)
+
     # TODO maybe helper method to delete_device that calls these
     async def delete_gateway(
         self,
@@ -5476,6 +5495,66 @@ class CentralApi(Session):
         url = f"/configuration/v1/swarm/{serial}/blacklisting"
 
         return await self.get(url)
+
+
+    async def get_auto_subscribe(
+        self,
+    ) -> Response:
+        """Get the services which have auto subscribe enabled.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/customer/settings/autolicense"
+
+        return await self.get(url)
+
+    async def enable_auto_subscribe(
+        self,
+        services: List[str],
+    ) -> Response:
+        """Standalone Customer API: Assign licenses to all devices and enable auto subscribe for
+        given services.
+
+        Args:
+            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+                advanced_switch_6200, foundation_70XX etc ...]. Check
+                /platform/licensing/v1/services/config API response to know the list of supported
+                services.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/customer/settings/autolicense"
+
+        json_data = {
+            'services': services
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def disable_auto_subscribe(
+        self,
+        services: List[str],
+    ) -> Response:
+        """Standalone Customer API: Disable auto licensing for given services.
+
+        Args:
+            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+                advanced_switch_6200, foundation_70XX etc ...]. Check
+                /platform/licensing/v1/services/config API response to know the list of supported
+                services.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/licensing/v1/customer/settings/autolicense"
+
+        json_data = {
+            'services': services
+        }
+
+        return await self.delete(url, json_data=json_data)
 
     # // -- Not used by commands yet.  undocumented kms api -- //
     async def kms_get_synced_aps(self, mac: str) -> Response:
