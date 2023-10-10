@@ -279,6 +279,7 @@ class Config:
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
         self.account = self.get_account_from_args()
+        self.base_url = self.data.get(self.account, {}).get("base_url")
         try:
             self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
@@ -318,6 +319,10 @@ class Config:
             return self.data[self.account].get(item, default)
         else:
             return self.data.get("central_info", {}).get(item, default)
+
+    @property
+    def is_cop(self):
+        return False if self.base_url.endswith("arubanetworks.com") else True
 
     # not used but may be handy
     @property
