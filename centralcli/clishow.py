@@ -580,6 +580,13 @@ def subscription(
         title = "Subscription Details"
         _cleaner = cleaner.get_subscriptions
         set_width_cols = {"name": 40}
+    elif what == "auto":
+        resp = cli.central.request(cli.central.get_auto_subscribe)
+        if resp and "services" in resp.output:
+            resp.output = resp.output["services"]
+        title = "Services with auto-subscribe enabled"
+        _cleaner = None
+        set_width_cols = None
     elif what == "stats":
         resp = cli.central.request(cli.central.get_subscription_stats)
         title = "Subscription Stats"
@@ -602,6 +609,7 @@ def subscription(
         cleaner=_cleaner,
         set_width_cols=set_width_cols
     )
+
 
 # TODO need sort_by enum
 @app.command(short_help="Show Swarms (IAP Clusters)")
