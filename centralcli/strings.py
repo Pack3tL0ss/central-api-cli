@@ -352,6 +352,8 @@ class ImportExamples:
         self.deploy = clibatch_deploy
         self.subscribe = clibatch_subscribe
         self.unsubscribe = clibatch_unsubscribe
+        self.archive = clibatch_unsubscribe.replace("unsubscribe", "archive")
+        self.unarchive = clibatch_unsubscribe.replace("unsubscribe", "unarchive")
         self.move_devices = clibatch_move_devices
 
     def __getattr__(self, key: str):
