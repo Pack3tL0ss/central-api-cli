@@ -1100,6 +1100,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
+
     elif delayed_mon_del_reqs:
         del_resp = []
         del_reqs_try = delayed_mon_del_reqs.copy()
@@ -1129,6 +1130,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
     # On COP delete devices from GreenLake inventory (only available on CoP)
     # TODO test against a cop system
+    # TODO add to cencli delete device ...
     if cop_del_reqs:
         cop_del_resp = cli.central.batch_request(cop_del_reqs)
         if not all(r.ok for r in cop_del_resp):
