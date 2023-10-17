@@ -5511,7 +5511,7 @@ class CentralApi(Session):
 
     async def enable_auto_subscribe(
         self,
-        services: List[str],
+        services: List[str] | str,
     ) -> Response:
         """Standalone Customer API: Assign licenses to all devices and enable auto subscribe for
         given services.
@@ -5527,6 +5527,9 @@ class CentralApi(Session):
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
+        if isinstance(services, str):
+            services = [services]
+
         json_data = {
             'services': services
         }
@@ -5535,7 +5538,7 @@ class CentralApi(Session):
 
     async def disable_auto_subscribe(
         self,
-        services: List[str],
+        services: List[str] | str,
     ) -> Response:
         """Standalone Customer API: Disable auto licensing for given services.
 
@@ -5549,6 +5552,9 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
+
+        if isinstance(services, str):
+            services = [services]
 
         json_data = {
             'services': services
