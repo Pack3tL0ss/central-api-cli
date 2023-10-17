@@ -333,6 +333,7 @@ class SubscriptionArgs(str, Enum):
     details = "details"
     stats = "stats"
     names = "names"
+    auto = "auto"
 
 class ArgToWhat:
     def __init__(self):

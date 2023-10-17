@@ -1011,6 +1011,11 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         br(cli.central.unarchive_devices, (inv_del_serials,)),
     ]
 
+    # cop only delete devices from GreenLake inventory
+    cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
+        br(cli.central.cop_delete_device_from_inventory, inv_del_serials)
+    ]
+
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
     mon_del_reqs, delayed_mon_del_reqs = [], []
     for dev_type, _devs in zip(["ap", "switch", "gateway"], [aps, switches, gws]):
@@ -1034,7 +1039,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         print("")
 
     # None of the provided devices were found in cache or inventory
-    if not [*reqs, *mon_del_reqs, *delayed_mon_del_reqs]:
+    if not [*reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
@@ -1043,7 +1048,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
 
-    _total_reqs = len([*reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
+    _total_reqs = len([*reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
 
     if ui_only:
         if delayed_mon_del_reqs:
@@ -1066,7 +1071,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
             console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
             cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.")
 
-    if not delayed_mon_del_reqs:
+    if not delayed_mon_del_reqs and not cop_del_reqs:
         # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
         all_ok = True if all(r.ok for r in batch_resp) else False
 
@@ -1096,33 +1101,47 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
 
-    del_resp = []
-    del_reqs_try = delayed_mon_del_reqs.copy()
-    _delay = 10 if not switches else 30  # switches take longer to drop off
-    for _try in range(4):
-        _word = "more " if _try > 0 else ""
-        _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
-        _delay -= (5 * _try) # reduce delay by 5 secs for each request
-        for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
-            sleep(1)
+    elif delayed_mon_del_reqs:
+        del_resp = []
+        del_reqs_try = delayed_mon_del_reqs.copy()
+        _delay = 10 if not switches else 30  # switches take longer to drop off
+        for _try in range(4):
+            _word = "more " if _try > 0 else ""
+            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+            _delay -= (5 * _try) # reduce delay by 5 secs for each request
+            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
+                sleep(1)
 
-        _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
-        if _try == 3:
-            if not all([r.ok for r in _del_resp]):
-                print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-            del_resp += _del_resp
+            _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
+            if _try == 3:
+                if not all([r.ok for r in _del_resp]):
+                    print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                del_resp += _del_resp
+            else:
+                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
+
+            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
+            if del_reqs_try:
+                print(f"{len(del_reqs_try)} out of {len(*mon_del_reqs, *delayed_mon_del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+            else:
+                break
+
+        batch_resp += del_resp or _del_resp
+
+    # On COP delete devices from GreenLake inventory (only available on CoP)
+    # TODO test against a cop system
+    # TODO add to cencli delete device ...
+    if cop_del_reqs:
+        cop_del_resp = cli.central.batch_request(cop_del_reqs)
+        if not all(r.ok for r in cop_del_resp):
+            print("[bright_red]Errors occured during CoP GreenLake delete")
+            cli.display_results(cop_del_resp, tablefmt="action")
         else:
-            del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-
-        del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
-        if del_reqs_try:
-            print(f"{len(del_reqs_try)} out of {len(*mon_del_reqs, *delayed_mon_del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-        else:
-            break
-
-    batch_resp += del_resp or _del_resp
+            # display results (below) with results of previous calls
+            batch_resp += cop_del_resp
 
     # TODO need to update cache after ui-only delete
+    # TODO need to improve logic throughout and update inventory cache
     if batch_resp:
         with console.status("Performing cache updates..."):
             db_updates = []
@@ -1804,7 +1823,7 @@ def move(
     elif not import_file:
         _msg = [
             "Usage: cencli batch move [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch add ?' for help.",
+            "Try 'cencli batch move ?' for help.",
             "",
             "Error: One of 'IMPORT_FILE' or --example should be provided.",
         ]
@@ -1813,6 +1832,109 @@ def move(
     else:
         resp = batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
         cli.display_results(resp, tablefmt="action")
+
+
+@app.command()
+def archive(
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Batch archive devices based on import data from file.
+
+    This will archive the devices in GreenLake
+    """
+    if show_example:
+        print(examples.archive)
+        return
+
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch archive [OPTIONS] WHAT:[devices] IMPORT_FILE",
+            "Try 'cencli batch archive ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    else:
+        data = config.get_file_data(import_file, text_ok=True)
+        if data and isinstance(data, list):
+            if all([isinstance(x, dict) for x in data]):
+                serials = [x.get("serial") or x.get("serial_num") for x in data]
+            elif all(isinstance(x, str) for x in data):
+                serials = data if not data[0].lower().startswith("serial") else data[1:]
+        else:
+            print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
+            print("Use [cyan]cencli batch archive --example[/] to see expected format.")
+            raise typer.Exit(1)
+
+        res = cli.central.request(cli.central.archive_devices, (serials,))
+        cli.display_results(res)
+
+
+@app.command()
+def unarchive(
+    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    default: bool = typer.Option(
+        False, "-d", is_flag=True, help="Use default central account", show_default=False,
+        callback=cli.default_callback,
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
+) -> None:
+    """Batch unarchive devices based on import data from file.
+
+    This will unarchive the devices (previously archived) in GreenLake
+    """
+    if show_example:
+        print(examples.unarchive)
+        return
+
+    elif not import_file:
+        _msg = [
+            "Usage: cencli batch unarchive [OPTIONS] WHAT:[devices] IMPORT_FILE",
+            "Try 'cencli batch unarchive ?' for help.",
+            "",
+            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+        ]
+        print("\n".join(_msg))
+        raise typer.Exit(1)
+    else:
+        data = config.get_file_data(import_file, text_ok=True)
+        if data and isinstance(data, list):
+            if all([isinstance(x, dict) for x in data]):
+                serials = [x.get("serial") or x.get("serial_num") for x in data]
+            elif all(isinstance(x, str) for x in data):
+                serials = data if not data[0].lower().startswith("serial") else data[1:]
+        else:
+            print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
+            print("Use [cyan]cencli batch unarchive --example[/] to see expected format.")
+            raise typer.Exit(1)
+
+        res = cli.central.request(cli.central.unarchive_devices, (serials,))
+        cli.display_results(res)
+
 
 @app.callback()
 def callback():
