@@ -42,7 +42,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.cache import CentralObject
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs)
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs)
 
 iden = IdenMetaVars()
 
@@ -713,6 +713,78 @@ def unarchive(
 
     resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in serials])
     cli.display_results(resp, tablefmt="action")
+
+
+@app.command(hidden=True)
+def enable(
+    what: EnableDisableArgs = typer.Argument("auto-sub"),
+    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Enable auto subscribe for service.
+
+    Enabling auto subscribe sets the level (i.e. foundation/advanced) for all devices of the same type as the subscription provided.
+    i.e. `enable auto-sub advanced-switch-6300` will enable auto subscribe for all switch tiers (6100, 6200, etc)
+    """
+
+    _msg = f"[bright_green]Enable[/] auto-subscribe for license"
+    if len(services) > 1:
+        _svc_msg = '\n    '.join([s.name for s in services])
+        _msg = f'{_msg}s:\n    {_svc_msg}\n'
+    else:
+        svc = services[0]
+        _msg = f'{_msg} {svc.name}'
+    print(_msg)
+    print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
+    print(f'[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
+    print(f'Not just the 6300 models.')
+    if yes or typer.confirm("\nProceed?", abort=True):
+        services = [s.name for s in services]
+
+        resp = cli.central.request(cli.central.enable_auto_subscribe, services=services)
+        cli.display_results(resp, tablefmt="action")
+
+
+@app.command(hidden=True)
+def disable(
+    what: EnableDisableArgs = typer.Argument("auto-sub"),
+    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+) -> None:
+    """Disable auto subscribe for service.
+
+    Disabling auto subscribe removes auto-subscribe for all models of the same type.
+    i.e. `disable auto-sub advanced-switch-6300` will disable auto subscribe for all switch tiers (6100, 6200, etc)
+    """
+
+    _msg = f"[bright_green]Disable[/] auto-subscribe for license"
+    if len(services) > 1:
+        _svc_msg = '\n    '.join([s.name for s in services])
+        _msg = f'{_msg}s:\n    {_svc_msg}\n'
+    else:
+        svc = services[0]
+        _msg = f'{_msg} {svc.name}'
+    print(_msg)
+    print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
+    print(f'[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
+    print(f'Not just the 6300.')
+    if yes or typer.confirm("\nProceed?", abort=True):
+        services = [s.name for s in services]
+
+        resp = cli.central.request(cli.central.enable_auto_subscribe, services=services)
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="convert j2 templates")

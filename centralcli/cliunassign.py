@@ -27,10 +27,10 @@ iden = IdenMetaVars()
 app = typer.Typer()
 
 
-@app.command(help="unassign License from device(s)")
+@app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
+    devices: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -39,6 +39,19 @@ def license(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
+    """
+    do_auto = True if "auto" in [s.lower() for s in devices] else False
+    if do_auto:
+        _msg = f"Disable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
+        if len(devices) > 1:
+            print(f'[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+        print(_msg)
+        if yes or typer.confirm("\nProceed?"):
+            resp = cli.central.request(cli.central.disable_auto_subscribe, services=license.name)
+            cli.display_results(resp, tablefmt="action")
+            return
+
     try:
         devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
     except typer.Exit:  # allows un-assignment of devices that never checked into Central
