@@ -699,7 +699,6 @@ def unarchive(
 
     _msg = f"[bright_green]Unarchive devices[/]:"
     if serials and all([isinstance(d, CentralObject) for d in serials]):
-        serials = [d.serial for d in serials]
         if len(serials) > 1:
             _dev_msg = '\n    '.join([dev.rich_help_text for dev in serials])
             _msg = f"{_msg}\n    {_dev_msg}\n"
@@ -712,7 +711,7 @@ def unarchive(
         serials = serials
     print(_msg)
 
-    resp = cli.central.request(cli.central.unarchive_devices, serials)
+    resp = cli.central.request(cli.central.unarchive_devices, [d.serial for d in serials])
     cli.display_results(resp, tablefmt="action")
 
 
