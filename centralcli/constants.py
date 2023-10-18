@@ -295,6 +295,11 @@ class BatchRenameArgs(str, Enum):
     groups = "groups"
 
 
+class EnableDisableArgs(str, Enum):
+    auto_sub = "auto-sub"
+
+
+
 class DhcpArgs(str, Enum):
     clients = "clients"
     server = "server"

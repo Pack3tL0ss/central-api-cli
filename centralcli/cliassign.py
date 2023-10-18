@@ -24,10 +24,11 @@ except (ImportError, ModuleNotFoundError) as e:
 app = typer.Typer()
 
 
-@app.command(short_help="Assign License to device(s)", hidden=False)
+# TODO consider removing auto option as we've added enable/disable auto-sub ...
+@app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
-    serial_nums: List[str] = typer.Argument(..., show_default=False),
+    serial_nums: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -36,7 +37,7 @@ def license(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Assign Licenses to devices by serial number.
+    """Assign Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
 
     Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
     Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
@@ -44,16 +45,27 @@ def license(
     # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     # TODO add confirmation method builder to output class
-    _msg = f"Assign [bright_green]{license}[/bright_green] to"
-    if len(serial_nums) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
-        _msg = f"{_msg}:\n    {_dev_msg}"
+    do_auto = True if "auto" in [s.lower() for s in serial_nums] else False
+    if do_auto:
+        _msg = f"Enable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
+        if len(serial_nums) > 1:
+            print(f'[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
-        dev = serial_nums[0]
-        _msg = f"{_msg} [cyan]{dev}[/]"
+        _msg = f"Assign [bright_green]{license}[/bright_green] to"
+        if len(serial_nums) > 1:
+            _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
+            _msg = f"{_msg}:\n    {_dev_msg}"
+        else:
+            dev = serial_nums[0]
+            _msg = f"{_msg} [cyan]{dev}[/]"
+
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
-        resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
+        if not do_auto:
+            resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
+        else:
+            resp = cli.central.request(cli.central.enable_auto_subscribe, services=license.name)
+
         cli.display_results(resp, tablefmt="action")
     # TODO cache update similar to batch unsubscribe
 
