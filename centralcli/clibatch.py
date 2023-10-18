@@ -1881,8 +1881,19 @@ def archive(
             print("Use [cyan]cencli batch archive --example[/] to see expected format.")
             raise typer.Exit(1)
 
-        res = cli.central.request(cli.central.archive_devices, (serials,))
-        cli.display_results(res)
+        res = cli.central.request(cli.central.archive_devices, serials)
+        if res:
+            caption = res.output.get("message")
+            if res.get("succeeded_devices"):
+                title = "Devices successfully archived."
+                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+                cli.display_results(data=data, title=title, caption=caption)
+            if res.get("failed_devices"):
+                title = "These devices failed to archived."
+                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+                cli.display_results(data=data, title=title, caption=caption)
+        else:
+            cli.display_results(res, tablefmt="action")
 
 
 @app.command()
@@ -1932,8 +1943,19 @@ def unarchive(
             print("Use [cyan]cencli batch unarchive --example[/] to see expected format.")
             raise typer.Exit(1)
 
-        res = cli.central.request(cli.central.unarchive_devices, (serials,))
-        cli.display_results(res)
+        res = cli.central.request(cli.central.unarchive_devices, serials)
+        if res:
+            caption = res.output.get("message")
+            if res.get("succeeded_devices"):
+                title = "Devices successfully archived."
+                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+                cli.display_results(data=data, title=title, caption=caption)
+            if res.get("failed_devices"):
+                title = "These devices failed to archived."
+                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+                cli.display_results(data=data, title=title, caption=caption)
+        else:
+            cli.display_results(res, tablefmt="action")
 
 
 @app.callback()
