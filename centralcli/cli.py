@@ -504,6 +504,7 @@ def start(
     ),
     port: int = typer.Option(config.wh_port, help="Port to listen on (overrides config value if provided)", show_default=True),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (including killing current process if running)", metavar="", show_default=False),
+    collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", hidden=True),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -522,6 +523,7 @@ def start(
         See [cyan]http://localhost:port/api/docs[/] for available endpoints / schema details.
 
     [cyan]hook2snow[/]:
+      - [bright_red]!!![/]This integration is incomplete, as the customer that requested it ended up going a different route with the webhooks.
       - Queries alerts API at launch to gather any "Open" items.
       - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
 
@@ -560,9 +562,12 @@ def start(
     if yes or yes_both or typer.confirm("\nProceed?", abort=True):
         console = Console()
         port = port or config.webhook.port
+        cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
+        if collect:
+             cmd += ["-c"]
         with console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
-                ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT
             )
@@ -624,7 +629,13 @@ def stop(
     def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
             if svc in str(p.cmdline()[1:]):
-                return p.pid, p.cmdline()[-1]
+                for flag in p.cmdline()[::-1]:
+                    if flag.startswith("-"):
+                        continue
+                    elif flag.isdigit():
+                        port = flag
+                        break
+                return p.pid, port
 
     proc = _get_process_info()
     if proc:
