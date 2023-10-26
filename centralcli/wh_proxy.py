@@ -406,10 +406,11 @@ async def webhook(
             ts=x_central_delivery_timestamp,
             del_id=x_central_delivery_id,
         ):
-            # TODO REMOVE temp to collect some example WebHooks to modify for test
-            raw_file = config.outdir / "wh_raw.json"
-            raw_file.write_text(json.dumps(data))
-            updated = await check_cache_entry(data)
+            if COLLECT:
+                raw_file = config.outdir / "wh_raw.json"
+                with raw_file.open("a") as rf:
+                    rf.write(json.dumps(data))
+                updated = await check_cache_entry(data)
         else:
             log.error("POST from Central has invalid signature (check webhook token in config), ignoring", show=True)
             return JSONResponse(
@@ -428,6 +429,14 @@ async def webhook(
 
 
 if __name__ == "__main__":
+    if "--collect" in sys.argv or "-c" in sys.argv:
+        COLLECT = True
+        flag = "--collect" if "--collect" in sys.argv else "-c"
+        _ = sys.argv.pop(sys.argv.index(flag))
+        log.info("Collection mode enabled.")
+    else:
+        COLLECT = False
+
     port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
     _ = get_current_branch_state()
     try:

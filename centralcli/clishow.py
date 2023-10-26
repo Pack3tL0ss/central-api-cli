@@ -2596,7 +2596,13 @@ def hook_proxy(
     def _get_process_details() -> tuple:
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
             if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
-                return p.pid, p.info["cmdline"][-1]
+                for flag in p.cmdline()[::-1]:
+                    if flag.startswith("-"):
+                        continue
+                    elif flag.isdigit():
+                        port = flag
+                        break
+                return p.pid, port
 
     if what == "logs":
         from centralcli import log
