@@ -4138,7 +4138,7 @@ class CentralApi(Session):
         url = "/configuration/v1/preassign"
 
         json_data = {
-            'device_id': serial_nums,
+            'device_id': utils.listify(serial_nums),
             'group_name': group_name,
         }
 

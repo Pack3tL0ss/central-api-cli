@@ -32,8 +32,8 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import (
     ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
-    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions,
-    DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, lib_to_api, what_to_pretty  # noqa
+    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
+    EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
 
 app = typer.Typer()
@@ -1760,6 +1760,65 @@ def clients(
         reverse=reverse,
         **verbose_kwargs
     )
+
+# TODO Sortby Enum
+@app.command()
+def tunnels(
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    time_range: TunnelTimeRange = typer.Argument("3H"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
+    sort_by: str = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show Tunnel details"""
+    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
+    resp = cli.central.request(cli.central.get_gw_tunnels, dev.serial, timerange=time_range.value)
+    caption = None
+    if resp:
+        if resp.output.get("total"):
+            caption = f'Tunnel Count: {resp.output["total"]}'
+        if resp.output.get("tunnels"):
+            resp.output = resp.output["tunnels"]
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+
+    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=None)
+
+
 
 @app.command(short_help="Show client roaming history")
 def roaming(

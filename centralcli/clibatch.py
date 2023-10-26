@@ -46,20 +46,21 @@ tty = utils.tty
 app = typer.Typer()
 
 
+# TODO template upload based on j2 support
 class GroupImport(BaseModel):
     group: str
     allowed_types: List[AllDevTypes] = Field(["ap", "gw", "cx", "sw"], alias="types")
-    gw_role: GatewayRole = Field("branch", alias="gw-role")
+    gw_role: GatewayRole = Field("branch",)  # alias="gw-role")
     aos10: bool = False
     microbranch: bool = False
-    wlan_tg: bool = Field(False, alias="wlan-tg")
-    wired_tg: bool = Field(False, alias="wired-tg")
-    monitor_only_sw: bool = Field(False, alias="monitor-only-sw")
-    monitor_only_cx: bool = Field(False, alias="monitor-only-cx")
-    gw_config: Path = Field(None, alias="gw-config")
-    ap_config: Path = Field(None, alias="ap-config")
-    gw_vars: Path = Field(None, alias="gw-vars")
-    ap_vars: Path = Field(None, alias="ap-vars")
+    wlan_tg: bool = Field(False,)  # alias="wlan-tg")
+    wired_tg: bool = Field(False,)  # alias="wired-tg")
+    monitor_only_sw: bool = Field(False,)  # alias="monitor-only-sw")
+    monitor_only_cx: bool = Field(False,)  # alias="monitor-only-cx")
+    gw_config: Path = Field(None,)  # alias="gw-config")
+    ap_config: Path = Field(None,)  # alias="ap-config")
+    gw_vars: Path = Field(None,)  # alias="gw-vars")
+    ap_vars: Path = Field(None,)  # alias="ap-vars")
 
     class Config:
         use_enum_values = True
@@ -424,7 +425,7 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     if len(site_names) > 7:
         site_names = [*site_names[0:3], "  ...", *site_names[-3:]]
 
-    print("[bright_green]The Following Sites will be created:[/]")
+    print("\n[bright_green]The Following Sites will be created:[/]")
     _ = [print(s) for s in site_names]
 
     if yes or typer.confirm("Proceed?", abort=True):
@@ -537,12 +538,15 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     _pre_config_msg = ""
     cache_data = []
     for group in data:
-        if "allowed-types" in data[group]:
-            data[group]["allowed_types"] = data[group]["allowed-types"]
-            del data[group]["allowed-types"]
+        # we allow fields as wired_tg or wired-tg
+        _data = {k.replace("-", "_"): v for k, v in data[group].items()}
+        # if "allowed-types" in data[group]:
+        #     data[group]["allowed_types"] = data[group]["allowed-types"]
+        #     del data[group]["allowed-types"]
 
         try:
-            g = GroupImport(**{"group": group, **data[group]})
+            # g = GroupImport(**{"group": group, **data[group]})
+            g = GroupImport(**{"group": group, **_data})
         except ValidationError as e:
             print(e)
             raise typer.Exit(1)
@@ -576,33 +580,40 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 else:
                     ap_reqs += [pc.request]
 
+    if pre_cfgs:
+        _pre_config_msg = (
+            "\n[bright_green]Group level configurations will be sent:[/]\n"
+            f"{_pre_config_msg}"
+        )
+    _pre_config_msg = (
+        f"{_pre_config_msg}\n"
+        f"[italic dark_olive_green2]{len(reqs) + len(gw_reqs) + len(ap_reqs)} API calls will be performed.[/]\n"
+    )
+
     print("[bright_green]The following groups will be created:[/]")
     _ = [print(f"  [cyan]{g}[/]") for g in data]
 
-    _pre_config_msg = (
-        "\n[bright_green]Group level configurations will be sent:[/]\n"
-        f"{_pre_config_msg}"
-        f"\n[italic dark_olive_green2]{len(reqs) + len(gw_reqs) + len(ap_reqs)} API calls will be performed.[/]\n"
-    )
     print(_pre_config_msg)
-    for idx in range(len(pre_cfgs) + 1):
-        if idx > 0:
-            print(_pre_config_msg)
-        print("Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
-        ch = utils.ask(
-            ">",
-            console=console,
-            choices=[*[str(idx) for idx in range(1, len(pre_cfgs) + 1)], "abort", "go"],
-        )
-        if ch.lower() == "go":
-            yes = True
-            break
-        else:
-            pc: PreConfig = pre_cfgs[int(ch) - 1]
-            console.rule(f"Config to be sent to {pc.name}")
-            with console.pager():
-                console.print(pc.config)
-            console.rule(f" End {pc.name} config ")
+
+    if pre_cfgs:
+        for idx in range(len(pre_cfgs) + 1):
+            if idx > 0:
+                print(_pre_config_msg)
+            print("Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
+            ch = utils.ask(
+                ">",
+                console=console,
+                choices=[*[str(idx) for idx in range(1, len(pre_cfgs) + 1)], "abort", "go"],
+            )
+            if ch.lower() == "go":
+                yes = True
+                break
+            else:
+                pc: PreConfig = pre_cfgs[int(ch) - 1]
+                console.rule(f"Config to be sent to {pc.name}")
+                with console.pager():
+                    console.print(pc.config)
+                console.rule(f" End {pc.name} config ")
 
     resp = None
     if reqs and yes or typer.confirm("Proceed?", abort=True):
@@ -753,7 +764,6 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
     if typer.confirm("Proceed?"):
         data = config.get_file_data(import_file)
         if "groups" in data:
-            # TODO have batch_add_groups return resp for consistency
             resp = batch_add_groups(data=data["groups"], yes=yes)
             cli.display_results(resp)
         if "sites" in data:
