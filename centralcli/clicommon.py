@@ -177,14 +177,18 @@ class CLICommon:
         if ctx is not None and ctx.resilient_parsing:  # tab completion, return without validating
             return
 
-        current = pkg_resources.get_distribution('centralcli').version
+        try:
+            current = pkg_resources.get_distribution('centralcli').version
+        except pkg_resources.DistributionNotFound:
+            current = "0.0.0  !! Unable to gather version"
         resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
         if not resp:
             print(current)
         else:
-            major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") < 2])
-            minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 1 and int(str(k).split(".")[0]) == major])
-            latest = f'{major}.{minor}'
+            # major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") < 3])
+            # minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 1 and int(str(k).split(".")[0]) == major])
+            # latest = f'{major}.{minor}'
+            latest = max(resp.output["releases"])
             msg = "[bold bright_green]centralcli[/] "
             msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
             msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'

@@ -6,6 +6,7 @@ from typing import Literal
 from json import JSONEncoder
 from enum import Enum
 import pendulum
+from pathlib import Path
 
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log"]
@@ -122,5 +123,5 @@ class Encoder(JSONEncoder):
     A Custom JSON Encoder to handle custom DateTime object during JSON serialization.
     """
     def default(self, o):
-        return o if not isinstance(o, DateTime) else str(o)
+        return o if not isinstance(o, DateTime) and not isinstance(o, Path) else str(o)
 
