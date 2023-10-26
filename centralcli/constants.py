@@ -289,6 +289,14 @@ class BatchDelArgs(str, Enum):
     labels = "labels"
 
 
+class TunnelTimeRange(str, Enum):
+    three_hours = "3H"
+    one_day = "1D"
+    one_week = "1W"
+    one_month = "1M"
+    three_months = "3M"
+
+
 class BatchRenameArgs(str, Enum):
     sites = "sites"
     aps = "aps"
