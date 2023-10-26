@@ -391,7 +391,7 @@ class Config:
                 ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf'].
         """
         if import_file.exists() and import_file.stat().st_size > 0:
-            with import_file.open() as f:
+            with import_file.open(encoding="utf-8-sig") as f:
                 try:
                     if import_file.suffix == ".json":
                         return json.loads(f.read()) if not model else model(**json.loads(f.read()))
@@ -403,7 +403,7 @@ class Config:
                                 return import_data
                             # return yaml.load(f, Loader=yaml.SafeLoader) if not model else model(*yaml.load(f, Loader=yaml.SafeLoader))
                         elif import_file.suffix in ['.csv', '.tsv', '.dbf']:
-                            csv_data = "".join([line for line in import_file.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
+                            csv_data = "".join([line for line in f.read().splitlines(keepends=True) if line and not line.startswith("#")])
                             try:
                                 ds = tablib.Dataset().load(csv_data)
                             except UnsupportedFormat:
@@ -419,7 +419,7 @@ class Config:
                         elif text_ok:
                             if model:
                                 raise UserWarning(f'text_ok=True, and model={model.__class__.__name__} are mutually exclusive.')
-                            return [line.rstrip() for line in import_file.read_text().splitlines()]
+                            return [line.rstrip() for line in f.read().splitlines()]
                         else:
                             raise UserWarning(
                                 "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
