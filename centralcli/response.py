@@ -408,6 +408,9 @@ class Session():
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
                 f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
             )
+            # TODO This DEBUG messasge won't hit for COP, need conditional to compare url to config.base_url
+            # token_msg is only a conditional for show version (non central API call).
+            # could update attribute in clicommonm cli.call_to_central
             log.debug(
                 f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
@@ -478,6 +481,7 @@ class Session():
                 log.exception(f'[{method}:{URL(url).path}]{e}')
                 resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
             except Exception as e:
+                log.exception(f'[{method}:{URL(url).path}]{e}')
                 resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
                 _ += 1
 
