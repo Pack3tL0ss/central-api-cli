@@ -509,6 +509,8 @@ class CLICommon:
                         console.print(f"[{fg}]{r}")
 
                     if idx + 1 == len(resp):
+                        if caption:
+                            print(caption.replace(rl_str, ""))
                         console.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
