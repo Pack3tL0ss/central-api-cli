@@ -498,9 +498,6 @@ class CLICommon:
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         print(r.raw)
 
-                        if caption:
-                            print(caption)
-
                         if outfile:
                             self.write_file(outfile, r.raw)
 
@@ -512,6 +509,8 @@ class CLICommon:
                         console.print(f"[{fg}]{r}")
 
                     if idx + 1 == len(resp):
+                        if caption:
+                            print(caption.replace(rl_str, ""))
                         console.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
