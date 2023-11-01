@@ -1077,8 +1077,10 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     if yes or typer.confirm("\nProceed?", abort=True):
         batch_resp = cli.central.batch_request([*reqs, *mon_del_reqs])
         if not all([r.ok for r in batch_resp]):
-            console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
-            console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
+            # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
+            log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
+            # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
+            log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
             cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.", tablefmt="action")
 
     if not delayed_mon_del_reqs and not cop_del_reqs:

@@ -498,6 +498,9 @@ class CLICommon:
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         print(r.raw)
 
+                        if caption:
+                            print(caption)
+
                         if outfile:
                             self.write_file(outfile, r.raw)
 
