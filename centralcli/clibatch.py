@@ -991,6 +991,52 @@ def add(
         cli.display_results(resp, tablefmt="action")
 
 
+# TODO archive and unarchive have the same block this is used by batch delete
+def show_archive_results(res: Response) -> None:
+
+    caption = res.output.get("message")
+    action = res.url.name
+    if res.get("succeeded_devices"):
+        title = f"Devices successfully {action}d."
+        data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+        cli.display_results(data=data, title=title, caption=caption)
+    if res.get("failed_devices"):
+        title = f"Fevices that [bright_red]failed[/] to {action}d."
+        data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+        cli.display_results(data=data, title=title, caption=caption)
+
+
+# TODO return status indicating cache update success/failure
+def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
+    br = BatchRequest
+    all_ok = True if all(r.ok for r in batch_resp) else False
+    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
+        cache_update_reqs = []
+        if cache_devs:
+            if all_ok:
+                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+            else:
+                cache_update_reqs += [br(cli.cache.update_dev_db)]
+
+    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
+        if cache_devs or inv_del_serials and not ui_only:
+            if all_ok:
+                cache_update_reqs += [
+                    br(
+                        cli.cache.update_inv_db,
+                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
+                        remove=True
+                    )
+                ]
+            else:
+                cache_update_reqs += [br(cli.cache.update_inv_db)]
+
+        # Update cache remove deleted items
+        # TODO failure detection
+        if cache_update_reqs:
+            cache_res = cli.central.batch_request(cache_update_reqs)
+            log.debug(f'cache update response: {cache_res}')
+
 def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
@@ -1016,7 +1062,8 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     devs_in_monitoring = [*aps, *switches, *gws]
 
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
-    reqs = [] if ui_only or not inv_del_serials else [
+    # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
+    arch_reqs = [] if ui_only or not inv_del_serials else [
         br(cli.central.archive_devices, (inv_del_serials,)),
         br(cli.central.unarchive_devices, (inv_del_serials,)),
     ]
@@ -1049,7 +1096,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         print("")
 
     # None of the provided devices were found in cache or inventory
-    if not [*reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
+    if not [*arch_reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
         print("Everything is as it should be, nothing to do.")
         raise typer.Exit(0)
 
@@ -1058,7 +1105,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
 
-    _total_reqs = len([*reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
+    _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
 
     if ui_only:
         if delayed_mon_del_reqs:
@@ -1075,40 +1122,29 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
-        batch_resp = cli.central.batch_request([*reqs, *mon_del_reqs])
-        if not all([r.ok for r in batch_resp]):
+        batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
+        if arch_reqs and len(batch_resp) >= 2:
+            # if archive requests all pass we summarize the result.
+            if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
+                batch_resp[0].output = batch_resp[0].output.get("message")
+                batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
+            else:
+                show_archive_results(batch_resp[0])  # archive
+                show_archive_results(batch_resp[1])  # unarchive
+                batch_resp = batch_resp[2:]
+
+        if not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE
             # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
             log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
             # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
-            log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
-            cli.display_results(batch_resp, exit_on_fail=True, caption="Re-run command to perform remaining actions.", tablefmt="action")
+            # log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
+            update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+
+            cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
 
     if not delayed_mon_del_reqs and not cop_del_reqs:
         # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
-        all_ok = True if all(r.ok for r in batch_resp) else False
-
-        cache_update_reqs = []
-        if cache_devs:
-            if all_ok:
-                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
-            else:
-                cache_update_reqs += [br(cli.cache.update_dev_db)]
-
-        if cache_devs or inv_del_serials and not ui_only:
-            if all_ok:
-                cache_update_reqs += [
-                    br(
-                        cli.cache.update_inv_db,
-                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
-                        remove=True
-                    )
-                ]
-            else:
-                cache_update_reqs += [br(cli.cache.update_inv_db)]
-
-        # Update cache remove deleted items
-        if cache_update_reqs:
-            batch_res = cli.central.batch_request(cache_update_reqs)
+        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
 
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
@@ -1155,17 +1191,8 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     # TODO need to update cache after ui-only delete
     # TODO need to improve logic throughout and update inventory cache
     if batch_resp:
-        with console.status("Performing cache updates..."):
-            db_updates = []
-            if devs_in_monitoring:  # Prepare db updates
-                db_updates += [br(cli.cache.update_dev_db, data=[d.serial for d in devs_in_monitoring], remove=True)]
-            if all([r.ok for r in batch_resp]):
-                _ = cli.central.batch_request(db_updates)
-            else:
-                # if any failed to delete do full update
-                # TODO could save 1 API call if we track the index for devices that failed, the reqs list and serial list
-                # should match up.
-                _ = cli.central.request(cli.cache.update_dev_db)
+        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+
         cli.display_results(batch_resp, tablefmt="action")
 
 
