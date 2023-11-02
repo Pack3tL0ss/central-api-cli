@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-from aiohttp.client_exceptions import ContentTypeError, ClientOSError
+from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
 from typing import Union, List, Any, Dict, Tuple
@@ -477,7 +477,7 @@ class Session():
 
                     resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
 
-            except ClientOSError as e:
+            except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
                 resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
             except Exception as e:
