@@ -25,6 +25,7 @@ app = typer.Typer()
 
 
 # TODO consider removing auto option as we've added enable/disable auto-sub ...
+# TODO update cache for device after successful assignment
 @app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
