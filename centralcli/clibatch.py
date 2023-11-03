@@ -832,6 +832,11 @@ def verify(
         }
         for d in central_devs
     }
+    # TODO figure out what key we are going to require  batch add devices --example show license
+    # batch add allows the same three keys
+    _keys = ["license", "services", "subscription"]
+    file_key = [k for k in _keys if k in file_by_serial[list(file_by_serial.keys())[0]].keys()]
+    file_key = file_key[0] if file_key else file_key
 
     validation = {}
     for s in file_by_serial:
@@ -848,11 +853,10 @@ def verify(
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
                 validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
-
-        if file_by_serial[s].get("license"):
+        if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s]["license"] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s]['license']}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
+            if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
