@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import List
+
 import typer
 from rich import print
 from rich.console import Console
-
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:

@@ -206,7 +206,7 @@ def move(
         _group = CentralObject("group", {"name": "unprovisioned"}) if group.lower() == "unprovisioned" else cli.cache.get_group_identifier(group)
         confirm_msg += f"  To Group: [cyan]{_group.name}[/]\n"
         if cx_retain_config:
-            confirm_msg += f"  [italic]Config for CX switches will be preserved during move.[/]\n"
+            confirm_msg += "  [italic]Config for CX switches will be preserved during move.[/]\n"
     if site:
         # _site = cli.cache.get_site_identifier(site)
         confirm_msg += f"  To Site: [cyan]{_site.name}[/]\n"
@@ -580,7 +580,7 @@ def start(
         if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
             output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
             print("\n".join(output))
-            print(f"\nWebHook Proxy Startup [red]Failed[/].")
+            print("\nWebHook Proxy Startup [red]Failed[/].")
         else:
             print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
@@ -672,7 +672,7 @@ def archive(
     devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
 
     # TODO add confirmation method builder to output class
-    _msg = f"[bright_green]Archive devices[/]:"
+    _msg = "[bright_green]Archive devices[/]:"
     if len(devices) > 1:
         _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
         _msg = f"{_msg}\n    {_dev_msg}\n"
@@ -708,7 +708,7 @@ def unarchive(
     # We have to make the call blind, best we can do is run them through utils.is_serial()
     serials: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
-    _msg = f"[bright_green]Unarchive devices[/]:"
+    _msg = "[bright_green]Unarchive devices[/]:"
     if serials and all([isinstance(d, CentralObject) for d in serials]):
         if len(serials) > 1:
             _dev_msg = '\n    '.join([dev.rich_help_text for dev in serials])
@@ -744,7 +744,7 @@ def enable(
     i.e. `enable auto-sub advanced-switch-6300` will enable auto subscribe for all switch tiers (6100, 6200, etc)
     """
 
-    _msg = f"[bright_green]Enable[/] auto-subscribe for license"
+    _msg = "[bright_green]Enable[/] auto-subscribe for license"
     if len(services) > 1:
         _svc_msg = '\n    '.join([s.name for s in services])
         _msg = f'{_msg}s:\n    {_svc_msg}\n'
@@ -753,8 +753,8 @@ def enable(
         _msg = f'{_msg} {svc.name}'
     print(_msg)
     print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
-    print(f'[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
-    print(f'Not just the 6300 models.')
+    print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
+    print('Not just the 6300 models.')
     if yes or typer.confirm("\nProceed?", abort=True):
         services = [s.name for s in services]
 
@@ -780,7 +780,7 @@ def disable(
     i.e. `disable auto-sub advanced-switch-6300` will disable auto subscribe for all switch tiers (6100, 6200, etc)
     """
 
-    _msg = f"[bright_green]Disable[/] auto-subscribe for license"
+    _msg = "[bright_green]Disable[/] auto-subscribe for license"
     if len(services) > 1:
         _svc_msg = '\n    '.join([s.name for s in services])
         _msg = f'{_msg}s:\n    {_svc_msg}\n'
@@ -789,8 +789,8 @@ def disable(
         _msg = f'{_msg} {svc.name}'
     print(_msg)
     print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
-    print(f'[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
-    print(f'Not just the 6300.')
+    print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
+    print('Not just the 6300.')
     if yes or typer.confirm("\nProceed?", abort=True):
         services = [s.name for s in services]
 
