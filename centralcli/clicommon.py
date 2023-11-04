@@ -337,6 +337,7 @@ class CLICommon:
                 if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
                     sort_by = sort_by.replace("_", " ")
 
+                # TODO move this to log.caption so it's at end of output
                 if not all([True if sort_by in d else False for d in data]):
                     print(f":x: [dark_orange3]Error: [cyan]{sort_by}[reset] does not appear to be a valid field")
                     print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
