@@ -162,6 +162,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
         else:
             return fstr
 
+# TODO use get_topo_for_site similar to show aps -n  single call can get neigbor detail for all aps
 def _get_lldp_dict(ap_dict: dict) -> dict:
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
     """
