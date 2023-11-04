@@ -5,34 +5,34 @@
 Collection of functions used to clean output from Aruba Central API into a consistent structure.
 """
 from __future__ import annotations
+
 import functools
 import ipaddress
 import logging
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Union
-from enum import Enum
 
 import pendulum
 from rich.console import Console
 from rich.markup import escape
-import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import constants, utils, log, render
+    from centralcli import constants, log, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import constants, utils, log, render
+        from centralcli import constants, log, utils
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import DevTypes
-from centralcli.render import Output
 from centralcli.objects import DateTime
+
 
 def epoch_convert(func):
     @functools.wraps(func)
@@ -1087,7 +1087,7 @@ def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
                 elif _r_code == 2:
                     _r_pretty = "[dark_orange3]WARNING[/dark_orange3]"
                 else:
-                    _r_pretty = f"[red]ERROR[/red]" if _r_code == 1 else f"[red]ERROR ({_r_code})[/red]"
+                    _r_pretty = "[red]ERROR[/red]" if _r_code == 1 else f"[red]ERROR ({_r_code})[/red]"
 
                 out += [f" [{_r_pretty}] {_c}"]
                 cmd_status = _r.get('status_str')
@@ -1110,7 +1110,6 @@ def get_all_webhooks(data: List[dict]) -> List[dict]:
 
     del_keys = ["retry_policy", "secure_token", "urls"]
     # flatten dict
-    import typer
     data = [
         {**{k: v for k, v in d.items() if k not in del_keys},
          "urls": "\n".join(d.get("urls", [])),

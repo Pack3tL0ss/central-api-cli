@@ -21,7 +21,6 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from tabulate import tabulate
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:

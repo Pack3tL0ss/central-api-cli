@@ -6,7 +6,7 @@ from __future__ import annotations
 import typer
 import sys
 import time
-from typing import Dict, List, Literal, Union, Tuple, Any
+from typing import List, Literal, Union, Tuple
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -69,15 +69,15 @@ class CLICommon:
             acct_clr = f"{typer.style(self.account, fg='cyan')}"
             return (
                 f"{typer.style(f'Using Account: {acct_clr}.', fg='magenta')}  "
-                f"{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
-                f"\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
+                "{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
+                "\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
                 f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}\n"
             )
 
         @property
         def previous(self):
             return (
-                f"{typer.style(f'Using previously specified account: ', fg='magenta')}"
+                "{typer.style(f'Using previously specified account: ', fg='magenta')}"
                 f"{typer.style(self.account, fg='cyan', blink=True)}.  "
                 f"\n{typer.style('Use `--account <account name>` to switch to another account.', fg='magenta')}"
                 f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}\n"
@@ -91,7 +91,7 @@ class CLICommon:
 
         @property
         def will_forget(self):
-            will_forget_msg = f"[magenta]Forget options is configured, will revert to default account[/]\n"
+            will_forget_msg = "[magenta]Forget options is configured, will revert to default account[/]\n"
             will_forget_msg = f"{will_forget_msg}[cyan]{config.forget_account_after}[/][magenta] mins after last command[/]"
             console = Console(emoji=False, record=True)
             console.begin_capture()
@@ -482,7 +482,7 @@ class CLICommon:
                 # Nothing returned in response payload
                 if not r.output:
                     print(f"  Status Code: [{fg}]{r.status}[/]")
-                    print(f"  :warning: Empty Response.  This may be normal.")
+                    print("  :warning: Empty Response.  This may be normal.")
                 elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
