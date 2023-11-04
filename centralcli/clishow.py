@@ -304,6 +304,7 @@ def aps(
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
     do_ssids: bool = typer.Option(False, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show AP neighbors \[requires --site]", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -325,16 +326,48 @@ def aps(
 ) -> None:
     """Show details for APs
     """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
+    if neighbors:
+        if site is None:
+            print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
+            raise typer.Exit(1)
 
-    show_devices(
-        aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
-        state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, do_ssids=do_ssids,
-        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_table=do_table)
+        site = cli.cache.get_site_identifier(site)
+        resp = cli.central.request(cli.central.get_topo_for_site, site.id, )
+
+        # TODO check the value of tagged/untagged VLAN for AP if it has tagged mgmt VLAN
+        if resp:
+            aps_in_cache = [dev["serial"] for dev in cli.cache.devices if dev["type"] == "ap"]
+            ap_connections = [edge for edge in resp.output["edges"] if edge["toIf"]["serial"] in aps_in_cache]
+            resp.output = [
+                {
+                    "ap": x["toIf"].get("deviceName", "--"),
+                    "ap_ip": x["toIf"].get("ipAddress", "--"),
+                    "ap_serial": x["toIf"].get("serial", "--"),
+                    "ap_port": x["toIf"].get("portNumber", "--"),
+                    # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
+                    # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
+                    "switch": x["fromIf"].get("deviceName", "--"),
+                    "switch_ip": x["fromIf"].get("ipAddress", "--"),
+                    "switch_serial": x["fromIf"].get("serial", "--"),
+                    "switch_port": x["fromIf"].get("name", "--"),
+                    "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
+                    "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans", []) if v != x["fromIf"].get("untaggedVlan", 9999)]),
+                    "healthy": "✅" if x.get("health", "") == "good" else "❌"
+                } for x in ap_connections
+            ]
+
+        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    else:
+        if down:
+            status = "Down"
+        elif up:
+            status = "Up"
+        show_devices(
+            aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, do_ssids=do_ssids,
+            sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+            do_table=do_table)
 
 @app.command("switches")
 def switches_(
