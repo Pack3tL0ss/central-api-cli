@@ -3,9 +3,8 @@
 
 import asyncio
 import sys
-from time import sleep
-
 from pathlib import Path
+from time import sleep
 from typing import List, Tuple, Union
 
 import typer
@@ -13,29 +12,23 @@ from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.progress import track
-import centralcli
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (BatchRequest, Response, caas, cleaner, models, cli, config,
-                            log, utils)
+    from centralcli import BatchRequest, Response, caas, cleaner, cli, config, log, models, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (BatchRequest, Response, caas, cleaner, models, cli,
-                                config, log, utils)
+        from centralcli import BatchRequest, Response, caas, cleaner, cli, config, log, models, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (
-    AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs,
-    GatewayRole, IdenMetaVars, LicenseTypes, SendConfigDevIdens,
-    SiteStates, state_abbrev_to_pretty, arg_to_what
-)
+from centralcli.constants import AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs, GatewayRole, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
+from centralcli.exceptions import ImportException, MissingFieldException
 from centralcli.strings import ImportExamples, LongHelp
-from centralcli.exceptions import MissingFieldException, ImportException
+
 # from centralcli.models import GroupImport
 examples = ImportExamples()
 help_text = LongHelp()
@@ -169,6 +162,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
         else:
             return fstr
 
+# TODO use get_topo_for_site similar to show aps -n  single call can get neigbor detail for all aps
 def _get_lldp_dict(ap_dict: dict) -> dict:
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
     """
@@ -664,10 +658,10 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     warn = False
     _reqd_cols = ["serial", "mac"]
     if not all([len(_reqd_cols) == len([k for k in d.keys() if k in _reqd_cols]) for d in data]):
-        print(f"[reset]::warning::[bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
-        print(f"\nImport file must have the following keys for each device:")
+        print("[reset]::warning::[bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
+        print("\nImport file must have the following keys for each device:")
         print("[cyan]serial[/], [cyan]mac[/]")
-        print(f"\nThe following headers/columns are optional:")
+        print("\nThe following headers/columns are optional:")
         print("[cyan]group[/], [cyan]license[reset]")
         print("Use [cyan]cencli batch add devices --show-example[/] to see valid import file formats.")
         # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
@@ -832,6 +826,11 @@ def verify(
         }
         for d in central_devs
     }
+    # TODO figure out what key we are going to require  batch add devices --example show license
+    # batch add allows the same three keys
+    _keys = ["license", "services", "subscription"]
+    file_key = [k for k in _keys if k in file_by_serial[list(file_by_serial.keys())[0]].keys()]
+    file_key = file_key[0] if file_key else file_key
 
     validation = {}
     for s in file_by_serial:
@@ -848,11 +847,10 @@ def verify(
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
                 validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
-
-        if file_by_serial[s].get("license"):
+        if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s]["license"] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s]['license']}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
+            if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
@@ -1070,7 +1068,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
     # cop only delete devices from GreenLake inventory
     cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, inv_del_serials)
+        br(cli.central.cop_delete_device_from_inventory, (inv_del_serials,))
     ]
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1091,7 +1089,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         if len(not_in_inventory) == 1:
             console.print(f"\n[dark_orange]Warning[/]: Skipping [cyan]{not_in_inventory[0]}[/] as it was not found in inventory.")
         else:
-            console.print(f"\n[dark_orange]Warning[/]: Skipping the following as they were not found in inventory.")
+            console.print("\n[dark_orange]Warning[/]: Skipping the following as they were not found in inventory.")
             _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
         print("")
 
@@ -1179,19 +1177,23 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     # On COP delete devices from GreenLake inventory (only available on CoP)
     # TODO test against a cop system
     # TODO add to cencli delete device ...
+    cop_del_resp = []
     if cop_del_reqs:
         cop_del_resp = cli.central.batch_request(cop_del_reqs)
         if not all(r.ok for r in cop_del_resp):
-            print("[bright_red]Errors occured during CoP GreenLake delete")
-            cli.display_results(cop_del_resp, tablefmt="action")
-        else:
-            # display results (below) with results of previous calls
-            batch_resp += cop_del_resp
+            log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
+        #     cli.display_results(cop_del_resp, tablefmt="action")
+        # else:
+        #     # display results (below) with results of previous calls
+        #     batch_resp += cop_del_resp
 
     # TODO need to update cache after ui-only delete
     # TODO need to improve logic throughout and update inventory cache
     if batch_resp:
         update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+
+        if cop_del_resp:
+            batch_resp += cop_del_resp
 
         cli.display_results(batch_resp, tablefmt="action")
 
@@ -1410,7 +1412,7 @@ def subscribe(
     to add devices and assign subscription use [cyan]cencli batch add devices <IMPORT_FILE>[/][/]
     """
     if show_example:
-        print(getattr(examples, f"subscribe"))  # TODO need example should be same as add devices
+        print(getattr(examples, "subscribe"))  # TODO need example should be same as add devices
         return
     elif not import_file:
         _msg = [
@@ -1468,7 +1470,7 @@ def unsubscribe(
     Use (-D | --dis-cen) flag to also dissasociate the devices from the Aruba Central app in Green Lake.
     """
     if show_example:
-        print(getattr(examples, f"unsubscribe"))  # TODO need example should be same as add devices
+        print(getattr(examples, "unsubscribe"))  # TODO need example should be same as add devices
         return
     elif never_connected:
         resp = cli.cache.get_devices_with_inventory()
@@ -1672,7 +1674,7 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
                     if retain_config:
                         console.print(f'[bright_red]WARNING[/]: {cd.rich_help_text} Group assignment is being ignored.')
                         console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                        console.print(f'  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central.')
+                        console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central.')
                         _skip = True
                 else:
                     _dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs

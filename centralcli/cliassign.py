@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import List
+
 import typer
 from rich import print
 from rich.console import Console
 
-
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils
+    from centralcli import cli
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
+        from centralcli import cli
     else:
         print(pkg_dir.parts)
         raise e
@@ -25,6 +25,7 @@ app = typer.Typer()
 
 
 # TODO consider removing auto option as we've added enable/disable auto-sub ...
+# TODO update cache for device after successful assignment
 @app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
@@ -49,7 +50,7 @@ def license(
     if do_auto:
         _msg = f"Enable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
         if len(serial_nums) > 1:
-            print(f'[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+            print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
         _msg = f"Assign [bright_green]{license}[/bright_green] to"
         if len(serial_nums) > 1:

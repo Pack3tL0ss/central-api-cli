@@ -2,20 +2,21 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
-from typing import Any, Literal, Dict, Sequence, Union, List, Set, Iterable
-from aiohttp.client import ClientSession
-from tinydb import TinyDB, Query
-from rich import print
-from centralcli import log, utils, config, CentralApi, cleaner, constants, Response, render, models
-from pathlib import Path
-from enum import Enum
+
 # Used to debug completion
 # from rich.console import Console
 # console = Console(stderr=True)
-
 import asyncio
 import time
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union
+
 import typer
+from rich import print
+from tinydb import Query, TinyDB
+
+from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -24,7 +25,7 @@ except Exception:
 
 # TODO remove after TESTING NEW string matching lookup
 try:
-    from fuzzywuzzy import process # type: ignore noqa
+    from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
 except Exception:
     FUZZ = False
@@ -268,13 +269,9 @@ class CacheResponses:
     def label(self):
         return self.update_rl(self._label)
 
-    @group.setter
+    @label.setter
     def label(self, resp: Response):
         self._label = resp
-
-# class LicenseDB:
-#     def all(self):
-#         pass
 
 
 class Cache:
@@ -1217,7 +1214,7 @@ class Cache:
                 upd = [self.DevDB.upsert(dev, cond=self.Q.serial == dev.get("serial")) for dev in data]
                 upd = [item for in_list in upd for item in in_list]
                 if False in upd:
-                    log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+                    log.error(f"TinyDB DevDB update returned an error.  db_resp: {upd}", show=True)
                 return upd
                 # db_res = self.DevDB.insert_multiple(data)
                 # if False in db_res:

@@ -2188,6 +2188,22 @@ class CentralApi(Session):
         params = {"period": time_frame, "result_order": order, "count": 250}
         return await self.get(url, params=params)
 
+    async def get_topo_for_site(
+        self,
+        site_id: int,
+    ) -> Response:
+        """Get topology details of a site.
+
+        Args:
+            site_id (int): Site ID.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/topology_external_api/{site_id}"
+
+        return await self.get(url)
+
     async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
         """Get neighbor details reported by AP via LLDP.
 

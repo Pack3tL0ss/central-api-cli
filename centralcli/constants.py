@@ -667,6 +667,17 @@ class SortDevOptions(str, Enum):
     labels = "labels"
     version = "version"
     uptime = "uptime"
+    ap = "ap"
+    ap_ip = "ap_ip"
+    ap_serial = "ap_serial"
+    ap_port = "ap_port"
+    switch = "switch"
+    switch_ip = "switch_ip"
+    switch_serial = "switch_serial"
+    switch_port = "switch_port"
+    untagged_vlan = "untagged_vlan"
+    tagged_vlans = "tagged_vlans"
+    healthy = "healthy"
 
 
 class SortTemplateOptions(str, Enum):

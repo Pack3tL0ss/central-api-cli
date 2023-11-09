@@ -21,7 +21,6 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from tabulate import tabulate
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -204,7 +203,7 @@ def tabulate_output(outdata: List[dict]) -> tuple:
 
         outdata = _do_subtables(outdata, tablefmt="tabulate")
 
-        table_data = tabulate(outdata, headers="keys", tablefmt="tabulate")
+        table_data = tabulate.tabulate(outdata, headers="keys", tablefmt="tabulate")
         td = table_data.splitlines(keepends=True)
         if td:
             table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
