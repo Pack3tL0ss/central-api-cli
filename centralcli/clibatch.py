@@ -1068,7 +1068,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
     # cop only delete devices from GreenLake inventory
     cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, inv_del_serials)
+        br(cli.central.cop_delete_device_from_inventory, (inv_del_serials,))
     ]
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1177,19 +1177,23 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     # On COP delete devices from GreenLake inventory (only available on CoP)
     # TODO test against a cop system
     # TODO add to cencli delete device ...
+    cop_del_resp = []
     if cop_del_reqs:
         cop_del_resp = cli.central.batch_request(cop_del_reqs)
         if not all(r.ok for r in cop_del_resp):
-            print("[bright_red]Errors occured during CoP GreenLake delete")
-            cli.display_results(cop_del_resp, tablefmt="action")
-        else:
-            # display results (below) with results of previous calls
-            batch_resp += cop_del_resp
+            log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
+        #     cli.display_results(cop_del_resp, tablefmt="action")
+        # else:
+        #     # display results (below) with results of previous calls
+        #     batch_resp += cop_del_resp
 
     # TODO need to update cache after ui-only delete
     # TODO need to improve logic throughout and update inventory cache
     if batch_resp:
         update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+
+        if cop_del_resp:
+            batch_resp += cop_del_resp
 
         cli.display_results(batch_resp, tablefmt="action")
 
