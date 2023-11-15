@@ -136,6 +136,7 @@ def do_pretty(key: str, value: str) -> str:
     Applies color to certain columns/values prior to formatting
     """
     color = "green" if value.lower() == "up" else "red"
+    value = "" if value is None else value  # testing error on cop
     return value if key != "status" else f'[b {color}]{value.title()}[/b {color}]'
 
 def _do_subtables(data: List[dict], tablefmt: str = "rich") -> List[dict]:
