@@ -73,16 +73,16 @@ def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     if formatter is None:
         formatter = lambda v: (None, v)  # noqa Multipart representation of value
 
-    if type(data) is not dict:
+    if not isinstance(data, dict):
         return {parent_key: formatter(data)}
 
     converted = []
 
     for key, value in data.items():
         current_key = key if parent_key is None else f"{parent_key}[{key}]"
-        if type(value) is dict:
+        if isinstance(value, dict):
             converted.extend(multipartify(value, current_key, formatter).items())
-        elif type(value) is list:
+        elif isinstance(value, list):
             for ind, list_value in enumerate(value):
                 iter_key = f"{current_key}[{ind}]"
                 converted.extend(multipartify(list_value, iter_key, formatter).items())
@@ -1380,13 +1380,13 @@ class CentralApi(Session):
             'status': None if not status else status.title(),
             'offset': offset,
             'limit': limit,
-            "calculate_total": "true"
+            "calculate_total": "true"  # So we know if we have multile calls that can be ran async
         }
 
         url = f"/monitoring/v1/{dev_type}"
         if dev_type == "aps":
             url = url.replace("v1", "v2")
-        elif dev_type == "gateways" and not config.base_url.lower().endswith(".arubanetworks.com"):  # indicates it's COP
+        elif dev_type == "gateways" and config.is_cop:
             url = url.replace("v1/gateways", "v2/mobility_controllers")
         params = {**common_params, **dev_params[dev_type]}
 
@@ -1440,60 +1440,6 @@ class CentralApi(Session):
         """
         url = f"/monitoring/v1/{dev_type}/{serial}"
         return await self.get(url)
-
-    async def monitoring_get_mcs(
-        self,
-        group: str = None,
-        label: str = None,
-        site: str = None,
-        status: str = None,
-        macaddr: str = None,
-        model: str = None,
-        fields: str = None,
-        calculate_total: bool = None,
-        sort: str = None,
-        offset: int = 0,
-        limit: int = 100,
-    ) -> Response:
-        """List Mobility Controllers.
-
-        You can only specify one of group, label, site
-
-        Args:
-            group (str, optional): Filter by group name
-            label (str, optional): Filter by Label name
-            site (str, optional): Filter by Site name
-            status (str, optional): Filter by Mobility Controller status
-            macaddr (str, optional): Filter by Mobility Controller MAC address
-            model (str, optional): Filter by Mobility Controller Model
-            fields (str, optional): Comma separated list of fields to be returned. Valid fields are
-                status, ip_address, model, firmware_version, labels, ap_count, usage
-            calculate_total (bool, optional): Whether to calculate total Mobility Controllers
-            sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr, -macaddr.
-                Default is '+serial'
-            offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Max is 1000 Defaults to 100.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/monitoring/v1/mobility_controllers"
-
-        params = {
-            "group": group,
-            "label": label,
-            "site": site,
-            "status": status,
-            "macaddr": macaddr,
-            "model": model,
-            "fields": fields,
-            "calculate_total": calculate_total,
-            "sort": sort,
-            "offset": offset,
-            "limit": limit,
-        }
-
-        return await self.get(url, params=params)
 
     async def get_wlans(
         self,
@@ -4718,7 +4664,7 @@ class CentralApi(Session):
         try:
             resp.output = [models.WIDS(**d).dict() for d in resp.output]
         except Exception as e:
-            log.warning(f"dev note. pydantic conversion did not work", show=True)
+            log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
 
         return resp
 
@@ -5588,7 +5534,7 @@ class CentralApi(Session):
         return await self.get(url)
 
     async def kms_get_hash(self) -> Response:
-        url = f"/keymgmt/v1/keyhash"
+        url = "/keymgmt/v1/keyhash"
         return await self.get(url)
 
     async def kms_get_ap_state(self, serial: str) -> Response:
