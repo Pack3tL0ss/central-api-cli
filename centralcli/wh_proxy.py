@@ -31,7 +31,6 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
-        import sys
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import MyLogger, cache, central, config  # type: ignore
     else:
@@ -257,7 +256,7 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     token = config.tokens.get("webhook_token")
     if token:
         log.warning(
-            f"Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
+            "Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
             show=True
         )
     else:
