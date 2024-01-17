@@ -468,7 +468,7 @@ class Config:
                         _m = f":warning: Forget option set for [cyan]{last_account}[/], and expiration has passed.  [bright_green]reverting to default account[/]"
                         _m = f"{_m}\nUse [cyan]--account[/] option or set environment variable ARUBACLI_ACCOUNT to use alternate account"
                         # console.print(_m)
-                        if not Confirm(f"Proceed using default account", console=console):
+                        if not Confirm("Proceed using default account", console=console):
                             abort()
                     else:
                         account = last_account
@@ -494,7 +494,7 @@ class Config:
         config_comments = f"\n\n# See Example at link below for all options. \n# {example_link}\n"
         self.dir.mkdir(exist_ok=True)
         print(f"[red]Configuration [/red]{self.file}[red] not found.")
-        print(f"[bold cyan]Central API CLI First Run Configuration Wizard.[reset]")
+        print("[bold cyan]Central API CLI First Run Configuration Wizard.[reset]")
         _clusters = list(CLUSTER_URLS.keys())
         choice = ""
         while True:
@@ -515,10 +515,10 @@ class Config:
             # get common variables
             # TODO pycentral library tokeStoreUtil makes customer_id optional, but load and refresh don't  so we need it here just
             # so the file has the expected name.  Would be nice just to use the format tok_account_name.json
-            print(f"\nYour [cyan]customer id[/cyan] can be found by clicking the user icon in the upper right of the Central UI")
+            print("\nYour [cyan]customer id[/cyan] can be found by clicking the user icon in the upper right of the Central UI")
             customer_id = ask("customer id")
-            print(f"\n[cyan]Client ID[reset] and [cyan]Client Secret[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
-            print(f"You can double click the field in the table to select then copy, it will copy the entire token even with the token truncated with ...")
+            print("\n[cyan]Client ID[reset] and [cyan]Client Secret[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
+            print("You can double click the field in the table to select then copy, it will copy the entire token even with the token truncated with ...")
             client_id = ask("client id")
             client_secret = ask("client secret")
 
@@ -542,9 +542,9 @@ class Config:
             print("generate new tokens.")
             print("\nYou will be prompted for all 4 just hit enter to skip, but you need to provide one of them (the tokens or user/pass")
 
-            print(f"\n[cyan]Access and Refresh Tokens[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
-            print(f"Click the [blue]View Tokens[/blue] link for the appropriate row in the System Apps and Tokens table.")
-            print(f"then click the [blue]Download Tokens[/blue] link in the Token List.  (Tokens will be displayed in a popup)")
+            print("\n[cyan]Access and Refresh Tokens[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
+            print("Click the [blue]View Tokens[/blue] link for the appropriate row in the System Apps and Tokens table.")
+            print("then click the [blue]Download Tokens[/blue] link in the Token List.  (Tokens will be displayed in a popup)")
             access_token = ask("Access Token")
             refresh_token = ask("Refresh Token")
             username = ask("username")
