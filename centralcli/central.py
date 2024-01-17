@@ -1503,7 +1503,8 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
+        gw_path = "mobility_controllers" if config.is_cop else "gateways"
+        url = f"/monitoring/v1/{gw_path}/{serial_num}/dhcp_clients"
 
         params = {
             'reservation': str(reservation),
@@ -1522,12 +1523,14 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_servers"
+        gw_path = "mobility_controllers" if config.is_cop else "gateways"
+        url = f"/monitoring/v1/{gw_path}/{serial_num}/dhcp_servers"
 
         return await self.get(url)
 
+    # DELME not used should be safe to remove after verification
     async def get_gateways_by_group(self, group):
-        url = "/monitoring/v1/mobility_controllers"
+        url = "/monitoring/v1/mobility_controllers" if config.is_cop else "/monitoring/v1/gateways"
         params = {"group": group}
         return await self.get(url, params=params)
 
