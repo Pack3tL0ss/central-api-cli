@@ -635,7 +635,7 @@ class Session():
 
             _limit = params.get("limit", 0)
             _offset = params.get("offset", 0)
-            if params.get("limit") and len(r.output) == _limit:
+            if params.get("limit") and r.output and len(r.output) == _limit:
                 if count and len(paged_output) >= count:
                     r.output = paged_output
                     r.raw = paged_raw
