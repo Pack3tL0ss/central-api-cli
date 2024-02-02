@@ -313,16 +313,16 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
 
 
 
-@app.command("config",
-    short_help="Update Group or Device level config",
-    help="Update/Replace Group or Device level Configuration (ap or gw)"
-)
+@app.command("config")
 def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar="GROUP|DEVICE",
         help="Group or device to update.",
-        autocompletion=cli.cache.group_dev_ap_gw_completion
+        # autocompletion=cli.cache.group_dev_ap_gw_completion
+        autocompletion = lambda incomplete: [
+           cf for cf in [*[c for c in cli.cache.group_dev_ap_gw_completion(incomplete)], ("cencli", "update cencli configuration")] if cf[0].lower().startswith(incomplete.lower())
+        ]
     ),
     # TODO simplify structure can just remove device arg
     # device: str = typer.Argument(
@@ -337,8 +337,7 @@ def config_(
     cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple()),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple()),
     # TODO --vars PATH  help="File containing variables to convert jinja2 template."
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -347,7 +346,12 @@ def config_(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
+    """Update group, device level config (ap or gw) or cencli config.
+    """
+    if group_dev == "cencli":
+        # return _update_cencli_config()
+        print("Not implemented yet")  # cli_file currently required. may be better to break this out into subcommand cliupdate_config
+        return
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
@@ -513,7 +517,7 @@ def site(
     if rename_only:
         print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if yes or typer.confirm(f"\nProceed?", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:

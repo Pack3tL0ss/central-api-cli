@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union
 
 import typer
 from rich import print
+from rich.console import Console
 from tinydb import Query, TinyDB
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
@@ -31,6 +32,7 @@ except Exception:
     FUZZ = False
     pass
 
+err_console = Console(stderr=True)
 TinyDB.default_table_name = "devices"
 
 # DBType = Literal["dev", "site", "template", "group"]
@@ -450,8 +452,13 @@ class Cache:
         res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
         return res[-1]
 
+    # using shell_complete to see if it improves click 8 compat... it does not still have ^M with click 8
     @staticmethod
-    def account_completion(incomplete: str,):
+    def account_completion(ctx: typer.Context, args: List[str], incomplete: str):
+        # err_console.print(f'\n\nctx: {ctx.__dict__} \n\n incomplete type: {type(incomplete)}\nincomplete_value: {incomplete}\n\nargs_type: {type(args)}\n value: {args.__dict__}')
+        # Works on shell_complete=
+        # return [a for a in config.defined_accounts if a.lower().startswith(incomplete.lower())]
+        # Works with autocompletion=
         for a in config.defined_accounts:
             if a.lower().startswith(incomplete.lower()):
                 yield a
@@ -826,7 +833,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> List[tuple[str, str]]:
         """Completion for argument that can be either group or device.
 
         Args:
@@ -846,8 +853,12 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
 
+        # FIXME args is now always [] believe this came with click 8
+        args = [] if args is None else args
         if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
             out += [("cencli", "show cencli configuration")]
+        if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
+            out += [("cencli", "update cencli configuration")]
 
         # partial completion by serial: out appears to have list with expected tuple but does
         # not appear in zsh
@@ -1253,10 +1264,17 @@ class Cache:
                     _update_data = utils.listify(resp.output)
                     _update_data = cleaner.get_devices(_update_data)
 
+                    # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
                     # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
                     if "aps" in resp.raw.get("aps", [{}])[0]:
                         _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
                         _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swarm_id": _swarm_ids[d["serial"]]}} for d in _update_data]
+
+                    # add stack_ids for switches to cache
+                    if "switches" in resp.raw.get("switches", [{}])[0]:
+                        _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
+                        _update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"stack_id": _stack_ids[d["serial"]]}} for d in _update_data]
+
 
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)

@@ -1035,7 +1035,7 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
             cache_res = cli.central.batch_request(cache_update_reqs)
             log.debug(f'cache update response: {cache_res}')
 
-def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes: bool = False) -> List[Response]:
+def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
 
@@ -1103,7 +1103,12 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
     if len(cache_devs) > 1:
         _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
 
-    _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs]) if not ui_only else len(mon_del_reqs)
+    if ui_only:
+        _total_reqs = len(mon_del_reqs)
+    elif cop_inv_only:
+        _total_reqs = len(cop_del_reqs)
+    else:
+        _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
 
     if ui_only:
         if delayed_mon_del_reqs:
@@ -1119,26 +1124,28 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
+    batch_resp = []
     if yes or typer.confirm("\nProceed?", abort=True):
-        batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
-        if arch_reqs and len(batch_resp) >= 2:
-            # if archive requests all pass we summarize the result.
-            if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
-                batch_resp[0].output = batch_resp[0].output.get("message")
-                batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
-            else:
-                show_archive_results(batch_resp[0])  # archive
-                show_archive_results(batch_resp[1])  # unarchive
-                batch_resp = batch_resp[2:]
+        if not cop_inv_only:
+            batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
+            if arch_reqs and len(batch_resp) >= 2:
+                # if archive requests all pass we summarize the result.
+                if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
+                    batch_resp[0].output = batch_resp[0].output.get("message")
+                    batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
+                else:
+                    show_archive_results(batch_resp[0])  # archive
+                    show_archive_results(batch_resp[1])  # unarchive
+                    batch_resp = batch_resp[2:]
 
-        if not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE
-            # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
-            log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
-            # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
-            # log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
-            update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+            if not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE
+                # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
+                log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
+                # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
+                # log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
+                update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
 
-            cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
+                cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
 
     if not delayed_mon_del_reqs and not cop_del_reqs:
         # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
@@ -1147,7 +1154,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         cli.display_results(batch_resp, tablefmt="action")
         raise typer.Exit(0)
 
-    elif delayed_mon_del_reqs:
+    elif delayed_mon_del_reqs and not cop_inv_only:
         del_resp = []
         del_reqs_try = delayed_mon_del_reqs.copy()
         _delay = 10 if not switches else 30  # switches take longer to drop off
@@ -1168,7 +1175,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
             del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
             if del_reqs_try:
-                print(f"{len(del_reqs_try)} out of {len(*mon_del_reqs, *delayed_mon_del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+                print(f"{len(del_reqs_try)} out of {len([*mon_del_reqs, *delayed_mon_del_reqs])} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
             else:
                 break
 
@@ -1182,6 +1189,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
         cop_del_resp = cli.central.batch_request(cop_del_reqs)
         if not all(r.ok for r in cop_del_resp):
             log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
+
         #     cli.display_results(cop_del_resp, tablefmt="action")
         # else:
         #     # display results (below) with results of previous calls
@@ -1194,7 +1202,10 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, yes:
 
         if cop_del_resp:
             batch_resp += cop_del_resp
+    elif cop_inv_only and cop_del_resp:
+        batch_resp = cop_del_resp
 
+    if batch_resp:
         cli.display_results(batch_resp, tablefmt="action")
 
 
@@ -1295,6 +1306,7 @@ def delete(
     what: BatchDelArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False),
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
+    cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1337,7 +1349,7 @@ def delete(
     if what == "devices":
         if isinstance(data, dict) and "devices" in data:
             data = data["devices"]
-        resp = batch_delete_devices(data, ui_only=ui_only, yes=yes)
+        resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
         if isinstance(data, dict) and "sites" in data:
             data = data["sites"]
@@ -1697,10 +1709,11 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
                 if now_site and now_site == to_site.name:
                     console.print(f'{cd.rich_help_text} Already in site [magenta]{to_site.name}[/].  Ignoring.')
                 elif not has_connected:
-                    console.print(f'{cd.rich_help_text} Has not checked-in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
+                    # TODO Need cache update here.  This command doesn't preemptively update cache.  So if device has come onboard since they did a show all it will appear as if it has not checked in
+                    console.print(f'{cd.rich_help_text} Has not checked in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
                 else:
                     key = f'{to_site.id}~|~{cd.generic_type}'
-                    if key not in site_rm_reqs:
+                    if key not in site_mv_reqs:
                         site_mv_reqs[key] = [cd.serial]
                     else:
                         site_mv_reqs[key] += [cd.serial]

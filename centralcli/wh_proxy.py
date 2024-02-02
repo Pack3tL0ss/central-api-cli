@@ -31,7 +31,6 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
-        import sys
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import MyLogger, cache, central, config  # type: ignore
     else:
@@ -257,7 +256,7 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
     token = config.tokens.get("webhook_token")
     if token:
         log.warning(
-            f"Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
+            "Deprication Warning: webhook_token is depricated and will be removed in a future release. webhook now has it's own key under the account, refer to documentation to adjust config.yaml",
             show=True
         )
     else:
@@ -334,7 +333,7 @@ async def check_cache_entry(data: dict) -> Union[list, None]:
         res = await central._request(central.get_gw_tunnels, data["device_id"])
         if not res:
             log.error(f"[WH IGNORE CLEAR] Error attempting to verify tunnels for {data['device_id']}")  # [{res.status}]{res.url}: {res.error}.")
-            log.error(f"DB may drift from reality :(")
+            log.error("DB may drift from reality :(")
             return
 
         tuns = res.output["tunnels"]
@@ -357,7 +356,7 @@ async def _favicon():
 
 @app.get('/api/v1.0/alerts', response_model=List[BranchResponse], )
 async def alerts(request: Request,):
-    log_request(request, f'fetching All Active Alerts')
+    log_request(request, 'fetching All Active Alerts')
     try:
         return cache.hook_active
     except Exception as e:
@@ -365,7 +364,7 @@ async def alerts(request: Request,):
 
 
 @app.get('/api/v1.0/alerts/{serial}', response_model=BranchResponse, )
-async def alerts(request: Request, serial: str = None):
+async def alerts_by_serial(request: Request, serial: str = None):
     log_request(request, f'fetching alerts details for {serial}')
     try:
         cache_entry = await cache.get_hooks_by_serial(serial)
@@ -385,6 +384,7 @@ async def webhook(
     x_central_delivery_timestamp: str = Header(None),
     x_central_delivery_id: str = Header(None),
 ):
+    updated = False
     if content_length > 1_000_000:
         # To prevent memory allocation attacks
         log.error(f"Incoming wh ignored, Content too long:  content_length: ({content_length})")
