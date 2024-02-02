@@ -1709,10 +1709,11 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
                 if now_site and now_site == to_site.name:
                     console.print(f'{cd.rich_help_text} Already in site [magenta]{to_site.name}[/].  Ignoring.')
                 elif not has_connected:
-                    console.print(f'{cd.rich_help_text} Has not checked-in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
+                    # TODO Need cache update here.  This command doesn't preemptively update cache.  So if device has come onboard since they did a show all it will appear as if it has not checked in
+                    console.print(f'{cd.rich_help_text} Has not checked in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
                 else:
                     key = f'{to_site.id}~|~{cd.generic_type}'
-                    if key not in site_rm_reqs:
+                    if key not in site_mv_reqs:
                         site_mv_reqs[key] = [cd.serial]
                     else:
                         site_mv_reqs[key] += [cd.serial]
