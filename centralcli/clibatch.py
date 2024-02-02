@@ -1175,7 +1175,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
             del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
             if del_reqs_try:
-                print(f"{len(del_reqs_try)} out of {len(*mon_del_reqs, *delayed_mon_del_reqs)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+                print(f"{len(del_reqs_try)} out of {len([*mon_del_reqs, *delayed_mon_del_reqs])} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
             else:
                 break
 
