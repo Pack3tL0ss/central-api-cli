@@ -1268,12 +1268,13 @@ class Cache:
                     # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
                     if "aps" in resp.raw.get("aps", [{}])[0]:
                         _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
-                        _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swarm_id": _swarm_ids[d["serial"]]}} for d in _update_data]
+                        _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in _update_data]
 
                     # add stack_ids for switches to cache
                     if "switches" in resp.raw.get("switches", [{}])[0]:
                         _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
-                        _update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"stack_id": _stack_ids[d["serial"]]}} for d in _update_data]
+                        _update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in _update_data]
+                    # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
 
 
                     self.DevDB.truncate()
