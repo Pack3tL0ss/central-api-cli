@@ -166,7 +166,7 @@ def swarm(
     device: str = typer.Argument(
         ...,
         metavar=iden.dev,
-        help=f"Upgrade will be performed on the cluster the AP belongs to.",
+        help="Upgrade will be performed on the cluster the AP belongs to.",
         autocompletion=cli.cache.dev_ap_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
@@ -187,7 +187,7 @@ def swarm(
     at = None if not at else int(round(datetime.timestamp(at)))
 
     dev = cli.cache.get_dev_identifier(device, dev_type="ap")
-    swarm = dev.swarm_id
+    swarm = dev.swack_id
 
     ver_msg = [typer.style("Upgrade APs in swarm", fg="cyan")]
     if version:

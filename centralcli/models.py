@@ -48,7 +48,7 @@ class Device(BaseModel):
     group: str
     site: str
     version: str
-    swarm_id: Optional[str] = None
+    swack_id: Optional[str] = None  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
 
 class Site(BaseModel):
     name: str
