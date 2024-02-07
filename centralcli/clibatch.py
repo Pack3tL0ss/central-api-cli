@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs, GatewayRole, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
-from centralcli.exceptions import ImportException, MissingFieldException
+from centralcli.exceptions import ImportException, MissingFieldException, DevException
 from centralcli.strings import ImportExamples, LongHelp
 
 # from centralcli.models import GroupImport
@@ -1054,10 +1054,30 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
     inv_del_serials = [s for s in serials_in if s in _all_in_inventory]
 
     # Devices in monitoring (have a status)
-    aps = [dev for dev in cache_devs if dev.generic_type == "ap" and dev.status]
-    switches = [dev for dev in cache_devs if dev.generic_type == "switch" and dev.status]
-    gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
-    devs_in_monitoring = [*aps, *switches, *gws]
+    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
+    # TODO profile these (1 loop vs multiple list comprehensions)
+    for dev in cache_devs:
+        if not dev.status:
+            continue
+        elif dev.generic_type == "ap":
+            aps += [dev]
+        elif dev.generic_type == "gw":
+            gws += [dev]
+        elif dev.generic_type == "switch":
+            if dev.swack_id is None:
+                switches += [dev]
+            elif dev.swack_id in _stack_ids:
+                continue
+            else:
+                _stack_ids += [dev.swack_id]
+                stacks += [dev]
+        else:
+            raise DevException(f'Unexpected device type {dev.generic_type}')
+
+    # aps = [dev for dev in cache_devs if dev.generic_type == "ap" and dev.status]
+    # switches = [dev for dev in cache_devs if dev.generic_type == "switch" and dev.status]  # FIXME Need to use stack_id for stacks
+    # gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
+    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
 
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
@@ -1073,10 +1093,10 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
     mon_del_reqs, delayed_mon_del_reqs = [], []
-    for dev_type, _devs in zip(["ap", "switch", "gateway"], [aps, switches, gws]):
+    for dev_type, _devs in zip(["ap", "switch", "stack", "gateway"], [aps, switches, stacks, gws]):
         if _devs:
-            down_now =  [d.serial for d in _devs if d.status.lower() == "down"]
-            up_now =  [d.serial for d in _devs if d.status.lower() == "up"]
+            down_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "down"]
+            up_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "up"]
             if [*down_now, *up_now]:
                 func = getattr(cli.central, f"delete_{dev_type}")
                 if down_now:

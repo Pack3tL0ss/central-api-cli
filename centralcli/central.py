@@ -4045,6 +4045,22 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
+    async def delete_stack(
+        self,
+        stack_id: str,
+    ) -> Response:
+        """Delete Switch Stack.
+
+        Args:
+            stack_id (str): Filter by Switch stack_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/switch_stacks/{stack_id}"
+
+        return await self.delete(url)
+
     async def delete_ap(
         self,
         serial: str,
