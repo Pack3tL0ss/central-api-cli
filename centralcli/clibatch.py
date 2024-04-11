@@ -658,7 +658,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     warn = False
     _reqd_cols = ["serial", "mac"]
     if not all([len(_reqd_cols) == len([k for k in d.keys() if k in _reqd_cols]) for d in data]):
-        print("[reset]::warning::[bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
+        print("[reset]:warning: [bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
         print("\nImport file must have the following keys for each device:")
         print("[cyan]serial[/], [cyan]mac[/]")
         print("\nThe following headers/columns are optional:")
@@ -694,7 +694,16 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 
     msg_pfx = "" if not warn else "Warning exist "
     word = "Adding" if not warn and yes else "Add"
-    print(f'{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    confirm_devices = ['|'.join([f'{k}:{v}' for k, v in d.items()]) for d in data]
+    if len(confirm_devices) > 6:
+        confirm_str = '\n'.join([*confirm_devices[0:3], "...", *confirm_devices[-3:]])
+    else:
+        confirm_str = '\n'.join(confirm_devices)
+
+    console = Console(emoji=False)
+    print(f'{len(data)} [cyan]Devices found in {"import file" if not import_file else import_file.name}[/]')
+    console.print(confirm_str)
+    print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
     resp = None
     if (not warn and yes) or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
