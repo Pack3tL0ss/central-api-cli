@@ -129,6 +129,7 @@ def move(
     console = Console()
 
     group, site, = None, None
+    device = device or ()
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
         if a == "group":
             group = b
