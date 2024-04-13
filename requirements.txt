@@ -3,7 +3,7 @@ click>=7.1.2
 pygments
 tabulate
 halo
-typer
+typer==0.10.0
 pylibyaml
 pyYAML
 tinydb

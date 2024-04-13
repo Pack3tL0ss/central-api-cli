@@ -652,6 +652,12 @@ class SortWlanOptions(str, Enum):
     ssid = "ssid"
     security = "security"
     type = "type"
+    clients = "clients"
+    enabled = "enabled"
+    rf_band = "rf_band"
+    mac_auth = "mac_auth"
+    access_type = "access_type"
+    group = "group"
 
 
 class SortDevOptions(str, Enum):

@@ -508,6 +508,7 @@ class Session():
                     _ -= 1
                 else:
                     break
+                spin_txt_run = f'{spin_txt_run} {spin_txt_retry}'  # FIXME after 503 (or any others above) spin txt didn't reflect retry
             else:
                 if resp.rl.near_sec:
                     self.rl_log += [

@@ -899,7 +899,8 @@ class CentralApi(Session):
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
-        resp.output = cleaner._get_group_names(resp.output)
+        if resp.ok:
+            resp.output = cleaner._get_group_names(resp.output)
         return resp
 
     async def delete_template(
@@ -1481,6 +1482,25 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    # TODO Under test 3/7/2024
+    async def get_full_wlan_list(
+        self,
+        group_name_or_guid_or_serial_number: str,
+    ) -> Response:
+        """Get WLAN list/details by (UI) group.
+
+        Args:
+            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}"
+
+        return await self.get(url)
 
     # API-FLAW This method returns next to nothing for reserved IPs.
     # Would be more ideal if it returned client_name pool pvid etc as it does with non resserved IPs
@@ -3026,6 +3046,7 @@ class CentralApi(Session):
                 return resp
             else:
                 groups = resp.output
+
         batch_reqs = []
         for _groups in utils.chunker(utils.listify(groups), 20):  # This call allows a max of 20
             params = {"groups": ",".join(_groups)}
@@ -3039,13 +3060,7 @@ class CentralApi(Session):
             resp.raw["data"] = output
         else:
             log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'")
-        groups = ",".join(utils.listify(groups))
 
-        # params = {
-        #     'groups': groups
-        # }
-
-        # return await self.get(url, params=params)
         return resp
 
     async def get_vc_firmware(
@@ -4025,7 +4040,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/gateways/{serial}"
+        url = f"/monitoring/v2/mobility_controllers/{serial}" if config.is_cop else f"/monitoring/v1/gateways/{serial}"
 
         return await self.delete(url)
 

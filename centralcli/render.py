@@ -52,7 +52,7 @@ CUST_KEYS = ["customer_id", "customer_name", "cid", "cust_id"]
 class Output:
     def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
         self.config = config
-        self._file = rawdata    # found typer.unstyle AFTER I built this
+        self._file = rawdata  # found typer.unstyle AFTER I built this
         self.tty = prettydata
 
     def __len__(self):
@@ -408,6 +408,9 @@ def output(
                                 _lexer(),
                                 formatters.Terminal256Formatter(style='solarized-dark')
                                 )
+
+    if isinstance(raw_data, str):  # HACK
+        raw_data = raw_data.replace('✅', 'True').replace('❌', 'False')   #  TODO handle this better messes up column spacing if replacing string.
 
     return Output(rawdata=raw_data, prettydata=table_data, config=config)
 

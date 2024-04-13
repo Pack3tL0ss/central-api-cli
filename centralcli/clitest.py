@@ -128,6 +128,7 @@ def method(
         print(getattr(central, method).__doc__.replace(old_ret, new_ret))
         raise typer.Exit(0)
 
+    kwargs = kwargs or {}
     kwargs = (
         "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
     )
