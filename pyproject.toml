@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "2.3.16"
+version = "2.4.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -35,7 +35,7 @@ cencli = "centralcli.cli:app"
 python = ">=3.8,<4.0"
 tabulate = ">=0.8"
 halo = "*"
-typer = ">=0.6"
+typer = ">=0.6,<0.11.0"
 pylibyaml = ">=0.1.0"
 PyYAML = ">=6"
 tinydb = ">=4"
