@@ -10,6 +10,7 @@ import functools
 import ipaddress
 import logging
 import sys
+import json
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -226,7 +227,9 @@ _short_value = {
     "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "learn_time": _log_timestamp,
     "last_state_change": _log_timestamp,
-    "graceful_restart_timer": _duration_words
+    "graceful_restart_timer": _duration_words,
+    "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
 
@@ -291,6 +294,11 @@ _short_key = {
     "client_count": "clients",
     "is_best": "best",
     "num_routes": "routes",
+    "disable_ssid": "enabled",
+    "mac_authentication": "mac auth",
+    "hide_ssid": "hidden",
+    "essid": "ssid",
+    "opmode": "security",
 }
 
 
@@ -371,7 +379,7 @@ def short_value(key: str, value: Any):
     if isinstance(value, (str, int, float)):
         return (
             short_key(key),
-            _short_value.get(value, value) if key not in _short_value or not value else _short_value[key](value),
+            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, bool) and not value) else _short_value[key](value),
         )
     elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
         if key in ["sites", "labels"]:
@@ -1467,3 +1475,49 @@ def get_overlay_interfaces(data: Union[List[dict], dict]) -> Union[List[dict], d
         log.error(f'get_overlay_interfaces cleaner threw {e.__class__.__name__} trying to get apo name from mac, skipping.', show=True)
 
     return simple_kv_formatter(data)
+
+def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> List[dict]:
+    if isinstance(data, list) and data and isinstance(data[0], str):
+        data = json.loads(data[0])
+    if isinstance(data, dict) and "wlans" in data:
+        data = data["wlans"]
+
+    verbosity_keys = [
+        [
+            'group',
+            'name',
+            'essid',
+            'type',
+            'hide_ssid',
+            'disable_ssid',
+            'rf_band',
+            'mac_authentication',
+            'vlan',
+            'opmode',
+            'access_type'
+        ]
+    ]
+    pretty_data = []
+    for wlan in data:
+        ssid_data = {k: v for k, v in wlan.items() if k in verbosity_keys[verbosity]}
+        if ssid_data.get("name", "") == ssid_data.get("essid", ""):
+            ssid_data["name"] = None
+        pretty_data += [ssid_data]
+
+    pretty_data = simple_kv_formatter(pretty_data)
+    pretty_data = strip_no_value(pretty_data)
+    return pretty_data
+
+
+def get_wlans(data: List[dict]) ->  List[dict]:
+    field_order = [
+        "essid",
+        "security",
+        "type",
+        "client_count"
+    ]
+
+    data = [{**{k: inner[k] for k in field_order if k in inner}, **inner} for inner in data]
+    return simple_kv_formatter(data)
+
+

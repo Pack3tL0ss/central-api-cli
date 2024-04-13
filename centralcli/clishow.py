@@ -1012,7 +1012,10 @@ def groups(
             for idx, g in enumerate(verbose_resp.output):
                 g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
                 g["properties"]["GwNetworkRole"] = g["properties"].get("GwNetworkRole", "NA")
-                g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys())}
+                g["properties"]["AOSVersion"] = g["properties"].get("AOSVersion", "NA")
+                g["properties"]["AllowedSwitchTypes"] = g["properties"].get("AllowedSwitchTypes", "NA")
+                g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
+                g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k != "MonitorOnlySwitch"}
                 for grp in resp.output:
                     if g["group"] == grp["name"]:
                         verbose_resp.output[idx] = {**grp, **g["properties"]}
@@ -1587,7 +1590,7 @@ def wlans(
         show_default=False,
     ),
     swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
     sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
@@ -1596,6 +1599,7 @@ def wlans(
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    verbose: bool = typer.Option(False, "-v", help="get more details for SSIDs across all AP groups", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1609,8 +1613,6 @@ def wlans(
     """Show WLAN(SSID)/details
     """
     central = cli.central
-    if sort_by and sort_by == "ssid":
-        sort_by = "essid"
 
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
@@ -1628,12 +1630,49 @@ def wlans(
         "swarm_id": swarm_id,
         "label": label,
         "site": site,
-        "calculate_client_count": do_clients,
+        "calculate_client_count": True,
     }
 
+    # if full and not group:
+    #     print("Error: must provide group via --group")
+    #     raise typer.Exit(1)
+
+    # TODO add verbosity levels for get_full_wlan_list
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = central.request(central.get_wlans, **params)
-    cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
+    if group:
+        resp = central.request(central.get_full_wlan_list, group)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+    elif verbose:
+        import json
+        group_res = central.request(central.get_groups_properties)
+        if group_res:
+            ap_groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
+            batch_req = [BatchRequest(central.get_full_wlan_list, group) for group in ap_groups]
+            batch_resp = cli.central.batch_request(batch_req)
+            out, failed, passed = [], [], []
+            for group, res in zip(ap_groups, batch_resp):
+                if res.ok:
+                    passed += [res]
+                    wlan_dict = json.loads(res.output)
+                    if wlan_dict.get("wlans"):
+                        for wlan in wlan_dict['wlans']:
+                            out += [{'group': group, **wlan}]
+                else:
+                    failed += [res]
+
+            if passed:
+                resp = passed[-1]
+                resp.output = out
+            else:
+                resp = failed
+        else:
+            resp = group_res
+
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+    else:
+        resp = central.request(central.get_wlans, **params)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)
+
 
 
 # FIXME show clients wireless <tab completion> does not filter based on type of device
@@ -1922,7 +1961,7 @@ def roaming(
             else:
                 time_words = f'Roaming history from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {start} appears to be invalid.")
             raise typer.Exit(1)
     if end:
@@ -1931,7 +1970,7 @@ def roaming(
             end = (dt.int_timestamp)
             time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {end} appears to be invalid.")
             raise typer.Exit(1)
     if past:
@@ -2475,7 +2514,7 @@ def notifications(
     resp = central.request(central.central_get_notification_config, search=search)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
-    title = f"Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
+    title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
 
     cli.display_results(
         resp,
