@@ -899,7 +899,8 @@ class CentralApi(Session):
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
-        resp.output = cleaner._get_group_names(resp.output)
+        if resp.ok:
+            resp.output = cleaner._get_group_names(resp.output)
         return resp
 
     async def delete_template(
