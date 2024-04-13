@@ -3046,6 +3046,7 @@ class CentralApi(Session):
                 return resp
             else:
                 groups = resp.output
+
         batch_reqs = []
         for _groups in utils.chunker(utils.listify(groups), 20):  # This call allows a max of 20
             params = {"groups": ",".join(_groups)}
@@ -3059,13 +3060,7 @@ class CentralApi(Session):
             resp.raw["data"] = output
         else:
             log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'")
-        groups = ",".join(utils.listify(groups))
 
-        # params = {
-        #     'groups': groups
-        # }
-
-        # return await self.get(url, params=params)
         return resp
 
     async def get_vc_firmware(
