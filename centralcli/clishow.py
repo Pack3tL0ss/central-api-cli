@@ -912,7 +912,6 @@ def upgrade(
         autocompletion=cli.cache.account_completion,
     ),
 ):
-    # TODO The API method only accepts swarm id for IAP which AOS10 does not have / serial rejected
     central = cli.central
     if len(device) > 2:
         typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
@@ -920,7 +919,10 @@ def upgrade(
     params, dev = {}, None
     if device and device[-1] != "status":
         dev = cli.cache.get_dev_identifier(device[-1])
-        params["serial"] = dev.serial
+        if dev.type == "ap":
+            params["swarm_id"] = dev.swack_id
+        else:
+            params["serial"] = dev.serial
     else:
         print("Missing required parameter [cyan]<device>[/]")
 
