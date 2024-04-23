@@ -1912,7 +1912,7 @@ def tunnels(
         rich_help_panel="Common Options",
     ),
 ) -> None:
-    """Show Tunnel details"""
+    """Show Branch Gateway/VPNC Tunnel details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
     resp = cli.central.request(cli.central.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
@@ -2441,7 +2441,7 @@ def alerts(
             else:
                 time_words = f'Alerts from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {start} appears to be invalid.")
             raise typer.Exit(1)
     if end:
@@ -2450,7 +2450,7 @@ def alerts(
             end = (dt.int_timestamp)
             time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {end} appears to be invalid.")
             raise typer.Exit(1)
     if past:
@@ -2489,7 +2489,7 @@ def alerts(
             time_words = f"[reset][cyan]{len(resp)}{' active' if not ack else ' '}[reset] {time_words}"
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-    title = f"Alerts/Notifications (Configured Notification Rules)"
+    title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
         title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
 
