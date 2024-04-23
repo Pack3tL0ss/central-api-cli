@@ -1710,22 +1710,23 @@ def wlans(
 # Same applies for wired
 @app.command(help="Show clients/details")
 def clients(
-    filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
+    filter: ClientArgs = typer.Argument('all', case_sensitive=False, show_default=False,),
     device: List[str] = typer.Argument(
         None,
         metavar=iden_meta.dev,
         help="Show clients for a specific device or multiple devices.",
         autocompletion=cli.cache.dev_client_completion,
+        show_default=False,
     ),
-    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
-    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion),
-    label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", ),
+    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     _dev: List[str] = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", hidden=True,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False,),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
     sort_by: SortClientOptions = typer.Option(None, "--sort",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
@@ -1794,7 +1795,12 @@ def clients(
         title = f"{dev.name} Denylisted Clients"
     elif filter.value != "all":  # wired or wireless
         args = (filter.value, device)
-        title = f"All {filter.value.title()} Clients"
+        if device:
+            dev = cli.cache.get_dev_identifier(device[0])
+            kwargs["serial"] = dev.serial
+            title = f"{dev.name} {filter.value.title()} Clients"
+        else:
+            title = f"All {filter.value.title()} Clients"
     else:  # all
         args = (filter.value, device)
         title = "All Clients"
