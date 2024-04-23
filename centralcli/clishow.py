@@ -7,6 +7,7 @@ import time
 import pendulum
 import asyncio
 import sys
+import json
 from typing import List, Iterable, Literal
 from pathlib import Path
 from rich import print
@@ -20,12 +21,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -1372,10 +1373,11 @@ def task(
         resp, tablefmt="action", title=f"Task {task_id} status")
 
 
-@app.command(short_help="Show last known running config for a device")
+@app.command()
 def run(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cli.cache.dev_completion),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Applies to AOS-SW: Output in YAML format [grey42]\[default: JSON][/]", rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1387,12 +1389,36 @@ def run(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show last known running config for a device
+
+    Not supported for CX.
+    Gateways and APs returns typical CLI format.
+    AOS-SW returns a JSON (unless --yaml flag is provided).
+    """
 
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
+    if dev.type == "cx":
+        print("[bright_red]Not Supported:[/] Command not supported for CX switches.")
+        raise typer.Exit(1)
+
     resp = central.request(central.get_device_configuration, dev.serial)
-    cli.display_results(resp, pager=pager, outfile=outfile)
+
+    if isinstance(resp.output, str) and resp.output.startswith("{"):
+        try:
+            cli_config = json.loads(resp.output)
+            cli_config = cli_config.get("_data", cli_config)
+            resp.output = cli_config
+        except Exception as e:
+            log.exception(e)
+
+    if isinstance(resp.output, dict):
+        tablefmt = "json" if not do_yaml else "yaml"
+    else:
+        tablefmt = None
+
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
 
 
 # TODO --status does not work
