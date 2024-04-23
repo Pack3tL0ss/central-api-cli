@@ -36,6 +36,7 @@ from centralcli.constants import (
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
     EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
+from centralcli.cache import CentralObject
 
 app = typer.Typer()
 app.add_typer(clishowfirmware.app, name="firmware")
@@ -834,22 +835,23 @@ def vlans(
     )
 
 
-@app.command(short_help="Show DHCP pool or lease details (gateways only)")
+@app.command()
 def dhcp(
-    what: DhcpArgs = typer.Argument(..., help=["server", "clients"]),
+    what: DhcpArgs = typer.Argument(..., show_default=False,),
     dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.dev} (Valid for Gateways Only) ",
         autocompletion=cli.cache.dev_completion,
+        show_default=False,
     ),
     no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False),
     reverse: bool = typer.Option(False, "-r", help="Reverse sort order", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -867,11 +869,11 @@ def dhcp(
         show_default=False,
     ),
 ) -> None:
+    """"Show DHCP pool or lease details (gateways only)"
+    """
     central = cli.central
-    dev = cli.cache.get_dev_identifier(dev, dev_type="gw")
+    dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
-    # if dev.generic_type != "gw":
-    #     typer.secho(f"show dhcp ... only valid for gateways not {dev.generic_type}", fg="red")
     if what == "server":
         resp = central.request(central.get_dhcp_server, dev.serial)
     else:
