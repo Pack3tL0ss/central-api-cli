@@ -57,7 +57,10 @@ def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = Fa
 
             if ts_resp.output.get("status", "") == "COMPLETED":
                 lines = "\n".join([line for line in ts_resp.output["output"].splitlines() if line != " "])
-                print(lines) if not cli.raw_out else print(ts_resp.output["output"])
+                # print(lines) if not cli.raw_out else print(ts_resp.output["output"])
+                ts_resp.raw = ts_resp.output["output"]
+                ts_resp.output = lines
+                cli.display_results(ts_resp, pager=pager, outfile=outfile)
                 complete = True
                 break
             else:
@@ -82,7 +85,7 @@ def ap_overlay(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show AP Overlay details
+    """Show AP Overlay details (Tunneled SSIDs)
 
     [cyan]Returns the output of the following commands useful in troubleshooting overlay AP / gateway tunnels.[/]
 
@@ -92,6 +95,32 @@ def ap_overlay(
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=("ap"))
     commands = [201, 203, 218]
+    send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
+
+
+@app.command()
+def gw_overlay(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+):
+    """Show GW Overlay details (Tunneled SSIDs)
+
+    [cyan]Returns the output of the following commands useful in troubleshooting overlay AP / gateway tunnels.[/]
+
+    [cyan]-[/] show crypto oto
+    [cyan]-[/] show tunnelmgr tunnel-list
+    [cyan]-[/] show tunnelmgr countersshow run
+
+    """
+    dev = cli.cache.get_dev_identifier(device, dev_type=("gw"))
+    commands = [2453, 2454, 2455]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
@@ -119,6 +148,31 @@ def ap_dpi(
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=("ap"))
     commands = [190, 210, 211, 317, 318]
+    send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
+
+
+@app.command()
+def ap_show_tech(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+):
+    """Show DPI (valid on APs)
+
+    [cyan]Returns the output of the following DPI related commands.[/]
+
+    [cyan]-[/] show tech-support
+    [cyan]-[/] show tech-support supplemental
+    [cyan]-[/] show tech-support memory
+    """
+    dev = cli.cache.get_dev_identifier(device, dev_type=("ap"))
+    commands = [115, 369, 465]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
