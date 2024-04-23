@@ -26,6 +26,7 @@ iden = IdenMetaVars()
 app = typer.Typer()
 
 
+# TODO validate if complaince can be set globally and refactor to allow without specifying group or by specifying "global"
 @app.command()
 def compliance(
     device_type: DevTypes = typer.Argument(
@@ -88,7 +89,7 @@ def compliance(
 
     print(f'Set firmware complaince for [cyan]{_dev_msg}[/] in group [cyan]{group.name}[/] to [bright_green]{version}[/]')
 
-    if yes or typer.confirm("\nProceed?"):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.set_firmware_compliance, **kwargs)
         cli.display_results(resp, tablefmt="action")
 

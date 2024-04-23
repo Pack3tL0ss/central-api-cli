@@ -21,19 +21,14 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, lib_to_api  # noqa
+from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes  # noqa
+from centralcli.cache import CentralObject
 
 app = typer.Typer()
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
-
-class ShowFirmwareDevType(str, Enum):
-    ap = "ap"
-    # gateway = "gateway"
-    gw = "gw"
-    switch = "switch"
 
 
 class ShowFirmwareKwags(str, Enum):
@@ -43,53 +38,46 @@ class ShowFirmwareKwags(str, Enum):
 
 @app.command(short_help="Show firmware compliance details")
 def compliance(
-    device_type: ShowFirmwareDevType = typer.Argument(..., metavar="[ap|gw|switch]",),
-    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
-    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    device_type: DevTypes = typer.Argument(..., show_default=False,),
+    group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
+    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV",),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
-):
+) -> None:
+    """Show firmware compliance details for a group/device type
+    """
     central = cli.central
-    cli.cache(refresh=update_cache)
-    _type_to_name = {
-        "AP": "IAP",
-        "GATEWAY": "CONTROLLER",
-        "GW": "CONTROLLER",
-        "SWITCH": "HP"
-    }
-    # Allows both:
-    # show firmware compliance <dev-type> <group iden>
-    # show firmware compliance <dev-type> group <group iden>
-    if len(_group) > 2:
-        typer.echo(f"Unknown extra arguments in {[x for x in list(_group)[0:-1] if x.lower() != 'group']}")
+
+    # Allows user to add unnecessary "group" keyword before the group
+    if len(group) > 2:
+        typer.echo(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
         raise typer.Exit(1)
-    _group = None if not _group else _group[-1]
-    group = _group or group_name
+    group = None if not group else group[-1]
+    group = group or group_name
     if group:
-        group = cli.cache.get_group_identifier(group).name
+        group: CentralObject = cli.cache.get_group_identifier(group)
 
     # TODO make device_type optional add 'all' keyword and implied 'all' if no device_type
     #      add macro method to get compliance for all device_types.
     kwargs = {
-        'device_type': _type_to_name.get(device_type.upper(), device_type),
-        'group': group
+        'device_type': device_type,
+        'group': group.name
     }
 
     resp = central.request(central.get_firmware_compliance, **kwargs)
     if resp.status == 404 and resp.output.lower() == "not found":
         resp.output = (
             f"Invalid URL or No compliance set for {device_type.lower()} "
-            f"{'Globally' if not group else f'in group {group}'}"
+            f"{'Globally' if group is None else f'in group {group.name}'}"
         )
         typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
     else:
@@ -98,22 +86,23 @@ def compliance(
         cli.display_results(
             resp,
             tablefmt=tablefmt,
-            title=f"{'Global ' if not group else f'{group} '}Firmware Compliance",
+            title=f"{'Global ' if not group else f'{group.name} '}Firmware Compliance",
             pager=pager,
             outfile=outfile
         )
 
 @app.command("list")
 def _list(
-    device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
-    dev_type: ShowFirmwareDevType = typer.Option(None, metavar="[ap|gw|switch]", help="Get firmware list for a device type (CX not suppoted, specify a CX device to see list)"),
-    swarm_id: str = typer.Option(None, help="Get available firmware for IAP cluster.",),
+    device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    dev_type: DevTypes = typer.Option(None, help="Get firmware list for a device type", show_default=False,),
+    swarm: bool = typer.Option(False, "--swarm", "-s", help="Get available firmware for IAP cluster associated with provided device", show_default=False,),
+    swarm_id: str = typer.Option(None, help="Get available firmware for specified IAP cluster", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, help="Enable Paged Output"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     account: str = typer.Option("central_info",
@@ -121,17 +110,17 @@ def _list(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ):
     """Show available firmware list for a specific device or a type of device
-
-    Note: Currently to get list for CX switches you need to specify a CX device.  --dev-type cx is not supported
-    by the API endpoint yet.
     """
-    dev = device if not device else cli.cache.get_dev_identifier(device)
+    dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device)
     _dev_type = dev_type if dev_type is None else lib_to_api("firmware", dev_type)
 
-    # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
+    # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
     if dev and dev.type == "ap":
-        dev_type = "ap"
-        _dev_type = "IAP"
+        if swarm:
+            swarm_id = dev.swack_id
+        else:
+            dev_type = "ap"
+            _dev_type = "IAP"
         dev = None
 
     kwargs = {
@@ -144,11 +133,9 @@ def _list(
 
     _error = ""
     if not kwargs:
-        _error += "\n[dark_orange]:warning:[/] Missing Argument / Option.  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required."
+        _error += "\n[dark_orange]:warning:[/]  [bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required."
     elif len(kwargs) > 1:
-        _error += "\n[dark_orange]:warning:[/] Invalid combination specify only [bold]one[/] of device (argument), --dev-type, [bold]OR[/] --swarm-id."
-    if dev_type and dev_type == "cx":
-        _error += "\nCX is not supported by the API Endpoint as device_type parameter.  To see available releases for CX provide as CX device as argument."
+        _error += "\n[dark_orange]:warning:[/]  [bright_red]Invalid combination[/] specify only [bold]one[/] of device (argument), --dev-type, [bold]OR[/] --swarm-id."
     if _error:
         print(_error)
         raise typer.Exit(1)

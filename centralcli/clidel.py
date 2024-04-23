@@ -14,12 +14,12 @@ from rich.progress import track
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log, config, utils, Response, BatchRequest
+    from centralcli import cli, log, config, utils, Response, BatchRequest, clidelfirmware
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, config, utils, Response, BatchRequest
+        from centralcli import cli, log, config, utils, Response, BatchRequest, clidelfirmware
     else:
         print(pkg_dir.parts)
         raise e
@@ -31,6 +31,7 @@ from centralcli.exceptions import DevException
 iden = IdenMetaVars()
 
 app = typer.Typer()
+app.add_typer(clidelfirmware.app, name="firmware")
 
 
 @app.command(short_help="Delete a certificate")
@@ -171,69 +172,6 @@ def wlan(
         resp = cli.central.request(cli.central.delete_wlan, group.name, name)
         cli.display_results(resp, tablefmt="action")
 
-
-class DelFirmwareArgs(str, Enum):
-    compliance = "compliance"
-
-
-class FirmwareDevType(str, Enum):
-    ap = "ap"
-    gateway = "gateway"
-    switch = "switch"
-
-
-@app.command(short_help="Delete/Clear firmware compliance")
-def firmware(
-    what: DelFirmwareArgs = typer.Argument(...),
-    device_type: FirmwareDevType = typer.Argument(
-        ...,
-        metavar=iden.generic_dev_types,
-        autocompletion=lambda incomplete: [x for x in ["ap", "gw", "switch"] if x.startswith(incomplete.lower())]
-    ),
-    _group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
-    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
-) -> None:
-    _type_to_name = {
-        "ap": "IAP",
-        "gateway": "CONTROLLER",
-        "switch": "HP"
-    }
-    yes = yes_ if yes_ else yes
-
-    if len(_group) > 2:
-        typer.echo(f"Unknown extra arguments in {[x for x in list(_group)[0:-1] if x.lower() != 'group']}")
-        raise typer.Exit(1)
-
-    _group = None if not _group else _group[-1]
-    group = _group or group_name
-    if group:
-        group = cli.cache.get_group_identifier(group).name
-
-    kwargs = {
-        'device_type': _type_to_name.get(device_type.lower(), device_type),
-        'group': group
-    }
-
-    confirm_1 = typer.style("Please Confirm:", fg="cyan")
-    confirm_2 = typer.style("remove", fg="bright_red")
-    confirm_3 = typer.style(f"compliance for {device_type} {'Globally?' if not group else f'in group {group}?'}", fg="cyan")
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}", abort=True):
-        resp = cli.central.request(cli.central.delete_firmware_compliance, **kwargs)
-        if resp.status == 404 and resp.output.lower() == "not found":
-            resp.output = (
-                f"Invalid URL or No compliance set for {device_type.lower()} "
-                f"{'Globally' if not group else f'in group {group}'}"
-            )
-            typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
-        else:
-            cli.display_results(resp, tablefmt="action")
 
 # TODO cache webhook name/id so they can be deleted by name
 @app.command(help="Delete WebHook")
