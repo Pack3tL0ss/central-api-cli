@@ -3,9 +3,6 @@
 
 from __future__ import annotations
 
-# Used to debug completion
-# from rich.console import Console
-# console = Console(stderr=True)
 import asyncio
 import time
 from enum import Enum
@@ -32,6 +29,7 @@ except Exception:
     FUZZ = False
     pass
 
+# Used to debug completion
 err_console = Console(stderr=True)
 TinyDB.default_table_name = "devices"
 
@@ -1025,6 +1023,7 @@ class Cache:
                 out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
 
         for m in out:
+            # err_console.print(f'{m=}')
             yield m
 
     def template_completion(
@@ -1918,9 +1917,7 @@ class Cache:
     def get_site_identifier(
         self,
         query_str: Union[str, List[str], tuple],
-        ret_field: str = "id",
         retry: bool = True,
-        multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject:
@@ -1934,47 +1931,57 @@ class Cache:
 
         match = None
         for _ in range(0, 2 if retry else 1):
-            # TODO match on name first then the other stuff
-            # 'm' returns Pommore          main-batch-demo  mb1-batch-demo
-            #   because Pommore is in Milford
-            # try exact site match
+            # try exact match by name
             match = self.SiteDB.search(
                 (self.Q.name == query_str)
-                | (self.Q.id.test(lambda v: str(v) == query_str))
-                | (self.Q.zipcode == query_str)
-                | (self.Q.address == query_str)
-                | (self.Q.city == query_str)
-                | (self.Q.state == query_str)
-                | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
             )
 
-            # raise ValueError(f'>{query_str}<, {type(query_str)}, {", ".join([m["name"] for m in match])} {bool(match)}')
+            # try exact match by other fields
+            if not match:
+                match = self.SiteDB.search(
+                    (self.Q.id.test(lambda v: str(v) == query_str))
+                    | (self.Q.zipcode == query_str)
+                    | (self.Q.address == query_str)
+                    | (self.Q.city == query_str)
+                    | (self.Q.state == query_str)
+                    | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
+                )
 
-            # retry with case insensitive name & address match if no match with original query
+            # try case insensitive name
             if not match:
                 match = self.SiteDB.search(
                     (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                    | self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
+                )
+            # try case insensitve address match
+            if not match:
+                match = self.SiteDB.search(
+                    self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
                 )
 
-            # swap _ and - and case insensitive
+            # try case insensitive name swapping _ and -
             if not match:
                 if "-" in query_str:
                     match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
                 elif "_" in query_str:
                     match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
 
-            # Last Chance try to match name if it startswith provided value
+            # try case insensitive name starts with
             if not match:
                 match = self.SiteDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.zipcode.test(lambda v: v.startswith(query_str))
+                )
+
+            # Last Chance try other fields case insensitive startswith provided value
+            if not match:
+                match = self.SiteDB.search(
+                    self.Q.zipcode.test(lambda v: v.startswith(query_str))
                     | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.address.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.address.test(lambda v: " ".join(v.split(" ")[1:]).lower().startswith(query_str.lower()))
                 )
 
+            # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and self.central.get_all_sites not in self.updated:
                 if FUZZ and not completion:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
@@ -1993,7 +2000,7 @@ class Cache:
 
         if match:
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="site",)  # multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str, query_type="site",)
 
             return match[0]
 
