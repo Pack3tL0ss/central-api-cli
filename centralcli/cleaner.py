@@ -1033,7 +1033,7 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
-    data = [dict(short_value(k, d.get(k)) for k in field_order if k in d) for d in data]
+    data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order if k in d)} for d in data]
     data = strip_no_value(data)
     return data
 

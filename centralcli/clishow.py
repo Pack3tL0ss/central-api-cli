@@ -7,6 +7,7 @@ import time
 import pendulum
 import asyncio
 import sys
+import json
 from typing import List, Iterable, Literal
 from pathlib import Path
 from rich import print
@@ -20,12 +21,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -35,6 +36,7 @@ from centralcli.constants import (
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
     EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
+from centralcli.cache import CentralObject
 
 app = typer.Typer()
 app.add_typer(clishowfirmware.app, name="firmware")
@@ -833,22 +835,23 @@ def vlans(
     )
 
 
-@app.command(short_help="Show DHCP pool or lease details (gateways only)")
+@app.command()
 def dhcp(
-    what: DhcpArgs = typer.Argument(..., help=["server", "clients"]),
+    what: DhcpArgs = typer.Argument(..., show_default=False,),
     dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.dev} (Valid for Gateways Only) ",
         autocompletion=cli.cache.dev_completion,
+        show_default=False,
     ),
     no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False),
     reverse: bool = typer.Option(False, "-r", help="Reverse sort order", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -866,11 +869,11 @@ def dhcp(
         show_default=False,
     ),
 ) -> None:
+    """"Show DHCP pool or lease details (gateways only)"
+    """
     central = cli.central
-    dev = cli.cache.get_dev_identifier(dev, dev_type="gw")
+    dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
-    # if dev.generic_type != "gw":
-    #     typer.secho(f"show dhcp ... only valid for gateways not {dev.generic_type}", fg="red")
     if what == "server":
         resp = central.request(central.get_dhcp_server, dev.serial)
     else:
@@ -912,7 +915,6 @@ def upgrade(
         autocompletion=cli.cache.account_completion,
     ),
 ):
-    # TODO The API method only accepts swarm id for IAP which AOS10 does not have / serial rejected
     central = cli.central
     if len(device) > 2:
         typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
@@ -920,7 +922,10 @@ def upgrade(
     params, dev = {}, None
     if device and device[-1] != "status":
         dev = cli.cache.get_dev_identifier(device[-1])
-        params["serial"] = dev.serial
+        if dev.type == "ap":
+            params["swarm_id"] = dev.swack_id
+        else:
+            params["serial"] = dev.serial
     else:
         print("Missing required parameter [cyan]<device>[/]")
 
@@ -1370,10 +1375,11 @@ def task(
         resp, tablefmt="action", title=f"Task {task_id} status")
 
 
-@app.command(short_help="Show last known running config for a device")
+@app.command()
 def run(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cli.cache.dev_completion),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Applies to AOS-SW: Output in YAML format [grey42]\[default: JSON][/]", rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1385,12 +1391,36 @@ def run(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show last known running config for a device
+
+    Not supported for CX.
+    Gateways and APs returns typical CLI format.
+    AOS-SW returns a JSON (unless --yaml flag is provided).
+    """
 
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
+    if dev.type == "cx":
+        print("[bright_red]Not Supported:[/] Command not supported for CX switches.")
+        raise typer.Exit(1)
+
     resp = central.request(central.get_device_configuration, dev.serial)
-    cli.display_results(resp, pager=pager, outfile=outfile)
+
+    if isinstance(resp.output, str) and resp.output.startswith("{"):
+        try:
+            cli_config = json.loads(resp.output)
+            cli_config = cli_config.get("_data", cli_config)
+            resp.output = cli_config
+        except Exception as e:
+            log.exception(e)
+
+    if isinstance(resp.output, dict):
+        tablefmt = "json" if not do_yaml else "yaml"
+    else:
+        tablefmt = None
+
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
 
 
 # TODO --status does not work
@@ -1680,22 +1710,23 @@ def wlans(
 # Same applies for wired
 @app.command(help="Show clients/details")
 def clients(
-    filter: ClientArgs = typer.Argument('all', case_sensitive=False, ),
+    filter: ClientArgs = typer.Argument('all', case_sensitive=False, show_default=False,),
     device: List[str] = typer.Argument(
         None,
         metavar=iden_meta.dev,
         help="Show clients for a specific device or multiple devices.",
         autocompletion=cli.cache.dev_client_completion,
+        show_default=False,
     ),
-    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion),
-    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion),
-    label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", ),
+    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     _dev: List[str] = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", hidden=True,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False,),
     do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
     sort_by: SortClientOptions = typer.Option(None, "--sort",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
@@ -1764,7 +1795,12 @@ def clients(
         title = f"{dev.name} Denylisted Clients"
     elif filter.value != "all":  # wired or wireless
         args = (filter.value, device)
-        title = f"All {filter.value.title()} Clients"
+        if device:
+            dev = cli.cache.get_dev_identifier(device[0])
+            kwargs["serial"] = dev.serial
+            title = f"{dev.name} {filter.value.title()} Clients"
+        else:
+            title = f"All {filter.value.title()} Clients"
     else:  # all
         args = (filter.value, device)
         title = "All Clients"
@@ -1876,7 +1912,7 @@ def tunnels(
         rich_help_panel="Common Options",
     ),
 ) -> None:
-    """Show Tunnel details"""
+    """Show Branch Gateway/VPNC Tunnel details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
     resp = cli.central.request(cli.central.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
@@ -2405,7 +2441,7 @@ def alerts(
             else:
                 time_words = f'Alerts from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {start} appears to be invalid.")
             raise typer.Exit(1)
     if end:
@@ -2414,7 +2450,7 @@ def alerts(
             end = (dt.int_timestamp)
             time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
         except Exception:
-            print(f"[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
+            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
             print(f"  Value: {end} appears to be invalid.")
             raise typer.Exit(1)
     if past:
@@ -2453,7 +2489,7 @@ def alerts(
             time_words = f"[reset][cyan]{len(resp)}{' active' if not ack else ' '}[reset] {time_words}"
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-    title = f"Alerts/Notifications (Configured Notification Rules)"
+    title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
         title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
 

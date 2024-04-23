@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 import pendulum
 from pathlib import Path
-from time import sleep
-from typing import List
 
 import typer
 from rich import print
@@ -44,9 +42,9 @@ def _build_caption(resp: Response) -> str | None:
     if resp and "summary" in resp.raw:
         s = resp.raw["summary"]
         oper_state = s.get("oper_state", "").split("_")[-1].title()
-        caption = f'[cyan]Overlay Connection Summary[/]:'
+        caption = '[cyan]Overlay Connection Summary[/]:'
         caption = f'{caption} Last State Change: {" ".join(pendulum.from_timestamp(s.get("last_state_change", 0), tz="local").to_day_datetime_string().split()[1:])}'
-        caption = f'{caption}\n  Admin Status: {"[bright_green]Up[/]" if s.get("admin_status") else ["[bright_red]Down[/]"]}'
+        caption = f'{caption}\n  Admin Status: {"[bright_green]Up[/]" if s.get("admin_status") else "[bright_red]Down[/]"}'
         caption = f'{caption}, Oper State: {color_status.get(oper_state, oper_state)}'
         # caption = f'{caption}\n  [cyan]Counts[/]: Up: [bright_green]{s.get("up_count")}[/], Down: [bright_red]{s.get("down_count")}[/]'
         caption = f'{caption}, interfaces: {s.get("num_interfaces")}'
@@ -182,19 +180,27 @@ def connection(
 
     resp = cli.central.request(cli.central.get_overlay_connection, dev.serial)
 
+    set_width_cols = {"name": 60}
     if "connection" in resp.output:
         resp.output = resp.output["connection"]
+        caption=_build_caption(resp)
+    elif "summary" in resp.output:
+        resp.output = resp.output["summary"]
+        caption = None
+        if resp.output.get("admin_status") is False:
+            set_width_cols = {"admin status": {"min": 55, "max": 100}}
+
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=f'{dev.name} Overlay Connection Information [italic](site: {dev.site})[/]',
-        caption=_build_caption(resp),
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        set_width_cols={"name": 60},
+        set_width_cols=set_width_cols,
         cleaner=cleaner.simple_kv_formatter,
     )
 
