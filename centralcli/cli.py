@@ -23,7 +23,7 @@ import typer
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import (Response, cleaner, cli, cliadd, cliassign,
-                            clibatch, clicaas, cliclone, clidel, clikick,
+                            clibatch, clicaas, cliclone, clidel, clikick, cliset,
                             clirefresh, clirename, clishow, clitest, clitshoot,
                             cliunassign, cliupdate, cliupgrade, config, log,
                             models, utils)
@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError) as e:
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (Response, cleaner, cli, cliadd, cliassign,
                                 clibatch, clicaas, cliclone, clidel, clikick,
-                                clirefresh, clirename, clishow, clitest,
+                                cliset, clirefresh, clirename, clishow, clitest,
                                 clitshoot, cliunassign, cliupdate, cliupgrade,
                                 config, log, models, utils)
     else:
@@ -67,6 +67,7 @@ app.add_typer(clitest.app, name="test",)
 app.add_typer(clitshoot.app, name="tshoot",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
+app.add_typer(cliset.app, name="set",)
 
 
 @app.command(

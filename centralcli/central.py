@@ -3569,6 +3569,48 @@ class CentralApi(Session):
 
         return await self.delete(url, params=params)
 
+    async def set_firmware_compliance(
+        self,
+        device_type: str,
+        group: str,
+        version: str,
+        compliance_scheduled_at: int,
+        reboot: bool = True,  # Only applies to MAS all others reboot regardless.  cencli doesn't support MAS
+        allow_unsupported_version: bool = False,
+    ) -> Response:
+        """Set Firmware Compliance version (for group/device-type).
+
+        Args:
+            device_type (str): Specify one of "IAP/MAS/HP/CX/CONTROLLER"
+            group (str): Group name
+            firmware_compliance_version (str): Firmware compliance version for specific device_type.
+            compliance_scheduled_at (int): Firmware compliance will be schedule at,
+                compliance_scheduled_at - current time. compliance_scheduled_at is epoch in seconds
+                and default value is current time.
+            reboot (bool): Use True for auto reboot after successful firmware download. Default
+                value is False. Applicable only on MAS, aruba switches, CX switches, and controller
+                since IAP reboots automatically after firmware download.
+            allow_unsupported_version (bool): Use True to set unsupported version as firmware
+                compliance version for specific device_type. Default is False.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v2/upgrade/compliance_version"
+        device_type = constants.lib_to_api('firmware', device_type)
+
+
+        json_data = {
+            'device_type': device_type,
+            'group': group,
+            'firmware_compliance_version': version,
+            'reboot': reboot,
+            'allow_unsupported_version': allow_unsupported_version,
+            'compliance_scheduled_at': compliance_scheduled_at
+        }
+
+        return await self.post(url, json_data=json_data)
+
     async def move_devices_to_group(
         self,
         group: str,
