@@ -97,6 +97,58 @@ def ap_overlay(
     commands = [201, 203, 218]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
+@app.command()
+def clients(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    wired: bool = typer.Option(False, "-w", "--wired", help="Include [cyan]show clients wired[/] (applies to AP)",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+):
+    """Show output of client related commands
+
+    [cyan]Returns the output of the following client related commands.[/]
+
+    [bright_green]APs[/]
+    [cyan]-[/] show clients
+    [cyan]-[/] show clients debug advanced
+    [cyan]-[/] show datapath user
+
+    Use of [cyan]--wired[/] option will also include
+    [cyan]-[/] show clients wired
+
+
+    [bright_green]GWs[/]
+    [cyan]-[/] show user-table verbose
+    [cyan]-[/] show datapath user table
+
+    [bright_green]AOS-SW[/]
+    [cyan]-[/] show port-access clients
+    [cyan]-[/] show port-access summary
+    """
+    ids_by_dev_type = {
+        "ap": [117, 257, 47],
+        "sw": [1028, 1089],
+        "gw": [2163, 2095]
+    }
+    dev: CentralObject = cli.cache.get_dev_identifier(device)
+    if dev.type == "cx":
+        print(":warning:  Command not supported on CX switches.")
+
+    commands = ids_by_dev_type[dev.type]
+    if wired:
+        if dev.type == "ap":
+            commands += [123]
+        else:
+            print(f":warning:  [cyan]--wired[/] flag ignored, only applies to APs, not {dev.type}.")
+
+    send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
+
 
 @app.command()
 def gw_overlay(
@@ -115,12 +167,13 @@ def gw_overlay(
     [cyan]Returns the output of the following commands useful in troubleshooting overlay AP / gateway tunnels.[/]
 
     [cyan]-[/] show crypto oto
+    [cyan]-[/] show crypto ipsec
     [cyan]-[/] show tunnelmgr tunnel-list
-    [cyan]-[/] show tunnelmgr countersshow run
+    [cyan]-[/] show tunnelmgr counters
 
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=("gw"))
-    commands = [2453, 2454, 2455]
+    commands = [2453, 2131, 2454, 2455]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
@@ -152,8 +205,8 @@ def ap_dpi(
 
 
 @app.command()
-def ap_show_tech(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+def show_tech(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -163,16 +216,20 @@ def ap_show_tech(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show DPI (valid on APs)
+    """Show Tech Support
 
-    [cyan]Returns the output of the following DPI related commands.[/]
+    [cyan]Returns the output of show tech.[/]
 
-    [cyan]-[/] show tech-support
-    [cyan]-[/] show tech-support supplemental
-    [cyan]-[/] show tech-support memory
+    [cyan]-[/] APs include show tech-support supplemental and show tech-support memory.
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=("ap"))
-    commands = [115, 369, 465]
+    dev: CentralObject = cli.cache.get_dev_identifier(device)
+    ids_by_dev_type = {
+        "ap": [115, 369, 465],
+        "sw": [1032],
+        "gw": [2408],
+        "cx": [6001]
+    }
+    commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
@@ -200,7 +257,7 @@ def ping(
     device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to ping from", autocompletion=cli.cache.dev_completion),
     host: str = typer.Argument(..., help="host to ping (IP of FQDN)"),
     mgmt: bool = typer.Option(None, "-m", help="ping using VRF mgmt, (only applies to cx)"),
-    repititions: int = typer.Option(None, "-r", help="repititions (only applies to switches)"),
+    repititions: int = typer.Option(None, "-r", help="repititions (only applies to AOS-SW)"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     verbose2: bool = typer.Option(
@@ -244,7 +301,7 @@ def ping(
     while not complete:
         for x in range(3):
             _delay = 15 if dev.type == "cx" else 10
-            for _ in track(range(_delay), description=f"[green]Allowing time for commands to complete[/]..."):
+            for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
             ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
 
