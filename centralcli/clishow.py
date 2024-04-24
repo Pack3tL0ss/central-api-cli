@@ -869,7 +869,7 @@ def dhcp(
         show_default=False,
     ),
 ) -> None:
-    """"Show DHCP pool or lease details (gateways only)"
+    """Show DHCP pool or lease details (gateways only)
     """
     central = cli.central
     dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
