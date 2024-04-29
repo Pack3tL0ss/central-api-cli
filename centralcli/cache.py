@@ -741,6 +741,7 @@ class Cache:
     # TODO put client names with spaces in quotes
     def dev_client_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -763,15 +764,14 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
-        gen = self.dev_switch_ap_completion
 
-        if args:
-            if args[-1].lower() == "wireless":
-                gen = self.dev_ap_completion
-            elif args[-1].lower() == "wired":
-                gen = self.dev_switch_completion
-            elif args[-1].lower() == "all":
-                return
+        if ctx.params.get("wireless"):
+            gen = self.dev_ap_completion
+        elif ctx.params.get("wired"):
+            gen = self.dev_switch_completion
+        else:
+            gen = self.dev_switch_ap_completion
+            # return
 
         for m in [dev for dev in gen(incomplete, args)]:
             yield m
@@ -2129,7 +2129,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject:
+    ) -> CentralObject | List[CentralObject]:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -2225,7 +2225,7 @@ class Cache:
         multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
-    ) -> List[CentralObject]:
+    ) -> CentralObject | List[CentralObject]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
@@ -2309,7 +2309,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject:
+    ) -> CentralObject | List[CentralObject]:
         """Allows Case insensitive label match"""
         retry = False if completion else retry
         for _ in range(0, 2):

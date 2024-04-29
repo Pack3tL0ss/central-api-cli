@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    ClientArgs, SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
     EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
@@ -1710,27 +1710,29 @@ def wlans(
 # Same applies for wired
 @app.command(help="Show clients/details")
 def clients(
-    filter: ClientArgs = typer.Argument('all', case_sensitive=False, show_default=False,),
-    device: List[str] = typer.Argument(
+    client: str = typer.Argument(
         None,
-        metavar=iden_meta.dev,
-        help="Show clients for a specific device or multiple devices.",
-        autocompletion=cli.cache.dev_client_completion,
+        metavar=iden_meta.client,
+        help="Show details for a specific client. [grey42 italic]verbose assumed.[/]",
+        autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
-    _dev: List[str] = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", hidden=True,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False,),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
+    wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](-d|--dev must also be supplied)[/]",),
+    device: str = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", autocompletion=cli.cache.dev_client_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
-    sort_by: SortClientOptions = typer.Option(None, "--sort",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False,),
+    sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
+    verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
     verbose2: bool = typer.Option(
         False,
         "-vv",
@@ -1743,6 +1745,7 @@ def clients(
         is_flag=True,
         help="Use default central account",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
     debug: bool = typer.Option(
         False,
@@ -1750,62 +1753,54 @@ def clients(
         envvar="ARUBACLI_DEBUG",
         help="Enable Additional Debug Logging",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     central = cli.central
-    device = utils.listify(device) if device else []
-    device = device if not _dev else [*device, *_dev]
-    kwargs = {}
-    dev = []
-    if filter.value == "device":
-        # TODO add support for multi-device
-        if len(device) == 1:
-            dev = cli.cache.get_dev_identifier(device[0])
-            kwargs["serial"] = dev.serial
-            args = tuple()
-            title = f"{dev.name} Clients"
-        else:
-            dev = [cli.cache.get_dev_identifier(d) for d in device]
-            args = tuple()
-            title = f"Clients Connected to: {', '.join([d.name for d in dev])}"
-    elif filter.value == "mac":
-        # TODO add support for multi-device
-        if len(device) == 1:
-            kwargs["mac"] = device[0]
-            args = tuple()
-            title = f"Details for client with MAC {device[0]}"
-        else:
-            print("Only 1 client MAC allowed currently")
-            raise typer.Exit(1)
-            # TODO allow multiple MACs get all clients then filter result
-    elif filter.value == "denylisted":
-        if not device:
-            print("Missing argument DEVICE:\[name|ip|mac|serial]")
-            raise typer.Exit(1)
-        elif len(device) > 1:
-            print(f"[bright_red]Warning!![/]: Support for multiple devices not implemented yet. showing denylist for {dev.name} only.")
-        dev = cli.cache.get_dev_identifier(device[0])
-        args = (dev.serial,)
-        title = f"{dev.name} Denylisted Clients"
-    elif filter.value != "all":  # wired or wireless
-        args = (filter.value, device)
-        if device:
-            dev = cli.cache.get_dev_identifier(device[0])
-            kwargs["serial"] = dev.serial
-            title = f"{dev.name} {filter.value.title()} Clients"
-        else:
-            title = f"All {filter.value.title()} Clients"
-    else:  # all
-        args = (filter.value, device)
-        title = "All Clients"
+    # device = utils.listify(device) if device else []
+    # device = device if not _dev else [*device, *_dev]
+    device = device or []
 
-    if filter.value != "denylisted":
+    kwargs = {}
+    dev = None
+    title = "All Clients"
+    args = tuple()
+    if client:
+        _client = cli.cache.get_client_identifier(client, exit_on_fail=True)
+        kwargs["mac"] = _client.mac
+        title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
+        verbose = True
+    elif device:
+        dev = cli.cache.get_dev_identifier(device)
+        kwargs["serial"] = dev.serial
+        title = f"{dev.name} Clients"
+
+    if denylisted:
+        if not dev:
+            print(":warning:  [cyan]--device[/] is required when [cyan]-D|--denylisted[/] flag is set.")
+            raise typer.Exit(1)
+        else:
+            args = (dev.serial,)
+            title = f"{dev.name} Denylisted Clients"
+            if any([group, site, label]):
+                print(":warning:  [cyan]--group[/], [cyan]--site[/], [cyan]--label[/] options not valid with [cyan]-D|--denylisted[/].  [italic bold]Ignoring[/].")
+
+    if not client:
+        if wired:
+            args = ("wired", *args)
+            title = "All Wired Clients" if not dev else f"{dev.name} Wired Clients"
+        elif wireless:
+            args = ("wireless", *args)
+            title = f"{'All' if not dev else dev.name} Wireless Clients"
+
+    if not denylisted:
         if group:
             kwargs["group"] = cli.cache.get_group_identifier(group).name
             title = f"{title} in group {group}"
@@ -1815,26 +1810,24 @@ def clients(
             title = f"{title} in site {site}"
 
         if label:
-            kwargs["label"] = label
+            kwargs["label"] = cli.cache.get_label_identifier(label).name
             title = f"{title} on devices with label {label}"
 
-    # TODO retain but strip out time fields in epoch for purposes of sorting
-    if sort_by:
-        sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
-
     # resp = central.request(central.get_clients, *args, **kwargs)
-    if filter.value != "denylisted":
+    if not denylisted:
         resp = central.request(cli.cache.update_client_db, *args, **kwargs)
     else:
         resp = central.request(cli.central.get_denylist_clients, *args)
+
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
     _count_text = ""
-    if filter.value not in ["mac", "denylisted"]:
-        if filter.value == "wired":
+    # if filter.value not in ["mac", "denylisted"]:
+    if not client and not denylisted:
+        if wired:
             _count_text = f"{len(resp)} Wired Clients."
-        elif filter.value == "wireless":
+        elif wireless:
             _count_text = f"{len(resp)} Wireless Clients."
         else:
             _tot = len(resp)
@@ -1849,19 +1842,23 @@ def clients(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
 
     verbose_kwargs = {}
-    if not verbose2 and filter.value != "denylisted":
+    if not verbose2 and not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
         verbose_kwargs["verbose"] = verbose
         # filter output on multiple devices
+        # TODO maybe restore multi-device looks like was handled in filter
         if dev and isinstance(dev, list):
             verbose_kwargs["filters"] = [d.serial for d in dev]
+
+    if sort_by:
+        sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose else None,
+        caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose and not denylisted else None,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
