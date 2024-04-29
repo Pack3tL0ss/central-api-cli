@@ -254,7 +254,7 @@ def dpi(
 
 
 @app.command()
-def ap_ssid(
+def ssid(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
