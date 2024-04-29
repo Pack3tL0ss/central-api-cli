@@ -40,24 +40,27 @@ iden_meta = IdenMetaVars()
 
 
 def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = False, outfile: Path = None) -> Response:
-    console = Console(emoji=False)
-    # dev = cli.cache.get_dev_identifier(device)
     _type = lib_to_api("tshoot", device.type)
     commands = utils.listify(commands)
 
     resp = cli.central.request(cli.central.start_ts_session, device.serial, dev_type=_type, commands=commands)
     cli.display_results(resp, tablefmt="action")
 
+    if not resp:
+        return
+
     complete = False
     while not complete:
         for x in range(3):
-            with console.status("Waiting for Troubleshooting Response..."):
-                sleep(10)
+            _delay = 15 if device.type == "cx" else 10
+            for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
+                sleep(1)
+            # with console.status("Waiting for Troubleshooting Response..."):
+            #     sleep(10)
             ts_resp = cli.central.request(cli.central.get_ts_output, device.serial, resp.session_id)
 
             if ts_resp.output.get("status", "") == "COMPLETED":
                 lines = "\n".join([line for line in ts_resp.output["output"].splitlines() if line != " "])
-                # print(lines) if not cli.raw_out else print(ts_resp.output["output"])
                 ts_resp.raw = ts_resp.output["output"]
                 ts_resp.output = lines
                 cli.display_results(ts_resp, pager=pager, outfile=outfile)
@@ -196,7 +199,7 @@ def clients(
     ids_by_dev_type = {
         "ap": [117, 257, 47],
         "sw": [1028, 1089],
-        "gw": [2163, 2095]
+        "gw": [2163, 2095],
     }
     dev: CentralObject = cli.cache.get_dev_identifier(device)
     if dev.type == "cx":
