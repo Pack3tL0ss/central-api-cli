@@ -24,7 +24,7 @@ def cleanup():
     yield do_nothing()
     # executed after test is run
     result = runner.invoke(app, ["show", "cache", "groups", "--json"])
-    del_groups = [g for g in json.loads(result.stdout) if g.startswith("cencli_test_")]
+    del_groups = [g for g in json.loads(result.stdout) if g.startswith("cencli_test_") or g == "TESTING"]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
         assert "Success" in result.stdout
@@ -70,11 +70,11 @@ def test_blink_wrong_dev_type():
 
 
 def test_clone_group(cleanup):
-    result = runner.invoke(app, ["clone", "group", TEST_DEVICES["gateway"]["group"], TEST_DEVICES["clone"]["to_group"], "-Y"])
+    result = runner.invoke(app, ["-d", "clone", "group", TEST_DEVICES["gateway"]["group"], TEST_DEVICES["clone"]["to_group"], "-Y"])
     assert result.exit_code == 0
     assert "201" in result.stdout
     assert "Created" in result.stdout
-    cleanup()
+    # cleanup()
 
 
 # def test_do_move_dev_to_group():
