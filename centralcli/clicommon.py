@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import typer
 import sys
-import time
 from typing import List, Literal, Union, Tuple
 from pathlib import Path
 from rich.console import Console
@@ -36,6 +35,7 @@ CASE_SENSITIVE_TOKENS = ["R", "U"]
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 console = Console(emoji=False)
+err_console = Console(emoji=False, stderr=True)
 
 
 class CLICommon:
@@ -51,7 +51,7 @@ class CLICommon:
             self.msg = msg
 
         def __repr__(self) -> str:
-            return str(self)
+            return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
 
         def __str__(self) -> str:
             if self.msg and hasattr(self, self.msg):
@@ -59,117 +59,141 @@ class CLICommon:
             else:
                 return self.initial if not os.environ.get("ARUBACLI_ACCOUNT") else self.envvar
 
+        def __call__(self) -> str:
+            return self.__str__()
+
         @property
         def envvar(self):
-            envvar_msg = f'Using Account: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
-            return render.rich_capture(envvar_msg)
+            return f'Using Account: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
 
         @property
         def initial(self):
-            acct_clr = f"{typer.style(self.account, fg='cyan')}"
-            return (
-                f"{typer.style(f'Using Account: {acct_clr}.', fg='magenta')}  "
-                "{typer.style(f'Account setting is sticky.  ', fg='red', blink=True)}"
-                "\n  {acct_clr} {typer.style(f'will be used for subsequent commands until', fg='magenta')}"
-                f"\n  {typer.style('--account <account name> or `-d` (revert to default). is used.', fg='magenta')}\n"
+            msg = (
+                f'[magenta]Using Account:[/] [cyan]{self.account}[/].\n'
+                f'[bright_red blink]Account setting is sticky.[/]  '
+                '[magenta]will be used for subsequent commands until[/]\n'
+                f'[cyan]--account <account name>[/] or [cyan]-d[/] (revert to default). is used.\n'
             )
+            return msg
 
         @property
         def previous(self):
             return (
-                "{typer.style(f'Using previously specified account: ', fg='magenta')}"
-                f"{typer.style(self.account, fg='cyan', blink=True)}.  "
-                f"\n{typer.style('Use `--account <account name>` to switch to another account.', fg='magenta')}"
-                f"\n{typer.style('    or `-d` flag to revert to default account.', fg='magenta')}\n"
+                f'[magenta]Using previously specified account[/]: [cyan blink]{self.account}[/]'
+                f'\n[magenta]Use[/] [cyan]--account <account name>[/] [magenta]to switch to another account.[/]'
+                f'\n    or [cyan]-d[/] [magenta]flag to revert to default account[/].'
             )
 
         @property
         def forgot(self):
-            return typer.style(
-                "Forget option set for account, and expiration has passed.  reverting to default account\n", fg="magenta"
-            )
+                return ":information:  Forget option set for account, and expiration has passed.  [bright_green]reverting to default account\n[/]"
 
         @property
         def will_forget(self):
             will_forget_msg = "[magenta]Forget options is configured, will revert to default account[/]\n"
-            will_forget_msg = f"{will_forget_msg}[cyan]{config.forget_account_after}[/][magenta] mins after last command[/]"
-            console = Console(emoji=False, record=True)
-            console.begin_capture()
-            console.print(will_forget_msg)
-            return console.end_capture()
-            # return typer.style(
-            #     f"Forget options is configured, will revert to default account "
-            #     f'{typer.style(f"{config.forget_account_after} mins", fg="cyan")}'
-            #     f'{typer.style(" after last command.", fg="magenta")}',
-            #     fg="magenta",
-            # )
+            will_forget_msg = f"{will_forget_msg}[cyan]{config.forget}[/][magenta] mins after last command[/]\n"
+            return will_forget_msg
 
         @property
         def previous_will_forget(self):
             return f"{self.previous}\n\n{self.will_forget}"
 
-    # TODO Can remove most of this and AcctMsg the bulk of messaging is now done in __init__
-    # as we need to know the account to load the correct cache.
-    # Initial --account still uses msg below in else
-    def account_name_callback(self, ctx: typer.Context, account: str):
-        if ctx.resilient_parsing or account is None:  # tab completion, return without validating
+        @property
+        def previous_short(self):
+            return f":information:  Using previously specified account: [bright_green]{self.account}[/]."
+
+    def account_name_callback(self, ctx: typer.Context, account: str, default: bool = False) -> str:
+        """Responsible for account messaging.  Actual account is determined in config.
+
+        Account has to be collected prior to CLI for completion to work specific to the account.
+
+        Args:
+            ctx (typer.Context): Typer context
+            account (str): account name.  Will only have value if --account flag was used.
+                Otherwise we use the default account, or envvar, or the last account (if forget timer not expired.)
+            default (bool, optional): If default flag was used to call this func. Defaults to False.
+
+        Raises:
+            typer.Exit: Exits if account is not found.
+
+        Returns:
+            str: account name
+        """
+        if ctx.resilient_parsing:  # tab completion, return without validating
             return account
 
-        # -- // sticky last account messaging account is loaded in __init__ \\ --
-        if account in ["central_info", "default"]:
-            if config.sticky_account_file.is_file():
-                last_account, last_cmd_ts = config.sticky_account_file.read_text().split("\n")
-                last_cmd_ts = float(last_cmd_ts)
+        account = account or config.default_account  # account only has value if --account flag is used.
+        emoji_console = Console()
 
-                # last account messaging
-                if config.forget:
-                    if time.time() > last_cmd_ts + (config.forget * 60):
-                        # config.sticky_account_file.unlink(missing_ok=True)
-                        typer.echo(self.AcctMsg(msg="forgot"))
-                    else:
-                        account = last_account
-                        typer.echo(self.AcctMsg(account, msg="previous_will_forget"))
-                else:
-                    account = last_account
-                    typer.echo(self.AcctMsg(account, msg="previous"))
-        else:
+        if default:  # They used the -d flag
+            emoji_console.print(":information:  [bright_green]Using default central account[/]",)
+            if config.sticky_account_file.is_file():
+                config.sticky_account_file.unlink()
             if account in config.data:
-                # config.sticky_account_file.parent.mkdir(exist_ok=True)
-                # config.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
-                typer.echo(self.AcctMsg(account))
+                return account
+            elif "default" in config.data:
+                return "default"
+
+        # -- // sticky last account messaging account is loaded in config.py \\ --
+        elif account in ["central_info", "default"]:
+            if config.last_account:
+                # last account messaging.
+                if config.forget:
+                    if config.last_account_expired:
+                        msg = self.AcctMsg(account)
+                        emoji_console.print(msg.forgot)
+                        if config.sticky_account_file.is_file():
+                            config.sticky_account_file.unlink()
+
+                    else:
+                        account = config.last_account
+                        msg = self.AcctMsg(account)
+                        if not config.last_account_msg_shown:
+                            console.print(msg.previous_will_forget)
+                            config.update_last_account_file(account, config.last_cmd_ts, True)
+                        else:
+                            emoji_console.print(msg.previous_short)
+
+                else:
+                    account = config.last_account
+                    msg = self.AcctMsg(account)
+                    if not config.last_account_msg_shown:
+                        console.print(msg.previous)
+                        config.update_last_account_file(account, config.last_cmd_ts, True)
+                    else:
+                        emoji_console.print(msg.previous_short)
+
+        elif account in config.data:
+            if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
+                msg = self.AcctMsg(account)
+                console.print(msg.envvar)
+            else:
+                console.print(self.AcctMsg(account).initial)
 
         if config.valid:
-            # config.account = self.account = account
-            # self.central = CentralApi(account)
-            # self.cache = Cache(self.central)
             return account
-        else:
-            typer.echo(
-                f"{typer.style('ERROR:', fg=typer.colors.RED)} "
-                f"The specified account: '{config.account}' is not defined in the config @\n"
-                f"{config.file}\n\n"
+        else:  # -- Error messages config invalid or account not found in config --
+            _def_msg = False
+            emoji_console.print(
+                f":warning:  [bright_red]Error:[/] The specified account: [cyan]{config.account}[/] is not defined in the config @\n"
+                f"  {config.file}\n"
             )
 
-            if config.defined_accounts:
-                typer.echo(
-                    f"The following accounts are defined {', '.join(config.defined_accounts)}\n"
-                    f"The default account 'central_info' is used if no account is specified via --account flag.\n"
-                    f"or the ARUBACLI_ACCOUNT environment variable.\n"
+            if "central_info" not in config.data and "default" not in config.data:
+                _def_msg = True
+                emoji_console.print(
+                    ":warning:  [cyan]central_info[/] is not defined in the config.  This is the default when not overridden by\n"
+                    "--account flag or [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
                 )
-            else:
-                if not config.data:
-                    # TODO prompt user for details
-                    typer.secho("Configuration doesn't exist", fg="red")
-                else:
-                    typer.secho("No accounts defined in config", fg="red")
 
             if account not in ["central_info", "default"]:
-                if "central_info" not in config.data and "default" not in config.data:
-                    typer.echo(
-                        f"{typer.style('WARNING:', fg='yellow')} "
-                        f"'central_info' is not defined in the config.  This is the default when not overridden by\n"
-                        f"--account parameter or ARUBACLI_ACCOUNT environment variable."
-                    )
+                if config.defined_accounts:
+                    console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]")
+                    if not _def_msg:
+                        console.print(
+                            "The default account [cyan]central_info[/] is used if no account is specified via [cyan]--account[/] flag.\n"
+                            "or the [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
+                        )
 
             raise typer.Exit(code=1)
 
@@ -208,7 +232,8 @@ class CLICommon:
             return
 
         if default and config.sticky_account_file.is_file():
-            typer.secho(" Using default central account", fg="bright_green")
+            emoji_console = Console()
+            emoji_console.print(":information:  [bright_green]Using default central account[/]",)
             config.sticky_account_file.unlink()
             return default
 
@@ -217,9 +242,6 @@ class CLICommon:
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 
-        # utils.json_print(ctx.__dict__)
-        # utils.json_print(ctx.parent.__dict__)
-        # utils.json_print(locals())
         if ctx.params["kw1"].lower() == "all" and ctx.params["nodes"].lower() == "commands":
             ctx.params["nodes"] = None
             return tuple([ctx.params["kw2"], *commands])
@@ -244,7 +266,7 @@ class CLICommon:
             log.DEBUG = log.verbose = config.debug = config.debugv = debugv
             return debugv
 
-    # not used at the moment but could be used to allow unambiguous partial tokens
+    # TODO not used at the moment but could be used to allow unambiguous partial tokens
     @staticmethod
     def normalize_tokens(token: str) -> str:
         return token.lower() if token not in CASE_SENSITIVE_TOKENS else token
@@ -378,7 +400,8 @@ class CLICommon:
                 "full_cols": full_cols,
                 "fold_cols": fold_cols,
             }
-            outdata = render.output(**kwargs)
+            with console.status("Rendering Output..."):
+                outdata = render.output(**kwargs)
 
             if stash:
                 config.last_command_file.write_text(
@@ -386,6 +409,14 @@ class CLICommon:
                 )
 
             typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
+
+            # TODO test speed of use normal console object.
+            # rich pager may render faster, but need to modify render.output .. rich_output
+            # if pager and tty and len(outdata) > tty.rows:
+            #     with console.pager():
+            #         console.print(outdata)
+            # else:
+            #     console.print(outdata)
 
             if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
                 print(caption)
@@ -498,7 +529,8 @@ class CLICommon:
                         if not r.ok:
                             print(r.error)
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
-                        print(r.raw)
+                        plain_console = Console(color_system=None, emoji=False)
+                        plain_console.print(r.raw)
 
                         if outfile:
                             self.write_file(outfile, r.raw)
@@ -508,7 +540,7 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        console.print(f"[{fg}]{r}")
+                        console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
                         if caption:

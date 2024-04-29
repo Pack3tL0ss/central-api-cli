@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from time import sleep
 from typing import List
+import typer
 import asyncio
 
 from rich import print
@@ -18,7 +19,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
-import typer
+err_console = Console(stderr=True)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -40,9 +41,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject  # noqa
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs)
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs)  #noqa
 
 iden = IdenMetaVars()
 
@@ -73,6 +74,8 @@ app.add_typer(cliset.app, name="set",)
 @app.command(
     help="Move device(s) to a defined group and/or site.",
 )
+
+# TODO Make this a sub command climove
 def move(
     device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion),
     kw1: str = typer.Argument(
@@ -848,6 +851,8 @@ def convert(
 
 
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
+    if ctx.resilient_parsing:
+        config.is_completion = True
     if not ctx.resilient_parsing:
         version, account, debug, debugv, default, update_cache = None, None, None, None, None, None
         for idx, arg in enumerate(sys.argv[1:]):
@@ -860,10 +865,10 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
             elif arg == "-d":
                 default = True
             elif arg == "--account" and "-d" not in sys.argv:
-                account = sys.argv[idx + 1]
+                account = sys.argv[idx + 2]  # sys.argv enumeration is starting at index 1 so need to adjust idx by 2 for next arg
             elif arg == "-U":
                 update_cache = True
-            elif arg.startswith("-") and not arg.startswith("--"):
+            elif arg.startswith("-") and not arg.startswith("--"):  # -dU is allowed
                 if "d" in arg:
                     default = True
                 if "U" in arg:
@@ -876,7 +881,11 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
             cli.version_callback(ctx)
             raise typer.Exit(0)
         if default:
-            default = cli.default_callback(ctx, True)
+            if "--account " in str(sys.argv) and account not in ["central_info", "default"]:
+                err_console.print(f":warning:  Both [cyan]-d[/] and [cyan]--account[/] flag used.  Honoring [cyan]-d[/], ignoring account [cyan]{account}[/]")
+                account = config.default_account
+            cli.account_name_callback(ctx, account=config.default_account, default=True)
+            # default = cli.default_callback(ctx, True)
         # elif account:
         else:
             cli.account_name_callback(ctx, account=account)
@@ -896,7 +905,7 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
 @app.callback()
 def callback(
     # ctx: typer.Context,``
-    version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version."),
+    version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version.",),
     debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
                             #    callback=all_commands_callback),
     debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging", hidden=True,),
@@ -908,10 +917,12 @@ def callback(
         help="Use default central account",
         show_default=False,
     ),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
     update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
 ) -> None:
     """
