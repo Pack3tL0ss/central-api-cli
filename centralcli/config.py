@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Author: Wade Wells github/Pack3tL0ss
-from typing import Optional
+from __future__ import annotations
 
 import json
 import os
@@ -9,7 +9,7 @@ import sys
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Dict, Union, TypeVar, TextIO, overload
+from typing import Any, List, Dict, Union, TypeVar, TextIO, Tuple, Optional
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
@@ -27,9 +27,7 @@ try:
 except Exception:
     pass
 
-# class BaseModel(PydanticBaseModel):
-#     class Config:
-#         arbitrary_types_allowed = True
+err_console = Console(stderr=True)
 
 class Token(BaseModel):
     access: str = Field(..., alias="access_token")
@@ -218,6 +216,7 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
 
 class Config:
     def __init__(self, base_dir: Path = None):
+        self.is_completion = False  # Updated in cli.py all_commands_callback if completion
         self.valid_suffix = valid_ext
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
@@ -260,7 +259,7 @@ class Config:
                     break
 
             # No config found trigger first run wizard
-            if not self.file.exists() and sys.stdin.isatty():
+            if not self.file.exists() and sys.stdin.isatty() and not self.is_completion:
                 if "-completion" not in str(sys.argv):
                     self.first_run()
                 else:
@@ -278,6 +277,8 @@ class Config:
         self.debug: bool = self.data.get("debug", False)
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
+        self.default_account: str = "default" if "default" in self.data else "central_info"
+        self.last_account, self.last_cmd_ts, self.last_account_msg_shown, self.last_account_expired = self.get_last_account()
         self.account = self.get_account_from_args()
         self.base_url = self.data.get(self.account, {}).get("base_url")
         try:
@@ -297,8 +298,6 @@ class Config:
                     _cache_token = json.loads(self.snow_tok_file.read_text())
                     _snow_config["token"]["cache"] = _cache_token
                 _snow_config["tok_file"] = Path(self.cache_dir / f'snow_{self.tok_file.name}')
-            # snow_cache = f'{self.cache_dir}/snow_tok_{self.data[self.account]["customer_id"]}_{self.data[self.account]["client_id"]}.json'
-            # self.snow = ServiceNow(**{**self.data[self.account].get("snow", {}), **{"tok_file": snow_cache}})
             self.snow = ServiceNow(**_snow_config)
         except ValidationError:
             self.snow = None
@@ -369,6 +368,31 @@ class Config:
             return self.data.get(key, default)
         elif self.account and key in self.data[self.account]:
             return self.data[self.account].get(key, default)
+
+    def get_last_account(self) -> Tuple[str | None, float | None, bool | None]:
+        """Gathers contents of last_account returns tuple with values.
+
+        last_account file stores: name of last account, timestamp of last command, numeric bool if big (will forget) msg has been displayed.
+            expiration is calculated based on the value of account_will_forget and delta between last_command timestamp and now.
+
+
+        Returns:
+            Tuple[None, str | None, float | bool | None, bool]:
+                last_account, timestamp of last cmd using this account, if initial will_forget_msg has been displayed, if account is expired
+        """
+        if self.sticky_account_file.is_file():
+            last_account_data = self.sticky_account_file.read_text().split("\n")
+            if last_account_data:
+                last_account = last_account_data[0]
+                last_cmd_ts = float(last_account_data[1])
+                big_msg_displayed = bool(int(last_account_data[2]))
+                expired = True if self.forget and time.time() > last_cmd_ts + (self.forget * 60) else False
+                return last_account, last_cmd_ts, big_msg_displayed, expired
+        return None, None, False, None
+
+    def update_last_account_file(self, account: str, last_cmd_ts: int | float = round(time.time(), 2), msg_shown: bool = False):
+        self.sticky_account_file.parent.mkdir(exist_ok=True)
+        self.sticky_account_file.write_text(f"{account}\n{last_cmd_ts}\n{int(msg_shown)}")
 
     @staticmethod
     def get_file_data(import_file: Path, text_ok: bool = False, model: Any = None) -> Union[dict, list]:
@@ -444,42 +468,27 @@ class Config:
         Returns:
             str: The account to use based on --account -d flags and last_account file.
         """
-        if "--account" in sys.argv:
+        # No printing, any printing messes with completion
+        if "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).rstrip("']").endswith("-d"):
+            return self.default_account
+        elif [arg for arg in sys.argv if arg.startswith("-") and arg.count("-") == 1 and "d" in arg]:
+            return self.default_account
+        elif "--account" in sys.argv:
             account = sys.argv[sys.argv.index("--account") + 1]
-        elif "--account" in str(sys.argv):  # vscode debug workaround
+        elif "--account " in str(sys.argv):  # vscode debug workaround
             args = [a.split(" ") for a in sys.argv if "--account " in a][0]
             account = args[args.index("--account") + 1]
-        elif "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).rstrip("']").endswith("-d"):
-            return "central_info"
         else:
-            account = "central_info" if not os.environ.get("ARUBACLI_ACCOUNT") else os.environ.get("ARUBACLI_ACCOUNT")
+            account = self.default_account if not os.environ.get("ARUBACLI_ACCOUNT") else os.environ.get("ARUBACLI_ACCOUNT")
 
         if account in ["central_info", "default"]:
-            if self.sticky_account_file.is_file():
-                last_account, last_cmd_ts = self.sticky_account_file.read_text().split("\n")
-                last_cmd_ts = float(last_cmd_ts)
+            if self.forget and self.last_account_expired:
+                pass  # all_commands_callback will handle messaging can't do here, along with last_account file reset.
+            else:
+                account = self.last_account or account
+        elif account in self.data and account != os.environ.get("ARUBACLI_ACCOUNT", ""):
+            self.update_last_account_file(account)
 
-                # TODO can't print here with about breaking auto-complete - restore messaging to account_name_callback
-                # last account sticky file handling -- messaging is in cli callback --
-                console = Console()
-                if self.forget:
-                    if time.time() > last_cmd_ts + (self.forget * 60):
-                        self.sticky_account_file.unlink(missing_ok=True)
-                        _m = f":warning: Forget option set for [cyan]{last_account}[/], and expiration has passed.  [bright_green]reverting to default account[/]"
-                        _m = f"{_m}\nUse [cyan]--account[/] option or set environment variable ARUBACLI_ACCOUNT to use alternate account"
-                        # console.print(_m)
-                        if not Confirm("Proceed using default account", console=console):
-                            abort()
-                    else:
-                        account = last_account
-                        # console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
-                else:
-                    account = last_account
-                    # console.print(f":warning: [magenta]Using Account[/] [cyan]{account}[/]\n")
-        else:
-            if account in self.data:
-                self.sticky_account_file.parent.mkdir(exist_ok=True)
-                self.sticky_account_file.write_text(f"{account}\n{round(time.time(), 2)}")
         return account
 
     def first_run(self) -> str:
