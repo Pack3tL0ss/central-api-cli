@@ -21,12 +21,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, BatchRequest, caas, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -78,25 +78,24 @@ def show_devices(
     _formatter = "yaml"
 
     if group:
-        group = cli.cache.get_group_identifier(group)
+        group: CentralObject = cli.cache.get_group_identifier(group)
     if site:
-        site = cli.cache.get_site_identifier(site)
+        site: CentralObject = cli.cache.get_site_identifier(site)
+    if label:
+        label: CentralObject = cli.cache.get_label_identifier(label)
 
     resp = None
+    status = status or state
     params = {
         "group": None if not group else group.name,
         "site": None if not site else site.name,
         "status": None if not status else status.title(),
-        "label": label,
+        "label": None if not label else label.name,
         "public_ip_address": pub_ip,
         "calculate_client_count": do_clients,
         "show_resource_details": do_stats,
         "calculate_ssid_count": do_ssids,
     }
-
-    # status and state keywords both allowed
-    if params["status"] is None and state is not None:
-        params["status"] = state.title()
 
     params = {k: v for k, v in params.items() if v is not None}
     if not devices and dev_type is None:
@@ -169,7 +168,8 @@ def show_devices(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        cleaner=cleaner.get_devices
+        cleaner=cleaner.get_devices,
+        # verbose=False  # TODO this works need to adjust calling command to include --inventory flag rather than -v use -v for full listing change -vv to --raw globally
     )
 
 
@@ -1316,7 +1316,7 @@ def lldp(
     cli.display_results(
         concat_resp,
         tablefmt=tablefmt,
-        title=f"LLDP Neighbor Info",
+        title="LLDP Neighbor Info",
         pager=pager,
         outfile=outfile,
         cleaner=cleaner.get_lldp_neighbor,
@@ -1401,11 +1401,11 @@ def run(
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
-    if dev.type == "cx":
-        print("[bright_red]Not Supported:[/] Command not supported for CX switches.")
-        raise typer.Exit(1)
-
-    resp = central.request(central.get_device_configuration, dev.serial)
+    if dev.type != "cx":
+        resp = central.request(central.get_device_configuration, dev.serial)
+    else:
+        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile)
+        raise typer.Exit(0)
 
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
