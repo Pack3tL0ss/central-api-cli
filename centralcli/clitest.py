@@ -123,9 +123,12 @@ def method(
         raise typer.Exit(1)
 
     if _help:
-        old_ret = "Response: CentralAPI Response object"
-        new_ret = "Response from Aruba Central API gateway."
-        print(getattr(central, method).__doc__.replace(old_ret, new_ret))
+        if getattr(central, method).__doc__:
+            old_ret = "Response: CentralAPI Response object"
+            new_ret = "Response from Aruba Central API gateway."
+            print(getattr(central, method).__doc__.replace(old_ret, new_ret))
+        else:
+            print(f"Sorry, {getattr(central, method).__name__}, lacks a docstr.  No help.")
         raise typer.Exit(0)
 
     kwargs = kwargs or {}
