@@ -653,18 +653,34 @@ class Session():
 
         return r
 
-    def _refresh_token(self, token_data: Union[dict, List[dict]] = []) -> bool:
+    # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
+    def _refresh_token(self, token_data: Union[dict, List[dict]] = [], silent: bool = False) -> bool:
+        """Refresh Aruba Central API tokens.  Get new set of access/refresh token.
+
+        This method performs the actual refresh API call (via pycentral).
+
+        Args:
+            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+                pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
+                each pair in order.  Stops once a refresh is successful.  Defaults to [].
+            silent (bool, optional): Setting to True disables spinner. Defaults to False.
+
+        Returns:
+            bool: Bool indicating success/failure.
+        """
         auth = self.auth
         token_data = utils.listify(token_data)
         token = None
-        spin = self.spinner
-        spin.start("Attempting to Refresh Tokens")
+        if not silent:
+            spin = self.spinner
+            spin.start("Attempting to Refresh Tokens")
         for idx, t in enumerate(token_data):
             try:
                 if idx == 1:
-                    spin.fail()
-                    spin.text = spin.text + " retry"
-                    spin.start()
+                    if not silent:
+                        spin.fail()
+                        spin.text = spin.text + " retry"
+                        spin.start()
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
@@ -675,20 +691,36 @@ class Session():
                 if token:
                     auth.storeToken(token)
                     auth.central_info["token"] = token
-                    spin.stop()
+                    if not silent:
+                        spin.stop()
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
 
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
-            spin.succeed()
-        else:
+            if not silent:
+                spin.succeed()
+        elif not silent:
             spin.fail()
 
         return token is not None
 
-    def refresh_token(self, token_data: dict = None) -> None:
+    def refresh_token(self, token_data: dict = None, silent: bool = False) -> None:
+        """Refresh Aruba Central API tokens.  Get new set of access/refresh token.
+
+        This method calls into _refresh_token which performs the API call.
+
+        Args:
+            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+                pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
+                each pair in order.  Stops once a refresh is successful.  If no token_data is provided
+                it is collected from cache or config.
+            silent (bool, optional): Setting to True disables spinner. Defaults to False.
+
+        Returns:
+            bool: Bool indicating success/failure.
+        """
         auth = self.auth
         if not token_data:
             token: Union[dict, None] = auth.central_info.get("token")
@@ -697,11 +729,14 @@ class Session():
         else:
             token_data = [token_data]
 
-        if self._refresh_token(token_data):
-            return
-        else:
+        success = self._refresh_token(token_data, silent=silent)
+        if success:
+            return True
+        elif not silent:
             token_data = self.get_token_from_user()
-            self._refresh_token(token_data)
+            return self._refresh_token(token_data)
+        else:
+            return False
 
     def get_token_from_user(self) -> dict:
         """Handle invalid or expired tokens
