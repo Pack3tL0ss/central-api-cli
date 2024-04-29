@@ -7,12 +7,13 @@ import asyncio
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union
+from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple
 
 import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
+from tinydb.table import Table
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
 
@@ -289,21 +290,21 @@ class Cache:
         self.responses = CacheResponses()
         # self.LicenseDB = LicenseDB()  # for the benefit of sphinx
         if config.valid and config.cache_dir.exists():
-            self.DevDB = TinyDB(config.cache_file)
-            self.InvDB = self.DevDB.table("inventory")
-            self.SiteDB = self.DevDB.table("sites")
-            self.GroupDB = self.DevDB.table("groups")
-            self.TemplateDB = self.DevDB.table("templates")
-            self.LabelDB = self.DevDB.table("labels")
-            self.LicenseDB = self.DevDB.table("licenses")
-            self.ClientDB = self.DevDB.table("clients")  # Updated only when show clients is ran
+            self.DevDB: TinyDB = TinyDB(config.cache_file)
+            self.InvDB: Table = self.DevDB.table("inventory")
+            self.SiteDB: Table = self.DevDB.table("sites")
+            self.GroupDB: Table = self.DevDB.table("groups")
+            self.TemplateDB: Table = self.DevDB.table("templates")
+            self.LabelDB: Table = self.DevDB.table("labels")
+            self.LicenseDB: Table = self.DevDB.table("licenses")
+            self.ClientDB: Table = self.DevDB.table("clients")  # Updated only when show clients is ran
             # log db is used to provide simple index to get details for logs
             # vs the actual log id in form 'audit_trail_2021_2,...'
             # it is updated anytime show logs is ran.
-            self.LogDB = self.DevDB.table("logs")
-            self.EventDB = self.DevDB.table("events")
-            self.HookConfigDB = self.DevDB.table("wh_config")
-            self.HookDataDB = self.DevDB.table("wh_data")
+            self.LogDB: Table = self.DevDB.table("logs")
+            self.EventDB: Table = self.DevDB.table("events")
+            self.HookConfigDB: Table = self.DevDB.table("wh_config")
+            self.HookDataDB: Table = self.DevDB.table("wh_data")
             self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
@@ -315,7 +316,7 @@ class Cache:
         if refresh:
             self.check_fresh(refresh)
 
-    def __iter__(self) -> list:
+    def __iter__(self) -> Generator[Tuple[str, TinyDB | Table], None, None]:
         for db in self._tables:
             yield db.name(), db.all()
 
@@ -464,6 +465,11 @@ class Cache:
 
     # TODO maybe build script to gather completion and help text and place in flat file
     def method_test_completion(self, incomplete: str, args: List[str] = []):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         if self.central is not None:
             methods = [
                 d for d in self.central.__dir__()
@@ -487,6 +493,11 @@ class Cache:
                 yield m
 
     def smg_kw_completion(self, ctx: typer.Context, incomplete: str, args: List[str] = []):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         kwds = ["group", "mac", "serial"]
         out = []
 
@@ -525,6 +536,10 @@ class Cache:
         incomplete: str,
         args: List[str] = None,
     ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
 
         # HACK click 8.x broke args being passed to completion functions.
         # if args is not None:
@@ -572,13 +587,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Device completion for returning matches that are either switch or AP
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
-            args (List[str], optional): The previous arguments/commands on CLI.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_dev_identifier(incomplete, dev_type=["switch"], completion=True)
 
         out = []
@@ -596,7 +620,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for commands that allow a list of devices followed by group/site.
 
         i.e. cencli move dev1 dev2 dev3 site site_name group group_name
@@ -607,8 +631,14 @@ class Cache:
             args (List[str], optional): The prev args passed into the command.
 
         Yields:
-            tuple: matching completion string, help text
+            Generator[Tuple[str, str], None, None]: Matching completion string, help text, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         if not args:  # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
             args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
             args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
@@ -660,12 +690,16 @@ class Cache:
         # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for argument where only APs are valid.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
         # if not args:
         #     _last = ctx.command_path.split()[-1]
@@ -673,6 +707,11 @@ class Cache:
         #         args = ctx.params[_last]
         #     else:
         #         args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
+
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
 
         dev_types = ["ap"]
         match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
@@ -702,7 +741,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for client output.
 
         Returns only devices that apply based on filter provided in command, defaults to clients
@@ -711,8 +750,17 @@ class Cache:
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
-            args (List[str], optional): The previous arguments/commands on CLI.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Tuple with completion and help text, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         gen = self.dev_switch_ap_completion
 
         if args:
@@ -730,13 +778,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Device completion for returning matches that are either switch or AP
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Yields Tuple with completion and help text, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
 
         # TODO fancy map to ensure dev.name, dev.mac, dev.serial, dev.ip are all not in args
@@ -753,13 +810,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Device completion that returns only ap and gw.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Yields Tuple with completion and help text, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         dev_types = ["ap", "gw"]
         _match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
@@ -782,13 +848,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Device completion that returns only switches and gateways.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         dev_types = ["switch", "gw"]
         match = [m for m in self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True) if m.generic_type in dev_types]
 
@@ -805,7 +880,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for device idens where only gateways are valid.
 
         Args:
@@ -813,10 +888,15 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            tuple: name and help_text for the device
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
-        # match = [m for m in self.dev_completion(incomplete) if m.generic_type == "gw"]
-        match = self.get_identifier(incomplete, ["dev"], device_type="gw", completion=True)
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match = self.get_dev_identifier(incomplete, device_type="gw", completion=True)
 
         out = []
         if match:
@@ -832,19 +912,29 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> List[tuple[str, str]]:
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for argument that can be either group or device.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
-        group_match = self.get_group_identifier(incomplete, completion=True)
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        # group_match = self.get_group_identifier(incomplete, completion=True)
 
         dev_types = ["ap", "gw"]
-        match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        # match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
 
-        match = group_match + match
+        # match = group_match + match
 
 
         out = []
@@ -863,23 +953,29 @@ class Cache:
         # not appear in zsh
 
         for m in out:
-            log.debug(f"yielding to completion {m}")  # DEBUG remove me serial completion yielding expected tuple but does not appear in zsh
+            log.debug(f"yielding to completion {m}")  # FIXME DEBUG remove me serial completion yielding expected tuple but does not appear in zsh
             yield m
 
     def group_dev_gw_completion(
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for argument that can be either group or a gateway.
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
-        # dev_types = ["gw"]
-        # dev_match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
-        # match = [*self.get_group_identifier(incomplete, completion=True), *dev_match]
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
 
         out = []
@@ -894,14 +990,23 @@ class Cache:
     def send_cmds_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
-    ):
+        args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
         """Completion for argument that can be either group, site, or a gateway or keyword "commands".
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
-            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
         """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         if args[-1] == "all":
             yield "commands"
         elif args[-1] in ["commands", "file"]:
@@ -930,7 +1035,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for groups (by name).
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the group, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_group_identifier(
             incomplete,
             completion=True,
@@ -947,8 +1067,23 @@ class Cache:
     def label_completion(
         self,
         incomplete: str,
-        args: List[str] = None,
-    ):
+        args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for labels.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]:  Name and help_text for the label, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_label_identifier(
             incomplete,
             completion=True,
@@ -966,7 +1101,22 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for clients.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the client, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_client_identifier(
             incomplete,
             completion=True,
@@ -995,23 +1145,47 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for events.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Value and help_text for the event, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         for event in self.events:
             if event["id"].startswith(incomplete):
                 yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
-
-        # for match, help_txt in sorted(matches, key=lambda i: int(i[0])):
-        #     yield match, help_txt
-        # for event_id in self.event_ids:
-        #     if event_id.startswith(incomplete):
-        #         yield event_id, f"Details for Event with id {event_id}"
 
     # TODO add support for zip code city state etc.
     def site_completion(
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for sites.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the site, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_site_identifier(
             incomplete.replace('"', "").replace("'", ""),
             completion=True,
@@ -1030,7 +1204,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_template_identifier(
             incomplete,
             completion=True,
@@ -1048,7 +1227,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_template_identifier(
             incomplete,
             completion=True,
@@ -1071,7 +1255,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_dev_identifier(
             incomplete,
             completion=True,
@@ -1093,7 +1282,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         match = self.get_dev_identifier(
             incomplete,
             dev_type=["gw", "switch"],
@@ -1117,7 +1311,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         if args[-1].lower() == "site":
             out = [m for m in self.site_completion(incomplete)]
             for m in out:
@@ -1140,7 +1339,12 @@ class Cache:
         self,
         incomplete: str,
         args: List[str],
-    ):
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
         cache = ()
         if [True for m in DEV_COMPLETION if args[-1].endswith(m)]:
             cache += tuple(["dev"])
@@ -1875,7 +2079,7 @@ class Cache:
                         kwargs["inv_db"] = True
                     else:
                         _word = " "
-                    typer.secho(f"No Match Found for {query_str}, Updating Device{_word}Cache", fg="red")
+                    print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Device{_word}Cache.")
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
