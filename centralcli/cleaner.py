@@ -735,9 +735,30 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     return data
 
 
-def get_devices(data: Union[List[dict], dict], sort: str = None) -> Union[List[dict], dict]:
+# TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
+def get_devices(data: Union[List[dict], dict], verbose: bool = True,) -> Union[List[dict], dict]:
     data = utils.listify(data)
 
+    if not verbose:
+        non_verbose_keys = [
+                    "name",
+                    "status",
+                    "client_count",
+                    "type",
+                    "model",
+                    "ip_address",
+                    "macaddr",
+                    "serial",
+                    "group_name",
+                    "site",
+                    "labels",
+                    "uptime",
+                    "cpu_utilization",
+                    "mem_total",
+                    "mem_free",
+                    "firmware_version",
+        ]
+        data = [{k: v for k, v in inner.items() if k in non_verbose_keys} for inner in data]
     # gather all keys from all dicts in list each dict could potentially be a diff size
     # Also concats ip/mask if provided in sep fields
     data = sort_result_keys(data)
