@@ -43,7 +43,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.cache import CentralObject  # noqa
 from centralcli.central import CentralApi  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs)  #noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
 
 iden = IdenMetaVars()
 
@@ -71,11 +71,8 @@ app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
 
 
-@app.command(
-    help="Move device(s) to a defined group and/or site.",
-)
-
-# TODO Make this a sub command climove
+# TODO see if can change kw1 to "group" kw2 to "site" and unhide
+@app.command()
 def move(
     device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion),
     kw1: str = typer.Argument(
@@ -88,6 +85,7 @@ def move(
         None,
         metavar="[site <SITE>]",
         show_default=False,
+        hidden=False,
     ),
     kw2: str = typer.Argument(
         None,
@@ -100,6 +98,7 @@ def move(
         metavar="[group <GROUP>]",
         show_default=False,
         help="[site and/or group required]",
+        hidden=False,
     ),
     _group: str = typer.Option(
         None,
@@ -129,6 +128,8 @@ def move(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Move device(s) to a defined group and/or site.
+    """
     central = cli.central
     console = Console()
 
