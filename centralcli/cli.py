@@ -734,7 +734,7 @@ def unarchive(
 @app.command(hidden=True)
 def enable(
     what: EnableDisableArgs = typer.Argument("auto-sub"),
-    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),
+    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -770,7 +770,7 @@ def enable(
 @app.command(hidden=True)
 def disable(
     what: EnableDisableArgs = typer.Argument("auto-sub"),
-    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),
+    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),

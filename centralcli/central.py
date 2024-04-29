@@ -18,6 +18,7 @@ from pycentral.base_utils import tokenLocalStoreUtil
 
 from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
                models, utils)
+from .utils import Mac
 from .response import Response, Session
 # buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
 
@@ -572,7 +573,7 @@ class CentralApi(Session):
 
     async def get_client_details(
         self,
-        mac: utils.Mac,
+        mac: Mac,
         dev_type: str = None,
         # sort_by: str = None,
         **kwargs
