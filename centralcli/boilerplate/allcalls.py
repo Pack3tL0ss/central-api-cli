@@ -602,8 +602,8 @@ class AllCalls(CentralApi):
 
     async def airgroup_views_get_traffic_summary_v1(
         self,
-        start_time: int,
-        end_time: int,
+        start_time: int = None,
+        end_time: int = None,
         label: str = None,
     ) -> Response:
         """Get AirGroup Traffic Summary in terms of Packets.
@@ -681,8 +681,8 @@ class AllCalls(CentralApi):
 
     async def airgroup_views_get_service_query_summary_v1(
         self,
-        start_time: int,
-        end_time: int,
+        start_time: int = None,
+        end_time: int = None,
         label: str = None,
     ) -> Response:
         """Retrieves a summary of all the services queried for.
@@ -707,8 +707,8 @@ class AllCalls(CentralApi):
 
     async def airgroup_views_get_server_distribution_v1(
         self,
-        start_time: int,
-        end_time: int,
+        start_time: int = None,
+        end_time: int = None,
         label: str = None,
     ) -> Response:
         """Retrieves a summary of the servers connected to AirGroup.
