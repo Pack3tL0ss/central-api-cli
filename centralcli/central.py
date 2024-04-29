@@ -923,6 +923,15 @@ class CentralApi(Session):
 
     # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:
+        """Get template group details for all groups.
+
+        This method will first call configuration/v2/groups to get a list of group names.
+        Then /configuration/v2/groups/template_info to get the template details (template_group or not)
+        for each group.
+
+        Returns:
+            Response: centralcli Response Object
+        """
         resp = await self._get_group_names()
         if not resp.ok:
             return resp
@@ -5623,6 +5632,46 @@ class CentralApi(Session):
     async def kms_get_health(self) -> Response:
         url = "/keymgmt/v1/health"
         return await self.get(url)
+
+    async def get_user_accounts(
+        self,
+        app_name: str = None,
+        type: str = None,
+        status: str = None,
+        order_by: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List user accounts.
+
+        Args:
+            app_name (str, optional): Appname nms to filter Aruba Central users, and account_setting
+                to filter HPE GreenLake Edge to Cloud Platform (CCS) application users  Valid
+                Values: nms, account_setting
+            type (str, optional): Filter based on system or federated user  Valid Values: system,
+                federated
+            status (str, optional): Filter user based on status (inprogress, failed)  Valid Values:
+                inprogress, failed
+            order_by (str, optional): Sort ordering (ascending or descending). +username signifies
+                ascending order of username.  Valid Values: +username, -username
+            offset (int, optional): Zero based offset to start from Defaults to 0.
+            limit (int, optional): Maximum number of items to return Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/platform/rbac/v1/users"
+
+        params = {
+            'app_name': app_name,
+            'type': type,
+            'status': status,
+            'order_by': order_by,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
 if __name__ == "__main__":
     pass
