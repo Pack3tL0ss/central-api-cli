@@ -28,7 +28,7 @@ app = typer.Typer()
 # TODO update cache for device after successful assignment
 @app.command()
 def license(
-    license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),
+    license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
     serial_nums: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),

@@ -203,15 +203,6 @@ class NotifyToArgs(str, Enum):
     email = "email"
 
 
-class ClientArgs(str, Enum):
-    wired = "wired"
-    wireless = "wireless"
-    all = "all"
-    mac = "mac"
-    device = "device"
-    denylisted = "denylisted"
-
-
 class RefreshWhat(str, Enum):
     cache = "cache"
     token = "token"

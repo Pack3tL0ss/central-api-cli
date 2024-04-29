@@ -33,7 +33,6 @@ import sys
 from rich import print
 import typer
 from typing import List
-from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -305,7 +304,6 @@ def send_cmds(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    console = Console(emoji=False)
     yes = yes if yes else yes_
     commands = commands or []
     if kw1 == "group":
@@ -376,7 +374,7 @@ def send_cmds(
         batch_res = cli.central.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
         # caas.
-        # Rich progress bar here
+        # TODO Rich progress bar here
 
 
 @app.callback()

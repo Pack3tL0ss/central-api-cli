@@ -281,19 +281,25 @@ def test_show_clients():
 
 
 def test_show_clients_wireless():
-    result = runner.invoke(app, ["show", "clients", "wireless"],)
+    result = runner.invoke(app, ["show", "clients", "--wireless"],)
     assert result.exit_code == 0
     assert "All Wireless Clients" in result.stdout
     assert "mac" in result.stdout
 
 
+def test_show_clients_wired():
+    result = runner.invoke(app, ["show", "clients", "--wired"],)
+    assert result.exit_code == 0
+    assert "All Wired Clients" in result.stdout
+    assert "mac" in result.stdout
+
+
 def test_show_client_by_mac():
     TEST_DEVICES["client_mac"] = TEST_DEVICES.get("client_mac", TEST_DEVICES["wlan_client_mac"])
-    result = runner.invoke(app, ["show", "clients", "mac", TEST_DEVICES["client_mac"]],)
-    assert TEST_DEVICES["client_mac"] == result.stdout.splitlines()[5].split()[1]
+    result = runner.invoke(app, ["show", "clients", TEST_DEVICES["client_mac"]],)
     assert result.exit_code == 0
-    assert "client with MAC" in result.stdout
-    assert "mac" in result.stdout
+    assert "role" in result.stdout
+    assert f"mac: {TEST_DEVICES['wlan_client_mac']}" in result.stdout
 
 
 def test_show_group_level_config():

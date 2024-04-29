@@ -362,11 +362,7 @@ def output(
         outdata = utils.unlistify(outdata)
         # TODO custom yaml Representer
         raw_data = yaml.dump(json.loads(json.dumps(outdata, cls=Encoder)), sort_keys=False)
-        # _lexer = lexers.YamlLexer
-        console = Console(record=True, emoji=False)
-        console.begin_capture()
-        console.print(raw_data)
-        table_data = console.end_capture()
+        table_data = rich_capture(raw_data)
 
     elif tablefmt == "csv":
         csv_data = "\n".join(
@@ -398,6 +394,8 @@ def output(
             else:  # template / config file output
                 # get rid of double nl @ EoF (configs)
                 raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+                table_data = rich_capture(raw_data)
+
         else:
             raw_data = table_data = '\n'.join(outdata)
             # Not sure what hit's this, but it was created so something must
