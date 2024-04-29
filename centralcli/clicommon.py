@@ -71,7 +71,7 @@ class CLICommon:
             msg = (
                 f'[magenta]Using Account:[/] [cyan]{self.account}[/].\n'
                 f'[bright_red blink]Account setting is sticky.[/]  '
-                '[magenta]will be used for subsequent commands until[/]\n'
+                f'[cyan]{self.account}[/] [magenta]will be used for subsequent commands until[/]\n'
                 f'[cyan]--account <account name>[/] or [cyan]-d[/] (revert to default). is used.\n'
             )
             return msg
@@ -100,7 +100,7 @@ class CLICommon:
 
         @property
         def previous_short(self):
-            return f":information:  Using previously specified account: [bright_green]{self.account}[/]."
+            return f":information:  Using previously specified account: [bright_green]{self.account}[/].\n"
 
     def account_name_callback(self, ctx: typer.Context, account: str, default: bool = False) -> str:
         """Responsible for account messaging.  Actual account is determined in config.
@@ -188,10 +188,10 @@ class CLICommon:
 
             if account not in ["central_info", "default"]:
                 if config.defined_accounts:
-                    console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]")
+                    console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
                     if not _def_msg:
                         console.print(
-                            "The default account [cyan]central_info[/] is used if no account is specified via [cyan]--account[/] flag.\n"
+                            f"The default account [cyan]{config.default_account}[/] is used if no account is specified via [cyan]--account[/] flag.\n"
                             "or the [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
                         )
 
