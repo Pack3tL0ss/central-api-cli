@@ -1473,7 +1473,7 @@ def config_(
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
-    group_dev = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
+    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
     if group_dev.is_group:
         group = group_dev
         if device:

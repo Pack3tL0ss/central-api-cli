@@ -32,6 +32,8 @@ except Exception:
 
 # Used to debug completion
 err_console = Console(stderr=True)
+emoji_console = Console()
+console = Console(emoji=False)
 TinyDB.default_table_name = "devices"
 
 # DBType = Literal["dev", "site", "template", "group"]
@@ -941,6 +943,7 @@ class Cache:
         if match:
             for m in sorted(match, key=lambda i: i.name):
                 out += [tuple([m.name, m.help_text])]
+                # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]  # FIXME completion for names with spaces is now broken, used to work.  Change in completion behavior
 
         # FIXME args is now always [] believe this came with click 8
         args = [] if args is None else args
@@ -1060,6 +1063,7 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
+                    # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])] # FIXME case insensitive and group completion now broken used to work
 
         for m in out:
             yield m
@@ -1197,7 +1201,6 @@ class Cache:
                 out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
 
         for m in out:
-            # err_console.print(f'{m=}')
             yield m
 
     def template_completion(
@@ -1970,6 +1973,8 @@ class Cache:
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
         if "dev" in qry_funcs:  # move dev query last
             qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
+
+        match: List[CentralObject] = []
         for _ in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()
@@ -1977,7 +1982,7 @@ class Cache:
                     kwargs["dev_type"] = device_type
                 elif q == "template":
                     kwargs["group"] = group
-                match: CentralObject = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)
+                match = [*match, *getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)]
 
                 if match and not completion:
                     return match
@@ -1999,7 +2004,7 @@ class Cache:
             return match
 
         if not match:
-            typer.secho(f"Unable to find a matching identifier for {qry_str}, tried: {qry_funcs}", fg="red")
+            emoji_console.print(f":warning:  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
             raise typer.Exit(1)
 
     def get_dev_identifier(
