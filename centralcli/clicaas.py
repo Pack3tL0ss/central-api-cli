@@ -33,7 +33,6 @@ import sys
 from rich import print
 import typer
 from typing import List
-from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
