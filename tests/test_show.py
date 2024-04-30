@@ -370,3 +370,49 @@ def test_show_overlay_interfaces():
     assert result.exit_code == 0
     assert "state" in result.stdout
 
+
+def test_show_config_gw_group():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["gateway"]["group"],
+            "--gw"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "mgmt-user" in result.stdout
+
+
+def test_show_config_gw_dev():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["gateway"]["name"]
+        ]
+    )
+    assert result.exit_code == 0
+    assert "firewall" in result.stdout
+
+
+def test_show_config_ap_group():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["ap"]["group"],
+            "--ap"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "rule any any" in result.stdout
+
+
+def test_show_config_ap_dev():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            TEST_DEVICES["ap"]["name"]
+        ]
+    )
+    assert result.exit_code == 0
+    assert "per-ap-settings" in result.stdout
+
