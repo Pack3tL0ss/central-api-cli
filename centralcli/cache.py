@@ -1986,7 +1986,7 @@ class Cache:
         Returns:
             CentralObject or list[CentralObject, ...]
         """
-        match = None
+        # match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
         if "dev" in qry_funcs:  # move dev query last
@@ -2000,10 +2000,15 @@ class Cache:
                     kwargs["dev_type"] = device_type
                 elif q == "template":
                     kwargs["group"] = group
-                match = [*match, *getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)]
+                this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
+                match = [*match, *utils.listify(this_match)]
 
                 if match and not completion:
-                    return match
+                    # user selects which device if multiple matches returned
+                    if len(match) > 1:
+                        match = self.handle_multi_match(match, query_str=qry_str,)
+
+                    return match[0]
 
             # No match found trigger refresh and try again.
             if not match and not completion:
