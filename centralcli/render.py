@@ -393,8 +393,12 @@ def output(
                 raw_data = outdata[0]
             else:  # template / config file output
                 # get rid of double nl @ EoF (configs)
-                raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
-                table_data = rich_capture(raw_data)
+                if "\x1b" in outdata[0]:  # already styled (cass_output)
+                    raw_data = typer.unstyle("{}\n".format('\n'.join(outdata).rstrip('\n')))
+                    table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+                else:
+                    raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+                    table_data = rich_capture(raw_data)
 
         else:
             raw_data = table_data = '\n'.join(outdata)
