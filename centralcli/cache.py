@@ -992,6 +992,7 @@ class Cache:
     # FIXME completion doesn't pop args need ctx: typer.Context and reference ctx.params which is dict?
     def send_cmds_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -1010,19 +1011,36 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
-        if args[-1] == "all":
+        if ctx.params.get("nodes"):
             yield "commands"
-        elif args[-1] in ["commands", "file"]:
-            yield None
-        elif args[-1] not in ["group", "site", "device"]:
+        elif ctx.params.get("kw1") == "all":
+            yield "commands"
+        elif ctx.params.get("kw1") in ["commands", "file"]:
+            yield None  # force shell path completion
+        elif ctx.params.get("kw1") not in ["group", "site", "device"]:
             yield "commands"
         else:
-            if args[-1] == "group":
+            if ctx.params.get("kw1") == "group":
                 db = "group"
-            elif args[-1] == "site":
+            elif ctx.params.get("kw1") == "site":
                 db = "site"
             else:
                 db = "dev"
+
+        # FIXME typer broke this a long time ago
+        # if args[-1] == "all":
+        #     yield "commands"
+        # elif args[-1] in ["commands", "file"]:
+        #     yield None
+        # elif args[-1] not in ["group", "site", "device"]:
+        #     yield "commands"
+        # else:
+        #     if args[-1] == "group":
+        #         db = "group"
+        #     elif args[-1] == "site":
+        #         db = "site"
+        #     else:
+        #         db = "dev"
 
             match = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
 
@@ -1968,7 +1986,7 @@ class Cache:
         Returns:
             CentralObject or list[CentralObject, ...]
         """
-        match = None
+        # match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
         if "dev" in qry_funcs:  # move dev query last
@@ -1982,10 +2000,15 @@ class Cache:
                     kwargs["dev_type"] = device_type
                 elif q == "template":
                     kwargs["group"] = group
-                match = [*match, *getattr(self, f"get_{q}_identifier")(qry_str, **kwargs)]
+                this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
+                match = [*match, *utils.listify(this_match)]
 
                 if match and not completion:
-                    return match
+                    # user selects which device if multiple matches returned
+                    if len(match) > 1:
+                        match = self.handle_multi_match(match, query_str=qry_str,)
+
+                    return match[0]
 
             # No match found trigger refresh and try again.
             if not match and not completion:

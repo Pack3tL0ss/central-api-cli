@@ -270,31 +270,41 @@ def caas_batch(
     #     elif devices:
     #         devices = [d for d in devices if d.site == site.name]
 
-@app.command(help="Send commands to gateway(s) (group or device level)", short_help="Send commands to gateways", hidden=False,)
+@app.command()
 def send_cmds(
     kw1: constants.SendCmdArgs = typer.Argument(
         ...,
+        help="What to send the commands to, [grey42]use 'file' to send_cmds to nodes based on import file.[/]",
+        show_default=False
     ),
     nodes: str = typer.Argument(
         None,
         autocompletion=cache.send_cmds_completion,
+        help="The device/group/site identifier, [grey42]or 'all' for all gateways in the environment[/] :warning:  [bright_red]Use Caution[/]",
         metavar=iden.group_or_dev_or_site,
+        show_default=False,
         # callback=cli.send_cmds_node_callback,
         # is_eager=True,
     ),
     kw2: str = typer.Argument(
         None,
         autocompletion=cache.send_cmds_completion,
+        metavar="commands",
+        show_default=False,
         # callback=cli.send_cmds_node_callback,
     ),
-    commands: List[str] = typer.Argument(None, callback=cli.send_cmds_node_callback),
-    cmd_file: Path = typer.Option(None, help="Path to file containing commands (1 per line) to be sent to device", exists=True),
+    commands: List[str] = typer.Argument(
+        None,
+        help="The commands to send.  ([grey42]space seperated, with each command wrapped in quotes[/]).",
+        callback=cli.send_cmds_node_callback,
+        show_default=False,
+    ),
+    cmd_file: Path = typer.Option(None, help="Path to file containing commands (1 per line) to be sent to device", exists=True, show_default=False,),
     # dev_file: Path = typer.Option(None, help="Path to file containing iden for devices to send commands to", exists=True),
     # group: bool = typer.Option(None, help="Send commands to all gateways in a group", autocompletion=cli.cache.group_completion),
     # site: bool = typer.Option(None, help="Send commands to all gateways in a site", autocompletion=cli.cache.site_completion),
     all: bool = typer.Option(False, "-A", help="Send command(s) to all gateways (device level update) when group is provided"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
                                  callback=cli.default_callback),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -304,7 +314,11 @@ def send_cmds(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 callback=cli.account_name_callback),
 ) -> None:
-    yes = yes if yes else yes_
+    """Send commands to gateway(s) (group or device level)
+
+    :warning:  [bright_red]Use Caution[/]
+    Do not push to production without first testing in a lab.
+    """
     commands = commands or []
     if kw1 == "group":
         if all:
