@@ -1666,6 +1666,7 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
     """
     # TODO improve logic.  if they are moving to a group we can use inventory as backup
     # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
+    # TODO Break this up / func for each move type...
     if all([arg is False for arg in [do_site, do_label, do_group]]):
         do_site = do_label = do_group = True
     devices = config.get_file_data(import_file)
@@ -1852,7 +1853,8 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
                 devs = [*devs[0:3], "...", *devs[-3:]]
             _msg = [*_msg, *[f'  {dev}' for dev in devs]]
 
-    _msg += [f'\n{_tot_req} API calls will be performed.']
+    if _tot_req > 1:
+        _msg += [f'\n{_tot_req} API calls will be performed.']
 
     console.print("\n".join(_msg))
     if yes or typer.confirm("\nProceed?", abort=True):
@@ -1872,7 +1874,7 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
 def move(
     # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    do_group: bool = typer.Option(False, "-G", "--group", help="process site move from import."),
+    do_group: bool = typer.Option(False, "-G", "--group", help="process group move from import."),
     do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
     do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
@@ -1890,7 +1892,7 @@ def move(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Move devices to group and/or site based on import data from file.
+    """Perform batch Move devices to any or all of group / site / label based on import data from file.
 
     By default group/site/label assignment will be processed if found in the import file.
     Use -G|--group, -S|--site, -L|--label flags to only process specified moves, and ignore
