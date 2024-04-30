@@ -1479,12 +1479,12 @@ def config_(
         if device:
             device = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
-            print("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            print(":warning:  Invalid Input, --gw or --ap option must be supplied for group level config.")
             raise typer.Exit(1)
     else:  # group_dev is a device iden
         group = cli.cache.get_group_identifier(group_dev.group)
         if device is not None:
-            print("Invalid input enter [Group] [device iden] or [device iden]")
+            print(":warning:  Invalid input enter \[[cyan]Group[/]] \[[cyan]device iden[/]] or \[[cyan]device iden[/]]")
             raise typer.Exit(1)
         else:
             device = group_dev
@@ -1492,7 +1492,7 @@ def config_(
     _data_key = None
     if do_gw or (device and device.generic_type == "gw"):
         if device and device.generic_type != "gw":
-            print(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+            print(f":warning:  Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
             raise typer.Exit(1)
         caasapi = caas.CaasAPI(central=cli.central)
         if not status:
@@ -1506,7 +1506,7 @@ def config_(
                 func = cli.central.get_per_ap_config
                 args = [device.serial]
             else:
-                print(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+                print(f":warning:  Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
                 raise typer.Exit(1)
         else:
             func = cli.central.get_ap_config
