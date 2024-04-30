@@ -1160,8 +1160,8 @@ class Cache:
                     out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port} (fail-safe match)'])]
 
 
-        for c in out:
-            yield c
+        for c in out:  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
+            yield c[0].replace(":", "-"), c[1]
 
     def event_completion(
         self,
