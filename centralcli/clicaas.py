@@ -31,6 +31,7 @@ Then run via
 from pathlib import Path
 import sys
 from rich import print
+from rich.console import Console
 import typer
 from typing import List
 
@@ -46,6 +47,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+from centralcli.cache import CentralObject
 cache = cli.cache
 
 tty = utils.tty
@@ -53,6 +55,7 @@ iden = constants.IdenMetaVars()
 app = typer.Typer()
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 
+console = Console(emoji=False)
 
 
 @app.command(short_help="Import Apply settings from bulk-edit.csv")
@@ -234,7 +237,7 @@ def caas_batch(
             if kwargs:
                 print("\n  With the following options:")
                 _ = [print(f"    {k} : {v}") for k, v in kwargs.items()]
-                print(f"  [bold]cli cmds:[/]")
+                print("  [bold]cli cmds:[/]")
             _ = [print(f"    [cyan]{c}[/]") for c in cmds]
             if typer.confirm("Proceed:"):
                 kwargs = {**kwargs, **{"cli_cmds": cmds}}
@@ -303,16 +306,22 @@ def send_cmds(
     # dev_file: Path = typer.Option(None, help="Path to file containing iden for devices to send commands to", exists=True),
     # group: bool = typer.Option(None, help="Send commands to all gateways in a group", autocompletion=cli.cache.group_completion),
     # site: bool = typer.Option(None, help="Send commands to all gateways in a site", autocompletion=cli.cache.site_completion),
-    all: bool = typer.Option(False, "-A", help="Send command(s) to all gateways (device level update) when group is provided"),
+    all: bool = typer.Option(False, "-A", "--all", help="Send command(s) to all gateways (device level update) when group is provided"),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+    ),
+    debug: bool = typer.Option(
+        False, "--debug", envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+    ),
 ) -> None:
     """Send commands to gateway(s) (group or device level)
 
@@ -320,19 +329,20 @@ def send_cmds(
     Do not push to production without first testing in a lab.
     """
     commands = commands or []
+    action = ""
     if kw1 == "group":
         if all:
             g = cache.get_group_identifier(nodes)
-            nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
+            nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
             action = f"all devices in {g.name} group."
         else:
             nodes = cache.get_group_identifier(nodes)
             action = f"group level gateway config for {nodes.name} group."
     elif kw1 == "site":
         s = cache.get_group_identifier(nodes)
-        nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
+        nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
         action = f"all devices in site: {s.name}"
-    elif kw1 == "file":
+    elif kw1 == "file":  # TODO break this out into sep func
         dev_file = Path(nodes)
         file_data = config.get_file_data(dev_file, text_ok=True)
         if not file_data:
@@ -346,9 +356,9 @@ def send_cmds(
             if devices:
                 nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data["devices"]]
             elif "groups" in file_data:
-                nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
+                nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
             elif "sites" in file_data:
-                nodes = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
+                nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
             else:
                 print(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
                 raise typer.Exit(1)
@@ -358,11 +368,13 @@ def send_cmds(
                     print("Providing commands on the command line and in the import file is a strange thing to do.")
                     raise typer.Exit(1)
                 commands = file_data.get("cmds", file_data.get("commands"))
+        action = f'{", ".join(n.name for n in nodes)} defined in {dev_file.name}'
     elif kw1 == "device":
         if not isinstance(nodes, str):
             print(f"nodes is of type {type(nodes)} this is unexpected.")
 
         nodes = [cache.get_identifier(nodes, ["dev"], "gw")]
+        action = f'{", ".join(n.name for n in nodes)}'
 
     if cmd_file:
         if commands:
@@ -371,9 +383,13 @@ def send_cmds(
         else:
             commands = [line.rstrip() for line in cmd_file.read_text().splitlines()]
 
+    # TODO common command confirmation func
     if not commands:
         print("Error No commands provided")
         raise typer.Exit(1)
+    else:
+        console.print(f"Sending the following to [cyan]{action}[/]")
+        _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
 
     if yes or typer.confirm("\nProceed?", abort=True):
         caasapi = caas.CaasAPI(central=cli.central)
