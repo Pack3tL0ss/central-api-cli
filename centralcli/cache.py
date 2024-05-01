@@ -1183,9 +1183,17 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
-        for event in self.events:
-            if event["id"].startswith(incomplete):
-                yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
+        if incomplete == "":
+            out = [("cencli", "Show cencli logs"), *[(x['id'], f"{x['id']}|{x['device'].split('Group:')[0].rstrip()}") for x in self.events]]
+            for m in out:
+                yield m[0], m[1]
+
+        elif "cencli".startswith(incomplete.lower()):
+            yield "cencli", "Show cencli logs"
+        else:
+            for event in self.events:
+                if event["id"].startswith(incomplete):
+                    yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
 
     # TODO add support for zip code city state etc.
     def site_completion(
@@ -2580,6 +2588,7 @@ class Cache:
             else:
                 return None
 
+    # cencli completion can be removed..  Moved to get_event_identifier
     def get_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
             return query
@@ -2587,7 +2596,6 @@ class Cache:
             return ["cencli", *[x["id"] for x in self.logs]]
 
         try:
-
             if "cencli".startswith(query.lower()):
                 return ["cencli"]
 
@@ -2622,7 +2630,7 @@ class Cache:
                 return match[-1]["details"]
 
         except ValueError as e:
-            log.error(f"Exception in get_event_identifier {e.__class__.__name__}")
+            log.error(f"Exception in get_event_identifier {e.__class__.__name__}", show=True)
             log.exception(e)
-            print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
+            # print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)
