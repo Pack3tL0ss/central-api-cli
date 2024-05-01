@@ -372,6 +372,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
         self.subscription = self.subscriptions = "subscription"
+        self.portal = self.portals = "portals"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
