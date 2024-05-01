@@ -74,10 +74,10 @@ app.add_typer(cliset.app, name="set",)
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
 @app.command()
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion),
+    device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion, show_default=False,),
     kw1: str = typer.Argument(
         None,
-        # metavar="",
+        metavar="",
         show_default=False,
         hidden=True,
     ),
@@ -85,11 +85,12 @@ def move(
         None,
         metavar="[site <SITE>]",
         show_default=False,
+        help="[cyan]site[/] keyword followed by the site name.",
         hidden=False,
     ),
     kw2: str = typer.Argument(
         None,
-        # metavar="",
+        metavar="",
         show_default=False,
         hidden=True,
     ),
@@ -97,7 +98,7 @@ def move(
         None,
         metavar="[group <GROUP>]",
         show_default=False,
-        help="[site and/or group required]",
+        help="[cyan]group[/] keyword followed by the group name.  [grey42 italic]\[site and/or group required][/]",
         hidden=False,
     ),
     _group: str = typer.Option(
@@ -133,6 +134,10 @@ def move(
     central = cli.central
     console = Console()
 
+    # For the benefit of the help text
+    # kw1_val = site
+    # kw2_val = group
+    # TODO reverted as breaks completion logic would need to modif dev_kwarg_completion
     group, site, = None, None
     device = device or ()
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
@@ -422,7 +427,7 @@ def reset(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Blink LED")
+@app.command(help="Blink LED")
 def blink(
     device: str = typer.Argument(..., show_default=False, metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
