@@ -653,7 +653,7 @@ def strip_no_value(data: List[dict] | Dict[dict]) -> List[dict] | Dict[dict]:
 
 
 def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
-    data = utils.listify(data)
+    # data = utils.listify(data)
     all_keys = list(set([ik for k in data for ik in k.keys()]))
     ip_word = "ipv4" if "ipv4" in all_keys else "ip_address"
     mask_word = "ipv4_mask" if "ipv4_mask" in all_keys else "subnet_mask"
@@ -688,8 +688,8 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             "vlan_id",
             "name",
             "status",
-            "client_count",
             "type",
+            "client_count",
             "model",
             'mode',
             "vlan_desc",
@@ -736,15 +736,25 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
 
 
 # TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
-def get_devices(data: Union[List[dict], dict], verbose: bool = True,) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: bool = False) -> Union[List[dict], dict]:
+    """Clean device output from Central API (Monitoring)
+
+    Args:
+        data (Union[List[dict], dict]): Response data from Central API
+        verbose (bool, optional): Not Used yet. Defaults to True.
+        cache (bool, optional): If output is being cleaned for entry into cache. Defaults to False.
+
+    Returns:
+        Union[List[dict], dict]: The cleaned data with consistent field heading, and human readable values.
+    """
     data = utils.listify(data)
 
     if not verbose:
         non_verbose_keys = [
                     "name",
                     "status",
-                    "client_count",
                     "type",
+                    "client_count",
                     "model",
                     "ip_address",
                     "macaddr",
@@ -759,6 +769,21 @@ def get_devices(data: Union[List[dict], dict], verbose: bool = True,) -> Union[L
                     "firmware_version",
         ]
         data = [{k: v for k, v in inner.items() if k in non_verbose_keys} for inner in data]
+
+    # cache uses post cleaner keys
+    # we don't actually use model or version for anything yet
+    cache_keys = [
+        "name",
+        "status",
+        "type",
+        "model",
+        "ip",
+        "mac",
+        "serial",
+        "group",
+        "site",
+        "version"
+    ]
     # gather all keys from all dicts in list each dict could potentially be a diff size
     # Also concats ip/mask if provided in sep fields
     data = sort_result_keys(data)
@@ -779,6 +804,10 @@ def get_devices(data: Union[List[dict], dict], verbose: bool = True,) -> Union[L
     )
 
     data = utils.listify(data)
+
+    if cache:
+        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
+
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
     return data

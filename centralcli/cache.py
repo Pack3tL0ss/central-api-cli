@@ -1436,6 +1436,21 @@ class Cache:
 
         return len(ret) == len(data)
 
+    async def get_swack_ids(self, resp: Response, update_data: List[dict]) -> List[dict]:
+        # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
+        # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
+        if "aps" in resp.raw.get("aps", [{}])[0]:
+            _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
+            update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in update_data]
+
+        # add stack_ids for switches to cache
+        if "switches" in resp.raw.get("switches", [{}])[0]:
+            _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
+            update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in update_data]
+        # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
+
+        return update_data
+
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
     async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False) -> Union[List[int], Response]:
@@ -1495,20 +1510,8 @@ class Cache:
             if resp.ok:
                 if resp.output:
                     _update_data = utils.listify(resp.output)
-                    _update_data = cleaner.get_devices(_update_data)
-
-                    # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
-                    # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
-                    if "aps" in resp.raw.get("aps", [{}])[0]:
-                        _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
-                        _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in _update_data]
-
-                    # add stack_ids for switches to cache
-                    if "switches" in resp.raw.get("switches", [{}])[0]:
-                        _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
-                        _update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in _update_data]
-                    # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
-
+                    _update_data = cleaner.get_devices(_update_data, cache=True)
+                    _update_data = await self.get_swack_ids(resp, _update_data)
 
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)
