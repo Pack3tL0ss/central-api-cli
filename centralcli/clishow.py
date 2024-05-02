@@ -56,11 +56,18 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
     devs_by_type = {_type: [t for t in resp.output if t.get("type", "ERR") == _type] for _type in dev_types}
     status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t.get("status", "") == "Up"]), "down": len([t for t in devs_by_type[_type] if t.get("status", "") == "Down"])} for _type in devs_by_type}
     _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+
+    try:
+        clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
+        _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+    except Exception as e:
+        log.exception(f"Exception occured in _build_caption\n{e}")
+
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
     caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
-    if "gw" in dev_types:
-        caption = f"{caption}\n  [magenta]Note[/]: GW firmware version has been simplified, the actual gw version is [cyan]aa.bb.cc.dd-aa.bb.cc.dd[-beta]_build[/]"
-        caption = f"{caption}\n  [italic]given the version is repeated it has been simplified.  You need to use the full version string when upgrading."
+    # if "gw" in dev_types:
+    #     caption = f"{caption}\n  [magenta]Note[/]: GW firmware version has been simplified, the actual gw version is [cyan]aa.bb.cc.dd-aa.bb.cc.dd[-beta]_build[/]"
+    #     caption = f"{caption}\n  [italic]given the version is repeated it has been simplified.  You need to use the full version string when upgrading."
     if inventory:
         caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
