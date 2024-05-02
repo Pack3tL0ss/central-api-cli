@@ -69,7 +69,7 @@ def device(
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),
+    license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),  # type: ignore
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
@@ -369,34 +369,14 @@ def site(
 
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if yes or typer.confirm(f"\nProceed?", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
         cli.display_results(resp)
         if resp:
             asyncio.run(cli.cache.update_site_db(resp.raw))
         else:
             raise typer.Exit(1)
-    # async def upload_certificate(
-    #     self,
-    #     cert_name: str,
-    #     cert_type: Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"],
-    #     cert_format: Literal["PEM", "DER", "PKCS12"],
-    #     passphrase: str,
-    #     cert_data: str,
-    # ) -> Response:
-    #     """Upload a certificate.
 
-    #     Args:
-    #         cert_name (str): cert_name
-    #         cert_type (str): cert_type  Valid Values: SERVER_CERT, CA_CERT, CRL, INTERMEDIATE_CA,
-    #             OCSP_RESPONDER_CERT, OCSP_SIGNER_CERT, PUBLIC_CERT
-    #         cert_format (str): cert_format  Valid Values: PEM, DER, PKCS12
-    #         passphrase (str): passphrase
-    #         cert_data (str): Certificate content encoded in base64 for all format certificates.
-
-    #     Returns:
-    #         Response: CentralAPI Response object
-    #     """
 
 # TODO allow more than one label and use batch_request
 @app.command(help="Create a new label")
@@ -500,7 +480,7 @@ def certificate(
         print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
         if k not in  ["passphrase", "cert_data"]
         ]
-    if yes or typer.confirm(f"\nProceed?", abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.upload_certificate, **kwargs)
         cli.display_results(resp, tablefmt="action")
 
@@ -555,7 +535,7 @@ def template(
         template = template.encode("utf-8")
 
     print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
-    print(f"[bright_green]Template will apply to[/]:")
+    print("[bright_green]Template will apply to[/]:")
     print(f"    Device Types: [cyan]{dev_type}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
@@ -620,7 +600,7 @@ def guest(
     # portal_id = cli.cache.get_portal_identifier(portal_id)
     _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
     _msg += f"  {options}\n"
-    _msg += f"\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
+    _msg += "\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
     print(_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_visitor, **payload)
