@@ -11,6 +11,7 @@ import json
 from typing import List, Iterable, Literal
 from pathlib import Path
 from rich import print
+from rich.console import Console
 
 try:
     import psutil
@@ -1452,6 +1453,11 @@ def config_(
     ),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
+    all: bool = typer.Option(
+        False, "-A", "--all",
+        help="collect device level configs for all devices of specified type [grey42]1st argument needs to be a group and --gw or --ap needs to be provided[/]",
+        show_default=False,
+    ),
     status: bool = typer.Option(
         False,
         "--status",
@@ -1475,6 +1481,52 @@ def config_(
         return _get_cencli_config()
 
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
+    if all:
+        if not any([do_gw, do_ap]):
+            print(":warning:  Invalid combination [cyan]--all[/] requires [cyan]--ap[/] or [cyan]--gw[/] flag.")
+            raise typer.Exit(1)
+        elif not group_dev.is_group:
+            print(":warning:  Invalid combination [cyan]--all[/] requires first argument to be a group")
+            raise typer.Exit(1)
+        else:  # TODO make this a sep func  Allow site as first arg
+            br = BatchRequest
+            if do_gw:
+                devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "gw" and d["group"] == group_dev.name]
+                caasapi = caas.CaasAPI(central=cli.central)
+
+                reqs = [br(caasapi.show_config, (group_dev.name, d.mac)) for d in devs]
+                res = cli.central.batch_request(reqs)
+
+                outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_gw_configs"
+                outdir.mkdir(parents=True, exist_ok=True)
+                for d, r in zip(devs, res):
+                    if isinstance(r.output, dict) and "config" in r.output:
+                        r.output = r.output["config"]
+                    console = Console(emoji=False)
+                    console.rule()
+                    console.print(f"[bold]Config for {d.rich_help_text}[reset]")
+                    console.rule()
+                    outfile = outdir / f"{d.name}_gw_dev.cfg"
+                    cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+            if do_ap:
+                devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "ap"]
+
+                reqs = [br(cli.central.get_per_ap_config, d.serial) for d in devs]
+                res = cli.central.batch_request(reqs)
+
+                outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_ap_configs"
+                outdir.mkdir(parents=True, exist_ok=True)
+
+                for d, r in zip(devs, res):
+                    console = Console(emoji=False)
+                    console.rule()
+                    console.print(f"[bold]Config for {d.rich_help_text}[reset]")
+                    console.rule()
+                    outfile = outdir / f"{d.name}_ap_dev.cfg"
+                    cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+
+            raise typer.Exit(0)
+
     if group_dev.is_group:
         group = group_dev
         if device:
