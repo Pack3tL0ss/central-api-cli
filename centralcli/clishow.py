@@ -68,7 +68,7 @@ def _build_caption(resp: Response, *, inventory: bool = False) -> str:
 def show_devices(
     devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, outfile: Path = None,
     update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
-    do_clients: bool = False, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
+    do_clients: bool = True, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
 ) -> None:
     caption = None
@@ -98,6 +98,14 @@ def show_devices(
         "show_resource_details": do_stats,
         "calculate_ssid_count": do_ssids,
     }
+
+    # if any of these values are set it's a filtered result so we don't update cache
+    filtering_params = [
+        "group",
+        "site",
+        "label",
+        "public_ip_address"
+    ]
 
     params = {k: v for k, v in params.items() if v is not None}
     if not devices and dev_type is None:
@@ -141,17 +149,20 @@ def show_devices(
             caption = _build_caption(resp, inventory=True)
             if len(params) > 3:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
-        # if no params (expected result may differ) update cli.cache if not updated this session and return results from there
-        elif len(params) == 3 and list(params.values()).count(False) == 3:
+        elif [p for p in params if p in filtering_params]:  # filtering params used no cache update only subset of devices  # TODO verify upsert on cache update and pass in data regardless
+            resp = central.request(central.get_all_devicesv2, **params)
+            if resp.ok and resp.output:
+                cache_output = cleaner.get_devices(resp.output, cache=True)
+                cache_output = central.request(cli.cache.get_swack_ids, resp, update_data=cache_output)
+                _ = central.request(cli.cache.update_dev_db, cache_output)
+            caption = None if not resp.ok else _build_caption(resp)
+        else:  # No filtering params, get update from cache
             if central.get_all_devicesv2 not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db)
                 caption = _build_caption(resp)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.
                 resp = cli.cache.responses.dev
-        else:  # will only run if user specifies params (filters)
-            resp = central.request(central.get_all_devicesv2, **params)
-            caption = _build_caption(resp)
     else:
         resp = central.request(central.get_devices, dev_type, **params)
 
@@ -186,7 +197,7 @@ def all_(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     verbose: bool = typer.Option(
         False,
         "-v",
@@ -220,7 +231,7 @@ def all_(
         status = "Up"
     show_devices(
         dev_type='all', outfile=outfile, include_inventory=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients, sort_by=sort_by, reverse=reverse,
+        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -237,7 +248,7 @@ def devices(
             if m[0].lower().startswith(incomplete.lower())
         ],
         help="Show details for a specific device [grey42]\[default: show details for all devices][/]",
-        show_default=False,
+        # show_default=False,
     ),
     group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
@@ -248,7 +259,7 @@ def devices(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     verbose: bool = typer.Option(
         False,
         "-v",
@@ -281,6 +292,8 @@ def devices(
     elif up:
         status = "Up"
 
+    devices = devices if devices is not None else ["all"]
+
     if "all" in devices:
         dev_type = "all"
         devices = None
@@ -289,7 +302,7 @@ def devices(
 
     show_devices(
         devices, dev_type=dev_type, include_inventory=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
-        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=do_stats, do_clients=do_clients,
+        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=do_stats, do_clients=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
 
@@ -305,8 +318,8 @@ def aps(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
     do_ssids: bool = typer.Option(False, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show AP neighbors \[requires --site]", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
@@ -369,7 +382,7 @@ def aps(
             status = "Up"
         show_devices(
             aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
-            state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, do_ssids=do_ssids,
+            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=do_ssids,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
 
@@ -384,8 +397,8 @@ def switches_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -414,7 +427,7 @@ def switches_(
 
     show_devices(
         switches, dev_type='switches', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
+        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -430,8 +443,8 @@ def gateways_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -460,7 +473,7 @@ def gateways_(
 
     show_devices(
         gateways, dev_type='gateways', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats,
+        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -476,8 +489,8 @@ def controllers_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -508,7 +521,7 @@ def controllers_(
 
     show_devices(
         controllers, dev_type='mobility_controllers', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=do_clients, do_stats=do_stats, sort_by=sort_by, reverse=reverse,
+        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
@@ -944,7 +957,7 @@ def upgrade(
     )
 
 
-@app.command("cache", short_help="Show contents of Identifier Cache.", hidden=True)
+@app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, show_default=False),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
@@ -967,6 +980,14 @@ def cache_(
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
+
+        # sort devices so output matches cencli show all
+        if isinstance(arg, str) and arg == "all":
+            if "devices" in cache_out:
+                cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+        elif arg.value == "devices":
+            cache_out = sorted(cache_out, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
@@ -1775,7 +1796,7 @@ def clients(
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](-d|--dev must also be supplied)[/]",),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev must also be supplied)[/]",),
     device: str = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", autocompletion=cli.cache.dev_client_completion, show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
