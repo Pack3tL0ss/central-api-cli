@@ -26,8 +26,8 @@ try:
     from centralcli import (Response, cleaner, cli, cliadd, cliassign,
                             clibatch, clicaas, cliclone, clidel, clikick, cliset,
                             clirefresh, clirename, clishow, clitest, clitshoot,
-                            cliunassign, cliupdate, cliupgrade, config, log,
-                            models, utils)
+                            cliunassign, cliupdate, cliupgrade, cliexport,
+                            config, log, models, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
@@ -36,7 +36,7 @@ except (ImportError, ModuleNotFoundError) as e:
                                 clibatch, clicaas, cliclone, clidel, clikick,
                                 cliset, clirefresh, clirename, clishow, clitest,
                                 clitshoot, cliunassign, cliupdate, cliupgrade,
-                                config, log, models, utils)
+                                cliexport, config, log, models, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -69,6 +69,7 @@ app.add_typer(clitshoot.app, name="tshoot",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
+app.add_typer(cliexport.app, name="export",)
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
