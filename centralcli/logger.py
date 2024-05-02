@@ -4,7 +4,7 @@ from typing import Union
 from logging.handlers import RotatingFileHandler
 from time import sleep
 from rich.console import Console
-from rich.logging import RichHandler
+# from rich.logging import RichHandler
 
 import logging
 import typer
