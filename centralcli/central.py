@@ -1626,11 +1626,14 @@ class CentralApi(Session):
         event_description: str = None,
         event_type: str = None,
         fields: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         offset: int = 0,
         limit: int = 1000,
     ) -> Response:
         """List Events. v2
+
+        Endpoint allows a max of 10000 records to be retrieved.  The sum of offset + limit can not
+        exceed 10,000
 
         Args:
             group (str, optional): Filter by group name
@@ -1655,7 +1658,7 @@ class CentralApi(Session):
             event_type (str, optional): Filter by event type
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 number, level
-            calculate_total (bool, optional): Whether to calculate total events
+            calculate_total (bool, optional): Whether to calculate total events. Defaults to True.
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
 
@@ -1668,8 +1671,8 @@ class CentralApi(Session):
             "group": group,
             "swarm_id": swarm_id,
             "label": label,
-            "from_tinmestamp": from_ts,
-            "to_tinmestamp": to_ts,
+            "from_timestamp": from_ts,
+            "to_timestamp": to_ts,
             'macaddr': macaddr,
             'bssid': bssid,
             'device_mac': device_mac,
@@ -1682,7 +1685,7 @@ class CentralApi(Session):
             'event_description': event_description,
             'event_type': event_type,
             'fields': fields,
-            'calculate_total': calculate_total,
+            'calculate_total': str(calculate_total),
             "offset": offset,
             "limit": limit,
         }

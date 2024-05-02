@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, LogAppArgs, LogSortBy, SortSiteOptions,
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
     EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
@@ -2157,7 +2157,7 @@ def logs(
                 typer.secho(f"end appears to be invalid {start}", fg="red")
                 raise typer.Exit(1)
         if past:
-            now = int(time.time())  # FIXME --past 30m is pulling too many logs, prob timezone / timestamp issue
+            now = int(time.time())
             past = past.lower().replace(" ", "")
             if past.endswith("d"):
                 start = now - (int(past.rstrip("d")) * 86400)
@@ -2190,7 +2190,7 @@ def logs(
         "event_description": description,
         "event_type": event_type,
         # "fields": fields,
-        # "calculate_total": None,
+        # "calculate_total": True,  # Total defaults to True in get_events for benefit of async multi-call
     }
 
     central = cli.central
