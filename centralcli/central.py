@@ -1042,7 +1042,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, **kwargs) -> Response:
+    async def get_all_devicesv2(self, calculate_client_count: bool = True, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1058,7 +1058,7 @@ class CentralApi(Session):
         }
         _output = {}
 
-        reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
+        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failure_idxs = [idx for idx, r in enumerate(res) if not r]
         if _failure_idxs:
@@ -1075,7 +1075,7 @@ class CentralApi(Session):
 
         resp = res[-1]
         # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
-        if kwargs.get("calculate_client_count"):
+        if calculate_client_count:
             _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
         else:
             _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
@@ -1322,7 +1322,7 @@ class CentralApi(Session):
         show_resource_details: bool = False,
         cluster_id: str = None,
         model: str = None,
-        calculate_client_count: bool = False,
+        calculate_client_count: bool = True,
         calculate_ssid_count: bool = False,
         macaddr: str = None,
         public_ip_address: str = None,
