@@ -138,7 +138,7 @@ class CLICommon:
         elif account in ["central_info", "default"]:
             if config.last_account:
                 # last account messaging.
-                if config.forget:
+                if config.forget is not None:
                     if config.last_account_expired:
                         msg = self.AcctMsg(account)
                         emoji_console.print(msg.forgot)
@@ -167,8 +167,11 @@ class CLICommon:
             if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
                 msg = self.AcctMsg(account)
                 console.print(msg.envvar)
-            else:
+            elif config.forget is not None and config.forget > 0:
                 console.print(self.AcctMsg(account).initial)
+            # No need to print account msg if forget is set to zero
+
+
 
         if config.valid:
             return account

@@ -92,7 +92,7 @@ NOT_ACCOUNT_KEYS = [
     "debug",
     "debugv",
     "limit",
-    "no_pager",
+    "no_pager",  # deprecated key kept in for older configs that might be using it
     "sanitize",
     "webclient_info",
 ]
@@ -273,7 +273,7 @@ class Config:
         self.sanitize_file = self.dir / "redact.yaml"
 
         self.data = self.get_file_data(self.file) or {}
-        self.forget: Union[int, None] = self.data.get("forget_account_after")
+        self.forget: int | None = self.data.get("forget_account_after")
         self.debug: bool = self.data.get("debug", False)
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
@@ -281,6 +281,7 @@ class Config:
         self.last_account, self.last_cmd_ts, self.last_account_msg_shown, self.last_account_expired = self.get_last_account()
         self.account = self.get_account_from_args()
         self.base_url = self.data.get(self.account, {}).get("base_url")
+        self.limit: int | None = self.data.get("limit")  # Allows override of paging limit for pagination testing
         try:
             self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
@@ -386,7 +387,7 @@ class Config:
                 last_account = last_account_data[0]
                 last_cmd_ts = float(last_account_data[1])
                 big_msg_displayed = bool(int(last_account_data[2]))
-                expired = True if self.forget and time.time() > last_cmd_ts + (self.forget * 60) else False
+                expired = True if self.forget is not None and time.time() > last_cmd_ts + (self.forget * 60) else False
                 return last_account, last_cmd_ts, big_msg_displayed, expired
         return None, None, False, None
 
@@ -487,7 +488,8 @@ class Config:
             else:
                 account = self.last_account or account
         elif account in self.data and account != os.environ.get("ARUBACLI_ACCOUNT", ""):
-            self.update_last_account_file(account)
+            if self.forget is not None and self.forget > 0:
+                self.update_last_account_file(account)
 
         return account
 
