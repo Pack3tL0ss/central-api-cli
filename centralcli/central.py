@@ -1558,19 +1558,8 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    # DELME not used should be safe to remove after verification
-    async def get_gateways_by_group(self, group):
-        url = "/monitoring/v1/mobility_controllers" if config.is_cop else "/monitoring/v1/gateways"
-        params = {"group": group}
-        return await self.get(url, params=params)
-
     async def get_group_for_dev_by_serial(self, serial_num):
         return await self.get(f"/configuration/v1/devices/{serial_num}/group")
-
-    # async def get_dhcp_client_info_by_gw(self, serial_num):
-    #     url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
-    #     params = {"reservation": False}
-    #     return await self.get(url, params=params)
 
     async def get_vlan_info_by_gw(self, serial_num):
         return await self.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
@@ -1583,11 +1572,6 @@ class CentralApi(Session):
     async def get_uplink_tunnel_stats_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks/tunnel_stats"
         return await self.get(url)
-
-    async def get_uplink_state_by_group(self, group: str) -> Response:
-        url = "/monitoring/v1/mobility_controllers/uplinks/distribution"
-        params = {"group": group}
-        return await self.get(url, params)
 
     # TODO move cleaner
     async def get_all_sites(
@@ -1905,29 +1889,6 @@ class CentralApi(Session):
         else:
             return Response(error="Missing Required Parameters")
 
-    async def update_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
-        """Set Username, password required for establishing SSH connection to switch.
-
-        This method only applies to switches
-
-        Args:
-            device_serial (str): Serial number of the switch.
-            username (str): SSH username
-            password (str): SSH password
-
-        Returns:
-            Response: CentralAPI Response object
-            Successful Response body (Response.output): "Success"
-        """
-        url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
-
-        json_data = {
-            'username': username,
-            'password': password
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def get_task_status(
         self,
         task_id: str,
@@ -2023,24 +1984,6 @@ class CentralApi(Session):
         url = f"/monitoring/v1/gateways/{serial}/vlan"
 
         return await self.get(url)
-
-    async def get_controller_vlans(self, serial: str) -> Response:
-        """Get Mobility Controllers VLAN details.
-
-        Args:
-            serial (str): Serial number of mobility controller to be queried
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/monitoring/v1/mobility_controllers/{serial}/vlan"
-
-        return await self.get(url)
-
-    # async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
-    #     url = "/troubleshooting/v1/commands"
-    #     params = {"device_type": dev_type}
-    #     return await self.get(url, params=params)
 
     async def get_ts_commands(
         self,
@@ -4148,29 +4091,6 @@ class CentralApi(Session):
         url = f"/monitoring/v1/aps/{serial}"
 
         return await self.delete(url)
-
-    # TODO may remove this would show the device in the group, but didn't behave as expected (device was not in device list)
-    async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
-        """Assign devices to pre-provisioned group.
-
-        // Used indirectly by add device (when group option provided) //
-
-        Args:
-            group (str): Group name
-            serials (List[str]|str): Device serial number or list of device serial numbers.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/device_management/v1/group/assign"
-        serial_nums = utils.listify(serial_nums)
-
-        json_data = {
-            'serials': serial_nums,
-            'group': group
-        }
-
-        return await self.post(url, json_data=json_data)
 
     async def preprovision_device_to_group(
         self,
