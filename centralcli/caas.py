@@ -128,8 +128,6 @@ class BuildCLI:
             common = self.data[dev]["_common"]
             vlans = self.data[dev]["vlans"]
             _pretty_name = typer.style(common.get('hostname', dev), fg="bright_green")
-            # print(f"Verifying {_pretty_name} is in Group {common['group']}...", end='')
-            # group_devs = self.session.get_gateways_by_group(self.data[dev]["_common"]["group"])
             resp = self.central.request(self.central.get_devices, "gateways")
             gateways = resp.output
             self.dev_info = [_dev for _dev in gateways if _dev.get('mac', '').lower() == dev.lower()]
