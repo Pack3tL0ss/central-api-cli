@@ -186,7 +186,7 @@ def _get_lldp_dict(ap_dict: dict) -> dict:
 
     return ap_dict
 
-def do_lldp_rename(fstr: str, **kwargs) -> Response:
+def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
     # TODO get all APs then filter down after, stash down aps for easy subsequent call
     resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
@@ -204,7 +204,14 @@ def do_lldp_rename(fstr: str, **kwargs) -> Response:
 
     _all_aps = utils.listify(resp.output)
     _keys = ["name", "macaddr", "model", "site", "serial"]
-    ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}
+    if not default_only:
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}
+    else:
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}
+        if not ap_dict:
+            print(":warning:  No Up APs found with default name.  Nothing to rename.")
+            raise typer.Exit(1)
+
     fstr_to_key = {
         "h": "neighborHostName",
         "m": "mac",
@@ -1013,12 +1020,11 @@ def show_archive_results(res: Response) -> None:
         cli.display_results(data=data, title=title, caption=caption)
 
 
-# TODO return status indicating cache update success/failure
 def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if all(r.ok for r in batch_resp) else False
+    cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        cache_update_reqs = []
         if cache_devs:
             if all_ok:
                 cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
@@ -1038,11 +1044,10 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
             else:
                 cache_update_reqs += [br(cli.cache.update_inv_db)]
 
-        # Update cache remove deleted items
-        # TODO failure detection
-        if cache_update_reqs:
-            cache_res = cli.central.batch_request(cache_update_reqs)
-            log.debug(f'cache update response: {cache_res}')
+    # Update cache remove deleted items
+    if cache_update_reqs:
+        _ = cli.central.batch_request(cache_update_reqs)
+
 
 def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
@@ -1567,12 +1572,13 @@ def rename(
     what: BatchRenameArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),  # TODO completion
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
+    default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
     group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
     site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     yes_: bool = typer.Option(False, "-y", hidden=True),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(
@@ -1586,14 +1592,13 @@ def rename(
     ),
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
-    yes = yes_ if yes_ else yes
 
     if str(import_file).lower() == "lldp":
         lldp = True
         import_file = None
 
     if not import_file and not lldp:
-        print("[bright_red]ERROR[/]: Missing required parameter [IMPORT_FILE|'lldp']")
+        print(":warning:  [bright_red]ERROR[/]: Missing required parameter [IMPORT_FILE|'lldp']")
         raise typer.Exit(1)
 
     central = cli.central
@@ -1601,7 +1606,7 @@ def rename(
         data = config.get_file_data(import_file)
 
         if not data:
-            print(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
+            print(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
             raise typer.Exit(1)
 
         resp = None
@@ -1644,7 +1649,7 @@ def rename(
         if label:
             kwargs["label"] = label
 
-        resp = do_lldp_rename(_lldp_rename_get_fstr(), **kwargs)
+        resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, **kwargs)
 
     cli.display_results(resp, tablefmt="action")
 

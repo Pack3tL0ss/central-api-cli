@@ -372,6 +372,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
         self.subscription = self.subscriptions = "subscription"
+        self.portal = self.portals = "portals"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -914,6 +915,11 @@ class LogSortBy(str, Enum):
     ip = "ip"
     user = "user"
     id = "id"
+
+
+class CloudAuthMacSortBy(str, Enum):
+    name = "name"
+    mac = "mac"
 
 
 LIB_DEV_TYPE = {

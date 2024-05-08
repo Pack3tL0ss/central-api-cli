@@ -810,6 +810,7 @@ class Cache:
 
     def dev_ap_gw_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -826,6 +827,10 @@ class Cache:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             err_console.print(":warning:  Invalid config")
+            return
+
+        # Prevents device completion for cencli show config cencli
+        if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") == "cencli":
             return
 
         dev_types = ["ap", "gw"]
@@ -912,6 +917,7 @@ class Cache:
     # works in BASH and powershell
     def group_dev_ap_gw_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -945,12 +951,16 @@ class Cache:
                 out += [tuple([m.name, m.help_text])]
                 # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]  # FIXME completion for names with spaces is now broken, used to work.  Change in completion behavior
 
-        # FIXME args is now always [] believe this came with click 8
-        args = [] if args is None else args
-        if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
-            out += [("cencli", "show cencli configuration")]
-        if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
-            out += [("cencli", "update cencli configuration")]
+        if args:
+            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "show cencli configuration")]
+            if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+        elif ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+            if "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+
+
 
         # partial completion by serial: out appears to have list with expected tuple but does
         # not appear in zsh
@@ -1160,8 +1170,8 @@ class Cache:
                     out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port} (fail-safe match)'])]
 
 
-        for c in out:
-            yield c
+        for c in out:  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
+            yield c[0].replace(":", "-"), c[1]
 
     def event_completion(
         self,
@@ -1183,9 +1193,17 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
-        for event in self.events:
-            if event["id"].startswith(incomplete):
-                yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
+        if incomplete == "":
+            out = [("cencli", "Show cencli logs"), *[(x['id'], f"{x['id']}|{x['device'].split('Group:')[0].rstrip()}") for x in self.events]]
+            for m in out:
+                yield m[0], m[1]
+
+        elif "cencli".startswith(incomplete.lower()):
+            yield "cencli", "Show cencli logs"
+        else:
+            for event in self.events:
+                if event["id"].startswith(incomplete):
+                    yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
 
     # TODO add support for zip code city state etc.
     def site_completion(
@@ -1356,6 +1374,7 @@ class Cache:
             for m in out:
                 yield m
 
+    # TODO double check not used and remove
     def completion(
         self,
         incomplete: str,
@@ -1428,6 +1447,21 @@ class Cache:
 
         return len(ret) == len(data)
 
+    async def get_swack_ids(self, resp: Response, update_data: List[dict]) -> List[dict]:
+        # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
+        # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
+        if "aps" in resp.raw.get("aps", [{}])[0]:
+            _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
+            update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in update_data]
+
+        # add stack_ids for switches to cache
+        if "switches" in resp.raw.get("switches", [{}])[0]:
+            _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
+            update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in update_data]
+        # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
+
+        return update_data
+
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
     async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False) -> Union[List[int], Response]:
@@ -1487,20 +1521,8 @@ class Cache:
             if resp.ok:
                 if resp.output:
                     _update_data = utils.listify(resp.output)
-                    _update_data = cleaner.get_devices(_update_data)
-
-                    # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
-                    # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
-                    if "aps" in resp.raw.get("aps", [{}])[0]:
-                        _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
-                        _update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in _update_data]
-
-                    # add stack_ids for switches to cache
-                    if "switches" in resp.raw.get("switches", [{}])[0]:
-                        _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
-                        _update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in _update_data]
-                    # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
-
+                    _update_data = cleaner.get_devices(_update_data, cache=True)
+                    _update_data = await self.get_swack_ids(resp, _update_data)
 
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)
@@ -2580,6 +2602,7 @@ class Cache:
             else:
                 return None
 
+    # cencli completion can be removed..  Moved to get_event_identifier
     def get_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
             return query
@@ -2587,7 +2610,6 @@ class Cache:
             return ["cencli", *[x["id"] for x in self.logs]]
 
         try:
-
             if "cencli".startswith(query.lower()):
                 return ["cencli"]
 
@@ -2622,7 +2644,7 @@ class Cache:
                 return match[-1]["details"]
 
         except ValueError as e:
-            log.error(f"Exception in get_event_identifier {e.__class__.__name__}")
+            log.error(f"Exception in get_event_identifier {e.__class__.__name__}", show=True)
             log.exception(e)
-            print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
+            # print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)

@@ -394,6 +394,8 @@ class Session():
         resp = None
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' [{_url.path}]'
+        if _url.query.get("offset") and _url.query["offset"] != "0":
+            _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
@@ -401,8 +403,7 @@ class Session():
         spin_txt_fail = f"{spin_word} Data{_data_msg}"
         self.spinner.text = spin_txt_run
         for _ in range(0, 2):
-            if _ > 0:
-                spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip()
+            spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -493,16 +494,14 @@ class Session():
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif resp.status == 503:
-                    # Request 3 [POST: /platform/licensing/v1/subscriptions/unassign]
-                    #     Response:
-                    #     status code: 503
-                    #     upstream connect error or disconnect/reset before headers. reset reason: connection termination
-                    spin_txt_retry == "(retry after 503: Service Unavailable)"
-                    log.warning(f'{resp.url} forced to retry after 503 (Service Unavailable) from Central API gateway')
+                    spin_txt_retry = "(retry after 503: Service Unavailable)"
+                    log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
+                    log.warning(f"raw 503 response:\n{resp.raw}")  # TODO remove once we've captured a raw 503
                 elif resp.status == 504:
-                    spin_txt_retry == "(retry after 504: Gatewat Time-out)"
-                    log.warning(f'{resp.url} forced to retry after 504 (Gateway Timeout) from Central API gateway')
+                    spin_txt_retry = "(retry after 504: Gatewat Time-out)"
+                    log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
+                    log.warning(f"Per second rate limit hit {fail_msg.replace(f'{spin_word} Data', '')}")
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
@@ -517,6 +516,7 @@ class Session():
                     self.rl_log += [
                         f"{time.perf_counter() - INIT_TS:.2f} [[bright_green]{resp.error}[/]] p/s: {resp.rl.remain_sec} {_url.path_qs}"
                     ]
+
                 # This handles long running API calls where subsequent calls finish before the previous...
                 self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if self.running_spinners:
@@ -533,8 +533,11 @@ class Session():
         else:
             if isinstance(res.output, dict):
                 paged_output = {**paged_output, **res.output}
-            else:  # FIXME paged_output += r.output was also changed contents of paged_raw dunno why
-                paged_output = paged_output + res.output
+            else:  # FIXME paged_output += r.output was also changing contents of paged_raw dunno why
+                try:
+                    paged_output = paged_output + res.output  # This does work different than += which would turn the string into a list of chars and append
+                except TypeError:
+                    log.error(f"Not adding {res.output} to paged output. Call Result {res.error}")
 
         if not paged_raw:
             paged_raw = res.raw
@@ -548,7 +551,10 @@ class Session():
                             paged_raw[outer_key] += res.raw[outer_key]
                         break
             else:
-                paged_raw += res.raw
+                try:
+                    paged_raw += res.raw
+                except TypeError:
+                    log.error(f"Not adding {res.raw} to paged raw. Call Result {res.error}")
 
         return paged_raw, paged_output
 
@@ -614,21 +620,33 @@ class Session():
             # total is provided for some calls with the total # of records available
             # TODO no strip_none for these, may need to add if we determine a scenario needs it.
             if params.get("offset", 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
-                if r.raw["total"] > len(r.output):
+                _total = r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
+                if _total > len(r.output):
                     _limit = params.get("limit", 100)
                     _offset = params.get("offset", 0)
                     br = BatchRequest
                     _reqs = [
                         br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, "offset": i, "limit": _limit}, **kwargs)
-                        for i in range(len(r.output), r.raw["total"], _limit)
+                        for i in range(len(r.output), _total, _limit)
                     ]
+
                     batch_res = await self._batch_request(_reqs)
-                    if not batch_res[-1]:
+                    failures: List[Response] = [r for r in batch_res if not r.ok]  # A failure means both the original attempt and the retry failed.
+                    successful: List[Response] = batch_res if not failures else [r for r in batch_res if r.ok]
+
+                    # Handle failures during batch execution
+                    if not successful and failures:
                         log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True)
-                        return batch_res[-1]
+                        return failures
+                    elif len(failures) >= len(successful):
+                        log.error(f"Failure rate exceeded during batch {method} calls to {url}. Stopping execution.", show=True)
+                    elif failures:
+                        log_sfx = "" if len(failures) > 1 else f"?offset={failures[-1].url.query.get('offset')}&limit={failures[-1].url.query.get('limit')}..."
+                        log.error(f":warning:  Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
+
                     page_res = [
                         await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
-                        for res in batch_res
+                        for res in successful
                     ]
                     r.raw, r.output = page_res[-1]
                     break

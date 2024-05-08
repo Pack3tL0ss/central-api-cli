@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import time
+import tablib
+import yaml
 from asyncio.proactor_events import _ProactorBasePipeTransport
 from datetime import datetime, timedelta
 from enum import Enum
@@ -1042,7 +1044,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, **kwargs) -> Response:
+    async def get_all_devicesv2(self, calculate_client_count: bool = True, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1058,7 +1060,7 @@ class CentralApi(Session):
         }
         _output = {}
 
-        reqs = [self.BatchRequest(self.get_devices, dev_type, **kwargs) for dev_type in dev_types]
+        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failure_idxs = [idx for idx, r in enumerate(res) if not r]
         if _failure_idxs:
@@ -1075,7 +1077,7 @@ class CentralApi(Session):
 
         resp = res[-1]
         # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
-        if kwargs.get("calculate_client_count"):
+        if calculate_client_count:
             _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
         else:
             _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
@@ -1105,7 +1107,9 @@ class CentralApi(Session):
 
         return resp
 
-    # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for access)
+    # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for an access port, include all VLANs on a trunk port, no indication of native)
+    # API-FLAW aos-sw always shows mode as access, cx does as well, but has vlan_mode which is accurate
+    # API-FLAW neither show interface name/description
     async def get_switch_ports(self, serial: str, slot: str = None, aos_sw: bool = False) -> Response:
         """Switch Ports Details.
 
@@ -1113,7 +1117,7 @@ class CentralApi(Session):
             serial (str): Serial number of switch to be queried
             slot (str, optional): Slot name of the ports to be queried {For chassis type switches
                 only}.
-            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False (indicating CX switch)
 
         Returns:
             Response: CentralAPI Response object
@@ -1322,7 +1326,7 @@ class CentralApi(Session):
         show_resource_details: bool = False,
         cluster_id: str = None,
         model: str = None,
-        calculate_client_count: bool = False,
+        calculate_client_count: bool = True,
         calculate_ssid_count: bool = False,
         macaddr: str = None,
         public_ip_address: str = None,
@@ -1558,19 +1562,8 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    # DELME not used should be safe to remove after verification
-    async def get_gateways_by_group(self, group):
-        url = "/monitoring/v1/mobility_controllers" if config.is_cop else "/monitoring/v1/gateways"
-        params = {"group": group}
-        return await self.get(url, params=params)
-
     async def get_group_for_dev_by_serial(self, serial_num):
         return await self.get(f"/configuration/v1/devices/{serial_num}/group")
-
-    # async def get_dhcp_client_info_by_gw(self, serial_num):
-    #     url = f"/monitoring/v1/mobility_controllers/{serial_num}/dhcp_clients"
-    #     params = {"reservation": False}
-    #     return await self.get(url, params=params)
 
     async def get_vlan_info_by_gw(self, serial_num):
         return await self.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
@@ -1583,11 +1576,6 @@ class CentralApi(Session):
     async def get_uplink_tunnel_stats_by_gw(self, serial_num):
         url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks/tunnel_stats"
         return await self.get(url)
-
-    async def get_uplink_state_by_group(self, group: str) -> Response:
-        url = "/monitoring/v1/mobility_controllers/uplinks/distribution"
-        params = {"group": group}
-        return await self.get(url, params)
 
     # TODO move cleaner
     async def get_all_sites(
@@ -1626,11 +1614,14 @@ class CentralApi(Session):
         event_description: str = None,
         event_type: str = None,
         fields: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         offset: int = 0,
         limit: int = 1000,
     ) -> Response:
         """List Events. v2
+
+        Endpoint allows a max of 10000 records to be retrieved.  The sum of offset + limit can not
+        exceed 10,000
 
         Args:
             group (str, optional): Filter by group name
@@ -1655,7 +1646,7 @@ class CentralApi(Session):
             event_type (str, optional): Filter by event type
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 number, level
-            calculate_total (bool, optional): Whether to calculate total events
+            calculate_total (bool, optional): Whether to calculate total events. Defaults to True.
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
 
@@ -1668,8 +1659,8 @@ class CentralApi(Session):
             "group": group,
             "swarm_id": swarm_id,
             "label": label,
-            "from_tinmestamp": from_ts,
-            "to_tinmestamp": to_ts,
+            "from_timestamp": from_ts,
+            "to_timestamp": to_ts,
             'macaddr': macaddr,
             'bssid': bssid,
             'device_mac': device_mac,
@@ -1682,7 +1673,7 @@ class CentralApi(Session):
             'event_description': event_description,
             'event_type': event_type,
             'fields': fields,
-            'calculate_total': calculate_total,
+            'calculate_total': str(calculate_total),
             "offset": offset,
             "limit": limit,
         }
@@ -1902,29 +1893,6 @@ class CentralApi(Session):
         else:
             return Response(error="Missing Required Parameters")
 
-    async def update_ssh_creds(self, device_serial: str, username: str, password: str) -> Response:
-        """Set Username, password required for establishing SSH connection to switch.
-
-        This method only applies to switches
-
-        Args:
-            device_serial (str): Serial number of the switch.
-            username (str): SSH username
-            password (str): SSH password
-
-        Returns:
-            Response: CentralAPI Response object
-            Successful Response body (Response.output): "Success"
-        """
-        url = f"/configuration/v1/devices/{device_serial}/ssh_connection"
-
-        json_data = {
-            'username': username,
-            'password': password
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def get_task_status(
         self,
         task_id: str,
@@ -2020,24 +1988,6 @@ class CentralApi(Session):
         url = f"/monitoring/v1/gateways/{serial}/vlan"
 
         return await self.get(url)
-
-    async def get_controller_vlans(self, serial: str) -> Response:
-        """Get Mobility Controllers VLAN details.
-
-        Args:
-            serial (str): Serial number of mobility controller to be queried
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/monitoring/v1/mobility_controllers/{serial}/vlan"
-
-        return await self.get(url)
-
-    # async def get_ts_commands(self, dev_type: Literal['iap', 'mas', 'switch', 'controller']) -> Response:
-    #     url = "/troubleshooting/v1/commands"
-    #     params = {"device_type": dev_type}
-    #     return await self.get(url, params=params)
 
     async def get_ts_commands(
         self,
@@ -4146,29 +4096,6 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    # TODO may remove this would show the device in the group, but didn't behave as expected (device was not in device list)
-    async def assign_devices_to_group(self,  group: str, serial_nums: Union[List[str], str]) -> Response:
-        """Assign devices to pre-provisioned group.
-
-        // Used indirectly by add device (when group option provided) //
-
-        Args:
-            group (str): Group name
-            serials (List[str]|str): Device serial number or list of device serial numbers.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/device_management/v1/group/assign"
-        serial_nums = utils.listify(serial_nums)
-
-        json_data = {
-            'serials': serial_nums,
-            'group': group
-        }
-
-        return await self.post(url, json_data=json_data)
-
     async def preprovision_device_to_group(
         self,
         group_name: str,
@@ -5634,6 +5561,44 @@ class CentralApi(Session):
         url = "/keymgmt/v1/health"
         return await self.get(url)
 
+    async def cloudauth_get_registered_macs(
+        self,
+        search: str = None,
+        sort: str = None,
+        filename: str = None,
+    ) -> Response:
+        """Fetch all Mac Registrations as a CSV file.
+
+        Args:
+            search (str, optional): Filter the Mac Registrations by Mac Address and Client Name.
+                Does a 'contains' match.
+            sort (str, optional): Sort order  Valid Values: +name, -name, +display_name,
+                -display_name
+            filename (str, optional): Suggest a file name for the downloading file via content
+                disposition header.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudauth/api/v3/bulk/mac"
+
+        params = {
+            'search': search,
+            'sort': sort,
+            'filename': filename
+        }
+
+        resp = await self.get(url, params=params)
+
+        if resp:
+            try:
+                ds = tablib.Dataset().load(resp.output)
+                resp.output = yaml.load(ds.json, Loader=yaml.SafeLoader)
+            except Exception as e:
+                log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True)
+
+        return resp
+
     async def get_user_accounts(
         self,
         app_name: str = None,
@@ -5672,7 +5637,10 @@ class CentralApi(Session):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        # TODO this needs a fair amount of massaging to turn into a command, it's nested dicts
+        # example response in private vscode dir.
+        resp = await self.get(url, params=params)
+        return resp
 
 if __name__ == "__main__":
     pass

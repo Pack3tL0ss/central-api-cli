@@ -137,6 +137,8 @@ def overlay(
     [cyan]-[/] show overlay ssid-cluster status
 
     [bright_green]GWs[/]
+    [cyan]-[/] show aruba-central control-channel
+    [cyan]-[/] show show aruba-central control-channel-counters
     [cyan]-[/] show crypto oto
     [cyan]-[/] show crypto ipsec
     [cyan]-[/] show crypto-local ipsec-map
@@ -151,7 +153,7 @@ def overlay(
     """
     ids_by_dev_type = {
         "ap": [208, 203, 201, 300, 39, 218],
-        "gw": [2453, 2131, 2441, 2454, 2455],
+        "gw": [2452, 2515, 2453, 2131, 2441, 2454, 2455],
         "sw": [1189, 1195, 1196, 1191]
     }
     dev = cli.cache.get_dev_identifier(device)

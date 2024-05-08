@@ -52,8 +52,7 @@ def site(
 def ap(
     ap: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     new_name: str = typer.Argument(..., show_default=False,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
@@ -64,8 +63,6 @@ def ap(
     """
     [bright_green]Rename an Access Point[/]
     """
-    yes = yes_ if yes_ else yes
-
     ap = cli.cache.get_dev_identifier(ap, dev_type="ap")
     print(f"Please Confirm: rename ap [bright_red]{ap.name}[/] -> [bright_green]{new_name}[/]")
     print("    [italic]Will result in 2 API calls[/italic]\n")
