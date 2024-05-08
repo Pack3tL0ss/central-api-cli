@@ -1364,6 +1364,7 @@ class Cache:
             for m in out:
                 yield m
 
+    # TODO double check not used and remove
     def completion(
         self,
         incomplete: str,
