@@ -180,6 +180,7 @@ _NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 # TODO determine all modes possible (CX)
 vlan_modes = {
     1: "Access",
+    2: "LAG",
     3: "Trunk",
 }
 
@@ -299,6 +300,7 @@ _short_key = {
     "hide_ssid": "hidden",
     "essid": "ssid",
     "opmode": "security",
+    "power_consumption": "poe usage",
 }
 
 
@@ -1397,12 +1399,11 @@ def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict
 
     return data
 
-def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
+def show_interfaces(data: Union[List[dict], dict], verbosity: int = 0, dev_type: DevTypes = "cx") -> Union[List[dict], dict]:
     data = utils.listify(data)
 
     # TODO verbose and non-verbose
-    # TODO verify oper_state and status are always the same and only show one of them
-    # TODO determine if "mode" has any value, appears to always be Access on CX
+    # TODO determine if "mode" has any value, appears to always be Access on SW
     key_order = [
         "macaddr",
         "type",
@@ -1428,15 +1429,51 @@ def show_interfaces(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
         "mux",
         "vsx_enabled",
     ]
-    strip_keys = ["port_number", "alignment",]
+    strip_keys = ["port_number", "alignment", "oper_state"]
+
+    verbosity_keys = {
+        0: [
+            "port_number",
+            "vlan",
+            "allowed_vlan",
+            "vlan_mode",
+            "admin_state",
+            "status",
+            "power_consumption",
+            "intf_state_down_reason",
+            "speed",
+            "is_uplink",
+            "phy_type",
+            "type"
+        ]
+    }
+
+    # API for AOS_SW always shows VLAN as 1
+    if dev_type == "sw":
+        # _ = verbosity_keys[0].pop(verbosity_keys[0].index("vlan"))
+        data = [
+            {
+                **d,
+                "vlan_mode": "Trunk" if len(d.get("allowed_vlan")) > 1 else "Access",
+                "vlan": "?" if len(d.get("allowed_vlan")) > 1 else d["allowed_vlan"][0],
+            } for d in data
+        ]
+    elif dev_type == "gw":
+        verbosity_keys[0].insert(4, "trusted")
 
     # Append any additional keys to the end
-    key_order = [*key_order, *data[-1].keys()]
-
-    # send all key/value pairs through formatters and convert List[Dict] to Dict where port_number is key
-    data = {
-        d["port_number"] if not all(d.isdigit() for d in d["port_number"]) else int(d["port_number"]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
-    }
+    if verbosity == 0:
+        key_order = verbosity_keys[verbosity]
+        # send all key/value pairs through formatters
+        data = [
+            dict(short_value(k, d.get(k),) for k in key_order) for d in data
+        ]
+    else:
+        key_order = [*key_order, *data[-1].keys()]
+        # send all key/value pairs through formatters and convert List[Dict] to Dict where port_number is key
+        data = {
+            d["port_number"] if not all(d.isdigit() for d in d["port_number"]) else int(d["port_number"]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
+        }
 
     return strip_no_value(data)
 

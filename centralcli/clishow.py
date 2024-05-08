@@ -22,12 +22,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, BatchRequest, caas, cli, utils, config, log
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, BatchRequest, caas, render, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, BatchRequest, caas, cli, utils, config, log
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, BatchRequest, caas, render, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -371,7 +371,7 @@ def aps(
                     # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
                     # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
                     "switch": x["fromIf"].get("deviceName", "--"),
-                    "switch_ip": x["fromIf"].get("ipAddress", "--"),
+                    "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
                     "switch_serial": x["fromIf"].get("serial", "--"),
                     "switch_port": x["fromIf"].get("name", "--"),
                     "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
@@ -726,6 +726,7 @@ def interfaces(
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
@@ -741,16 +742,42 @@ def interfaces(
 
     Command is valid for switches and gateways
     """
-    dev = cli.cache.get_dev_identifier(device,)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"],)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:
         resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, aos_sw=dev.type == "sw")
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
+    title = f"{dev.name} Interfaces"
+
+    if dev.type == "sw":
+        caption = render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)
+    else:
+        caption = ""
+
+    if resp:
+        try:
+            up = len([i for i in resp.output if i.get("status").lower() == "up"])
+            down = len(resp.output) - up
+            caption = f"{caption}\n  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"
+        except Exception as e:
+            log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_interfaces)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.show_interfaces,
+        verbosity=verbose,
+        dev_type=dev.type
+    )
 
 
 @app.command(help="Show (switch) poe details for an interface")
