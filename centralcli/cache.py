@@ -810,6 +810,7 @@ class Cache:
 
     def dev_ap_gw_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -826,6 +827,10 @@ class Cache:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             err_console.print(":warning:  Invalid config")
+            return
+
+        # Prevents device completion for cencli show config cencli
+        if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") == "cencli":
             return
 
         dev_types = ["ap", "gw"]
@@ -912,6 +917,7 @@ class Cache:
     # works in BASH and powershell
     def group_dev_ap_gw_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -945,12 +951,16 @@ class Cache:
                 out += [tuple([m.name, m.help_text])]
                 # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]  # FIXME completion for names with spaces is now broken, used to work.  Change in completion behavior
 
-        # FIXME args is now always [] believe this came with click 8
-        args = [] if args is None else args
-        if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
-            out += [("cencli", "show cencli configuration")]
-        if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
-            out += [("cencli", "update cencli configuration")]
+        if args:
+            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "show cencli configuration")]
+            if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+        elif ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+            if "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+
+
 
         # partial completion by serial: out appears to have list with expected tuple but does
         # not appear in zsh
