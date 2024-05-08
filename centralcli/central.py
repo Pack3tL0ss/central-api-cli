@@ -1105,7 +1105,9 @@ class CentralApi(Session):
 
         return resp
 
-    # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for access)
+    # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for an access port, include all VLANs on a trunk port, no indication of native)
+    # API-FLAW aos-sw always shows mode as access, cx does as well, but has vlan_mode which is accurate
+    # API-FLAW neither show interface name/description
     async def get_switch_ports(self, serial: str, slot: str = None, aos_sw: bool = False) -> Response:
         """Switch Ports Details.
 
@@ -1113,7 +1115,7 @@ class CentralApi(Session):
             serial (str): Serial number of switch to be queried
             slot (str, optional): Slot name of the ports to be queried {For chassis type switches
                 only}.
-            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False (indicating CX switch)
 
         Returns:
             Response: CentralAPI Response object
