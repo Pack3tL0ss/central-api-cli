@@ -917,6 +917,11 @@ class LogSortBy(str, Enum):
     id = "id"
 
 
+class CloudAuthMacSortBy(str, Enum):
+    name = "name"
+    mac = "mac"
+
+
 LIB_DEV_TYPE = {
     "AOS-CX": "cx",
     "AOS-S": "sw",

@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import time
+import tablib
+import yaml
 from asyncio.proactor_events import _ProactorBasePipeTransport
 from datetime import datetime, timedelta
 from enum import Enum
@@ -5558,6 +5560,44 @@ class CentralApi(Session):
     async def kms_get_health(self) -> Response:
         url = "/keymgmt/v1/health"
         return await self.get(url)
+
+    async def cloudauth_get_registered_macs(
+        self,
+        search: str = None,
+        sort: str = None,
+        filename: str = None,
+    ) -> Response:
+        """Fetch all Mac Registrations as a CSV file.
+
+        Args:
+            search (str, optional): Filter the Mac Registrations by Mac Address and Client Name.
+                Does a 'contains' match.
+            sort (str, optional): Sort order  Valid Values: +name, -name, +display_name,
+                -display_name
+            filename (str, optional): Suggest a file name for the downloading file via content
+                disposition header.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudauth/api/v3/bulk/mac"
+
+        params = {
+            'search': search,
+            'sort': sort,
+            'filename': filename
+        }
+
+        resp = await self.get(url, params=params)
+
+        if resp:
+            try:
+                ds = tablib.Dataset().load(resp.output)
+                resp.output = yaml.load(ds.json, Loader=yaml.SafeLoader)
+            except Exception as e:
+                log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True)
+
+        return resp
 
     async def get_user_accounts(
         self,
