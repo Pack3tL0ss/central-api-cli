@@ -393,7 +393,9 @@ class Session():
         auth = self.auth
         resp = None
         _url = URL(url).with_query(params)
-        _data_msg = ' ' if not url else f' [{_url.path}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
+        _data_msg = ' ' if not url else f' [{_url.path}]'
+        if _url.query.get("offset") and _url.query["offset"] != "0":
+            _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
