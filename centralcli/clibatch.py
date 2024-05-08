@@ -1020,12 +1020,11 @@ def show_archive_results(res: Response) -> None:
         cli.display_results(data=data, title=title, caption=caption)
 
 
-# TODO return status indicating cache update success/failure
 def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if all(r.ok for r in batch_resp) else False
+    cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        cache_update_reqs = []
         if cache_devs:
             if all_ok:
                 cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
@@ -1045,11 +1044,10 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
             else:
                 cache_update_reqs += [br(cli.cache.update_inv_db)]
 
-        # Update cache remove deleted items
-        # TODO failure detection
-        if cache_update_reqs:
-            cache_res = cli.central.batch_request(cache_update_reqs)
-            log.debug(f'cache update response: {cache_res}')
+    # Update cache remove deleted items
+    if cache_update_reqs:
+        _ = cli.central.batch_request(cache_update_reqs)
+
 
 def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     br = cli.central.BatchRequest
