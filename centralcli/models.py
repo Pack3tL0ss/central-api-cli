@@ -537,3 +537,37 @@ class RoutesLearned(BaseModel):
 class RoutesAdvertised(BaseModel):
     summary: Summary
     routes: List[RouteAdvertised]
+
+
+# get_user_accounts
+class Scope(BaseModel):
+    groups: List[str]
+    labels: List
+    sites: List
+
+
+class InfoItem(BaseModel):
+    role: str
+    scope: Scope
+
+
+class Application(BaseModel):
+    info: List[InfoItem]
+    name: str
+
+
+class Name(BaseModel):
+    firstname: str
+    lastname: str
+
+
+class Item(BaseModel):
+    applications: List[Application]
+    name: Name
+    system_user: bool
+    username: str
+
+
+class UserAccounts(BaseModel):
+    items: List[Item]
+    total: int

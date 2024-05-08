@@ -5637,7 +5637,10 @@ class CentralApi(Session):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        # TODO this needs a fair amount of massaging to turn into a command, it's nested dicts
+        # example response in private vscode dir.
+        resp = await self.get(url, params=params)
+        return resp
 
 if __name__ == "__main__":
     pass
