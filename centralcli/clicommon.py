@@ -328,6 +328,15 @@ class CLICommon:
             if out_msg:
                 log.warning(out_msg, show=True)
 
+    @staticmethod
+    def exit(msg: str, code: int = 1) -> None:
+        """Print error text and exit.
+        """
+        if code != 0:
+            msg = f":warning:  {msg}"
+
+        print(msg)
+        raise typer.Exit(code=code)
 
     def _display_results(
         self,

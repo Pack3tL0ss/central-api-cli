@@ -2146,6 +2146,56 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    async def get_switch_neighbors_v1(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get lldp device neighbor info for CX switch.
+
+        If used on AOS-SW will only return neighbors that are CX switches
+
+        Args:
+            serial (str): id of the switch
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switches/{serial}/neighbors"
+
+        return await self.get(url)
+
+    async def get_cx_switch_stack_neighbors_v1(
+        self,
+        stack_id: str,
+    ) -> Response:
+        """Get lldp device neighbor info for CX switch stack.
+
+        Args:
+            stack_id (str): Filter by stack_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switch_stacks/{stack_id}/neighbors"
+
+        return await self.get(url)
+
+    async def get_switch_vsx_detail(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get switch vsx info for CX switch.
+
+        Args:
+            serial (str): Filter by switch serial
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switches/{serial}/vsx"
+
+        return await self.get(url)
+
     async def do_multi_group_snapshot(
         self,
         backup_name: str,
@@ -3109,7 +3159,7 @@ class CentralApi(Session):
         self,
         swarm_id: str,
         command: Literal[
-            "reboot_swarm",
+            "reboot",
             "erase_configuration",
         ]
     ) -> Response:
@@ -3118,11 +3168,14 @@ class CentralApi(Session):
         Args:
             swarm_id (str): Swarm ID of device
             command (str): Command mentioned in the description that is to be executed
-                valid: 'reboot_swarm', 'erase_configuration'
+                valid: 'reboot', 'erase_configuration'
 
         Returns:
             Response: CentralAPI Response object
         """
+        if command == "reboot":
+            command = "reboot_swarm"
+
         url = f"/device_management/v1/swarm/{swarm_id}/action/{command}"
 
         return await self.post(url)

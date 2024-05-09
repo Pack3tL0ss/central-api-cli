@@ -5,7 +5,8 @@ import asyncio
 import sys
 from pathlib import Path
 from time import sleep
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
+from tinydb.table import Document
 
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
@@ -707,7 +708,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     else:
         confirm_str = '\n'.join(confirm_devices)
 
-    console = Console(emoji=False)
+    console = Console(emoji=False, no_color=True)
     print(f'{len(data)} [cyan]Devices found in {"import file" if not import_file else import_file.name}[/]')
     console.print(confirm_str)
     print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
@@ -791,7 +792,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
 @app.command(short_help="Validate a batch import")
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(..., exists=True, show_default=False,),
+    import_file: Path = typer.Argument(..., exists=True, show_default=False, autocompletion=lambda incomplete: [],),
     no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
     failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
     passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
@@ -821,8 +822,8 @@ def verify(
     # make get_file_data return consistent List of pydantic models
     data = config.get_file_data(import_file)
     data = data if not hasattr(data, "dict") else data.dict
-    if isinstance(data, dict) and "devices" in data:
-        data = data["devices"]
+    if isinstance(data, dict) and what in data:
+        data = data[what]
 
     # TODO Verify yaml/json/csv should now all look the same... only tested with csv
 
@@ -959,7 +960,7 @@ def deploy(
 @app.command(short_help="Perform Batch Add from file")
 def add(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),  # HACK completion broken when trying to complete a Path
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
@@ -995,7 +996,6 @@ def add(
         cli.display_results(resp)
     elif what == "groups":
         resp = batch_add_groups(import_file, yes=yes)
-        # TODO put cleaner func in response object maybe??
         cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
     elif what == "devices":
         resp = batch_add_devices(import_file, yes=yes)
@@ -1049,9 +1049,11 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
         _ = cli.central.batch_request(cache_update_reqs)
 
 
-def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
-    br = cli.central.BatchRequest
+# TODO DELME temporary debug testing
+def batch_delete_devices_dry_run(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     console = Console(emoji=False)
+    from rich import inspect
+
 
     if not data:
         print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
@@ -1059,17 +1061,14 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
     serials_in = [dev["serial"].upper() for dev in data]
 
-    # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
-    # to avoid duplication ... # FIXME update clidel with corrections made below
-    cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]
-    not_in_inventory = [d for d, c in zip(serials_in, cache_devs) if c is None]
-    cache_devs = [c for c in cache_devs if c]
-    _all_in_inventory = cli.cache.inventory_by_serial
-    inv_del_serials = [s for s in serials_in if s in _all_in_inventory]
+    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
+    not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
+    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
+    _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
+    inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
 
-    # Devices in monitoring (have a status)
+    # Devices in monitoring (have a status), If only in inventory they lack status
     aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    # TODO profile these (1 loop vs multiple list comprehensions)
     for dev in cache_devs:
         if not dev.status:
             continue
@@ -1088,9 +1087,59 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
         else:
             raise DevException(f'Unexpected device type {dev.generic_type}')
 
-    # aps = [dev for dev in cache_devs if dev.generic_type == "ap" and dev.status]
-    # switches = [dev for dev in cache_devs if dev.generic_type == "switch" and dev.status]  # FIXME Need to use stack_id for stacks
-    # gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
+    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
+
+    console.rule(f"{len(cache_devs)} cache_devs")
+    console.print("\ncache_devs=")
+    _ = [console.print(c.rich_help_text) for c in cache_devs]
+    console.rule("")
+    console.print(f"\n{not_in_inventory=}\n\n_all_in_inventory (keys)={list(_all_in_inventory.keys())}\n\n{inv_del_serials=}")
+    console.rule(f"{len(devs_in_monitoring)} devs_in_monitoring")
+    _ = [console.print(c.rich_help_text) for c in devs_in_monitoring]
+    console.rule("")
+    console.print(f"Size of Inventory DB: {len(cli.cache.inventory)}")
+    console.print(f"Size of Device DB: {len(cli.cache.devices)}")
+    # inspect(cli.cache, console=console)
+
+
+def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
+    br = cli.central.BatchRequest
+    console = Console(emoji=False)
+
+    if not data:
+        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
+        raise typer.Exit(1)
+
+    serials_in = [dev["serial"].upper() for dev in data]
+
+    # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
+    # to avoid duplication ... # FIXME update clidel with corrections made below
+    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
+    not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
+    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
+    _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
+    inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
+
+    # Devices in monitoring (have a status), If only in inventory they lack status
+    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
+    for dev in cache_devs:
+        if not dev.status:
+            continue
+        elif dev.generic_type == "ap":
+            aps += [dev]
+        elif dev.generic_type == "gw":
+            gws += [dev]
+        elif dev.generic_type == "switch":
+            if dev.swack_id is None:
+                switches += [dev]
+            elif dev.swack_id in _stack_ids:
+                continue
+            else:
+                _stack_ids += [dev.swack_id]
+                stacks += [dev]
+        else:
+            raise DevException(f'Unexpected device type {dev.generic_type}')
+
     devs_in_monitoring = [*aps, *switches, *stacks, *gws]
 
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
@@ -1331,16 +1380,16 @@ def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False,
             upd_res = asyncio.run(cache_del_func(data=[{"name": g.name} for g in cache_objs], remove=True))
             log.debug(f"cache update to remove deleted {'groups' if del_groups else 'labels'} returns {upd_res}")
 
-# TODO need to include stack_id for switches in cache as hidden field, then if the switch is a stack member
-# need to use DELETE	/monitoring/v1/switch_stacks/{stack_id}
+
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
 @app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
 def delete(
     what: BatchDelArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False),
+    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False, autocompletion=lambda incomplete: [],),
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1383,7 +1432,10 @@ def delete(
     if what == "devices":
         if isinstance(data, dict) and "devices" in data:
             data = data["devices"]
-        resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+        if not dry_run:
+            resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+        else:
+            resp = batch_delete_devices_dry_run(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
         if isinstance(data, dict) and "sites" in data:
             data = data["sites"]
@@ -1878,7 +1930,7 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
 @app.command()
 def move(
     # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
+    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),
     do_group: bool = typer.Option(False, "-G", "--group", help="process group move from import."),
     do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
     do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
@@ -2051,7 +2103,7 @@ def unarchive(
 @app.callback()
 def callback():
     """
-    Perform batch operations.
+    Perform batch operations
     """
     pass
 

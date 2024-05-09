@@ -527,7 +527,7 @@ def site(
 @app.callback()
 def callback():
     """
-    Update existing Aruba Central objects.
+    Update existing Aruba Central objects
     """
     pass
 

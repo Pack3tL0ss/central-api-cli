@@ -8,6 +8,7 @@ import os
 import typer
 
 from pathlib import Path
+from typing import Iterable, List
 import sys
 
 import click
@@ -62,6 +63,61 @@ log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.d
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
 log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()}, indent=4)}")
+
+
+# HACK completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
+# This hack manually adds the _expand_args functionality to click.utils which is pinned to 7.1.2  Otherwise an exception is thrown on Windows.
+if os.name == "nt":  # pragma: no cover
+    def _expand_args(
+        args: Iterable[str],
+        *,
+        user: bool = True,
+        env: bool = True,
+        glob_recursive: bool = True,
+    ) -> List[str]:
+        """Simulate Unix shell expansion with Python functions.
+
+        See :func:`glob.glob`, :func:`os.path.expanduser`, and
+        :func:`os.path.expandvars`.
+
+        This is intended for use on Windows, where the shell does not do any
+        expansion. It may not exactly match what a Unix shell would do.
+
+        :param args: List of command line arguments to expand.
+        :param user: Expand user home directory.
+        :param env: Expand environment variables.
+        :param glob_recursive: ``**`` matches directories recursively.
+
+        :meta private:
+        """
+        from glob import glob
+        import re
+
+        out = []
+
+        for arg in args:
+            if user:
+                arg = os.path.expanduser(arg)
+
+            if env:
+                arg = os.path.expandvars(arg)
+
+            try:
+                matches = glob(arg, recursive=glob_recursive)
+            except re.error:
+                matches = []
+
+            if not matches:
+                out.append(arg)
+            else:
+                out.extend(matches)
+
+        return out
+
+    import click
+    if not hasattr(click.utils, "_expand_args"):
+        click.utils._expand_args = _expand_args
+
 
 from pycentral.base import ArubaCentralBase
 from .utils import Utils

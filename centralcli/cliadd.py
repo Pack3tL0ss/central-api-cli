@@ -610,7 +610,7 @@ def guest(
 @app.callback()
 def callback():
     """
-    Add devices / objects.
+    Add devices / objects
     """
     pass
 

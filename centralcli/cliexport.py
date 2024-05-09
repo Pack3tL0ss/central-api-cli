@@ -50,7 +50,7 @@ def configs(
 @app.callback()
 def callback():
     """
-    Collect configs in mass.
+    Collect configs in mass
     """
     pass
 
