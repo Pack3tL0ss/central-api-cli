@@ -995,21 +995,23 @@ def upgrade(
 @app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, show_default=False),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False, rich_help_panel="Common Options"),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Common Options"),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     args = ('all',) if not args else args
@@ -1023,7 +1025,7 @@ def cache_(
         elif arg.value == "devices":
             cache_out = sorted(cache_out, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in args else "yaml")
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
             tablefmt=tablefmt,
