@@ -1813,6 +1813,43 @@ def wlans(
         cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)
 
 
+@app.command()
+def vsx(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show VSX details for a CX switch
+    """
+    central = cli.central
+    device: CentralObject = cli.cache.get_dev_identifier(device, dev_type="switch")  # update to cx once get_dev_iden... refactored to support type vs generic_type
+    if device.type == "sw":
+        cli.exit("This command is only valid for [cyan]CX[/] switches, not [cyan]AOS-SW[/]")
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    resp = central.request(central.get_switch_vsx_detail, device.serial)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"VSX details for {device.name}",
+        pager=pager,
+        outfile=outfile,
+    )
+
 
 # FIXME show clients wireless <tab completion> does not filter based on type of device
 # FIXME show clients wireless AP-NAME does not filter only devices on that AP

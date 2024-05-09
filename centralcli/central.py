@@ -2150,9 +2150,9 @@ class CentralApi(Session):
         self,
         serial: str,
     ) -> Response:
-        """Get lldp device neighbor info for switch.
+        """Get lldp device neighbor info for CX switch.
 
-        Verified this works on aos-sw or appears to
+        If used on AOS-SW will only return neighbors that are CX switches
 
         Args:
             serial (str): id of the switch
@@ -2177,6 +2177,22 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/monitoring/v1/cx_switch_stacks/{stack_id}/neighbors"
+
+        return await self.get(url)
+
+    async def get_switch_vsx_detail(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get switch vsx info for CX switch.
+
+        Args:
+            serial (str): Filter by switch serial
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switches/{serial}/vsx"
 
         return await self.get(url)
 
