@@ -2146,6 +2146,40 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    async def get_switch_neighbors_v1(
+        self,
+        serial: str,
+    ) -> Response:
+        """Get lldp device neighbor info for switch.
+
+        Verified this works on aos-sw or appears to
+
+        Args:
+            serial (str): id of the switch
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switches/{serial}/neighbors"
+
+        return await self.get(url)
+
+    async def get_cx_switch_stack_neighbors_v1(
+        self,
+        stack_id: str,
+    ) -> Response:
+        """Get lldp device neighbor info for CX switch stack.
+
+        Args:
+            stack_id (str): Filter by stack_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/cx_switch_stacks/{stack_id}/neighbors"
+
+        return await self.get(url)
+
     async def do_multi_group_snapshot(
         self,
         backup_name: str,
