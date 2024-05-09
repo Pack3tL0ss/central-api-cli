@@ -2051,7 +2051,7 @@ def unarchive(
 @app.callback()
 def callback():
     """
-    Perform batch operations.
+    Perform batch operations
     """
     pass
 

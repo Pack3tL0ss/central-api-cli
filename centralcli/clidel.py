@@ -495,7 +495,7 @@ def device(
 @app.callback()
 def callback():
     """
-    Delete Aruba Central Objects.
+    Delete Aruba Central Objects
     """
     pass
 
