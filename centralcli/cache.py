@@ -590,7 +590,7 @@ class Cache:
         incomplete: str,
         args: List[str] = [],
     ) -> Generator[Tuple[str, str], None, None] | None:
-        """Device completion for returning matches that are either switch or AP
+        """Device completion for returning matches that are switches (AOS-SW or CX)
 
         Args:
             incomplete (str): The last partial or full command before completion invoked.
@@ -616,6 +616,40 @@ class Cache:
 
         for m in out:
             yield m
+
+    # TODO this is not used until get_dev_identifier is refactored to support type vs generic_type
+    # TODO Also args is not being sent by typer, would need to use ctx.params.values()
+    # def dev_cx_completion(
+    #     self,
+    #     incomplete: str,
+    #     args: List[str] = [],
+    # ) -> Generator[Tuple[str, str], None, None] | None:
+    #     """Device completion for returning matches that are CX switches
+
+    #     Args:
+    #         incomplete (str): The last partial or full command before completion invoked.
+    #         args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+    #     Yields:
+    #         Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+    #             Returns None if config is invalid
+    #     """
+    #     # Prevents exception during completion when config missing or invalid
+    #     if not config.valid:
+    #         err_console.print(":warning:  Invalid config")
+    #         return
+
+    #     match = self.get_dev_identifier(incomplete, dev_type=["cx"], completion=True)
+
+    #     out = []
+    #     if match:
+    #         out = [
+    #             tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+    #             if m.name not in args
+    #             ]
+
+    #     for m in out:
+    #         yield m
 
     def dev_kwarg_completion(
         self,
