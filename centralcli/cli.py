@@ -69,7 +69,7 @@ app.add_typer(clitshoot.app, name="tshoot",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
-app.add_typer(cliexport.app, name="export",)
+app.add_typer(cliexport.app, name="export", hidden=True)  # TODO remove once implemented
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
@@ -297,7 +297,7 @@ def move(
     # TODO ok_status is not used in display_results anymore, impacted colorization I think?  Need to verify.
 
 
-@app.command(short_help="Bounce Interface or PoE on Interface")
+@app.command()
 def bounce(
     what: BounceArgs = typer.Argument(..., show_default=False),
     device: str = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_switch_completion),
@@ -310,36 +310,27 @@ def bounce(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
+    """Bounce interface or PoE on an interface (Valid on switches)
+    """
     dev = cli.cache.get_dev_identifier(device)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/] port [cyan]{port}[/]")
-    if yes or typer.confirm("\nProceed?"):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
         cli.display_results(resp, tablefmt="action")
-        # typer.secho(str(resp), fg="green" if resp else "red")
-        # !! removing this for now Central ALWAYS returns:
-        # !!   reason: Sending command to device. state: QUEUED, even after command execution.
-        # if resp and resp.get('task_id'):
-        #     resp = cli.central.request(session.get_task_status, resp.task_id)
-        #     typer.secho(str(resp), fg="green" if resp else "red")
-
-    else:
-        raise typer.Abort()
+        # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
 
 
-@app.command(help="Remove a device from a site")
+@app.command()
 def remove(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
-    # _device: List[str] = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.completion),
-    # _site_kw: RemoveArgs = typer.Argument(None),
     site: str = typer.Argument(
         ...,
         metavar="[site <SITE>]",
         show_default=False,
         autocompletion=cli.cache.remove_completion
     ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -347,18 +338,17 @@ def remove(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
+    """Remove a device from a site
+    """
     devices = (d for d in devices if d != "site")
     devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
     site = cli.cache.get_site_identifier(site)
 
-    # TODO add confirmation method builder to output class
     print(
         f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
     )
-    if yes or typer.confirm("\nProceed?"):
-        devs_by_type = {
-        }
+    if yes or typer.confirm("\nProceed?", abort=True):
+        devs_by_type = {}
         for d in devices:
             if d.generic_type not in devs_by_type:
                 devs_by_type[d.generic_type] = [d.serial]
@@ -375,11 +365,11 @@ def remove(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(help="Reboot a device")
+@app.command()
 def reboot(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -387,17 +377,32 @@ def reboot(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
-    dev = cli.cache.get_dev_identifier(device)
-    # TODO add swarm cache and support for central.send_command_to_swarm
+    """Reboot a device
+    """
+    dev: CentralObject = cli.cache.get_dev_identifier(device)
+
+    conf_msg = dev.rich_help_text
+    func = cli.central.send_command_to_device
+    arg = dev.serial
+
+    if swarm:
+        if dev.generic_type != "ap":
+            print(f":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
+        elif dev.version.startswith("10."):
+            print(":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
+        else:
+            func = cli.central.send_command_to_swarm
+            arg = dev.swack_id
+            conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
+            # TODO reboot swarm has not been tested
 
     console = Console(emoji=False)
     _msg = "Reboot" if not yes else "Rebooting"
-    _msg = f"{_msg} [cyan]{dev.rich_help_text}[/]"
+    _msg = f"{_msg} {conf_msg}"
     console.print(_msg)
 
     if yes or typer.confirm("Proceed?", abort=True):
-        resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'reboot')
+        resp = cli.central.request(func, arg, 'reboot')
         cli.display_results(resp, tablefmt="action")
 
 
@@ -447,11 +452,11 @@ def blink(
     cli.display_results(resp, tablefmt="action")
 
 
-@app.command(help="Factory Default A Switch (ArubaOS-SW only)")
+@app.command()
 def nuke(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
+    swarm: bool = typer.Option(False, "-s", "--swarm", help="Factory Default the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -459,16 +464,36 @@ def nuke(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    yes = yes_ if yes_ else yes
-    dev = cli.cache.get_dev_identifier(device)
-    if dev.type != "sw":
-        print(f"[bright_red]ERROR:[/] This command only applies to AOS-SW (switches), not {dev.type.upper()}")
-        raise typer.Exit(1)
+    """Reset a device to factory default, erase all configuration (Valid on ArubaOS-SW or IAP Clusters)
 
+    :warning:  For AOS8 IAP this command is only valid for entire cluster, not individual APs -s|--swarm option is required.
+    """
+    dev = cli.cache.get_dev_identifier(device, dev_type=["ap", "switch"])
+    if dev.type == "cx":
+        cli.exit("This command only applies to [cyan]AOS-SW[/] switches, not [cyan]CX[/]")
+
+    conf_msg = dev.rich_help_text
+    if dev.generic_type == "switch":
+        func = cli.central.send_command_to_device
+        arg = dev.serial
+        if swarm:
+            print(f":warning:  Ignoring -s|--swarm option, as it only applies to APs not {dev.type}\n")
+    else:  # AP all others will error in get_dev_identifier
+        func = cli.central.send_command_to_swarm
+        arg = dev.swack_id
+        if dev.version.startswith("10."):  # TODO add aos8 vs aos10 flag to dev cache
+            cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
+        elif not swarm:
+            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [green]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster")
+        else:
+            conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
+
+    console = Console(emoji=False)
     _msg = "Factory Default" if not yes else "Factory Defaulting"
-    print(f"[bright_red blink]{_msg}[/] [cyan]{dev.name}[/]|[cyan]{dev.serial}[/]")
+    _msg = f"[bright_red blink]{_msg}[/] {conf_msg}"
+    console.print(_msg)
     if yes or typer.confirm("Proceed?", abort=True):
-        resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'erase_configuration')
+        resp = cli.central.request(func, arg, 'erase_configuration')
         cli.display_results(resp, tablefmt="action")
 
 
@@ -710,14 +735,12 @@ def unarchive(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """unacrchive devices.
+    """Unacrchive devices
 
     Remove previously archived devices from archive.
 
     Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
     """
-    # TODO maybe remnove all this, archived devs not in Inventory so prob not in cache.
-    # We have to make the call blind, best we can do is run them through utils.is_serial()
     serials: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
     _msg = "[bright_green]Unarchive devices[/]:"

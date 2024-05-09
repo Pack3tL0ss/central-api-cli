@@ -3109,7 +3109,7 @@ class CentralApi(Session):
         self,
         swarm_id: str,
         command: Literal[
-            "reboot_swarm",
+            "reboot",
             "erase_configuration",
         ]
     ) -> Response:
@@ -3118,11 +3118,14 @@ class CentralApi(Session):
         Args:
             swarm_id (str): Swarm ID of device
             command (str): Command mentioned in the description that is to be executed
-                valid: 'reboot_swarm', 'erase_configuration'
+                valid: 'reboot', 'erase_configuration'
 
         Returns:
             Response: CentralAPI Response object
         """
+        if command == "reboot":
+            command = "reboot_swarm"
+
         url = f"/device_management/v1/swarm/{swarm_id}/action/{command}"
 
         return await self.post(url)
