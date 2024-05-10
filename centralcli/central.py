@@ -1417,7 +1417,7 @@ class CentralApi(Session):
         hostname: str = None,
         group: str = None,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 1000,
     ) -> Response:
         """List Switch Stacks.
 
@@ -1425,7 +1425,7 @@ class CentralApi(Session):
             hostname (str, optional): Filter by stack hostname
             group (str, optional): Filter by group name
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. Default is 1000 and max is 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -1440,6 +1440,22 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_switch_stack_details(
+        self,
+        stack_id: str,
+    ) -> Response:
+        """Switch Stack Details.
+
+        Args:
+            stack_id (str): Filter by Switch stack_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/switch_stacks/{stack_id}"
+
+        return await self.get(url)
 
     async def get_dev_details(
         self,

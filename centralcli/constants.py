@@ -58,6 +58,16 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
+class SortStackOptions(str, Enum):
+    group = "group"
+    _id = "id"
+    mac = "mac"
+    name = "name"
+    split_policy = "split_policy"
+    status = "status"
+    topology = "topology"
+
+
 class SortWebHookOptions(str, Enum):
     name = "name"
     updated = "updated"
@@ -144,6 +154,7 @@ STRIP_KEYS = [
     "areas",
     "lsas",
     "commands",
+    "stacks",
 ]
 
 

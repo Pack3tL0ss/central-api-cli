@@ -31,7 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes
+from centralcli.constants import DevTypes, StatusOptions
 from centralcli.objects import DateTime
 
 
@@ -1611,3 +1611,17 @@ def get_wlans(data: List[dict]) ->  List[dict]:
     return simple_kv_formatter(data)
 
 
+def get_switch_stacks(data: List[Dict[str, str]], status: StatusOptions = None, stack_ids: List[str] = None):
+    simple_types = {"ArubaCX": "cx"}
+    data = [{"name": d.get("name"), **d, "switch_type": simple_types.get(d.get("switch_type", ""), d.get("switch_type"))} for d in data]
+    before = len(data)
+    if status:  # Filter up / down
+        data = [d for d in data if d.get("status").lower() == status.value.lower()]
+    if stack_ids:  # Filter Stack IDs
+        data = [d for d in data if d.get("id") in stack_ids]
+
+    if before and not data:
+        data = "\nNo stacks matched provided filters"
+
+    data = strip_no_value(data)
+    return simple_kv_formatter(data)
