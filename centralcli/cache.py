@@ -2090,6 +2090,7 @@ class Cache:
         self,
         query_str: str | Iterable[str],
         dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
+        swack: bool = False,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
@@ -2177,6 +2178,13 @@ class Cache:
             match = []
             for _dev_type in dev_type:
                 match += [d for d in all_match if d.generic_type.lower() in "".join(_dev_type[0:len(d.generic_type)]).lower()]
+
+        # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
+        # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
+        # This param returns only the commander matching the name.
+        if swack and len(match) > 1:
+            unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
+            match = [d for d in match if d.swack_id in unique_swack_ids and d.ip]
 
         if completion:
             return match or []
