@@ -718,6 +718,7 @@ def swarms(
 def interfaces(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
+    stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
@@ -743,11 +744,12 @@ def interfaces(
 
     Command is valid for switches and gateways
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"],)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], swack=stack,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:
-        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, aos_sw=dev.type == "sw")
+        iden = dev.serial if not stack else dev.swack_id
+        resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=stack, aos_sw=dev.type == "sw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{dev.name} Interfaces"

@@ -1400,7 +1400,10 @@ def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict
     return data
 
 def show_interfaces(data: Union[List[dict], dict], verbosity: int = 0, dev_type: DevTypes = "cx") -> Union[List[dict], dict]:
-    data = utils.listify(data)
+    if isinstance(data, list) and data and "member_port_detail" in data[0]:
+        data = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
+    else:
+        data = utils.listify(data)
 
     # TODO verbose and non-verbose
     # TODO determine if "mode" has any value, appears to always be Access on SW
