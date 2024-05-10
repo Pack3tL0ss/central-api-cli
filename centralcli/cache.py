@@ -2019,6 +2019,7 @@ class Cache:
         qry_str: str,
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
+        swack: bool = False,
         group: str = None,
         all: bool = False,
         completion: bool = False,
@@ -2030,6 +2031,8 @@ class Cache:
             qry_funcs (Sequence[str]): Sequence of strings "dev", "group", "site", "template"
             device_type (Union[str, List[str]], optional): Restrict matches to specific dev type(s).
                 Defaults to None.
+            swack (bool, optional): Restrict matches to only the stack commanders matching query (filter member switches).
+                Defaults to False.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
@@ -2054,6 +2057,7 @@ class Cache:
                 kwargs = default_kwargs.copy()
                 if q == "dev":
                     kwargs["dev_type"] = device_type
+                    kwargs["swack"] = swack
                 elif q == "template":
                     kwargs["group"] = group
                 this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []

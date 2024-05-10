@@ -1924,7 +1924,7 @@ class CentralApi(Session):
         primary_vlan_id: int = None,
         status: str = None,
         sort: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         aos_sw: bool = False,
         offset: int = 0,
         limit: int = 500,
@@ -1932,7 +1932,7 @@ class CentralApi(Session):
         """Get vlan info for switch (CX and SW).
 
         Args:
-            iden (str): Serial Number of Stack ID, Identifies the dev to return VLANs from.
+            iden (str): Serial Number or Stack ID, Identifies the dev to return VLANs from.
             stack (bool, optional): Set to True for stack. Default: False
             name (str, optional): Filter by vlan name
             id (int, optional): Filter by vlan id
@@ -1969,7 +1969,7 @@ class CentralApi(Session):
             "primary_vlan_id": primary_vlan_id,
             "status": status,
             "sort": sort,
-            "calculate_total": calculate_total,
+            "calculate_total": None if not calculate_total else str(calculate_total),  # sending str of False/false will be interpreted as true.  None will strip the param
             "offset": offset,
             "limit": limit,
         }
@@ -2146,13 +2146,15 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_switch_neighbors_v1(
+    async def get_cx_switch_neighbors(
         self,
         serial: str,
     ) -> Response:
         """Get lldp device neighbor info for CX switch.
 
         If used on AOS-SW will only return neighbors that are CX switches
+        For a stack this will return neighbors for the individual member
+        use get_cx_switch_stack_neighbors to get neighbors for entire stack
 
         Args:
             serial (str): id of the switch
@@ -2164,7 +2166,7 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_cx_switch_stack_neighbors_v1(
+    async def get_cx_switch_stack_neighbors(
         self,
         stack_id: str,
     ) -> Response:
