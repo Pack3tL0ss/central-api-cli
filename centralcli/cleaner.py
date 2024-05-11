@@ -979,15 +979,18 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         return data
 
 
-def get_lldp_neighbor(data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def get_lldp_neighbor(data: List[Dict[str, str]]) -> Dict[str: Dict[str, str]]:
     data = utils.listify(data)
     strip_keys = ["cid"]
     _short_val = {
         "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode": "1000BaseT FD"
     }
-    data = [{k: _short_val.get(d[k], d[k]) for k in d if d["localPort"] != "bond0" and k not in strip_keys} for d in data]
+    # grab the key details from switch lldp return, make data look closer to lldp return from AP
+    data = [{**dict(d if "dn" not in d else d["dn"]), "vlan_id": ",".join(d.get("vlan_id", [])), "lldp_poe": d.get("lldp_poe_enabled")} for d in data]
+    # simplify some of the values and strip the bond0 entry from AP
+    data = [{k: _short_val.get(d[k], d[k]) for k in d if d.get("localPort", "") != "bond0" and k not in strip_keys} for d in data]
 
-    return strip_no_value(utils.listify(data))
+    return strip_no_value(data)
 
 
 def get_vlans(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1400,8 +1403,14 @@ def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict
     return data
 
 def show_interfaces(data: Union[List[dict], dict], verbosity: int = 0, dev_type: DevTypes = "cx") -> Union[List[dict], dict]:
-    if isinstance(data, list) and data and "member_port_detail" in data[0]:
-        data = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
+    if isinstance(data, list) and data and "member_port_detail" in data[0]:  # switch stack
+        normal_ports = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
+        stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
+        try:
+            data = sorted([*normal_ports, *stack_ports], key=lambda i: [int(i["port_number"].split("/")[y]) for y in range(i["port_number"].count("/") + 1)])
+        except Exception as e:
+            log.exception(f"Exception in cleaner sort for show_interfaces\n{e}")
+            data = [*normal_ports, *stack_ports]
     else:
         data = utils.listify(data)
 
