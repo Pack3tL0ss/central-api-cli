@@ -2095,12 +2095,36 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
         swack: bool = False,
+        conductor_only: bool = False,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
     ) -> CentralObject | List[CentralObject] | None:
+        """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
+
+        If multiple matches are found user is promted to select device.
+
+        Args:
+            query_str (str | Iterable[str]): The query string or list of strings to attempt to match.
+            dev_type (constants.GenericDevTypes | List[constants.GenericDevTypes], optional): Limit matches to specific device type. Defaults to None (all device types).
+            swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
+                If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
+            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
+                Does not filter non stacks, the way swack option does. Defaults to False.
+            retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
+            completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
+            silent (bool, optional): Do not display errors / output, simply returns match if match is found. Defaults to False.
+            include_inventory (bool, optional): Whether match attempt should also include Inventory DB (devices in GLCP that have yet to connect to Central). Defaults to False.
+            exit_on_fail (bool, optional): Whether a failure to match exits the program. Defaults to True.
+
+        Raises:
+            typer.Exit: Exit CLI / command, occurs if there is no match unless exit_on_fail is set to False.
+
+        Returns:
+            CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
+        """
 
         retry = False if completion else retry
         # TODO dev_type currently not passed in or handled identifier for show switches would also
@@ -2186,9 +2210,13 @@ class Cache:
         # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
         # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
         # This param returns only the commander matching the name.
-        if swack and len(match) > 1:
+        if len(match) > 1 and (swack or conductor_only):
             unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
-            match = [d for d in match if d.swack_id in unique_swack_ids and d.ip]
+            stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip]
+            if swack:
+                match = stacks
+            elif conductor_only:
+                match = [*stacks, *[d for d in match if not d.swack_id]]
 
         if completion:
             return match or []
