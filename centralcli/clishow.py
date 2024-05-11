@@ -782,7 +782,7 @@ def swarms(
 def interfaces(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
-    stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
@@ -808,26 +808,25 @@ def interfaces(
 
     Command is valid for switches and gateways
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], swack=stack,)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], conductor_only=True,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:
-        iden = dev.serial if not stack else dev.swack_id
-        resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=stack, aos_sw=dev.type == "sw")
+        iden = dev.swack_id or dev.serial
+        resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=dev.swack_id is not None, aos_sw=dev.type == "sw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{dev.name} Interfaces"
 
+    caption = []
     if dev.type == "sw":
-        caption = render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)
-    else:
-        caption = ""
+        caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)]
 
     if resp:
         try:
             up = len([i for i in resp.output if i.get("status").lower() == "up"])
             down = len(resp.output) - up
-            caption = f"{caption}\n  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"
+            caption += [f"  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
         except Exception as e:
             log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
 
@@ -836,7 +835,7 @@ def interfaces(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=caption,
+        caption="\n".join(caption),
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -1400,12 +1399,12 @@ def variables(
     )
 
 
-@app.command(short_help="Show AP lldp neighbor", help="Show AP lldp neighbor.  Command only applies to APs at this time.")
+@app.command()
 def lldp(
     device: List[str] = typer.Argument(
         ...,
         metavar=iden_meta.dev_many,
-        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete=incomplete, args=["ap"]),
+        autocompletion=cli.cache.dev_switch_ap_completion,
         show_default=False,
     ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
@@ -1430,25 +1429,39 @@ def lldp(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show AP lldp neighbor
+
+    Valid on APs and CX switches
+    Command will run on AOS-SW, but neighbor table will only show neighbors that are CX switches or APs
+    """
     central = cli.central
 
-    devs = [cli.cache.get_dev_identifier(_dev, dev_type="ap") for _dev in device if not _dev.lower().startswith("neighbor")]
-    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs]
+    # TODO need get_dev_identier to accept cx
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
+    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
+    unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
+    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
-    if all([res.ok for res in batch_resp]):
-        concat_resp = batch_resp[-1]
-        concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
+    # if all([res.ok for res in batch_resp]):
+    #     concat_resp = batch_resp[-1]
+    #     concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
-    cli.display_results(
-        concat_resp,
-        tablefmt=tablefmt,
-        title="LLDP Neighbor Info",
-        pager=pager,
-        outfile=outfile,
-        cleaner=cleaner.get_lldp_neighbor,
-    )
-
+    console = Console()
+    for dev, r in zip(devs, batch_resp):
+        title = f"{dev.name} LLDP Neighbor information"
+        if tablefmt not in ["table", "rich"]:
+            console.print(f'[green]{"-" * 5}[/] [cyan bold]{title}[/] [green]{"-" * 5}[/]')
+        cli.display_results(
+            r,
+            tablefmt=tablefmt,
+            title=title,
+            pager=pager,
+            outfile=outfile,
+            output_by_key=["port", "localPort"],
+            cleaner=cleaner.get_lldp_neighbor,
+        )
 
 @app.command(short_help="Show certificates/details")
 def certs(
