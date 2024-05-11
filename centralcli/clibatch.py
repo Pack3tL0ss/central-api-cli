@@ -1052,8 +1052,6 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
 # TODO DELME temporary debug testing
 def batch_delete_devices_dry_run(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     console = Console(emoji=False)
-    from rich import inspect
-
 
     if not data:
         print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
