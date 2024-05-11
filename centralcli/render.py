@@ -322,11 +322,12 @@ def output(
     caption: str = None,
     account: str = None,
     config: Config = None,
+    output_by_key: str | List[str] = "name",
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
 ) -> Output:
-    # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
+    output_by_key = output_by_key if isinstance(output_by_key, list) else [output_by_key]
     raw_data = outdata
     _lexer = table_data = None
 
@@ -337,14 +338,17 @@ def output(
     if outdata and all(isinstance(x, str) for x in outdata):
         tablefmt = "strings"
 
-    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs
+    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
         outdata = utils.listify(outdata)
-        if outdata and isinstance(outdata[0], dict) and 'name' in outdata[0]:
-            outdata: Dict[dict] = {
-                item['name']: {k: v for k, v in item.items() if k != 'name'}
-                for item in outdata
-            }
+        if outdata and isinstance(outdata[0], dict):
+            _output_key = [k for k in output_by_key if k in outdata[0]]
+            if _output_key:
+                _output_key = _output_key[0]
+                outdata: Dict[dict] = {
+                    item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                    for item in outdata
+                }
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)

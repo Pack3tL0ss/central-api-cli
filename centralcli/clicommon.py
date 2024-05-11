@@ -349,6 +349,7 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         stash: bool = True,
+        output_by_key: str | List[str] = "name",
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -388,7 +389,7 @@ class CLICommon:
                         # data = sorted(data, key=get_sort(d[sort_by], type_=type_))
                     except TypeError as e:
                         print(
-                            f":x: [dark_orange3]Warning:[reset] Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "
+                            f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "
                         )
 
             if reverse:
@@ -408,6 +409,7 @@ class CLICommon:
                 "caption": caption,
                 "account": None if config.account in ["central_info", "default", "account"] else config.account,
                 "config": config,
+                "output_by_key": output_by_key,
                 "set_width_cols": set_width_cols,
                 "full_cols": full_cols,
                 "fold_cols": fold_cols,
@@ -450,6 +452,7 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         stash: bool = True,
+        output_by_key: str | List[str] = "name",
         exit_on_fail: bool = False,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
@@ -478,6 +481,8 @@ class CLICommon:
             reverse (bool, optional): reverse the output.
             stash (bool, optional): stash (cache) the output of the command.  The CLI can re-display with
                 show last.  Default: True
+            output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
+                the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
             ok_status (Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]], optional): By default
                 responses with status_code 2xx are considered OK and are rendered as green by
                 Output class.  provide int or list of int to override additional status_codes that
@@ -571,6 +576,7 @@ class CLICommon:
                         sort_by=sort_by,
                         reverse=reverse,
                         stash=stash,
+                        output_by_key=output_by_key,
                         set_width_cols=set_width_cols,
                         full_cols=full_cols,
                         fold_cols=fold_cols,
@@ -596,6 +602,7 @@ class CLICommon:
                 sort_by=sort_by,
                 reverse=reverse,
                 stash=stash,
+                output_by_key=output_by_key,
                 set_width_cols=set_width_cols,
                 full_cols=full_cols,
                 fold_cols=fold_cols,
