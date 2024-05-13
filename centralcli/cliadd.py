@@ -57,11 +57,11 @@ class AddGroupArgs(str, Enum):
 # FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command()
 def device(
-    kw1: AddGroupArgs = typer.Argument(..., hidden=False, metavar="serial",),
-    serial: str = typer.Argument(..., metavar="[SERIAL NUM]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw2: str = typer.Argument(..., hidden=False, metavar="mac", autocompletion=cli.cache.smg_kw_completion),
-    mac: str = typer.Argument(..., metavar="[MAC ADDRESS]", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw3: str = typer.Argument(None, metavar="group", hidden=False, autocompletion=cli.cache.smg_kw_completion),
+    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="serial", show_default=False,),
+    serial: str = typer.Argument(..., metavar="<SERIAL NUM>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw2: str = typer.Argument(..., hidden=True, metavar="mac", autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    mac: str = typer.Argument(..., metavar="<MAC ADDRESS>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw3: str = typer.Argument(None, metavar="group", hidden=True, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     group: str = typer.Argument(None, metavar="[GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
@@ -82,6 +82,8 @@ def device(
     ),
 ) -> None:
     """Add a Device to Aruba Central.
+
+    Serial Number and MAC are required, group is opional.
     """
     kwd_vars = [kw1, kw2, kw3]
     vals = [serial, mac, group]
@@ -110,8 +112,7 @@ def device(
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
-        print("[bright_red]Error[/]: both serial number and mac address are required.")
-        raise typer.Exit(1)
+        cli.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
     api_kwd = {"serial": "serial_num", "mac": "mac_address"}
     kwargs = {api_kwd.get(k, k): v for k, v in kwargs.items() if v}
