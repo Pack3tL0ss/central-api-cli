@@ -230,6 +230,8 @@ _short_value = {
     "last_state_change": _log_timestamp,
     "graceful_restart_timer": _duration_words,
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
+    "reserved_power_in_watts": lambda v: round(v, 2),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -301,6 +303,12 @@ _short_key = {
     "essid": "ssid",
     "opmode": "security",
     "power_consumption": "poe usage",
+    "poe_priority": "priority",
+    "poe_detection_status": "status",
+    "power_drawn_in_watts": "draw",
+    "pse_allocated_power": "allocated",
+    "reserved_power_in_watts": "reserved",
+    "power_class": "class",
 }
 
 
@@ -381,7 +389,7 @@ def short_value(key: str, value: Any):
     if isinstance(value, (str, int, float)):
         return (
             short_key(key),
-            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, bool) and not value) else _short_value[key](value),
+            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, (bool, int)) and not value) else _short_value[key](value),
         )
     elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
         if key in ["sites", "labels"]:
@@ -1498,6 +1506,34 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         }
 
     return strip_no_value(data)
+
+
+def get_switch_poe_details(data: List[Dict[str, Any]], verbosity: int = 0, powered: bool = False, aos_sw: bool = False) -> List[Dict[str, Any]]:
+    verbosity_keys = {
+        0: [
+            "port",
+            "poe_detection_status",
+            "poe_priority",
+            "power_drawn_in_watts",
+            # "amperage_drawn_in_milliamps",
+            "pse_allocated_power",
+            "reserved_power_in_watts",
+            "pre_standard_detect",
+            "power_class"
+        ]
+    }
+    if powered:
+        data = list(filter(lambda d: d.get("poe_detection_status", 99) == 3, data))
+
+    # AOS-SW does not return usage in watts, calculate it to make it consistent with CX.  CX has these fields but always returns 0 for the 2 fields.
+    if aos_sw:
+        data = [{**d, "power_drawn_in_watts": round(d.get("amperage_drawn_in_milliamps", 0) / 1000 * d.get("port_voltage_in_volts", 0), 2)} for d in data]
+
+    if verbosity == 0:
+        data = [dict(short_value(k, d.get(k),) for k in verbosity_keys[verbosity]) for d in data]
+        data = strip_no_value(data)
+
+    return sort_interfaces(data, interface_key="port")
 
 def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     key_order = [

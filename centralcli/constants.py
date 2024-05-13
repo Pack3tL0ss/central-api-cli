@@ -48,6 +48,12 @@ class SendConfigDevIdens(str, Enum):
     # cx = "cx"
 
 
+class PoEDetectionStatus(Enum):
+    NA = 0
+    Undefined = 1
+    Searching = 2
+    Delivering = 3
+
 class ShowInventoryArgs(str, Enum):
     all = "all"
     ap = "ap"
