@@ -1145,7 +1145,7 @@ class CentralApi(Session):
         Args:
             serial (str): Switch serial
             port (str, optional): Filter by switch port
-            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False (CX Switch)
 
         Returns:
             Response: CentralAPI Response object
