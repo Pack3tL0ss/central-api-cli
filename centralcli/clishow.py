@@ -791,7 +791,7 @@ def interfaces(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
@@ -849,31 +849,59 @@ def interfaces(
 @app.command(help="Show (switch) poe details for an interface")
 def poe(
     device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    port: str = typer.Argument(None, show_default=False,),
-    _port: str = typer.Option(None, "--port", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
+    _port: str = typer.Option(None, "--port", show_default=False, hidden=True,),
+    powered: bool = typer.Option(False, "-p", "--powered", help="Show only interfaces currently delivering power", show_default=False,),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False, rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False, rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
     resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
     resp.output = utils.unlistify(resp.output)
+    caption = "  Power values are in watts."
+    if resp:
+        resp.output = utils.listify(resp.output)  # if they specify an interface output will be a single dict.
+        _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
+        caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+        if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
+            caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
+            caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
+            caption = f"{caption}, In use: [cyan]{resp.output[0]['poe_slots'].get('power_in_use_in_watts', '?')}[/]"
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"Poe details for {dev.name}",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        pager=pager,
+        outfile=outfile,
+        output_by_key="port",
+        cleaner=cleaner.get_switch_poe_details,
+        verbosity=verbose,
+        powered=powered,
+        aos_sw=dev.type == "sw"
+    )
     # TODO output cleaner / sort & reverse options
 
 
