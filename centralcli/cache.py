@@ -2093,7 +2093,7 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
+        dev_type: constants.AllDevTypes | List[constants.AllDevTypes] = None,
         swack: bool = False,
         conductor_only: bool = False,
         retry: bool = True,
@@ -2108,7 +2108,7 @@ class Cache:
 
         Args:
             query_str (str | Iterable[str]): The query string or list of strings to attempt to match.
-            dev_type (constants.GenericDevTypes | List[constants.GenericDevTypes], optional): Limit matches to specific device type. Defaults to None (all device types).
+            dev_type (constants.AllDevTypes | List[constants.AllDevTypes], optional): Limit matches to specific device type. Defaults to None (all device types).
             swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
                 If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
             conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
@@ -2203,9 +2203,12 @@ class Cache:
         if dev_type:
             all_match = match.copy()
             dev_type = utils.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
             match = []
+
             for _dev_type in dev_type:
-                match += [d for d in all_match if d.generic_type.lower() in "".join(_dev_type[0:len(d.generic_type)]).lower()]
+                match += [d for d in all_match if d.type == _dev_type]
 
         # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
         # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
