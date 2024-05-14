@@ -429,6 +429,8 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     Args:
         text (str | List[str]): The text or list of text to capture.
             If provided as list it will be converted to string (joined with \n)
+        emoji: (bool, Optional): Allow emoji placeholders.  Default: False
+        kwargs: additional kwargs passed to rich Console.
 
     Returns:
         str: text with markups converted to ascii control chars
