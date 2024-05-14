@@ -444,8 +444,14 @@ class Cache:
             res = [self.responses.dev or Response()]
 
         _inv_by_ser = self.inventory_by_serial
-        _dev_by_ser = self.devices_by_serial
-        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
+        # Need to use the resp value not what was just stored in cache as we don't store all fields
+        dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
+        if dev_res:
+            _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        else:
+            _dev_by_ser = self.devices_by_serial
+
+        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
             {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
             for serial in _all_serials
@@ -1558,10 +1564,11 @@ class Cache:
                     _update_data = cleaner.get_devices(_update_data, cache=True)
                     _update_data = await self.get_swack_ids(resp, _update_data)
 
+                    # Cache update  # TODO make own function
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)
                     if False in update_res:
-                        log.error("Tiny DB returned an error during dev db update")
+                        log.error("Tiny DB returned an error during dev db update", caption=True)
 
                 # TODO change updated from  list of funcs to class with bool attributes or something
                 self.updated.append(self.central.get_all_devicesv2)
