@@ -1838,7 +1838,7 @@ def wlans(
         autocompletion=cli.cache.site_completion,
         show_default=False,
     ),
-    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),
+    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),  # TODO Can add option for --swarm where value is a dev iden
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
     sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
@@ -1848,7 +1848,7 @@ def wlans(
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose: bool = typer.Option(False, "-v", help="get more details for SSIDs across all AP groups", show_default=False,),
+    verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1865,13 +1865,17 @@ def wlans(
 
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
-        title = f"{title} in group {group}"
+        _group: CentralObject = cli.cache.get_group_identifier(group)
+        title = f"{title} in group {_group.name}"
+        group = _group.name
     if label:
-        title = f"{title} with label {label}"
+        _label: CentralObject = cli.cache.get_label_identifier(label)
+        title = f"{title} with label {_label.name}"
+        label = _label.name
     if site:
-        _site = cli.cache.get_site_identifier(site)
-        site = _site.name or site
-        title = f"{title} in site {site}"
+        _site: CentralObject = cli.cache.get_site_identifier(site)
+        title = f"{title} in site {_site.name}"
+        site = _site.name
 
     params = {
         "name": name,
@@ -1882,15 +1886,11 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # if full and not group:
-    #     print("Error: must provide group via --group")
-    #     raise typer.Exit(1)
-
-    # TODO add verbosity levels for get_full_wlan_list
+    # TODO only verbosity 0 currently if group is specified
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:
         resp = central.request(central.get_full_wlan_list, group)
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose)
     elif verbose:
         import json
         group_res = central.request(central.get_groups_properties)
@@ -1921,6 +1921,36 @@ def wlans(
     else:
         resp = central.request(central.get_wlans, **params)
         cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)
+
+
+@app.command()
+def cluster(
+    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion, show_default=False,),
+    ssid: str = typer.Argument(..., autocompletion=cli.cache.label_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show Cluster mapped to a given group/SSID
+    """
+    group = cli.cache.get_group_identifier(group)
+    resp = cli.central.request(cli.central.get_wlan_cluster_by_group, group.name, ssid)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    if tablefmt == "rich":
+        resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
+    cli.display_results(resp, tablefmt=tablefmt, title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]", pager=pager, outfile=outfile, cleaner=cleaner.simple_kv_formatter)
 
 
 @app.command()

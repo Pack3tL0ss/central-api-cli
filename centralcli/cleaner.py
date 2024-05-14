@@ -225,7 +225,7 @@ _short_value = {
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
     "mem_total": _format_memory,
     "mem_free": _format_memory,
-    "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
+    "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "learn_time": _log_timestamp,
     "last_state_change": _log_timestamp,
     "graceful_restart_timer": _duration_words,
@@ -309,6 +309,8 @@ _short_key = {
     "pse_allocated_power": "allocated",
     "reserved_power_in_watts": "reserved",
     "power_class": "class",
+    "cluster_group_name": "group",
+    "cluster_redundancy_type": "redundancy type",
 }
 
 
@@ -781,7 +783,7 @@ def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: b
         data = [{k: v for k, v in inner.items() if k in non_verbose_keys} for inner in data]
 
     # cache uses post cleaner keys
-    # we don't actually use model or version for anything yet
+    # we don't actually use model for anything yet
     cache_keys = [
         "name",
         "status",
@@ -1627,8 +1629,8 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
     if isinstance(data, dict) and "wlans" in data:
         data = data["wlans"]
 
-    verbosity_keys = [
-        [
+    verbosity_keys = {
+        0: [
             'group',
             'name',
             'essid',
@@ -1639,12 +1641,28 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
             'mac_authentication',
             'vlan',
             'opmode',
-            'access_type'
+            'access_type',
+            'cluster_name'
         ]
-    ]
+    }
     pretty_data = []
+    # rf_band all is a legacy key so all means 2.4 and 5, this updates so that all is only the value if 6 is also enabled.
+    # also grabs values for keys that are stored in dicts
+    def _simplify_value(wlan: dict, k: str, v: Any) -> Any:
+        if k == "rf_band":
+            _band = v.replace("all", "2.4, 5").replace("5.0", "5")
+            if wlan.get("rf_band_6ghz", {}).get("value"):
+                _band = f"{_band}, 6"
+            return "all" if _band.count(",") == 2 else _band
+
+        return v if not isinstance(v, dict) or "value" not in v else v["value"]
+
+
     for wlan in data:
-        ssid_data = {k: v for k, v in wlan.items() if k in verbosity_keys[verbosity]}
+        ssid_data = {
+            k: _simplify_value(wlan, k, wlan[k])
+            for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())]) if k in wlan
+        }
         if ssid_data.get("name", "") == ssid_data.get("essid", ""):
             ssid_data["name"] = None
         pretty_data += [ssid_data]

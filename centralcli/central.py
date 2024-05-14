@@ -1518,6 +1518,24 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_wlan_cluster_by_group(
+        self,
+        group_name: str,
+        ssid: str
+    ) -> Response:
+        """Retrieve Cluster mapping for given group/SSID.
+
+        Args:
+            group_name (str): The name of the group.
+            ssid (str): Wlan ssid name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/GROUP/{group_name}/config/ssid_cluster/{ssid}/WIRELESS_PROFILE/"
+
+        return await self.get(url)
+
     # TODO Under test 3/7/2024
     async def get_full_wlan_list(
         self,
@@ -3533,6 +3551,36 @@ class CentralApi(Session):
             'firmware_version': firmware_version,
             'reboot': reboot,
             'model': model
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cancel_upgrade(
+        self,
+        device_type: str,
+        serial: str = None,
+        swarm_id: str = None,
+        group: str = None,
+    ) -> Response:
+        """Cancel scheduled firmware upgrade.
+
+        Args:
+            device_type (str): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
+            serial (str): Serial of device
+            swarm_id (str): Swarm ID
+            group (str): Specify Group Name to cancel upgrade for devices in that group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        device_type = constants.lib_to_api('firmware', device_type)
+        url = "/firmware/v1/upgrade/cancel"
+
+        json_data = {
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'device_type': device_type,
+            'group': group
         }
 
         return await self.post(url, json_data=json_data)
