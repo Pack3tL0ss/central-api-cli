@@ -22,6 +22,7 @@ from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
                models, utils)
 from .utils import Mac
 from .response import Response, Session
+from .exceptions import CentralCliException
 # buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
 
 
@@ -898,12 +899,18 @@ class CentralApi(Session):
 
         return templates.update_template(self.auth, **kwargs)
 
-    async def _get_group_names(self) -> Response:
+    async def get_group_names(self) -> Response:
+        """Get a listing of all group names defined in Aruba Central
+
+        Returns:
+            Response: CentralAPI Respose object
+                output attribute will be List[str]
+        """
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
         if resp.ok:
-            resp.output = cleaner._get_group_names(resp.output)
+            resp.output = cleaner.get_group_names(resp.output)
         return resp
 
     async def delete_template(
@@ -924,40 +931,89 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:
-        """Get template group details for all groups.
+        """Get properties and template info for all groups
 
         This method will first call configuration/v2/groups to get a list of group names.
-        Then /configuration/v2/groups/template_info to get the template details (template_group or not)
-        for each group.
+
+        It then combines the responses from /configuration/v2/groups/template_info
+        and /configuration/v1/groups/properties to get the template details
+         (template_group or not) and properties for each group.
+
+         The template_info and properties endpoints both allow 20 groups per request.
+         Multiple requests will be performed async if there are more than 20 groups.
+
+        Raises:
+            CentralCliException: Raised when validation of combined responses fails.
 
         Returns:
             Response: centralcli Response Object
         """
-        resp = await self._get_group_names()
+        resp = await self.get_group_names()
         if not resp.ok:
             return resp
-        else:
-            url = "/configuration/v2/groups/template_info"
-            # return await self.get_groups_properties(resp.output)
-            batch_reqs = []
-            for groups in utils.chunker(resp.output, 20):  # This call allows a max of 20
-                params = {"groups": ",".join(groups)}
-                batch_reqs += [self.BatchRequest(self.get, url, params=params)]
-                # all_groups = await self.get(url, params=params)
-                # TODO dunder add in Response
-            batch_resp = await self._batch_request(batch_reqs)
-            # TODO method to combine raw and output attrs of all responses into last resp
-            output = [r for res in batch_resp for r in res.output]
-            resp = batch_resp[-1]
-            resp.output = output
-            if "data" in resp.raw:
-                resp.raw["data"] = output
-            else:
-                log.warning("raw attr in resp from get_all_groups lacks expected outer key 'data'")
 
-            return resp
+        groups = resp.output
+
+        template_resp, props_resp = await self._batch_request(
+            [
+                self.BatchRequest(self.get_groups_template_status, (groups,)),
+                self.BatchRequest(self.get_groups_properties, (groups,))
+            ]
+        )
+
+        template_by_group = {d["group"]: d["template_details"] for d in template_resp.output}
+        props_by_group = {d["group"]: d["properties"] for d in props_resp.output}
+
+        combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
+        if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
+            raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
+
+        resp = props_resp
+        resp.output = [{"group": k, **v} for k, v in combined.items()]
+        resp.raw = {"properties": resp.raw, "template_info": template_resp.raw}
+
+        return resp
+
+
+    async def get_groups_template_status(self, groups: List[str] | str = None) -> Response:
+        """Get template group status for provided groups or all if none are provided.  (if it is a template group or not)
+
+        Will return response from /configuration/v2/groups/template_info endpoint.
+        If no groups are provided /configuration/v2/groups is first called to get a list of all group names.
+
+        Args:
+            groups (List[str] | str, optional): A single group or list of groups. Defaults to None (all groups).
+
+        Returns:
+            Response: centralcli Response Object
+        """
+        url = "/configuration/v2/groups/template_info"
+
+        if isinstance(groups, str):
+            groups = [groups]
+
+        if not groups:
+            resp = await self.get_group_names()
+            if not resp.ok:
+                return resp
+            groups: List[str] = resp.output
+
+        batch_reqs = []
+        for chunk in utils.chunker(groups, 20):  # This call allows a max of 20
+            params = {"groups": ",".join(chunk)}
+            batch_reqs += [self.BatchRequest(self.get, url, params=params)]
+
+        batch_resp = await self._batch_request(batch_reqs)
+        output = [r for res in batch_resp for r in res.output]
+        resp = batch_resp[-1]
+        resp.output = output
+        if "data" in resp.raw:
+            resp.raw["data"] = output
+        else:
+            log.warning("raw attr in resp from get_all_groups lacks expected outer key 'data'")
+
+        return resp
 
 
     async def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
@@ -972,7 +1028,7 @@ class CentralApi(Session):
             Response: centralcli Response Object
         """
         if not groups:
-            resp = await self.get_all_groups()
+            resp = await self.get_groups_template_status()
             if not resp:
                 return resp
             groups = cleaner.get_all_groups(resp.output)
@@ -3074,7 +3130,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_groups_properties(self, groups: Union[str, List[str]] = None) -> Response:
+    async def get_groups_properties(self, groups: str | List[str] = None) -> Response:
         """Get properties set for groups.
 
         // Used by show groups when -v flag is provided //
@@ -3092,7 +3148,7 @@ class CentralApi(Session):
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
         if groups is None:
-            resp = await self._get_group_names()
+            resp = await self.get_group_names()
             if not resp.ok:
                 return resp
             else:
