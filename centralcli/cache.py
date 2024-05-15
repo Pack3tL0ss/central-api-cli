@@ -14,6 +14,7 @@ from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
 from tinydb.table import Table
+from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
 
@@ -865,6 +866,9 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
+        from rich import inspect
+        inspect(ctx, console=err_console)
+        inspect(ctx.params)
         if not config.valid:
             err_console.print(":warning:  Invalid config")
             return
@@ -1504,7 +1508,7 @@ class Cache:
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
-    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False, **kwargs) -> Union[List[int], Response]:
         """Update Device Database (local cache).
 
         Args:
@@ -1557,10 +1561,10 @@ class Cache:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
             # TODO update device inventory first then only get details for device types in inventory
-            resp = await self.central.get_all_devicesv2()
+            resp = await self.central.get_all_devicesv2(**kwargs)
             if resp.ok:
                 if resp.output:
-                    _update_data = utils.listify(resp.output)
+                    _update_data = utils.listify(deepcopy(resp.output))
                     _update_data = cleaner.get_devices(_update_data, cache=True)
                     _update_data = await self.get_swack_ids(resp, _update_data)
 
