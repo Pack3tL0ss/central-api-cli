@@ -166,7 +166,7 @@ def show_devices(
             caption = None if not resp.ok else _build_caption(resp)
         else:  # No filtering params, get update from cache
             if central.get_all_devicesv2 not in cli.cache.updated:
-                resp = central.request(cli.cache.update_dev_db)
+                resp = central.request(cli.cache.update_dev_db, **params)
                 caption = _build_caption(resp)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.
@@ -204,7 +204,7 @@ def all_(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=True,),  # TODO --stats for APs not showing with show all only with show aps so cpu etc is being filtered when gws switches also included (common keys)
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     verbose: bool = typer.Option(
         False,
