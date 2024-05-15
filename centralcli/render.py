@@ -401,13 +401,12 @@ def output(
                     raw_data = typer.unstyle("{}\n".format('\n'.join(outdata).rstrip('\n')))
                     table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
                 else:
-                    raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+                    raw_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
                     table_data = rich_capture(raw_data)
 
-        else:
-            raw_data = table_data = '\n'.join(outdata)
-            # Not sure what hit's this, but it was created so something must
-            log.debug("List[str] else hit")
+        else:  # cencli show config <GW> is list of strings
+            raw_data = '\n'.join(outdata)
+            table_data = rich_capture(raw_data)
 
     if _lexer and raw_data:
         table_data = highlight(bytes(raw_data, 'UTF-8'),
