@@ -235,10 +235,10 @@ def test_show_lldp_by_ap_name():
 
 
 def test_show_groups():
-    result = runner.invoke(app, ["show", "groups"],)
+    result = runner.invoke(app, ["show", "groups", "--csv"],)
     assert result.exit_code == 0
     assert "name" in result.stdout
-    assert "template group" in result.stdout
+    assert "AOSVersion" in result.stdout
 
 
 def test_show_certs():
