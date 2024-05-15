@@ -777,6 +777,16 @@ class SortSiteOptions(str, Enum):
     associated_devices = "associated_devices"
 
 
+class SortGroupOptions(str, Enum):
+    name = "name"
+    AOSVersion = "AOSVersion"
+    AllowedDevTypes = "AllowedDevTypes"
+    ApNetworkRole = "ApNetworkRole"
+    Architecture = "Architecture"
+    GwNetworkRole = "GwNetworkRole"
+    template_group = "template_group"
+
+
 class SortVlanOptions(str, Enum):
     name = "name"
     pvid = "pvid"
