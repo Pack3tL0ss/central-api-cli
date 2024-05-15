@@ -24,7 +24,7 @@ def cleanup():
     yield do_nothing()
     # executed after test is run
     result = runner.invoke(app, ["show", "cache", "groups", "--json"])
-    del_groups = [g for g in json.loads(result.stdout) if g.startswith("cencli_test_") or g == "TESTING"]
+    del_groups = [g["name"] for g in json.loads(result.stdout) if g["name"].startswith("cencli_test_") or g["name"] == "TESTING"]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
         assert "Success" in result.stdout
