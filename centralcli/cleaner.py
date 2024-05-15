@@ -431,7 +431,7 @@ def simple_kv_formatter(data: List) -> List:
 
     return data
 
-def _get_group_names(data: List[List[str],]) -> list:
+def get_group_names(data: List[List[str],]) -> list:
     """Convert list of single item lists to a list of strs
 
     Also removes "unprovisioned" group as it has no value for our
@@ -463,9 +463,24 @@ def get_all_groups(
     Returns:
         list: reformatted Data with keys/headers changed
     """
-    # TODO use _short_key like others and combine show groups into this func
-    _keys = {"group": "name", "template_details": "template group"}
-    return [{_keys[k]: v for k, v in g.items()} for g in data]
+    allowed_dev_types = {"Gateways": "gw", "AccessPoints": "ap", "AOS_CX": "cx", "AOS_S": "sw"}
+    aos_version = {"AOS_10X": "AOS10", "AOS_8X": "AOS8", "NA": "NA"}
+    gw_role = {"WLANGateway": "WLAN", "VPNConcentrator": "VPNC", "BranchGateway": "Branch", "NA": "NA"}
+
+    # Not all groups will have all field properties.  Make it so.
+    clean = []
+    for g in data:
+        g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
+        g["properties"]["GwNetworkRole"] = gw_role.get(g["properties"].get("GwNetworkRole", "NA"), "err")
+        g["properties"]["AOSVersion"] = aos_version.get(g["properties"].get("AOSVersion", "NA"), "err")
+        g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
+        g["properties"]["AllowedDevTypes"] = ", ".join([allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"])
+
+        g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k not in ["MonitorOnlySwitch", "AllowedSwitchTypes"]}
+        clean += [{"name": g["group"], **g["properties"], "template group": g["template_details"]}]
+
+    return strip_no_value(clean)
+    # return [{_keys.get(k, k): v for k, v in g.items()} for g in clean]
 
 def show_groups(data: List[dict]) -> List[dict]:
     return [{k: v if k != "template group" else ",".join([kk for kk, vv in v.items() if vv]) or "--" for k, v in inner.items()} for inner in data]
