@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortStackOptions,
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions,
     DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
     EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
 )
@@ -155,7 +155,7 @@ def show_devices(
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
-            if len(params) > 3:
+            if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
         elif [p for p in params if p in filtering_params]:  # filtering params used no cache update only subset of devices  # TODO verify upsert on cache update and pass in data regardless
             resp = central.request(central.get_all_devicesv2, **params)
@@ -189,6 +189,7 @@ def show_devices(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        output_by_key="name" if not include_inventory else "serial",
         cleaner=cleaner.get_devices,
         # verbose=False  # TODO this works need to adjust calling command to include --inventory flag rather than -v use -v for full listing change -vv to --raw globally
     )
@@ -204,7 +205,7 @@ def all_(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=True,),  # TODO --stats for APs not showing with show all only with show aps so cpu etc is being filtered when gws switches also included (common keys)
+    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     verbose: bool = typer.Option(
         False,
@@ -328,7 +329,7 @@ def aps(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
-    do_ssids: bool = typer.Option(False, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
+    # do_ssids: bool = typer.Option(True, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show AP neighbors \[requires --site]", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
@@ -351,7 +352,7 @@ def aps(
 ) -> None:
     """Show details for APs
     """
-    if neighbors:
+    if neighbors:  # TODO Move this to sep func
         if site is None:
             print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
             raise typer.Exit(1)
@@ -359,7 +360,7 @@ def aps(
         site = cli.cache.get_site_identifier(site)
         resp = cli.central.request(cli.central.get_topo_for_site, site.id, )
 
-        # TODO check the value of tagged/untagged VLAN for AP if it has tagged mgmt VLAN
+        # TODO check the value of tagged/untagged VLAN for AP if it has tagged mgmt VLAN.  Move to cleaner
         if resp:
             aps_in_cache = [dev["serial"] for dev in cli.cache.devices if dev["type"] == "ap"]
             ap_connections = [edge for edge in resp.output["edges"] if edge["toIf"]["serial"] in aps_in_cache]
@@ -390,7 +391,7 @@ def aps(
             status = "Up"
         show_devices(
             aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
-            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=do_ssids,
+            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
 
@@ -1128,31 +1129,36 @@ def cache_(
             outfile=outfile,
             sort_by=sort_by,
             reverse=reverse,
+            output_by_key=None,
             stash=False,
         )
 
 
 @app.command(short_help="Show groups/details")
 def groups(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose: bool = typer.Option(False, "-v", help="Verbose: include additional group properties", show_default=False,),
+    sort_by: SortGroupOptions = typer.Option("name", "--sort",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting", hidden=True,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     verbose2: bool = typer.Option(
         False,
         "-vv",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     central = cli.central
@@ -1161,29 +1167,10 @@ def groups(
     else:
         resp = cli.cache.responses.group
 
-    if resp and verbose:
-        groups = [g["name"] for g in resp.output]
-        verbose_resp = central.request(central.get_groups_properties, groups=groups)
-        if not verbose_resp:
-            print("Error: Additional API call to gather group properties for verbose output failed.")
-            cli.display_results(verbose_resp, tablefmt="action")
-        else:
-            for idx, g in enumerate(verbose_resp.output):
-                g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
-                g["properties"]["GwNetworkRole"] = g["properties"].get("GwNetworkRole", "NA")
-                g["properties"]["AOSVersion"] = g["properties"].get("AOSVersion", "NA")
-                g["properties"]["AllowedSwitchTypes"] = g["properties"].get("AllowedSwitchTypes", "NA")
-                g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
-                g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k != "MonitorOnlySwitch"}
-                for grp in resp.output:
-                    if g["group"] == grp["name"]:
-                        verbose_resp.output[idx] = {**grp, **g["properties"]}
-                        continue
-            verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
-            resp = verbose_resp
+    caption = f'Total Groups: [cyan]{len(resp.output)}[/], Template Groups: [cyan]{len(list(filter(lambda g: any(g.get("template group", {}).values()), resp.output)))}[/]'
 
-    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile, cleaner=cleaner.show_groups)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups)
 
 
 @app.command(short_help="Show labels/details")
@@ -1332,6 +1319,10 @@ def templates(
 
     if group:
         group = cli.cache.get_group_identifier(group).name
+
+    # Allows show templates group WadeLab
+    if name and name.lower() == "group":
+        name = None
 
     central = cli.central
 
@@ -2052,6 +2043,7 @@ def clients(
     central = cli.central
     # device = utils.listify(device) if device else []
     # device = device if not _dev else [*device, *_dev]
+    # TODO test --device and potentially restore multi-dev support
     device = device or []
 
     kwargs = {}
@@ -2099,7 +2091,6 @@ def clients(
             kwargs["label"] = cli.cache.get_label_identifier(label).name
             title = f"{title} on devices with label {label}"
 
-    # resp = central.request(central.get_clients, *args, **kwargs)
     if not denylisted:
         resp = central.request(cli.cache.update_client_db, *args, **kwargs)
     else:
@@ -2108,30 +2099,40 @@ def clients(
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
+    # Build Caption Text # TODO move to caption builder
     _count_text = ""
-    # if filter.value not in ["mac", "denylisted"]:
+    _last_mac_text = ""
     if not client and not denylisted:
         if wired:
             _count_text = f"{len(resp)} Wired Clients."
+            if resp.raw.get("last_client_mac"):
+                _count_text = f'{_count_text} [bright_green]Last Wired Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
         elif wireless:
             _count_text = f"{len(resp)} Wireless Clients."
+            if resp.raw.get("last_client_mac"):
+                _count_text = f'{_count_text} [bright_green]Last Wireless Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
         else:
             _tot = len(resp)
-            _wired = len([x for x in resp.output if x["client_type"] == "WIRED"])
-            _wireless = len([x for x in resp.output if x["client_type"] == "WIRELESS"])
-            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{_wired}[/], [bright_green]Wireless[/]: [cyan]{_wireless}[/]"
+            wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
+            wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
+            caption_data = {}
+            for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
+                caption_data[_type] = {
+                    "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
+                    "last_client_mac": "" if not data or "last_client_mac" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["last_client_mac"]
+                }
+            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+            _last_mac_text = f"[bright_green]Last Wired Mac[/]: [cyan]{caption_data['wired']['last_client_mac']}[/], [bright_green]Last Wireless Mac[/]: [cyan]{caption_data['wireless']['last_client_mac']}[/]"
 
-    if not verbose2:
-        _format = "rich" if not verbose else "yaml"
-    else:
-        _format = "json"
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     verbose_kwargs = {}
     if not verbose2 and not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
         verbose_kwargs["verbose"] = verbose
+
         # filter output on multiple devices
         # TODO maybe restore multi-device looks like was handled in filter
         if dev and isinstance(dev, list):
@@ -2144,7 +2145,7 @@ def clients(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose and not denylisted else None,
+        caption=f"{_count_text} Use -v for more details, -vv for unformatted response.\n  {_last_mac_text}".rstrip() if not verbose and not denylisted else None,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -2351,7 +2352,7 @@ def logs(
     site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     start: str = typer.Option(None, "-s", "--start", help="Start time of range to collect events, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
     end: str = typer.Option(None, "-e", "--end", help="End time of range to collect events, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option(None, "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
+    past: str = typer.Option("30m", "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h",),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
@@ -2406,7 +2407,7 @@ def logs(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show device event logs (last hour by default) or show cencli logs.
+    """Show device event logs (last 30m by default) or show cencli logs.
 
     [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
     """
@@ -2462,7 +2463,7 @@ def logs(
         "group": group,
         # "swarm_id": swarm_id,
         "label": label,
-        "from_ts": start or int(time.time() - 3600),
+        "from_ts": start or int(time.time() - 1800),
         "to_ts": end,
         "macaddr": client_mac,
         "bssid": bssid,
