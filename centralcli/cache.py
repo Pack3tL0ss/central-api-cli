@@ -1725,7 +1725,7 @@ class Cache:
                 self.GroupDB.truncate()
                 update_res = self.GroupDB.insert_multiple(resp.output)
                 if False in update_res:
-                    log.error("Tiny DB returned an error during group db update")
+                    log.error("Tiny DB returned an error during group db update", caption=True)
             return resp
 
     async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
