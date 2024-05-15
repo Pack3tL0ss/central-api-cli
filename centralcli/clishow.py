@@ -1550,21 +1550,26 @@ def run(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show last known running config for a device
+    """Show running config for a device
 
-    Not supported for CX.
-    Gateways and APs returns typical CLI format.
-    AOS-SW returns a JSON (unless --yaml flag is provided).
+    APs get the last known running config from Central
+    Switches and GWs request the running config from the device
     """
 
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
-    if dev.type != "cx":
-        resp = central.request(central.get_device_configuration, dev.serial)
-    else:
+    if dev.type == "cx":
         clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile)
         raise typer.Exit(0)
+    elif dev.type == "sw":
+        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile)
+        raise typer.Exit(0)
+    elif dev.type == "gw":
+        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile)
+        raise typer.Exit(0)
+    else:
+        resp = central.request(central.get_device_configuration, dev.serial)
 
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
@@ -1664,7 +1669,8 @@ def config_(
                     console.print(f"[bold]Config for {d.rich_help_text}[reset]")
                     console.rule()
                     outfile = outdir / f"{d.name}_gw_dev.cfg"
-                    cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+                    # cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+                    cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
             if do_ap:
                 devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "ap"]
 
