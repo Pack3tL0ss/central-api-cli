@@ -189,7 +189,7 @@ def show_devices(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        output_by_key="name" if not include_inventory else "serial",
+        output_by_key="name+serial" if not include_inventory else "serial",
         cleaner=cleaner.get_devices,
         # verbose=False  # TODO this works need to adjust calling command to include --inventory flag rather than -v use -v for full listing change -vv to --raw globally
     )
@@ -1061,18 +1061,20 @@ def upgrade(
     ),
 ):
     central = cli.central
-    if len(device) > 2:
-        typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
+    # Allow unnecessary keyword status `cencli show upgrade status <dev>`
+    device = [d for d in device if d != "status"]
+
+    if not device:
+        cli.exit("Missing required parameter [cyan]<device>[/]")
+    elif len(device) > 1:
+        cli.exit("Specify only one device.")
 
     params, dev = {}, None
-    if device and device[-1] != "status":
-        dev = cli.cache.get_dev_identifier(device[-1])
-        if dev.type == "ap":
-            params["swarm_id"] = dev.swack_id
-        else:
-            params["serial"] = dev.serial
+    dev: CentralObject = cli.cache.get_dev_identifier(device[-1], conductor_only=True)
+    if dev.type == "ap":
+        params["swarm_id"] = dev.swack_id
     else:
-        print("Missing required parameter [cyan]<device>[/]")
+        params["serial"] = dev.serial
 
     resp = central.request(central.get_upgrade_status, **params)
 
