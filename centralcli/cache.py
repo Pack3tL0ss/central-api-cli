@@ -2216,10 +2216,8 @@ class Cache:
             dev_type = utils.listify(dev_type)
             if "switch" in dev_type:
                 dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
-            match = []
 
-            for _dev_type in dev_type:
-                match += [d for d in all_match if d.type == _dev_type]
+            match = [d for d in all_match if d.type in dev_type]
 
         # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
         # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
