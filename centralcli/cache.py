@@ -1491,20 +1491,6 @@ class Cache:
 
         return len(ret) == len(data)
 
-    async def get_swack_ids(self, resp: Response, update_data: List[dict]) -> List[dict]:
-        # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
-        # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
-        if "aps" in resp.raw.get("aps", [{}])[0]:
-            _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
-            update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in update_data]
-
-        # add stack_ids for switches to cache
-        if "switches" in resp.raw.get("switches", [{}])[0]:
-            _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
-            update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in update_data]
-        # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
-
-        return update_data
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
@@ -1561,12 +1547,11 @@ class Cache:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
             # TODO update device inventory first then only get details for device types in inventory
-            resp = await self.central.get_all_devicesv2(**kwargs)
+            resp = await self.central.get_all_devicesv2(cache=True, **kwargs)
             if resp.ok:
                 if resp.output:
                     _update_data = utils.listify(deepcopy(resp.output))
                     _update_data = cleaner.get_devices(_update_data, cache=True)
-                    _update_data = await self.get_swack_ids(resp, _update_data)
 
                     # Cache update  # TODO make own function
                     self.DevDB.truncate()
@@ -2224,7 +2209,7 @@ class Cache:
         # This param returns only the commander matching the name.
         if len(match) > 1 and (swack or conductor_only):
             unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
-            stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip]
+            stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip or (d.switch_role and d.switch_role == 2)]
             if swack:
                 match = stacks
             elif conductor_only:

@@ -50,9 +50,19 @@ class SendConfigDevIdens(str, Enum):
 
 class PoEDetectionStatus(Enum):
     NA = 0
-    Undefined = 1
+    Undefined = 1  # TODO figure out what this status is
     Searching = 2
     Delivering = 3
+
+
+# Not used currently # TODO reference in cleaner
+class SwitchRoles(Enum):
+    ERR = 0
+    StandAlone = 1
+    StackConductor = 2
+    StackSecondary = 3
+    StackMember = 4
+
 
 class ShowInventoryArgs(str, Enum):
     all = "all"

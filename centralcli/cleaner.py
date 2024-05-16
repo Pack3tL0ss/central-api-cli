@@ -368,7 +368,7 @@ def _unlist(data: Any):
 
 def _check_inner_dict(data: Any) -> Any:
     if isinstance(data, list):
-        if True in set([isinstance(id, dict) for id in data]):
+        if True in set([isinstance(inner, dict) for inner in data]):
             if list(set([dk for d in data for dk in d.keys()]))[0] == "port":
                 return _unlist([d["port"] for d in data])
             else:
@@ -763,7 +763,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
 
 
 # TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
-def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: bool = False) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: bool = False) -> Union[List[dict], dict]:
     """Clean device output from Central API (Monitoring)
 
     Args:
@@ -776,41 +776,50 @@ def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: b
     """
     data = utils.listify(data)
 
-    if not verbose:
-        non_verbose_keys = [
-                    "name",
-                    "status",
-                    "type",
-                    "client_count",
-                    "model",
-                    "ip_address",
-                    "macaddr",
-                    "serial",
-                    "group_name",
-                    "site",
-                    "labels",
-                    "uptime",
-                    "cpu_utilization",
-                    "mem_total",
-                    "mem_free",
-                    "firmware_version",
+    # Both lists below are pre cleaned key values
+    verbosity_keys = {
+        0:  [
+                "name",
+                "status",
+                "type",
+                "client_count",
+                "model",
+                "ip_address",
+                "macaddr",
+                "serial",
+                "group_name",
+                "site",
+                "labels",
+                "uptime",
+                "cpu_utilization",
+                "mem_total",
+                "mem_free",
+                "firmware_version",
         ]
-        data = [{k: v for k, v in inner.items() if k in non_verbose_keys} for inner in data]
-
-    # cache uses post cleaner keys
+    }
     # we don't actually use model for anything yet
     cache_keys = [
         "name",
         "status",
         "type",
         "model",
-        "ip",
-        "mac",
+        "ip_address",
+        "macaddr",
         "serial",
-        "group",
+        "group_name",
         "site",
-        "version"
+        "firmware_version",
+        "swack_id",
+        "switch_role"
     ]
+    if cache:
+        # We want these 2 keys to retain the underscore. if it's a cahce update.
+        global _short_key
+        _short_key = {**_short_key, "swack_id": "swack_id", "switch_role": "switch_role"}
+        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
+    elif verbosity == 0:  # If verbosity > 0 we simply don't filter any fields.
+        data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for inner in data]
+
     # gather all keys from all dicts in list each dict could potentially be a diff size
     # Also concats ip/mask if provided in sep fields
     data = sort_result_keys(data)
@@ -824,16 +833,13 @@ def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: b
             dict(
                 short_value(k, _check_inner_dict(v))
                 for k, v in pre_clean(inner).items()
-                if "id" not in k[-3:] and k != "mac_range"
+                if k == "swack_id" or ("id" not in k[-3:] and k != "mac_range")
             )
             for inner in data
         ]
     )
 
     data = utils.listify(data)
-
-    if cache:
-        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 

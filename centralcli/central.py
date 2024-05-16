@@ -1100,7 +1100,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, calculate_client_count: bool = True, **kwargs) -> Response:
+    async def get_all_devicesv2(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = False, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1116,7 +1116,9 @@ class CentralApi(Session):
         }
         _output = {}
 
-        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, **kwargs) for dev_type in dev_types]
+        # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
+        # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
+        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failure_idxs = [idx for idx, r in enumerate(res) if not r]
         if _failure_idxs:
@@ -1139,14 +1141,27 @@ class CentralApi(Session):
             _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
+        # TODO use below once everything that references it has been refactored so resp.raw["aps"][0]["aps"] becomes resp.raw["aps"]["aps"]
+        # resp.raw = {k: v for k, v in zip(dev_types, [r.raw for r in res]) if v}
+        def _get_swack_id(dev_type: str, dev_data: dict) -> str | None:
+            if dev_type == "gateways":
+                return None
+            elif dev_type == "switches":
+                return dev_data.get("stack_id")
+            elif dev_type == "aps":
+                return dev_data.get("swarm_id") if dev_data.get("firmware_version", "8").split(".")[0] == 8 else dev_data.get("serial")
+
         if _output:
             # Add type key to all dicts covert "switch-type" to cencli type (cx or sw)
+            # Add switch_role and swack_id (swarm/stack id) to all devices, both for the sake of cache
             # TODO move to cleaner? set type to switch_type for switches let cleaner change value to lib vals
             dicts = [
                 {
                     **{
                         "type": lib_dev_types.get(k, k) if k != "switches" else
-                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch"))
+                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch")),
+                        "swack_id": _get_swack_id(k, inner_dict),
+                        "switch_role": inner_dict.get("switch_role")
                     },
                     **{
                         kk: vv for kk, vv in inner_dict.items()
