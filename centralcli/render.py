@@ -342,13 +342,20 @@ def output(
     if tablefmt in ['json', 'yaml', 'yml']:
         outdata = utils.listify(outdata)
         if outdata and isinstance(outdata[0], dict):
-            _output_key = [k for k in output_by_key if k in outdata[0]]
-            if _output_key:
-                _output_key = _output_key[0]
-                outdata: Dict[dict] = {
-                    item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
-                    for item in outdata
-                }
+            if len(output_by_key) == 1 and "+" in output_by_key[0]:
+                found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
+                if len(found_keys) == len(output_by_key[0].split("+")):
+                    outdata: Dict[dict] = {
+                        f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in outdata
+                    }
+            else:
+                _output_key = [k for k in output_by_key if k in outdata[0]]
+                if _output_key:
+                    _output_key = _output_key[0]
+                    outdata: Dict[dict] = {
+                        item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                        for item in outdata
+                    }
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)
