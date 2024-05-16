@@ -378,8 +378,10 @@ def reboot(
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
     """Reboot a device
+
+    Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device)
+    dev: CentralObject = cli.cache.get_dev_identifier(device, conductor_only=True)
 
     conf_msg = dev.rich_help_text
     func = cli.central.send_command_to_device
@@ -399,8 +401,8 @@ def reboot(
     console = Console(emoji=False)
     _msg = "Reboot" if not yes else "Rebooting"
     _msg = f"{_msg} {conf_msg}"
-    console.print(_msg)
 
+    console.print(_msg)
     if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(func, arg, 'reboot')
         cli.display_results(resp, tablefmt="action")
