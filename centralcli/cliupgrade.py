@@ -30,7 +30,7 @@ app = typer.Typer()
 
 # You can only specify one of group, swarm_id or serial parameters
 
-@app.command(short_help="Upgrade firmware on a specific device",)
+@app.command()
 def device(
     device: str = typer.Argument(
         ...,
@@ -62,6 +62,8 @@ def device(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
+    """Upgrade firmware on a device
+    """
     dev = cli.cache.get_dev_identifier(device, swack=True)
     if dev.generic_type == "ap":
         reboot = True
