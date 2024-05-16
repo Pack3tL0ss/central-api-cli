@@ -301,7 +301,7 @@ def move(
 def bounce(
     what: BounceArgs = typer.Argument(..., show_default=False),
     device: str = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_switch_completion),
-    port: str = typer.Argument(..., autocompletion=lambda incomplete: [], show_default=False),
+    ports: List[str] = typer.Argument(..., autocompletion=lambda incomplete: [], show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -310,13 +310,22 @@ def bounce(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Bounce interface or PoE on an interface (Valid on switches)
+    """Bounce interface(s) or PoE on interface(s) (Valid on switches)
+
+    Ranges are supported:
+    [cyan]cencli bounce interface edge3 1/1/1-1/1/4 2/1/1-2/1/4[/] will bounce the 8 interfaces in those ranges
+    [cyan]cencli bounce interface edge3 1/1/1-1/1/4,2/1/1-2/1/4[/] comma seperated similar to swich CLI is also valid
+
+    [italic dark_olive_green2]Results in 1 API call per interface[/]
     """
-    dev = cli.cache.get_dev_identifier(device)
+    dev = cli.cache.get_dev_identifier(device, conductor_only=True)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
-    print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/] port [cyan]{port}[/]")
+    ports = utils.get_interfaces_from_range(ports)
+
+    print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
+    print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if yes or typer.confirm("\nProceed?", abort=True):
-        resp = cli.central.request(cli.central.send_bounce_command_to_device, dev.serial, command, port)
+        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, (dev.serial, command, p,)) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
 

@@ -784,3 +784,22 @@ class Utils:
             raise typer.Exit(1)
 
         return cli_cmds
+
+    def get_interfaces_from_range(self, interfaces: str | List[str]) -> List[str]:
+        console = Console(stderr=True)
+        interfaces = self.listify(interfaces)
+
+        def expand_range(interface_range: str) -> List[str]:
+            if "-" not in interface_range:
+                return self.listify(interface_range)
+            elif interface_range.count("-") > 1:
+                console.print("Invalid Interface Range, expected a single '-'")
+                raise typer.Exit(1)
+            _start, _end = interface_range.split("-")
+            if "/".join(_start.split("/")[0:-1]) != "/".join(_end.split("/")[0:-1]):
+                console.print(f'Interface range can not go beyond the same stack-member/module [cyan]{"/".join(_start.split("/")[0:-1])}[/] in start or range should match [cyan]{"/".join(_end.split("/")[0:-1])}[/] specified as end of range.')
+                raise typer.Exit(1)
+            prefix = "/".join(_start.split("/")[0:-1])
+            return [f"{prefix}/{p}" for p in range(int(_start.split("/")[-1]), int(_end.split("/")[-1]) + 1)]
+
+        return [iface for port in interfaces for p in port.split(",") for iface in expand_range(p)]
