@@ -72,11 +72,13 @@ def registered_macs(
         sort_by = sort_full_names.get(sort_by, sort_by)
 
     resp = cli.central.request(cli.central.cloudauth_get_registered_macs, search=search)
+    caption = None if not resp.ok else f"[cyan]{len(resp.output)}[/] Registered MAC Addresses"
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich")
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title="Cloud-Auth Registered Mac Addresses",
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
