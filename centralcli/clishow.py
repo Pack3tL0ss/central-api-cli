@@ -34,9 +34,9 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions,
-    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
-    EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
+    SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, lib_to_api, what_to_pretty, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -53,23 +53,45 @@ app.add_typer(clishowcloudauth.app, name="cloud-auth")
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
-def _build_caption(resp: Response, *, inventory: bool = False) -> str:
-    dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
-    devs_by_type = {_type: [t for t in resp.output if t.get("type", "ERR") == _type] for _type in dev_types}
-    status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t.get("status", "") == "Up"]), "down": len([t for t in devs_by_type[_type] if t.get("status", "") == "Down"])} for _type in devs_by_type}
-    _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
+    def get_switch_counts(data) -> dict:
+        dev_types = set([t.get("switch_type", "ERR") for t in data])
+        # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
+        return {
+            LIB_DEV_TYPE.get(_type, _type): {
+                "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
+                "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
+            }
+            for _type in dev_types
+        }
 
-    try:
-        clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
-        _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
-    except Exception as e:
-        log.exception(f"Exception occured in _build_caption\n{e}")
+    if not dev_type:
+        counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    elif dev_type == "switch":
+        counts_by_type = get_switch_counts(resp.raw["switches"])
+        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    else:
+        _tot = len(resp)
+        _up = len(list(filter(lambda a: a["status"] == "Up", resp.output)))
+        _down = _tot - _up
+        status_by_type = {dev_type: {"total": _tot, "up": _up, "down": _down}}
+
+    if status:
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+    else:
+        _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+
+    if status is None or status.lower() != "down":
+        try:
+            clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
+            _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+        except Exception as e:
+            log.exception(f"Exception occured in _build_caption\n{e}")
 
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
-    # if "gw" in dev_types:
-    #     caption = f"{caption}\n  [magenta]Note[/]: GW firmware version has been simplified, the actual gw version is [cyan]aa.bb.cc.dd-aa.bb.cc.dd[-beta]_build[/]"
-    #     caption = f"{caption}\n  [italic]given the version is repeated it has been simplified.  You need to use the full version string when upgrading."
+    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]" if not dev_type else f"[reset]Counts: {_cnt_str}"
+
     if inventory:
         caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
@@ -113,17 +135,18 @@ def show_devices(
         "public_ip_address"
     ]
 
+    cache_generic_types = {
+        "aps": "ap",
+        "gateways": "gw",
+        "mobility_controllers": "gw",
+        "switches": "switch"
+    }
+
     params = {k: v for k, v in params.items() if v is not None}
     if not devices and dev_type is None:
         dev_type = "all"
 
-    if devices:
-        cache_generic_types = {
-            "aps": "ap",
-            "gateways": "gw",
-            "mobility_controllers": "gw",
-            "switches": "switch"
-        }
+    if devices:  # cencli show devices <device iden>
         if dev_type:
             dev_type = cache_generic_types.get(dev_type)
 
@@ -145,14 +168,14 @@ def show_devices(
 
         if "cx" in _types:
             caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'
-    elif dev_type == "all":
+    elif dev_type == "all":  # cencli show all | cencli show devices
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
             if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
-        elif [p for p in params if p in filtering_params]:  # filtering params used no cache update only subset of devices  # TODO verify upsert on cache update and pass in data regardless
-            resp = central.request(central.get_all_devicesv2, **params)
+        elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
+            resp = central.request(central.get_all_devicesv2, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:
                 cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
                 _ = central.request(cli.cache.update_dev_db, cache_output)
@@ -160,12 +183,13 @@ def show_devices(
         else:  # No filtering params, get update from cache
             if central.get_all_devicesv2 not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db, **params)
-                caption = _build_caption(resp)
+                caption = _build_caption(resp, status=status)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev
-    else:
+    else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
+        caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbosity else "yaml")
     title_sfx = [
@@ -243,7 +267,7 @@ def all_(
         status = "Up"
     show_devices(
         dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=True, sort_by=sort_by, reverse=reverse,
+        state=state, label=label, pub_ip=pub_ip, do_stats=bool(verbose), do_clients=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
