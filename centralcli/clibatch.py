@@ -789,6 +789,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
             cli.display_results(resp, tablefmt="action")
 
 
+# FIXME
 @app.command(short_help="Validate a batch import")
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
@@ -830,6 +831,7 @@ def verify(
     resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         cli.display_results(resp, stash=False, exit_on_fail=True)
+    resp.output = cleaner.simple_kv_formatter(resp.output)
     central_devs = [CentralObject("dev", data=r) for r in resp.output]
 
     file_by_serial = {
@@ -864,6 +866,14 @@ def verify(
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
                 validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
+        if file_by_serial[s].get("site"):
+            if not central_by_serial[s].get("status"):
+                validation[s] += [f"{_pfx}  Also unable to assign site prior to device checking in."]
+            elif not central_by_serial[s].get("site"):
+                validation[s] += [f"{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
+            elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
+                validation[s] += [f"{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
+
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
             if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
@@ -874,7 +884,7 @@ def verify(
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["license", "group"]:
+            for field in ["license", "group", "site"]:
                 if field in file_by_serial[s] and file_by_serial[s][field]:
                     _msg += f", {field.title()} [bright_green]OK[/]"
             validation[s] += [_msg]
