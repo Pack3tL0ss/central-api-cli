@@ -23,7 +23,7 @@ from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
 from .utils import Mac
 from .response import Response, Session
 from .exceptions import CentralCliException
-# buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
+# buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
 
 
 
@@ -72,6 +72,7 @@ class WlanType(str, Enum):
     employee = "employee"
     guest = "guest"
 
+CloudAuthUploadType = Literal["mpsk", "mac"]
 
 def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     if formatter is None:
@@ -1134,7 +1135,6 @@ class CentralApi(Session):
 
 
         resp = res[-1]
-        # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
         if calculate_client_count:
             _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
         else:
@@ -5793,6 +5793,108 @@ class CentralApi(Session):
                 log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True)
 
         return resp
+
+    async def cloudauth_upload_fixme(
+        self,
+        upload_type: CloudAuthUploadType,
+        file: Union[Path, str],
+        ssid: str = None,
+    ) -> Response:
+        """Upload file.
+
+        This doesn't work still sorting the format of FormData
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            file (Union[Path, str]): The csv file to upload
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}"
+        file = file if isinstance(file, Path) else Path(str(file))
+        # data = multipartify(file.read_bytes())
+        # data = aiohttp.FormData(file.open())
+
+        params = {
+            'ssid': ssid
+        }
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        form_data = aiohttp.FormData(files)
+        # files = {f'{upload_type}_import': (f'{upload_type}_import.csv', file.read_bytes())}
+        headers = {
+            "Content-Type": "multipart/form-data",
+            'Accept': 'application/json'
+        }
+        headers = {**headers, **dict(aiohttp.FormData(files)._writer._headers)}
+
+        return await self.post(url, headers=headers, params=params, payload=form_data)
+
+    async def cloudauth_upload(
+        self,
+        upload_type: CloudAuthUploadType,
+        file: Union[Path, str],
+        ssid: str = None,
+    ) -> Response:
+
+        """Upload file.
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            file (Union[Path, str]): The csv file to upload
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}"
+        file = file if isinstance(file, Path) else Path(str(file))
+        params = {
+            'ssid': ssid
+        }
+
+        # HACK need to make the above async function work
+        import requests
+        headers = {
+            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            'Accept': 'application/json'
+        }
+
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        url=f"{self.auth.central_info['base_url']}{url}"
+
+        for _ in range(2):
+            resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
+            output = f"[{resp.reason}]" + " " + resp.text.lstrip('[\n "').rstrip('"\n]')
+            resp = Response(output=output, ok=resp.ok, url=url, elapsed=round(resp.elapsed.total_seconds(), 2), status_code=resp.status_code, rl_str="-")
+            if "invalid_token" in resp.output:
+                self.refresh_token()
+            else:
+                break
+        return resp
+
+    async def cloudauth_upload_status(
+        self,
+        upload_type: CloudAuthUploadType,
+        ssid: str = None,
+    ) -> Response:
+        """Read upload status of last file upload.
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}/status"
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
 
     async def get_user_accounts(
         self,
