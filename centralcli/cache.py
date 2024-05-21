@@ -308,6 +308,7 @@ class Cache:
             self.EventDB: Table = self.DevDB.table("events")
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
+            self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk-networks is ran or as needed when show named-mpsk <SSID> is ran
             self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
@@ -372,6 +373,10 @@ class Cache:
     @property
     def clients(self) -> list:
         return self.ClientDB.all()
+
+    @property
+    def mpsk(self) -> list:
+        return self.MpskDB.all()
 
     @property
     def logs(self) -> list:
@@ -657,6 +662,38 @@ class Cache:
 
     #     for m in out:
     #         yield m
+
+    def mpsk_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match = self.get_mpsk_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or ctx.params.values()  # HACK as args stopped working
+        if match:
+            # remove devices that are already on the command line
+            match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete):
+                    out += [tuple([m.name, m.id])]
+                elif m.id.startswith(incomplete):
+                    out += [tuple([m.id, m.name])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
 
     def dev_kwarg_completion(
         self,
@@ -1870,6 +1907,30 @@ class Cache:
             self.HookDataDB.truncate()
             return self.HookDataDB.insert_multiple(data)
 
+    async def update_mpsk_db(self, data: List[Dict[str, Any]] = None) -> bool:
+        if data:
+            data = models.CacheMpskNetworks(data)
+            data = data.dict()
+            self.MpskDB.truncate()
+            return self.MpskDB.insert_multiple(data)
+        else:
+            resp = await self.central.cloudauth_get_mpsk_networks()
+            if resp.ok:
+                if resp.output:
+                    _update_data = utils.listify(deepcopy(resp.output))
+                    _update_data = models.CacheMpskNetworks(**resp.raw)
+                    _update_data = _update_data.dict()["items"]
+
+                    self.MpskDB.truncate()
+                    update_res = self.MpskDB.insert_multiple(_update_data)
+                    if False in update_res:
+                        log.error("Tiny DB returned an error during MPSK db update", caption=True)
+
+                # TODO change updated from  list of funcs to class with bool attributes or something
+                self.updated.append(self.central.cloudauth_get_mpsk_networks)
+                self.responses.dev = resp
+            return resp
+
     # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
     async def _check_fresh(
         self,
@@ -2719,3 +2780,84 @@ class Cache:
             log.exception(e)
             # print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)
+
+    def get_mpsk_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CentralObject | List[CentralObject]:
+        """Allows Case insensitive ssid match"""
+        retry = False if completion else retry
+        for _ in range(0, 2):
+            if query_str == "":
+                match = self.mpsk
+            else:
+                match = self.MpskDB.search((self.Q.name == query_str))
+
+            # case insensitive
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive ignore -_
+            if not match:
+                if "_" in query_str or "-" in query_str:
+                    match = self.MpskDB.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                        )
+                    )
+
+            # case insensitive startswith search for mspk id
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.id.test(
+                        lambda v: v.lower().startswith(query_str.lower())
+                    )
+                )
+
+            if not match and retry and self.central.cloudauth_get_mpsk_networks not in self.updated:
+                if FUZZ:
+                    fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
+                    if fuzz_resp:
+                        fuzz_match, fuzz_confidence = fuzz_resp[0]
+                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                            match = self.MpskDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    err_console.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating mpsk Cache")
+                    asyncio.run(self.update_mpsk_db())
+                _ += 1
+            if match:
+                match = [CentralObject("mpsk", g) for g in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type="mpsk",)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk])
+            print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
+            print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
+            raise typer.Exit(1)
+        else:
+            if not completion:
+                log.error(
+                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                )
