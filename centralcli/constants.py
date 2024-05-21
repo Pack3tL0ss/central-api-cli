@@ -281,6 +281,7 @@ class CacheArgs(str, Enum):
     hook_config = "hook_config"
     hook_data = "hook_data"
     hook_active = "hook_active"
+    mpsk = "mpsk"
 
 
 class KickArgs(str, Enum):
@@ -684,6 +685,13 @@ class SortWlanOptions(str, Enum):
     access_type = "access_type"
     group = "group"
 
+
+class SortNamedMpskOptions(str, Enum):
+    _id = "id"
+    name = "name"
+    role = "role"
+    status = "status"
+    mpsk = "mpsk"
 
 class SortDevOptions(str, Enum):
     name = "name"

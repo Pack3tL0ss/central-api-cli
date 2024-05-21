@@ -1740,3 +1740,17 @@ def cloudauth_upload_status(data: List[Dict[str, Any]] | Dict[str, Any]) -> Dict
         del data["durationNanos"]
 
     return data
+
+def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> List[Dict[str, Any]]:
+    verbosity_keys = {
+        0: [
+            'name',
+            'role',
+            'status',
+        ]
+    }
+
+    if verbosity == 0:  # currently no verbosity beyond 0, we just don't filter the fields
+        data = [{k: d.get(k) for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for d in data]
+
+    return data

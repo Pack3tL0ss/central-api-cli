@@ -592,3 +592,22 @@ class CloudAuthUploadResponse(BaseModel):
         json_encoders = {
             datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
         }
+
+class MpskNetwork(BaseModel):
+    id: str
+    ssid: str
+    accessURL: str
+    passwordPolicy: str
+
+
+class MpskNetworks(BaseModel):
+    items: List[MpskNetwork]
+
+
+class CacheMpskNetwork(BaseModel):
+    id: str
+    name: str = Field(alias="ssid")
+
+
+class CacheMpskNetworks(BaseModel):
+    items: List[CacheMpskNetwork]
