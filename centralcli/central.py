@@ -5951,6 +5951,44 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def cloudauth_download_mpsk_csv(
+        self,
+        ssid: str,
+        filename: str = None,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        sort: str = None,
+    ) -> Response:
+        """Fetch all Named MPSK as a CSV file.
+
+        Args:
+            ssid (str): Configured MPSK SSID for which Named MPSKs are to be downloaded.
+            filename (str, optional): Suggest a file name for the downloading file via content
+                disposition header.
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/download/mpsk"
+
+        params = {
+            'ssid': ssid,
+            'filename': filename,
+            'name': name,
+            'role': role,
+            'status': status,
+            'sort': sort
+        }
+
+        return await self.get(url, params=params)
+
     async def get_user_accounts(
         self,
         app_name: str = None,
