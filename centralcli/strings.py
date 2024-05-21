@@ -5,7 +5,8 @@ from __future__ import annotations
 from rich.console import Console
 from rich.json import JSON
 from centralcli import log
-import tablib, yaml
+import tablib
+import yaml
 console = Console(emoji=False)
 
 # TODO typer now supports markup_mode="rich" Don't need the help below, can just put the markup in the docstr
@@ -250,7 +251,7 @@ name\nphl-access\nsan-dc-tor\ncom-branches
 {common_add_delete_end}
 """
 
-clibatch_delete_devices_help = f"""
+clibatch_delete_devices_help = """
 [bright_green]Perform batch Delete operations using import data from file.[/]
 
 [cyan]cencli delete sites <IMPORT_FILE>[/] and
@@ -282,7 +283,7 @@ Use '[dark_olive_green2]cencli batch add sites <IMPORT_FILE>[/]' to add multiple
 {_site_common}
 """
 
-clibatch_deploy = f"""
+clibatch_deploy = """
 [bright_green]Batch Deploy[/]
 
 This is a placeholder
@@ -308,7 +309,7 @@ NOTE: Most batch operations are designed so the same file can be used for multip
       the fields not required for a particular automation will be ignored.
 """
 
-clibatch_unsubscribe = f"""
+clibatch_unsubscribe = """
 [italic cyan]cencli batch unsubscribe IMPORT_FILE[/]:
 Accepts the following keys (include as header row for csv import):
     If importing yaml or json the following fields can optionally be under a 'devices' key
@@ -330,6 +331,41 @@ NOTE: Most batch operations are designed so the same file can be used for multip
       the fields not required for a particular automation will be ignored.
 """
 
+data="""Mac Address,Client Name
+00:09:B0:75:65:D1,Integra
+00:1B:4F:23:8A:3E,Avaya VoIP
+3C:A8:2A:A6:07:0B,HP Thin Client"""
+
+clibatch_add_macs = f"""
+[italic cyan]cencli batch add macs IMPORT_FILE[/]:
+
+Requires the following keys (include as header row for csv import):
+[cyan]Mac Address[/]
+Optional keys:
+[cyan]Client Name[/]
+
+{Example(data)}
+"""
+
+data="""Name,MPSK,Client Role,Status
+wade@example.com,chant chemo domain lugged,admin_users,enabled
+jerry@example.com,quick dumpster offset jack,dia,enabled
+stephanie@example.com,random here words go,general_users,enabled"""
+
+clibatch_add_mpsk = f"""
+[italic cyan]cencli batch add mpsk IMPORT_FILE --ssid <SSID>[/]:
+
+Requires the following keys (include as header row for csv import):
+[cyan]Name[/],[cyan]Client Role[/],[cyan]Status[/]
+
+:information:  MPSK will be randomly generated.
+:information:  Roles must exist in Central.
+:information:  [cyan]--ssid[/] Option is required when uploading Named MPSKs.
+
+
+{Example(data)}
+"""
+
 def do_capture(text: str) -> str:
     con = Console()
     con.begin_capture()
@@ -344,6 +380,8 @@ class ImportExamples:
         self.add_sites = clibatch_add_sites
         self.add_groups = clibatch_add_groups
         self.add_labels = clibatch_add_labels
+        self.add_macs = clibatch_add_macs
+        self.add_mpsk = clibatch_add_mpsk
         self.delete_devices = clibatch_delete_devices
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
