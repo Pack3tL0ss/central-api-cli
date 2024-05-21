@@ -308,7 +308,7 @@ class Cache:
             self.EventDB: Table = self.DevDB.table("events")
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
-            self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk-networks is ran or as needed when show named-mpsk <SSID> is ran
+            self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
             self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
