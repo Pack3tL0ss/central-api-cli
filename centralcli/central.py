@@ -13,6 +13,7 @@ from enum import Enum
 from functools import wraps
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
+from yarl import URL
 
 # from aiohttp import ClientSession
 import aiohttp
@@ -72,7 +73,7 @@ class WlanType(str, Enum):
     employee = "employee"
     guest = "guest"
 
-CloudAuthUploadType = Literal["mpsk", "mac"]
+CloudAuthUploadType = constants.CloudAuthUploadType
 
 def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     if formatter is None:
@@ -5865,11 +5866,14 @@ class CentralApi(Session):
         url=f"{self.auth.central_info['base_url']}{url}"
 
         for _ in range(2):
-            resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            output = f"[{resp.reason}]" + " " + resp.text.lstrip('[\n "').rstrip('"\n]')
-            resp = Response(output=output, ok=resp.ok, url=url, elapsed=round(resp.elapsed.total_seconds(), 2), status_code=resp.status_code, rl_str="-")
+            _resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
+            output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+            # Make requests Response look like aiohttp.ClientResponse
+            _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
+            resp = Response(_resp, output=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2), status_code=_resp.status_code, rl_str="-")
             if "invalid_token" in resp.output:
                 self.refresh_token()
+                headers["Authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
             else:
                 break
         return resp
@@ -5892,6 +5896,57 @@ class CentralApi(Session):
 
         params = {
             'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_get_mpsk_networks(
+        self,
+    ) -> Response:
+        """Read all configured MPSK networks.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/mpsk"
+
+        return await self.get(url)
+
+    async def cloudauth_get_namedmpsk(
+        self,
+        mpsk_id: str,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        cursor: str = None,
+        sort: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Read all named MPSK.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            cursor (str, optional): For cursor based pagination.
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+            limit (int, optional): Number of items to be fetched Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
+
+        params = {
+            'name': name,
+            'role': role,
+            'status': status,
+            'cursor': cursor,
+            'sort': sort,
+            'limit': limit
         }
 
         return await self.get(url, params=params)

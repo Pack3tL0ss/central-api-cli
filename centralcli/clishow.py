@@ -2009,6 +2009,31 @@ def cluster(
     cli.display_results(resp, tablefmt=tablefmt, title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]", pager=pager, outfile=outfile, cleaner=cleaner.simple_kv_formatter)
 
 
+@app.command("mpsk-networks")
+def mpsk_networks(
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show all MPSK networks
+    """
+    resp = cli.central.request(cli.central.cloudauth_get_mpsk_networks)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    cli.display_results(resp, tablefmt=tablefmt, title="MPSK Networks", pager=pager, outfile=outfile, full_cols=["id", "accessURL"])
+
+
 @app.command()
 def vsx(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
