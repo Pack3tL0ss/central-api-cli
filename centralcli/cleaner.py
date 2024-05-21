@@ -33,6 +33,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import DevTypes, StatusOptions
 from centralcli.objects import DateTime
+from centralcli.models import CloudAuthUploadResponse
 
 
 def epoch_convert(func):
@@ -1719,3 +1720,23 @@ def get_switch_stacks(data: List[Dict[str, str]], status: StatusOptions = None, 
 
     data = strip_no_value(data)
     return simple_kv_formatter(data)
+
+
+def cloudauth_upload_status(data: List[Dict[str, Any]] | Dict[str, Any]) -> Dict[str, Any]:
+    if not data:
+        return data
+    else:
+        data = utils.unlistify(data)  # _display_results will listify the data as most outputs are lists of dicts
+
+    try:
+        resp_model = CloudAuthUploadResponse(**data)
+        data = resp_model.dict()
+    except Exception as e:
+        log.error("Attempt to normalize cloudauth upload status response through model failed.")
+        log.exception(e)
+
+    if "durationNanos" in data:
+        data["duration_secs"] = round(data["durationNanos"] / 1_000_000_000, 2)
+        del data["durationNanos"]
+
+    return data

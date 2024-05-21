@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 
 import pendulum
 from pydantic import BaseModel, Field, validator, IPvAnyAddress
@@ -570,3 +570,25 @@ class Item(BaseModel):
 class UserAccounts(BaseModel):
     items: List[Item]
     total: int
+
+class CloudAuthUploadStats(BaseModel):
+    completed: int
+    failed: int
+    total: int
+
+
+class CloudAuthUploadResponse(BaseModel):
+    details: Dict[str, Any]
+    status: str
+    stats: CloudAuthUploadStats
+    submittedAt: datetime
+    lastUpdatedAt: datetime
+    durationNanos: int
+    fileName: str
+
+    _normalize_datetimes = validator("lastUpdatedAt", "submittedAt", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
+        }

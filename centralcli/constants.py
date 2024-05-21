@@ -298,7 +298,13 @@ class BatchAddArgs(str, Enum):
     groups = "groups"
     devices = "devices"
     labels = "labels"
+    macs = "macs"
+    mpsk = "mpsk"
 
+# CloudAuthUploadType = Literal["mpsk", "mac"]
+class CloudAuthUploadType(str, Enum):
+    mpsk = "mpsk"
+    mac = "mac"
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
