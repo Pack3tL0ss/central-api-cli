@@ -1,14 +1,16 @@
-import subprocess
-from typing import List, Union
-
 from cli import app  # type: ignore # NoQA
 from typer.testing import CliRunner
 from centralcli import cache
 from click import Context, Command
+from pathlib import Path
+import json
 
 runner = CliRunner()
 ctx = Context(Command("cencli reset"), info_name="reset", resilient_parsing=True)
 ctx.params={'what': 'overlay', 'device': None, 'yes': None, 'debug': None, 'default': None, 'account': None}
+test_dev_file = Path(__file__).parent / 'test_devices.json'
+if test_dev_file.is_file():
+    TEST_DEVICES = json.loads(test_dev_file.read_text())
 # TODO make this work
 # work in progress based on https://stackoverflow.com/questions/9137245/unit-test-for-bash-completion-script
 # need to see of typer command runner has a function to test completion
@@ -117,5 +119,10 @@ def test_dev_gw_switch_site_completion(incomplete: str = "barn"):
 
 def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     result = [c for c in cache.dev_ap_completion(incomplete, ("show", "aps",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_mpsk_completion_partial_name(incomplete: str = "".join(TEST_DEVICES["mpsk_ssid"].capitalize()[0:-3])):
+    result = [c for c in cache.mpsk_completion(incomplete)]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
