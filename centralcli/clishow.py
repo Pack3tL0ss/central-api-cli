@@ -23,12 +23,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, BatchRequest, caas, render, cli, utils, config, log
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, BatchRequest, caas, render, cli, utils, config, log
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -49,6 +49,7 @@ app.add_typer(clishowtshoot.app, name="tshoot")
 app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
+app.add_typer(clishowmpsk.app, name="mpsk")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -2007,31 +2008,6 @@ def cluster(
     if tablefmt == "rich":
         resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
     cli.display_results(resp, tablefmt=tablefmt, title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]", pager=pager, outfile=outfile, cleaner=cleaner.simple_kv_formatter)
-
-
-@app.command("mpsk-networks")
-def mpsk_networks(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-    """Show all MPSK networks
-    """
-    resp = cli.central.request(cli.central.cloudauth_get_mpsk_networks)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    cli.display_results(resp, tablefmt=tablefmt, title="MPSK Networks", pager=pager, outfile=outfile, full_cols=["id", "accessURL"])
 
 
 @app.command()
