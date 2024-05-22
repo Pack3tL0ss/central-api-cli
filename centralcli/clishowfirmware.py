@@ -111,7 +111,7 @@ def _list(
 ):
     """Show available firmware list for a specific device or a type of device
     """
-    dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device)
+    dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
     _dev_type = dev_type if dev_type is None else lib_to_api("firmware", dev_type)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type

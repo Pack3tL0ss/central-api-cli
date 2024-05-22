@@ -12,6 +12,7 @@ from typing import List, Iterable, Literal
 from pathlib import Path
 from rich import print
 from rich.console import Console
+from copy import deepcopy
 
 try:
     import psutil
@@ -22,20 +23,20 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, BatchRequest, caas, render, cli, utils, config, log
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, BatchRequest, caas, render, cli, utils, config, log
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions,
-    DevTypes, SortDevOptions, SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs,
-    EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, lib_to_api, what_to_pretty  # noqa
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
+    SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, lib_to_api, what_to_pretty, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -48,33 +49,56 @@ app.add_typer(clishowtshoot.app, name="tshoot")
 app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
+app.add_typer(clishowmpsk.app, name="mpsk")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
-def _build_caption(resp: Response, *, inventory: bool = False) -> str:
-    dev_types = set([t.get("type", "NOTYPE") for t in resp.output])
-    devs_by_type = {_type: [t for t in resp.output if t.get("type", "ERR") == _type] for _type in dev_types}
-    status_by_type = {_type: {"total": len(devs_by_type[_type]), "up": len([t for t in devs_by_type[_type] if t.get("status", "") == "Up"]), "down": len([t for t in devs_by_type[_type] if t.get("status", "") == "Down"])} for _type in devs_by_type}
-    _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
+    def get_switch_counts(data) -> dict:
+        dev_types = set([t.get("switch_type", "ERR") for t in data])
+        # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
+        return {
+            LIB_DEV_TYPE.get(_type, _type): {
+                "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
+                "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
+            }
+            for _type in dev_types
+        }
 
-    try:
-        clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
-        _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
-    except Exception as e:
-        log.exception(f"Exception occured in _build_caption\n{e}")
+    if not dev_type:
+        counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    elif dev_type == "switch":
+        counts_by_type = get_switch_counts(resp.raw["switches"])
+        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    else:
+        _tot = len(resp)
+        _up = len(list(filter(lambda a: a["status"] == "Up", resp.output)))
+        _down = _tot - _up
+        status_by_type = {dev_type: {"total": _tot, "up": _up, "down": _down}}
+
+    if status:
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+    else:
+        _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+
+    if status is None or status.lower() != "down":
+        try:
+            clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
+            _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+        except Exception as e:
+            log.exception(f"Exception occured in _build_caption\n{e}")
 
     caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]Counts: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]"
-    # if "gw" in dev_types:
-    #     caption = f"{caption}\n  [magenta]Note[/]: GW firmware version has been simplified, the actual gw version is [cyan]aa.bb.cc.dd-aa.bb.cc.dd[-beta]_build[/]"
-    #     caption = f"{caption}\n  [italic]given the version is repeated it has been simplified.  You need to use the full version string when upgrading."
+    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]" if not dev_type else f"[reset]Counts: {_cnt_str}"
+
     if inventory:
         caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
 def show_devices(
-    devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, outfile: Path = None,
+    devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
     update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
     do_clients: bool = True, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
     do_yaml: bool = False, do_table: bool = False
@@ -83,9 +107,6 @@ def show_devices(
     central = cli.central
     if update_cache:
         cli.central.request(cli.cache.update_dev_db)
-
-    # device details is a lot of data default to yaml output, default horizontal would typically overrun tty
-    _formatter = "yaml"
 
     if group:
         group: CentralObject = cli.cache.get_group_identifier(group)
@@ -115,17 +136,23 @@ def show_devices(
         "public_ip_address"
     ]
 
+    cache_generic_types = {
+        "aps": "ap",
+        "gateways": "gw",
+        "mobility_controllers": "gw",
+        "switches": "switch"
+    }
+
     params = {k: v for k, v in params.items() if v is not None}
     if not devices and dev_type is None:
         dev_type = "all"
 
-    if devices:
-        cache_generic_types = {
-            "aps": "ap",
-            "gateways": "gw",
-            "mobility_controllers": "gw",
-            "switches": "switch"
-        }
+    default_tablefmt = "rich" if not verbosity and not devices else "yaml"
+
+    if devices:  # cencli show devices <device iden>
+        # Asking for details of a specific device implies verbose
+        if not verbosity:
+            verbosity = 99
         if dev_type:
             dev_type = cache_generic_types.get(dev_type)
 
@@ -147,38 +174,42 @@ def show_devices(
 
         if "cx" in _types:
             caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'
-    elif dev_type == "all":
-        # if they have a single device type in inventory, it's too many fields to display as table
-        if len(cli.cache.device_types) > 1:
-            _formatter = "rich"
-
+    elif dev_type == "all":  # cencli show all | cencli show devices
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
-            if len(params) > 3:
+            if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
-        elif [p for p in params if p in filtering_params]:  # filtering params used no cache update only subset of devices  # TODO verify upsert on cache update and pass in data regardless
-            resp = central.request(central.get_all_devicesv2, **params)
+        elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
+            resp = central.request(central.get_all_devicesv2, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:
-                cache_output = cleaner.get_devices(resp.output, cache=True)
-                cache_output = central.request(cli.cache.get_swack_ids, resp, update_data=cache_output)
+                cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
                 _ = central.request(cli.cache.update_dev_db, cache_output)
             caption = None if not resp.ok else _build_caption(resp)
         else:  # No filtering params, get update from cache
             if central.get_all_devicesv2 not in cli.cache.updated:
-                resp = central.request(cli.cache.update_dev_db)
-                caption = _build_caption(resp)
+                resp = central.request(cli.cache.update_dev_db, **params)
+                caption = _build_caption(resp, status=status)
             else:
-                # get_all_devicesv2 already called (to populate/update cache) grab response from cache.
-                resp = cli.cache.responses.dev
-    else:
+                # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
+                resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+    else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
+        caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=_formatter)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
         f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
     ] if not include_inventory else ["including Devices from Inventory"]
     title = "Device Details" if not dev_type else f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}".rstrip()
+
+    # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
+    if include_inventory:
+        output_key = "serial"
+    elif dev_type and dev_type == "switches":
+        output_key = "name+serial"
+    else:
+        output_key = "name"
 
     cli.display_results(
         resp,
@@ -189,8 +220,9 @@ def show_devices(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        output_by_key=output_key,
         cleaner=cleaner.get_devices,
-        # verbose=False  # TODO this works need to adjust calling command to include --inventory flag rather than -v use -v for full listing change -vv to --raw globally
+        verbosity=verbosity,
     )
 
 
@@ -204,14 +236,16 @@ def all_(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
-    verbose: bool = typer.Option(
-        False,
+    verbose: int = typer.Option(
+        0,
         "-v",
-        help="additional details (include devices in Inventory that have yet to connect)",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -238,8 +272,8 @@ def all_(
     elif up:
         status = "Up"
     show_devices(
-        dev_type='all', outfile=outfile, include_inventory=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=do_stats, do_clients=True, sort_by=sort_by, reverse=reverse,
+        dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
+        state=state, label=label, pub_ip=pub_ip, do_stats=bool(verbose), do_clients=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -268,12 +302,14 @@ def devices(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
-    verbose: bool = typer.Option(
-        False,
+    verbose: int = typer.Option(
+        0,
         "-v",
-        help="additional details (include devices in Inventory that have yet to connect)",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -309,7 +345,7 @@ def devices(
         dev_type = None
 
     show_devices(
-        devices, dev_type=dev_type, include_inventory=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
+        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
         label=label, status=status, state=state, pub_ip=pub_ip, do_stats=do_stats, do_clients=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
@@ -328,8 +364,15 @@ def aps(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
-    do_ssids: bool = typer.Option(False, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show AP neighbors \[requires --site]", show_default=False,),
+    # do_ssids: bool = typer.Option(True, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show all AP LLDP neighbors for a site \[requires --site]", show_default=False,),
+    verbose: int = typer.Option(
+        0,
+        "-v",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
+        show_default=False,
+    ),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -358,39 +401,16 @@ def aps(
 
         site = cli.cache.get_site_identifier(site)
         resp = cli.central.request(cli.central.get_topo_for_site, site.id, )
-
-        # TODO check the value of tagged/untagged VLAN for AP if it has tagged mgmt VLAN
-        if resp:
-            aps_in_cache = [dev["serial"] for dev in cli.cache.devices if dev["type"] == "ap"]
-            ap_connections = [edge for edge in resp.output["edges"] if edge["toIf"]["serial"] in aps_in_cache]
-            resp.output = [
-                {
-                    "ap": x["toIf"].get("deviceName", "--"),
-                    "ap_ip": x["toIf"].get("ipAddress", "--"),
-                    "ap_serial": x["toIf"].get("serial", "--"),
-                    "ap_port": x["toIf"].get("portNumber", "--"),
-                    # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
-                    # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
-                    "switch": x["fromIf"].get("deviceName", "--"),
-                    "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
-                    "switch_serial": x["fromIf"].get("serial", "--"),
-                    "switch_port": x["fromIf"].get("name", "--"),
-                    "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
-                    "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans", []) if v != x["fromIf"].get("untaggedVlan", 9999)]),
-                    "healthy": "✅" if x.get("health", "") == "good" else "❌"
-                } for x in ap_connections
-            ]
-
         tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site)
     else:
         if down:
             status = "Down"
         elif up:
             status = "Up"
         show_devices(
-            aps, dev_type="aps", outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
-            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=do_ssids,
+            aps, dev_type="aps", verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
 
@@ -407,6 +427,13 @@ def switches_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    verbose: int = typer.Option(
+        0,
+        "-v",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
+        show_default=False,
+    ),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -434,7 +461,7 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switches', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        switches, dev_type='switches', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -453,6 +480,13 @@ def gateways_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
+    verbose: int = typer.Option(
+        0,
+        "-v",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
+        show_default=False,
+    ),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -480,7 +514,7 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gateways', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        gateways, dev_type='gateways', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -499,6 +533,13 @@ def controllers_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    verbose: int = typer.Option(
+        0,
+        "-v",
+        count=True,
+        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
+        show_default=False,
+    ),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -528,9 +569,73 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='mobility_controllers', outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        controllers, dev_type='mobility_controllers', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+
+
+
+@app.command()
+def stacks(
+    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    sort_by: SortStackOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show details for switch stacks
+    """
+    if down:
+        status = StatusOptions("Down")
+    elif up:
+        status = StatusOptions("Up")
+
+    if group:
+        group: CentralObject = cli.cache.get_group_identifier(group)
+
+    cleaner_kwargs = {"status": status}
+    args = ()
+    kwargs = {}
+    func = cli.central.get_switch_stacks
+    if switches:
+        devs: List[CentralObject] = [cli.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
+        if len(devs) == 1:  # if the specify a we use the details call
+            func = cli.central.get_switch_stack_details
+            args = (devs[0].swack_id,)
+        else: # if the specify multiple hosts we grab info for all stacks and filter in the cleaner
+            cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
+            if group:
+                kwargs = {"group": group.name}
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = cli.central.request(func, *args, **kwargs)
+
+    title = "Switch stack details"
+    caption = ""
+    if resp:
+        if "count" in resp.raw:
+            caption = f"Total # of Stacks Returned: [cyan]{resp.raw['count']}[/]"
+
+    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
 
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
@@ -718,6 +823,7 @@ def swarms(
 def interfaces(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
@@ -726,7 +832,7 @@ def interfaces(
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
@@ -743,25 +849,25 @@ def interfaces(
 
     Command is valid for switches and gateways
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"],)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], conductor_only=True,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
     else:
-        resp = cli.central.request(cli.central.get_switch_ports, dev.serial, slot=slot, aos_sw=dev.type == "sw")
+        iden = dev.swack_id or dev.serial
+        resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=dev.swack_id is not None, aos_sw=dev.type == "sw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{dev.name} Interfaces"
 
+    caption = []
     if dev.type == "sw":
-        caption = render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)
-    else:
-        caption = ""
+        caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)]
 
     if resp:
         try:
             up = len([i for i in resp.output if i.get("status").lower() == "up"])
             down = len(resp.output) - up
-            caption = f"{caption}\n  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"
+            caption += [f"  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
         except Exception as e:
             log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
 
@@ -770,7 +876,7 @@ def interfaces(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=caption,
+        caption="\n".join(caption),
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -784,31 +890,59 @@ def interfaces(
 @app.command(help="Show (switch) poe details for an interface")
 def poe(
     device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    port: str = typer.Argument(None, show_default=False,),
-    _port: str = typer.Option(None, "--port", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
+    _port: str = typer.Option(None, "--port", show_default=False, hidden=True,),
+    powered: bool = typer.Option(False, "-p", "--powered", help="Show only interfaces currently delivering power", show_default=False,),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False, rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False, rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
     resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
     resp.output = utils.unlistify(resp.output)
+    caption = "  Power values are in watts."
+    if resp:
+        resp.output = utils.listify(resp.output)  # if they specify an interface output will be a single dict.
+        _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
+        caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+        if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
+            caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
+            caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
+            caption = f"{caption}, In use: [cyan]{resp.output[0]['poe_slots'].get('power_in_use_in_watts', '?')}[/]"
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"Poe details for {dev.name}",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        pager=pager,
+        outfile=outfile,
+        output_by_key="port",
+        cleaner=cleaner.get_switch_poe_details,
+        verbosity=verbose,
+        powered=powered,
+        aos_sw=dev.type == "sw"
+    )
     # TODO output cleaner / sort & reverse options
 
 
@@ -820,7 +954,7 @@ def vlans(
         autocompletion=cli.cache.dev_gw_switch_site_completion,
         show_default=False,
     ),
-    # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by VLAN status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
@@ -850,7 +984,7 @@ def vlans(
     """
     # TODO cli command lacks the filtering options available from method currently.
     central = cli.central
-    obj = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"))
+    obj: CentralObject = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
 
     if up:
         status = "Up"
@@ -864,7 +998,14 @@ def vlans(
         resp = central.request(central.get_site_vlans, obj.id)
     elif obj.is_dev:
         if obj.generic_type == "switch":
-            resp = central.request(central.get_switch_vlans, obj.serial, aos_sw=obj.type == "sw")
+            if obj.swack_id:
+                iden = obj.swack_id
+                stack = True
+            else:
+                iden = obj.serial
+                stack = False
+
+            resp = central.request(central.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw")
         elif obj.type.lower() == 'gw':
             resp = central.request(central.get_gateway_vlans, obj.serial)
         else:
@@ -966,18 +1107,20 @@ def upgrade(
     ),
 ):
     central = cli.central
-    if len(device) > 2:
-        typer.echo(f"Unexpected argument {', '.join([a for a in device[0:-1] if a != 'status'])}")
+    # Allow unnecessary keyword status `cencli show upgrade status <dev>`
+    device = [d for d in device if d != "status"]
+
+    if not device:
+        cli.exit("Missing required parameter [cyan]<device>[/]")
+    elif len(device) > 1:
+        cli.exit("Specify only one device.")
 
     params, dev = {}, None
-    if device and device[-1] != "status":
-        dev = cli.cache.get_dev_identifier(device[-1])
-        if dev.type == "ap":
-            params["swarm_id"] = dev.swack_id
-        else:
-            params["serial"] = dev.serial
+    dev: CentralObject = cli.cache.get_dev_identifier(device[-1], conductor_only=True)
+    if dev.type == "ap":
+        params["swarm_id"] = dev.swack_id
     else:
-        print("Missing required parameter [cyan]<device>[/]")
+        params["serial"] = dev.serial
 
     resp = central.request(central.get_upgrade_status, **params)
 
@@ -995,21 +1138,23 @@ def upgrade(
 @app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, show_default=False),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False,),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False, rich_help_panel="Common Options"),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Common Options"),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ):
     args = ('all',) if not args else args
@@ -1023,7 +1168,7 @@ def cache_(
         elif arg.value == "devices":
             cache_out = sorted(cache_out, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, default="rich" if "all" not in args else "yaml")
+        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
             tablefmt=tablefmt,
@@ -1032,31 +1177,36 @@ def cache_(
             outfile=outfile,
             sort_by=sort_by,
             reverse=reverse,
+            output_by_key=None,
             stash=False,
         )
 
 
 @app.command(short_help="Show groups/details")
 def groups(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose: bool = typer.Option(False, "-v", help="Verbose: include additional group properties", show_default=False,),
+    sort_by: SortGroupOptions = typer.Option("name", "--sort",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting", hidden=True,),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     verbose2: bool = typer.Option(
         False,
         "-vv",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
+        rich_help_panel="Common Options",
     ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
     account: str = typer.Option(
         "central_info",
         envvar="ARUBACLI_ACCOUNT",
         help="The Aruba Central Account to use (must be defined in the config)",
         autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
     ),
 ) -> None:
     central = cli.central
@@ -1065,29 +1215,10 @@ def groups(
     else:
         resp = cli.cache.responses.group
 
-    if resp and verbose:
-        groups = [g["name"] for g in resp.output]
-        verbose_resp = central.request(central.get_groups_properties, groups=groups)
-        if not verbose_resp:
-            print("Error: Additional API call to gather group properties for verbose output failed.")
-            cli.display_results(verbose_resp, tablefmt="action")
-        else:
-            for idx, g in enumerate(verbose_resp.output):
-                g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
-                g["properties"]["GwNetworkRole"] = g["properties"].get("GwNetworkRole", "NA")
-                g["properties"]["AOSVersion"] = g["properties"].get("AOSVersion", "NA")
-                g["properties"]["AllowedSwitchTypes"] = g["properties"].get("AllowedSwitchTypes", "NA")
-                g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
-                g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k != "MonitorOnlySwitch"}
-                for grp in resp.output:
-                    if g["group"] == grp["name"]:
-                        verbose_resp.output[idx] = {**grp, **g["properties"]}
-                        continue
-            verbose_resp.output = cleaner.strip_no_value(verbose_resp.output)
-            resp = verbose_resp
+    caption = f'Total Groups: [cyan]{len(resp.output)}[/], Template Groups: [cyan]{len(list(filter(lambda g: any(g.get("template group", {}).values()), resp.output)))}[/]'
 
-    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", pager=pager, outfile=outfile, cleaner=cleaner.show_groups)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups)
 
 
 @app.command(short_help="Show labels/details")
@@ -1237,6 +1368,10 @@ def templates(
     if group:
         group = cli.cache.get_group_identifier(group).name
 
+    # Allows show templates group WadeLab
+    if name and name.lower() == "group":
+        name = None
+
     central = cli.central
 
     params = {
@@ -1331,12 +1466,12 @@ def variables(
     )
 
 
-@app.command(short_help="Show AP lldp neighbor", help="Show AP lldp neighbor.  Command only applies to APs at this time.")
+@app.command()
 def lldp(
     device: List[str] = typer.Argument(
         ...,
         metavar=iden_meta.dev_many,
-        autocompletion=lambda incomplete: cli.cache.dev_completion(incomplete=incomplete, args=["ap"]),
+        autocompletion=cli.cache.dev_switch_ap_completion,
         show_default=False,
     ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
@@ -1361,25 +1496,39 @@ def lldp(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show AP lldp neighbor
+
+    Valid on APs and CX switches
+    Command will run on AOS-SW, but neighbor table will only show neighbors that are CX switches or APs
+    """
     central = cli.central
 
-    devs = [cli.cache.get_dev_identifier(_dev, dev_type="ap") for _dev in device if not _dev.lower().startswith("neighbor")]
-    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs]
+    # TODO need get_dev_identier to accept cx
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
+    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
+    unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
+    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
-    if all([res.ok for res in batch_resp]):
-        concat_resp = batch_resp[-1]
-        concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
+    # if all([res.ok for res in batch_resp]):
+    #     concat_resp = batch_resp[-1]
+    #     concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
-    cli.display_results(
-        concat_resp,
-        tablefmt=tablefmt,
-        title="LLDP Neighbor Info",
-        pager=pager,
-        outfile=outfile,
-        cleaner=cleaner.get_lldp_neighbor,
-    )
-
+    console = Console()
+    for dev, r in zip(devs, batch_resp):
+        title = f"{dev.name} LLDP Neighbor information"
+        if tablefmt not in ["table", "rich"]:
+            console.print(f'[green]{"-" * 5}[/] [cyan bold]{title}[/] [green]{"-" * 5}[/]')
+        cli.display_results(
+            r,
+            tablefmt=tablefmt,
+            title=title,
+            pager=pager,
+            outfile=outfile,
+            output_by_key=["port", "localPort"],
+            cleaner=cleaner.get_lldp_neighbor,
+        )
 
 @app.command(short_help="Show certificates/details")
 def certs(
@@ -1449,21 +1598,26 @@ def run(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show last known running config for a device
+    """Show running config for a device
 
-    Not supported for CX.
-    Gateways and APs returns typical CLI format.
-    AOS-SW returns a JSON (unless --yaml flag is provided).
+    APs get the last known running config from Central
+    Switches and GWs request the running config from the device
     """
 
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
-    if dev.type != "cx":
-        resp = central.request(central.get_device_configuration, dev.serial)
-    else:
+    if dev.type == "cx":
         clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile)
         raise typer.Exit(0)
+    elif dev.type == "sw":
+        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile)
+        raise typer.Exit(0)
+    elif dev.type == "gw":
+        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile)
+        raise typer.Exit(0)
+    else:
+        resp = central.request(central.get_device_configuration, dev.serial)
 
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
@@ -1563,7 +1717,8 @@ def config_(
                     console.print(f"[bold]Config for {d.rich_help_text}[reset]")
                     console.rule()
                     outfile = outdir / f"{d.name}_gw_dev.cfg"
-                    cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+                    # cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
+                    cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
             if do_ap:
                 devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "ap"]
 
@@ -1728,7 +1883,7 @@ def wlans(
         autocompletion=cli.cache.site_completion,
         show_default=False,
     ),
-    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),
+    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),  # TODO Can add option for --swarm where value is a dev iden
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
     sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
@@ -1738,7 +1893,7 @@ def wlans(
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose: bool = typer.Option(False, "-v", help="get more details for SSIDs across all AP groups", show_default=False,),
+    verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -1755,13 +1910,17 @@ def wlans(
 
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
-        title = f"{title} in group {group}"
+        _group: CentralObject = cli.cache.get_group_identifier(group)
+        title = f"{title} in group {_group.name}"
+        group = _group.name
     if label:
-        title = f"{title} with label {label}"
+        _label: CentralObject = cli.cache.get_label_identifier(label)
+        title = f"{title} with label {_label.name}"
+        label = _label.name
     if site:
-        _site = cli.cache.get_site_identifier(site)
-        site = _site.name or site
-        title = f"{title} in site {site}"
+        _site: CentralObject = cli.cache.get_site_identifier(site)
+        title = f"{title} in site {_site.name}"
+        site = _site.name
 
     params = {
         "name": name,
@@ -1772,15 +1931,11 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # if full and not group:
-    #     print("Error: must provide group via --group")
-    #     raise typer.Exit(1)
-
-    # TODO add verbosity levels for get_full_wlan_list
+    # TODO only verbosity 0 currently if group is specified
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:
         resp = central.request(central.get_full_wlan_list, group)
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose)
     elif verbose:
         import json
         group_res = central.request(central.get_groups_properties)
@@ -1811,6 +1966,36 @@ def wlans(
     else:
         resp = central.request(central.get_wlans, **params)
         cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)
+
+
+@app.command()
+def cluster(
+    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion, show_default=False,),
+    ssid: str = typer.Argument(..., autocompletion=cli.cache.label_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+    ),
+) -> None:
+    """Show Cluster mapped to a given group/SSID
+    """
+    group = cli.cache.get_group_identifier(group)
+    resp = cli.central.request(cli.central.get_wlan_cluster_by_group, group.name, ssid)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    if tablefmt == "rich":
+        resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
+    cli.display_results(resp, tablefmt=tablefmt, title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]", pager=pager, outfile=outfile, cleaner=cleaner.simple_kv_formatter)
 
 
 @app.command()
@@ -1912,6 +2097,7 @@ def clients(
     central = cli.central
     # device = utils.listify(device) if device else []
     # device = device if not _dev else [*device, *_dev]
+    # TODO test --device and potentially restore multi-dev support
     device = device or []
 
     kwargs = {}
@@ -1959,7 +2145,6 @@ def clients(
             kwargs["label"] = cli.cache.get_label_identifier(label).name
             title = f"{title} on devices with label {label}"
 
-    # resp = central.request(central.get_clients, *args, **kwargs)
     if not denylisted:
         resp = central.request(cli.cache.update_client_db, *args, **kwargs)
     else:
@@ -1968,30 +2153,40 @@ def clients(
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
+    # Build Caption Text # TODO move to caption builder
     _count_text = ""
-    # if filter.value not in ["mac", "denylisted"]:
+    _last_mac_text = ""
     if not client and not denylisted:
         if wired:
             _count_text = f"{len(resp)} Wired Clients."
+            if resp.raw.get("last_client_mac"):
+                _count_text = f'{_count_text} [bright_green]Last Wired Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
         elif wireless:
             _count_text = f"{len(resp)} Wireless Clients."
+            if resp.raw.get("last_client_mac"):
+                _count_text = f'{_count_text} [bright_green]Last Wireless Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
         else:
             _tot = len(resp)
-            _wired = len([x for x in resp.output if x["client_type"] == "WIRED"])
-            _wireless = len([x for x in resp.output if x["client_type"] == "WIRELESS"])
-            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{_wired}[/], [bright_green]Wireless[/]: [cyan]{_wireless}[/]"
+            wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
+            wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
+            caption_data = {}
+            for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
+                caption_data[_type] = {
+                    "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
+                    "last_client_mac": "" if not data or "last_client_mac" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["last_client_mac"]
+                }
+            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+            _last_mac_text = f"[bright_green]Last Wired Mac[/]: [cyan]{caption_data['wired']['last_client_mac']}[/], [bright_green]Last Wireless Mac[/]: [cyan]{caption_data['wireless']['last_client_mac']}[/]"
 
-    if not verbose2:
-        _format = "rich" if not verbose else "yaml"
-    else:
-        _format = "json"
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default=_format)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     verbose_kwargs = {}
     if not verbose2 and not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
         verbose_kwargs["verbose"] = verbose
+
         # filter output on multiple devices
         # TODO maybe restore multi-device looks like was handled in filter
         if dev and isinstance(dev, list):
@@ -2004,7 +2199,7 @@ def clients(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=f"{_count_text} Use -v for more details, -vv for unformatted response." if not verbose and not denylisted else None,
+        caption=f"{_count_text} Use -v for more details, -vv for unformatted response.\n  {_last_mac_text}".rstrip() if not verbose and not denylisted else None,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -2211,7 +2406,7 @@ def logs(
     site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     start: str = typer.Option(None, "-s", "--start", help="Start time of range to collect events, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
     end: str = typer.Option(None, "-e", "--end", help="End time of range to collect events, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option(None, "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
+    past: str = typer.Option("30m", "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h",),
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
@@ -2266,7 +2461,7 @@ def logs(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show device event logs (last hour by default) or show cencli logs.
+    """Show device event logs (last 30m by default) or show cencli logs.
 
     [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
     """
@@ -2322,7 +2517,7 @@ def logs(
         "group": group,
         # "swarm_id": swarm_id,
         "label": label,
-        "from_ts": start or int(time.time() - 3600),
+        "from_ts": start or int(time.time() - 1800),
         "to_ts": end,
         "macaddr": client_mac,
         "bssid": bssid,

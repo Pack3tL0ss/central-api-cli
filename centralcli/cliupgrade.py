@@ -30,7 +30,7 @@ app = typer.Typer()
 
 # You can only specify one of group, swarm_id or serial parameters
 
-@app.command(short_help="Upgrade firmware on a specific device",)
+@app.command()
 def device(
     device: str = typer.Argument(
         ...,
@@ -62,7 +62,9 @@ def device(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    dev = cli.cache.get_dev_identifier(device)
+    """Upgrade firmware on a device
+    """
+    dev = cli.cache.get_dev_identifier(device, swack=True)
     if dev.generic_type == "ap":
         reboot = True
     at = None if not at else int(round(at.timestamp()))
@@ -75,7 +77,7 @@ def device(
     if yes or typer.confirm("\nProceed?", abort=True):
         if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
             # For AOS10 AP need to specifiy serial number as the swarm_id in payload to upgrade individual AP
-            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.serial, firmware_version=version, reboot=reboot)
+            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
         else:
             resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")

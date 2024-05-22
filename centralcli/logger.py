@@ -25,6 +25,7 @@ log_colors = {
 #     "warning": "[dark_orange4]",
 # }
 console = Console(emoji=False, markup=False)
+emoji_console = Console(markup=False)
 to_debug = [
     "Loaded token from storage from file"
 ]
@@ -119,7 +120,7 @@ class MyLogger:
             self.log_msgs += _msgs
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
-                    typer.secho(m, fg=log_colors.get(level))
+                    emoji_console.print(f"{':warning:  ' if not level=='info' else ''}{m}")
             self.log_msgs = []
 
         if caption:

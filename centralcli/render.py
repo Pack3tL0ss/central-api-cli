@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Union
 
-import tabulate
+from tabulate import tabulate
 import typer
 import yaml
 import json
@@ -24,12 +24,12 @@ from rich.text import Text
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import log, utils
+    from centralcli import utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import log, utils
+        from centralcli import utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -204,7 +204,7 @@ def tabulate_output(outdata: List[dict]) -> tuple:
 
         outdata = _do_subtables(outdata, tablefmt="tabulate")
 
-        table_data = tabulate.tabulate(outdata, headers="keys", tablefmt="tabulate")
+        table_data = tabulate(outdata, headers="keys", tablefmt="tabulate")
         td = table_data.splitlines(keepends=True)
         if td:
             table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
@@ -322,11 +322,12 @@ def output(
     caption: str = None,
     account: str = None,
     config: Config = None,
+    output_by_key: str | List[str] = "name",
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
 ) -> Output:
-    # log.debugv(f"data passed to output():\n{pprint(outdata, indent=4)}")
+    output_by_key = utils.listify(output_by_key)
     raw_data = outdata
     _lexer = table_data = None
 
@@ -337,14 +338,24 @@ def output(
     if outdata and all(isinstance(x, str) for x in outdata):
         tablefmt = "strings"
 
-    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs
+    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
         outdata = utils.listify(outdata)
-        if outdata and isinstance(outdata[0], dict) and 'name' in outdata[0]:
-            outdata: Dict[dict] = {
-                item['name']: {k: v for k, v in item.items() if k != 'name'}
-                for item in outdata
-            }
+        if output_by_key and outdata and isinstance(outdata[0], dict):
+            if len(output_by_key) == 1 and "+" in output_by_key[0]:
+                found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
+                if len(found_keys) == len(output_by_key[0].split("+")):
+                    outdata: Dict[dict] = {
+                        f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in outdata
+                    }
+            else:
+                _output_key = [k for k in output_by_key if k in outdata[0]]
+                if _output_key:
+                    _output_key = _output_key[0]
+                    outdata: Dict[dict] = {
+                        item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                        for item in outdata
+                    }
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)
@@ -397,13 +408,12 @@ def output(
                     raw_data = typer.unstyle("{}\n".format('\n'.join(outdata).rstrip('\n')))
                     table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
                 else:
-                    raw_data = table_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
+                    raw_data = "{}\n".format('\n'.join(outdata).rstrip('\n'))
                     table_data = rich_capture(raw_data)
 
-        else:
-            raw_data = table_data = '\n'.join(outdata)
-            # Not sure what hit's this, but it was created so something must
-            log.debug("List[str] else hit")
+        else:  # cencli show config <GW> is list of strings
+            raw_data = '\n'.join(outdata)
+            table_data = rich_capture(raw_data)
 
     if _lexer and raw_data:
         table_data = highlight(bytes(raw_data, 'UTF-8'),
@@ -425,6 +435,8 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     Args:
         text (str | List[str]): The text or list of text to capture.
             If provided as list it will be converted to string (joined with \n)
+        emoji: (bool, Optional): Allow emoji placeholders.  Default: False
+        kwargs: additional kwargs passed to rich Console.
 
     Returns:
         str: text with markups converted to ascii control chars

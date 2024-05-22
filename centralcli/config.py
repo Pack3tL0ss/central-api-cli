@@ -145,24 +145,6 @@ def _get_config_file(dirs: List[Path]) -> Path:
             if f.suffix in valid_ext and 'base_url' in f.read_text():
                 return f
 
-def _get_user_input(valid: list) -> str:
-    choice = ""
-    try:
-        while choice.lower() not in valid:
-            choice = input(" >> ")
-            if choice.lower() == "abort":
-                print("Aborted")
-                sys.exit()
-            elif choice.lower() not in valid:
-                print(
-                    f"[red]Invalid input.[/red] {choice}.\n"
-                    f"  Select from: {', '.join(valid)}"
-                )
-        return choice
-    except (KeyboardInterrupt, EOFError):
-        print("Aborted")
-        sys.exit()
-
 
 class SafeLineLoader(yaml.SafeLoader):
     """Loader class that keeps track of line numbers."""

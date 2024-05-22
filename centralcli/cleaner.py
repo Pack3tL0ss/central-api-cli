@@ -31,8 +31,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes
+from centralcli.constants import DevTypes, StatusOptions
 from centralcli.objects import DateTime
+from centralcli.models import CloudAuthUploadResponse
 
 
 def epoch_convert(func):
@@ -225,11 +226,13 @@ _short_value = {
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
     "mem_total": _format_memory,
     "mem_free": _format_memory,
-    "firmware_version": lambda v: v if len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
+    "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "learn_time": _log_timestamp,
     "last_state_change": _log_timestamp,
     "graceful_restart_timer": _duration_words,
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
+    "reserved_power_in_watts": lambda v: round(v, 2),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -301,6 +304,14 @@ _short_key = {
     "essid": "ssid",
     "opmode": "security",
     "power_consumption": "poe usage",
+    "poe_priority": "priority",
+    "poe_detection_status": "status",
+    "power_drawn_in_watts": "draw",
+    "pse_allocated_power": "allocated",
+    "reserved_power_in_watts": "reserved",
+    "power_class": "class",
+    "cluster_group_name": "group",
+    "cluster_redundancy_type": "redundancy type",
 }
 
 
@@ -358,7 +369,7 @@ def _unlist(data: Any):
 
 def _check_inner_dict(data: Any) -> Any:
     if isinstance(data, list):
-        if True in set([isinstance(id, dict) for id in data]):
+        if True in set([isinstance(inner, dict) for inner in data]):
             if list(set([dk for d in data for dk in d.keys()]))[0] == "port":
                 return _unlist([d["port"] for d in data])
             else:
@@ -381,7 +392,7 @@ def short_value(key: str, value: Any):
     if isinstance(value, (str, int, float)):
         return (
             short_key(key),
-            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, bool) and not value) else _short_value[key](value),
+            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, (bool, int)) and not value) else _short_value[key](value),
         )
     elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
         if key in ["sites", "labels"]:
@@ -421,7 +432,7 @@ def simple_kv_formatter(data: List) -> List:
 
     return data
 
-def _get_group_names(data: List[List[str],]) -> list:
+def get_group_names(data: List[List[str],]) -> list:
     """Convert list of single item lists to a list of strs
 
     Also removes "unprovisioned" group as it has no value for our
@@ -453,9 +464,24 @@ def get_all_groups(
     Returns:
         list: reformatted Data with keys/headers changed
     """
-    # TODO use _short_key like others and combine show groups into this func
-    _keys = {"group": "name", "template_details": "template group"}
-    return [{_keys[k]: v for k, v in g.items()} for g in data]
+    allowed_dev_types = {"Gateways": "gw", "AccessPoints": "ap", "AOS_CX": "cx", "AOS_S": "sw"}
+    aos_version = {"AOS_10X": "AOS10", "AOS_8X": "AOS8", "NA": "NA"}
+    gw_role = {"WLANGateway": "WLAN", "VPNConcentrator": "VPNC", "BranchGateway": "Branch", "NA": "NA"}
+
+    # Not all groups will have all field properties.  Make it so.
+    clean = []
+    for g in data:
+        g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
+        g["properties"]["GwNetworkRole"] = gw_role.get(g["properties"].get("GwNetworkRole", "NA"), "err")
+        g["properties"]["AOSVersion"] = aos_version.get(g["properties"].get("AOSVersion", "NA"), "err")
+        g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
+        g["properties"]["AllowedDevTypes"] = ", ".join([allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"])
+
+        g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k not in ["MonitorOnlySwitch", "AllowedSwitchTypes"]}
+        clean += [{"name": g["group"], **g["properties"], "template group": g["template_details"]}]
+
+    return strip_no_value(clean)
+    # return [{_keys.get(k, k): v for k, v in g.items()} for g in clean]
 
 def show_groups(data: List[dict]) -> List[dict]:
     return [{k: v if k != "template group" else ",".join([kk for kk, vv in v.items() if vv]) or "--" for k, v in inner.items()} for inner in data]
@@ -738,7 +764,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
 
 
 # TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
-def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: bool = False) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: bool = False) -> Union[List[dict], dict]:
     """Clean device output from Central API (Monitoring)
 
     Args:
@@ -751,41 +777,50 @@ def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: b
     """
     data = utils.listify(data)
 
-    if not verbose:
-        non_verbose_keys = [
-                    "name",
-                    "status",
-                    "type",
-                    "client_count",
-                    "model",
-                    "ip_address",
-                    "macaddr",
-                    "serial",
-                    "group_name",
-                    "site",
-                    "labels",
-                    "uptime",
-                    "cpu_utilization",
-                    "mem_total",
-                    "mem_free",
-                    "firmware_version",
+    # Both lists below are pre cleaned key values
+    verbosity_keys = {
+        0:  [
+                "name",
+                "status",
+                "type",
+                "client_count",
+                "model",
+                "ip_address",
+                "macaddr",
+                "serial",
+                "group_name",
+                "site",
+                "labels",
+                "uptime",
+                "cpu_utilization",
+                "mem_total",
+                "mem_free",
+                "firmware_version",
         ]
-        data = [{k: v for k, v in inner.items() if k in non_verbose_keys} for inner in data]
-
-    # cache uses post cleaner keys
-    # we don't actually use model or version for anything yet
+    }
+    # we don't actually use model for anything yet
     cache_keys = [
         "name",
         "status",
         "type",
         "model",
-        "ip",
-        "mac",
+        "ip_address",
+        "macaddr",
         "serial",
-        "group",
+        "group_name",
         "site",
-        "version"
+        "firmware_version",
+        "swack_id",
+        "switch_role"
     ]
+    if cache:
+        # We want these 2 keys to retain the underscore. if it's a cahce update.
+        global _short_key
+        _short_key = {**_short_key, "swack_id": "swack_id", "switch_role": "switch_role"}
+        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
+    elif verbosity == 0:  # If verbosity > 0 we simply don't filter any fields.
+        data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for inner in data]
+
     # gather all keys from all dicts in list each dict could potentially be a diff size
     # Also concats ip/mask if provided in sep fields
     data = sort_result_keys(data)
@@ -799,16 +834,13 @@ def get_devices(data: Union[List[dict], dict], *, verbose: bool = True, cache: b
             dict(
                 short_value(k, _check_inner_dict(v))
                 for k, v in pre_clean(inner).items()
-                if "id" not in k[-3:] and k != "mac_range"
+                if k == "swack_id" or ("id" not in k[-3:] and k != "mac_range")
             )
             for inner in data
         ]
     )
 
     data = utils.listify(data)
-
-    if cache:
-        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
@@ -979,15 +1011,20 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         return data
 
 
-def get_lldp_neighbor(data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def get_lldp_neighbor(data: List[Dict[str, str]]) -> Dict[str: Dict[str, str]]:
     data = utils.listify(data)
     strip_keys = ["cid"]
     _short_val = {
         "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode": "1000BaseT FD"
     }
-    data = [{k: _short_val.get(d[k], d[k]) for k in d if d["localPort"] != "bond0" and k not in strip_keys} for d in data]
+    # grab the key details from switch lldp return, make data look closer to lldp return from AP
+    if data and "dn" in data[0].keys():
+        data = [{**dict(d if "dn" not in d else d["dn"]), "vlan_id": ",".join(d.get("vlan_id", [])), "lldp_poe": d.get("lldp_poe_enabled")} for d in data]
+        data = sort_interfaces(data, interface_key="port")
+    # simplify some of the values and strip the bond0 entry from AP
+    data = [{k: _short_val.get(d[k], d[k]) for k in d if d.get("localPort", "") != "bond0" and k not in strip_keys} for d in data]
 
-    return strip_no_value(utils.listify(data))
+    return strip_no_value(data)
 
 
 def get_vlans(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1274,7 +1311,7 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     # combine type / device_type for verbose output, preferring type from cache
 
     data = [
-        {"type": _inv_type(d["model"], d.get("type", d["device_type"])), **{key: val for key, val in d.items() if key != "device_type"}}
+        {"type": _inv_type(d["model"], d.get("type", d.get("device_type", "err"))), **{key: val for key, val in d.items() if key != "device_type"}}
         for d in data
     ]
     data = [
@@ -1399,8 +1436,25 @@ def get_ospf_interface(data: Union[List[dict], dict],) -> Union[List[dict], dict
 
     return data
 
-def show_interfaces(data: Union[List[dict], dict], verbosity: int = 0, dev_type: DevTypes = "cx") -> Union[List[dict], dict]:
-    data = utils.listify(data)
+
+def sort_interfaces(interfaces: List[Dict[str, Any]], interface_key: str= "port_number") -> List[Dict[str, Any]]:
+    try:
+        sorted_interfaces = sorted(
+            interfaces, key=lambda i: [int(i[interface_key].split("/")[y]) for y in range(i[interface_key].count("/") + 1)]
+        )
+        return sorted_interfaces
+    except Exception as e:
+        log.error(f"Exception in cleaner.sort_interfaces {e.__class__.__name__}")
+        return interfaces
+
+
+def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx") -> List[dict] | dict:
+    if isinstance(data, list) and data and "member_port_detail" in data[0]:  # switch stack
+        normal_ports = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
+        stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
+        data = sort_interfaces([*normal_ports, *stack_ports])
+    else:
+        data = utils.listify(data)
 
     # TODO verbose and non-verbose
     # TODO determine if "mode" has any value, appears to always be Access on SW
@@ -1476,6 +1530,34 @@ def show_interfaces(data: Union[List[dict], dict], verbosity: int = 0, dev_type:
         }
 
     return strip_no_value(data)
+
+
+def get_switch_poe_details(data: List[Dict[str, Any]], verbosity: int = 0, powered: bool = False, aos_sw: bool = False) -> List[Dict[str, Any]]:
+    verbosity_keys = {
+        0: [
+            "port",
+            "poe_detection_status",
+            "poe_priority",
+            "power_drawn_in_watts",
+            # "amperage_drawn_in_milliamps",
+            "pse_allocated_power",
+            "reserved_power_in_watts",
+            "pre_standard_detect",
+            "power_class"
+        ]
+    }
+    if powered:
+        data = list(filter(lambda d: d.get("poe_detection_status", 99) == 3, data))
+
+    # AOS-SW does not return usage in watts, calculate it to make it consistent with CX.  CX has these fields but always returns 0 for the 2 fields.
+    if aos_sw:
+        data = [{**d, "power_drawn_in_watts": round(d.get("amperage_drawn_in_milliamps", 0) / 1000 * d.get("port_voltage_in_volts", 0), 2)} for d in data]
+
+    if verbosity == 0:
+        data = [dict(short_value(k, d.get(k),) for k in verbosity_keys[verbosity]) for d in data]
+        data = strip_no_value(data)
+
+    return sort_interfaces(data, interface_key="port")
 
 def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     key_order = [
@@ -1569,8 +1651,8 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
     if isinstance(data, dict) and "wlans" in data:
         data = data["wlans"]
 
-    verbosity_keys = [
-        [
+    verbosity_keys = {
+        0: [
             'group',
             'name',
             'essid',
@@ -1581,12 +1663,28 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
             'mac_authentication',
             'vlan',
             'opmode',
-            'access_type'
+            'access_type',
+            'cluster_name'
         ]
-    ]
+    }
     pretty_data = []
+    # rf_band all is a legacy key so all means 2.4 and 5, this updates so that all is only the value if 6 is also enabled.
+    # also grabs values for keys that are stored in dicts
+    def _simplify_value(wlan: dict, k: str, v: Any) -> Any:
+        if k == "rf_band":
+            _band = v.replace("all", "2.4, 5").replace("5.0", "5")
+            if wlan.get("rf_band_6ghz", {}).get("value"):
+                _band = f"{_band}, 6"
+            return "all" if _band.count(",") == 2 else _band
+
+        return v if not isinstance(v, dict) or "value" not in v else v["value"]
+
+
     for wlan in data:
-        ssid_data = {k: v for k, v in wlan.items() if k in verbosity_keys[verbosity]}
+        ssid_data = {
+            k: _simplify_value(wlan, k, wlan[k])
+            for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())]) if k in wlan
+        }
         if ssid_data.get("name", "") == ssid_data.get("essid", ""):
             ssid_data["name"] = None
         pretty_data += [ssid_data]
@@ -1608,3 +1706,78 @@ def get_wlans(data: List[dict]) ->  List[dict]:
     return simple_kv_formatter(data)
 
 
+def get_switch_stacks(data: List[Dict[str, str]], status: StatusOptions = None, stack_ids: List[str] = None):
+    simple_types = {"ArubaCX": "cx"}
+    data = [{"name": d.get("name"), **d, "switch_type": simple_types.get(d.get("switch_type", ""), d.get("switch_type"))} for d in data]
+    before = len(data)
+    if status:  # Filter up / down
+        data = [d for d in data if d.get("status").lower() == status.value.lower()]
+    if stack_ids:  # Filter Stack IDs
+        data = [d for d in data if d.get("id") in stack_ids]
+
+    if before and not data:
+        data = "\nNo stacks matched provided filters"
+
+    data = strip_no_value(data)
+    return simple_kv_formatter(data)
+
+
+def cloudauth_upload_status(data: List[Dict[str, Any]] | Dict[str, Any]) -> Dict[str, Any]:
+    if not data:
+        return data
+    else:
+        data = utils.unlistify(data)  # _display_results will listify the data as most outputs are lists of dicts
+
+    try:
+        resp_model = CloudAuthUploadResponse(**data)
+        data = resp_model.dict()
+    except Exception as e:
+        log.error("Attempt to normalize cloudauth upload status response through model failed.")
+        log.exception(e)
+
+    if "durationNanos" in data:
+        data["duration_secs"] = round(data["durationNanos"] / 1_000_000_000, 2)
+        del data["durationNanos"]
+
+    return data
+
+def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> List[Dict[str, Any]]:
+    verbosity_keys = {
+        0: [
+            'name',
+            'role',
+            'status',
+        ]
+    }
+
+    if verbosity == 0:  # currently no verbosity beyond 0, we just don't filter the fields
+        data = [{k: d.get(k) for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for d in data]
+
+    return data
+
+
+def show_all_ap_lldp_neighbors_for_site(data):
+    data = utils.unlistify(data)
+    # TODO circular import if placed at top review import logic
+    from centralcli import cache
+    aps_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] == "ap"]
+    ap_connections = [edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_cache]
+    data = [
+        {
+            "ap": x["toIf"].get("deviceName", "--"),
+            "ap_ip": x["toIf"].get("ipAddress", "--"),
+            "ap_serial": x["toIf"].get("serial", "--"),
+            "ap_port": x["toIf"].get("portNumber", "--"),
+            # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
+            # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
+            "switch": x["fromIf"].get("deviceName", "--"),
+            "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
+            "switch_serial": x["fromIf"].get("serial", "--"),
+            "switch_port": x["fromIf"].get("name", "--"),
+            "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
+            "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans") or [] if v != x["fromIf"].get("untaggedVlan", 9999)]),
+            "healthy": "✅" if x.get("health", "") == "good" else "❌"
+        } for x in ap_connections
+    ]
+
+    return simple_kv_formatter(data)

@@ -48,6 +48,22 @@ class SendConfigDevIdens(str, Enum):
     # cx = "cx"
 
 
+class PoEDetectionStatus(Enum):
+    NA = 0
+    Undefined = 1  # TODO figure out what this status is
+    Searching = 2
+    Delivering = 3
+
+
+# Not used currently # TODO reference in cleaner
+class SwitchRoles(Enum):
+    ERR = 0
+    StandAlone = 1
+    StackConductor = 2
+    StackSecondary = 3
+    StackMember = 4
+
+
 class ShowInventoryArgs(str, Enum):
     all = "all"
     ap = "ap"
@@ -56,6 +72,16 @@ class ShowInventoryArgs(str, Enum):
     sw = "sw"
     cx = "cx"
     switch = "switch"
+
+
+class SortStackOptions(str, Enum):
+    group = "group"
+    _id = "id"
+    mac = "mac"
+    name = "name"
+    split_policy = "split_policy"
+    status = "status"
+    topology = "topology"
 
 
 class SortWebHookOptions(str, Enum):
@@ -144,6 +170,7 @@ STRIP_KEYS = [
     "areas",
     "lsas",
     "commands",
+    "stacks",
 ]
 
 
@@ -254,6 +281,7 @@ class CacheArgs(str, Enum):
     hook_config = "hook_config"
     hook_data = "hook_data"
     hook_active = "hook_active"
+    mpsk = "mpsk"
 
 
 class KickArgs(str, Enum):
@@ -271,7 +299,13 @@ class BatchAddArgs(str, Enum):
     groups = "groups"
     devices = "devices"
     labels = "labels"
+    macs = "macs"
+    mpsk = "mpsk"
 
+# CloudAuthUploadType = Literal["mpsk", "mac"]
+class CloudAuthUploadType(str, Enum):
+    mpsk = "mpsk"
+    mac = "mac"
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
@@ -652,6 +686,13 @@ class SortWlanOptions(str, Enum):
     group = "group"
 
 
+class SortNamedMpskOptions(str, Enum):
+    _id = "id"
+    name = "name"
+    role = "role"
+    status = "status"
+    mpsk = "mpsk"
+
 class SortDevOptions(str, Enum):
     name = "name"
     model = "model"
@@ -758,6 +799,16 @@ class SortSiteOptions(str, Enum):
     zipcode = "zipcode"
     country = "country"
     associated_devices = "associated_devices"
+
+
+class SortGroupOptions(str, Enum):
+    name = "name"
+    AOSVersion = "AOSVersion"
+    AllowedDevTypes = "AllowedDevTypes"
+    ApNetworkRole = "ApNetworkRole"
+    Architecture = "Architecture"
+    GwNetworkRole = "GwNetworkRole"
+    template_group = "template_group"
 
 
 class SortVlanOptions(str, Enum):

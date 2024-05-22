@@ -14,6 +14,7 @@ from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
 from tinydb.table import Table
+from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
 
@@ -307,6 +308,7 @@ class Cache:
             self.EventDB: Table = self.DevDB.table("events")
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
+            self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
             self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
@@ -371,6 +373,10 @@ class Cache:
     @property
     def clients(self) -> list:
         return self.ClientDB.all()
+
+    @property
+    def mpsk(self) -> list:
+        return self.MpskDB.all()
 
     @property
     def logs(self) -> list:
@@ -444,8 +450,14 @@ class Cache:
             res = [self.responses.dev or Response()]
 
         _inv_by_ser = self.inventory_by_serial
-        _dev_by_ser = self.devices_by_serial
-        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
+        # Need to use the resp value not what was just stored in cache as we don't store all fields
+        dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
+        if dev_res:
+            _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        else:
+            _dev_by_ser = self.devices_by_serial
+
+        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
             {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
             for serial in _all_serials
@@ -617,39 +629,118 @@ class Cache:
         for m in out:
             yield m
 
-    # TODO this is not used until get_dev_identifier is refactored to support type vs generic_type
-    # TODO Also args is not being sent by typer, would need to use ctx.params.values()
-    # def dev_cx_completion(
-    #     self,
-    #     incomplete: str,
-    #     args: List[str] = [],
-    # ) -> Generator[Tuple[str, str], None, None] | None:
-    #     """Device completion for returning matches that are CX switches
+    def dev_switch_by_type_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+        dev_type: Literal["cx", "sw"] = "cx",
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Device completion for returning matches that are of specific switch type (cx by default)
 
-    #     Args:
-    #         incomplete (str): The last partial or full command before completion invoked.
-    #         args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
-    #     Yields:
-    #         Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
-    #             Returns None if config is invalid
-    #     """
-    #     # Prevents exception during completion when config missing or invalid
-    #     if not config.valid:
-    #         err_console.print(":warning:  Invalid config")
-    #         return
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
 
-    #     match = self.get_dev_identifier(incomplete, dev_type=["cx"], completion=True)
+        match = self.get_dev_identifier(incomplete, dev_type=[dev_type], completion=True)
 
-    #     out = []
-    #     if match:
-    #         out = [
-    #             tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
-    #             if m.name not in args
-    #             ]
+        out = []
+        if match:
+            out = [
+                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+                if m.name not in args
+                ]
 
-    #     for m in out:
-    #         yield m
+        for m in out:
+            yield m
+
+    def dev_cx_completion(
+            self,
+            incomplete: str,
+            args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
+            yield match
+
+    def dev_sw_completion(
+            self,
+            incomplete: str,
+            args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
+            yield match
+
+    def dev_ap_gw_sw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Device completion for returning matches that are ap, gw, or AOS-SW
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match: List[CentralObject] = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
+
+        out = []
+        if match:
+            out = [
+                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+                if m.name not in args
+                ]
+
+        for m in out:
+            yield m
+
+    def mpsk_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match = self.get_mpsk_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or ctx.params.values()  # HACK as args stopped working
+        if match:
+            # remove devices that are already on the command line
+            match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete):
+                    out += [tuple([m.name, m.id])]
+                elif m.id.startswith(incomplete):
+                    out += [tuple([m.id, m.name])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
 
     def dev_kwarg_completion(
         self,
@@ -859,6 +950,9 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
+        from rich import inspect
+        inspect(ctx, console=err_console)
+        inspect(ctx.params)
         if not config.valid:
             err_console.print(":warning:  Invalid config")
             return
@@ -1481,24 +1575,10 @@ class Cache:
 
         return len(ret) == len(data)
 
-    async def get_swack_ids(self, resp: Response, update_data: List[dict]) -> List[dict]:
-        # TODO these likely cause more delay on large accounts as it's pulling from raw, make more efficient or loop for both aps/switches in the same loop
-        # add swarm_ids for APs to cache (AOS 8 IAP and AP individual Upgrade)
-        if "aps" in resp.raw.get("aps", [{}])[0]:
-            _swarm_ids = {d["serial"]: d["swarm_id"] or d["serial"] for d in resp.raw["aps"][0]["aps"]}
-            update_data = [d if not d["type"] == "ap" or d["serial"] not in _swarm_ids else {**d, **{"swack_id": _swarm_ids[d["serial"]]}} for d in update_data]
-
-        # add stack_ids for switches to cache
-        if "switches" in resp.raw.get("switches", [{}])[0]:
-            _stack_ids = {d["serial"]: d["stack_id"] for d in resp.raw["switches"][0]["switches"]}
-            update_data = [d if d["type"] not in  ["cx", "sw"] or d["serial"] not in _stack_ids else {**d, **{"swack_id": _stack_ids[d["serial"]]}} for d in update_data]
-        # FIXME need to update everything that uses AP swarm_id to use swack_id (swarm/stack id)
-
-        return update_data
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
-    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False, **kwargs) -> Union[List[int], Response]:
         """Update Device Database (local cache).
 
         Args:
@@ -1551,17 +1631,17 @@ class Cache:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
             # TODO update device inventory first then only get details for device types in inventory
-            resp = await self.central.get_all_devicesv2()
+            resp = await self.central.get_all_devicesv2(cache=True, **kwargs)
             if resp.ok:
                 if resp.output:
-                    _update_data = utils.listify(resp.output)
+                    _update_data = utils.listify(deepcopy(resp.output))
                     _update_data = cleaner.get_devices(_update_data, cache=True)
-                    _update_data = await self.get_swack_ids(resp, _update_data)
 
+                    # Cache update  # TODO make own function
                     self.DevDB.truncate()
                     update_res = self.DevDB.insert_multiple(_update_data)
                     if False in update_res:
-                        log.error("Tiny DB returned an error during dev db update")
+                        log.error("Tiny DB returned an error during dev db update", caption=True)
 
                 # TODO change updated from  list of funcs to class with bool attributes or something
                 self.updated.append(self.central.get_all_devicesv2)
@@ -1714,7 +1794,7 @@ class Cache:
                 self.GroupDB.truncate()
                 update_res = self.GroupDB.insert_multiple(resp.output)
                 if False in update_res:
-                    log.error("Tiny DB returned an error during group db update")
+                    log.error("Tiny DB returned an error during group db update", caption=True)
             return resp
 
     async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
@@ -1798,41 +1878,43 @@ class Cache:
 
         Past users are always retained, unless truncate=True
         """
-        if self.central.get_clients not in self.updated:
-            client_resp = await self.central.get_clients(*args, **kwargs)
-            if not client_resp.ok:
-                return client_resp
-            else:
-                if len(client_resp) > 0:
-                    client_resp.output = utils.listify(client_resp.output)
-                    self.updated.append(self.central.get_clients)
-                    data = [
-                        {
-                            "mac": c.get("macaddr"),
-                            "name": c.get("name", c.get("macaddr")),
-                            "ip": c.get("ip_address", ""),
-                            "type": c["client_type"],
-                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
-                            "connected_serial": c.get("associated_device"),
-                            "connected_name": c.get("associated_device_name"),
-                            "site": c.get("site"),
-                            "group": c.get("group_name"),
-                            "last_connected": c.get("last_connection_time")
-                        }
-                        for c in client_resp.output
-                    ]
-                    if truncate:
-                        self.ClientDB.truncate()
-                        cache_update_res = self.ClientDB.insert_multiple(data)
-                    else:
-                        Client = Query()
-                        cache_update_res = [
-                            self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
-                            for c in data
-                        ]
-                    if False in cache_update_res:
-                        log.error("Tiny DB returned an error during client db update")
+        # TODO running pytest on subsequent tests of show clients this would eval True and return None
+        # if self.central.get_clients not in self.updated:
+        client_resp = await self.central.get_clients(*args, **kwargs)
+        if not client_resp.ok:
             return client_resp
+        else:
+            if len(client_resp) > 0:
+                client_resp.output = utils.listify(client_resp.output)
+                self.updated.append(self.central.get_clients)
+                data = [
+                    {
+                        "mac": c.get("macaddr"),
+                        "name": c.get("name", c.get("macaddr")),
+                        "ip": c.get("ip_address", ""),
+                        "type": c["client_type"],
+                        "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
+                        "connected_serial": c.get("associated_device"),
+                        "connected_name": c.get("associated_device_name"),
+                        "site": c.get("site"),
+                        "group": c.get("group_name"),
+                        "last_connected": c.get("last_connection_time")
+                    }
+                    for c in client_resp.output
+                ]
+                if truncate:
+                    self.ClientDB.truncate()
+                    cache_update_res = self.ClientDB.insert_multiple(data)
+                else:
+                    Client = Query()
+                    cache_update_res = [
+                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
+                        for c in data
+                    ]
+                if False in cache_update_res:
+                    log.error("Tiny DB returned an error during client db update")
+        return client_resp
+
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
         self.LogDB.truncate()
@@ -1873,6 +1955,30 @@ class Cache:
             data = [*self.hook_active, *data]
             self.HookDataDB.truncate()
             return self.HookDataDB.insert_multiple(data)
+
+    async def update_mpsk_db(self, data: List[Dict[str, Any]] = None) -> bool:
+        if data:
+            data = models.CacheMpskNetworks(data)
+            data = data.dict()
+            self.MpskDB.truncate()
+            return self.MpskDB.insert_multiple(data)
+        else:
+            resp = await self.central.cloudauth_get_mpsk_networks()
+            if resp.ok:
+                if resp.output:
+                    _update_data = utils.listify(deepcopy(resp.output))
+                    _update_data = models.CacheMpskNetworks(**resp.raw)
+                    _update_data = _update_data.dict()["items"]
+
+                    self.MpskDB.truncate()
+                    update_res = self.MpskDB.insert_multiple(_update_data)
+                    if False in update_res:
+                        log.error("Tiny DB returned an error during MPSK db update", caption=True)
+
+                # TODO change updated from  list of funcs to class with bool attributes or something
+                self.updated.append(self.central.cloudauth_get_mpsk_networks)
+                self.responses.dev = resp
+            return resp
 
     # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
     async def _check_fresh(
@@ -2019,6 +2125,8 @@ class Cache:
         qry_str: str,
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
+        swack: bool = False,
+        conductor_only: bool = False,
         group: str = None,
         all: bool = False,
         completion: bool = False,
@@ -2030,6 +2138,10 @@ class Cache:
             qry_funcs (Sequence[str]): Sequence of strings "dev", "group", "site", "template"
             device_type (Union[str, List[str]], optional): Restrict matches to specific dev type(s).
                 Defaults to None.
+            swack (bool, optional): Restrict matches to only the stack commanders matching query (filter member switches).
+                Defaults to False.
+            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
+                Does not filter non stacks, the way swack option does. Defaults to False.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
@@ -2054,6 +2166,8 @@ class Cache:
                 kwargs = default_kwargs.copy()
                 if q == "dev":
                     kwargs["dev_type"] = device_type
+                    kwargs["swack"] = swack
+                    kwargs["conductor_only"] = conductor_only
                 elif q == "template":
                     kwargs["group"] = group
                 this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
@@ -2089,13 +2203,38 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.GenericDevTypes | List[constants.GenericDevTypes] = None,
+        dev_type: constants.AllDevTypes | List[constants.AllDevTypes] = None,
+        swack: bool = False,
+        conductor_only: bool = False,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
     ) -> CentralObject | List[CentralObject] | None:
+        """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
+
+        If multiple matches are found user is promted to select device.
+
+        Args:
+            query_str (str | Iterable[str]): The query string or list of strings to attempt to match.
+            dev_type (constants.AllDevTypes | List[constants.AllDevTypes], optional): Limit matches to specific device type. Defaults to None (all device types).
+            swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
+                If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
+            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
+                Does not filter non stacks, the way swack option does. Defaults to False.
+            retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
+            completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
+            silent (bool, optional): Do not display errors / output, simply returns match if match is found. Defaults to False.
+            include_inventory (bool, optional): Whether match attempt should also include Inventory DB (devices in GLCP that have yet to connect to Central). Defaults to False.
+            exit_on_fail (bool, optional): Whether a failure to match exits the program. Defaults to True.
+
+        Raises:
+            typer.Exit: Exit CLI / command, occurs if there is no match unless exit_on_fail is set to False.
+
+        Returns:
+            CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
+        """
 
         retry = False if completion else retry
         # TODO dev_type currently not passed in or handled identifier for show switches would also
@@ -2174,9 +2313,21 @@ class Cache:
         if dev_type:
             all_match = match.copy()
             dev_type = utils.listify(dev_type)
-            match = []
-            for _dev_type in dev_type:
-                match += [d for d in all_match if d.generic_type.lower() in "".join(_dev_type[0:len(d.generic_type)]).lower()]
+            if "switch" in dev_type:
+                dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
+
+            match = [d for d in all_match if d.type in dev_type]
+
+        # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
+        # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
+        # This param returns only the commander matching the name.
+        if len(match) > 1 and (swack or conductor_only):
+            unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
+            stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip or (d.switch_role and d.switch_role == 2)]
+            if swack:
+                match = stacks
+            elif conductor_only:
+                match = [*stacks, *[d for d in match if not d.swack_id]]
 
         if completion:
             return match or []
@@ -2682,3 +2833,84 @@ class Cache:
             log.exception(e)
             # print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)
+
+    def get_mpsk_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CentralObject | List[CentralObject]:
+        """Allows Case insensitive ssid match"""
+        retry = False if completion else retry
+        for _ in range(0, 2):
+            if query_str == "":
+                match = self.mpsk
+            else:
+                match = self.MpskDB.search((self.Q.name == query_str))
+
+            # case insensitive
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive ignore -_
+            if not match:
+                if "_" in query_str or "-" in query_str:
+                    match = self.MpskDB.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                        )
+                    )
+
+            # case insensitive startswith search for mspk id
+            if not match:
+                match = self.MpskDB.search(
+                    self.Q.id.test(
+                        lambda v: v.lower().startswith(query_str.lower())
+                    )
+                )
+
+            if not match and retry and self.central.cloudauth_get_mpsk_networks not in self.updated:
+                if FUZZ:
+                    fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
+                    if fuzz_resp:
+                        fuzz_match, fuzz_confidence = fuzz_resp[0]
+                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                            match = self.MpskDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    err_console.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating mpsk Cache")
+                    asyncio.run(self.update_mpsk_db())
+                _ += 1
+            if match:
+                match = [CentralObject("mpsk", g) for g in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type="mpsk",)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk])
+            print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
+            print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
+            raise typer.Exit(1)
+        else:
+            if not completion:
+                log.error(
+                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                )

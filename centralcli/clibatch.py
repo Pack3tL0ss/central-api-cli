@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs, GatewayRole, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty
+from centralcli.constants import AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs, GatewayRole, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty, CloudAuthUploadType
 from centralcli.exceptions import ImportException, MissingFieldException, DevException
 from centralcli.strings import ImportExamples, LongHelp
 
@@ -769,6 +769,20 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     return resp or Response(error="No labels were added")
 
 
+def batch_add_cloudauth(upload_type: CloudAuthUploadType = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+    elif not data:
+        cli.exit("[red]Error!![/] No import file provided")
+
+    print(f"Upload{'' if not yes else 'ing'} [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid}[/]' if upload_type == 'mpsk' else ''}")
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=import_file, ssid=ssid)
+
+    return resp
+
+
 # TODO TEST and complete.
 def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
     print("Batch Deploy is new, and has not been completely tested yet.")
@@ -789,6 +803,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
             cli.display_results(resp, tablefmt="action")
 
 
+# FIXME
 @app.command(short_help="Validate a batch import")
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
@@ -830,6 +845,7 @@ def verify(
     resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         cli.display_results(resp, stash=False, exit_on_fail=True)
+    resp.output = cleaner.simple_kv_formatter(resp.output)
     central_devs = [CentralObject("dev", data=r) for r in resp.output]
 
     file_by_serial = {
@@ -864,6 +880,14 @@ def verify(
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
                 validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
+        if file_by_serial[s].get("site"):
+            if not central_by_serial[s].get("status"):
+                validation[s] += [f"{_pfx}  Also unable to assign site prior to device checking in."]
+            elif not central_by_serial[s].get("site"):
+                validation[s] += [f"{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
+            elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
+                validation[s] += [f"{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
+
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
             if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
@@ -874,7 +898,7 @@ def verify(
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["license", "group"]:
+            for field in ["license", "group", "site"]:
                 if field in file_by_serial[s] and file_by_serial[s][field]:
                     _msg += f", {field.title()} [bright_green]OK[/]"
             validation[s] += [_msg]
@@ -957,10 +981,11 @@ def deploy(
 
 
 # FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
-@app.command(short_help="Perform Batch Add from file")
+@app.command()
 def add(
-    what: BatchAddArgs = typer.Argument(..., show_default=False,),
+    what: BatchAddArgs = typer.Argument(..., help="[cyan]macs[/] and [cyan]mpsk[/] are for cloud-auth", show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),  # HACK completion broken when trying to complete a Path
+    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", show_default=False,),
     show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
@@ -976,33 +1001,49 @@ def add(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Perform batch Add operations using import data from file."""
+    """Perform batch Add operations using import data from file
+
+
+    """
     if show_example:
         print(getattr(examples, f"add_{what}"))
         return
 
     if not import_file:
         _msg = [
-            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE",
+            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices|macs|mpsk] IMPORT_FILE",
             "Try 'cencli batch add ?' for help.",
             "",
             "Error: One of 'IMPORT_FILE' or --example should be provided.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
 
+    caption, cleaner, tablefmt = None, None, "action"
     if what == "sites":
         resp = batch_add_sites(import_file, yes=yes)
-        cli.display_results(resp)
+        tablefmt = "rich"
     elif what == "groups":
         resp = batch_add_groups(import_file, yes=yes)
-        cli.display_results(resp, tablefmt="action", cleaner=cleaner.parse_caas_response)
+        cleaner = cleaner.parse_caas_response
     elif what == "devices":
         resp = batch_add_devices(import_file, yes=yes)
-        cli.display_results(resp, tablefmt="action")
     elif what == "labels":
         resp = batch_add_labels(import_file, yes=yes)
-        cli.display_results(resp, tablefmt="action")
+    elif what == "macs":
+        resp = batch_add_cloudauth("mac", import_file, yes=yes)
+        caption = (
+            "Use [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
+            "Use [cyan]cencli show cloud-auth registered-macs[/] to see all registered macs."
+        )
+    elif what == "mpsk":
+        if not ssid:
+            cli.exit("[cyan]--ssid[/] option is required when uploading mpsk")
+        resp = batch_add_cloudauth("mpsk", import_file, ssid=ssid, yes=yes)
+        caption = (
+            "Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import."
+        )
+
+    cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what}", caption=caption, cleaner=cleaner)
 
 
 # TODO archive and unarchive have the same block this is used by batch delete
@@ -1052,8 +1093,6 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
 # TODO DELME temporary debug testing
 def batch_delete_devices_dry_run(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
     console = Console(emoji=False)
-    from rich import inspect
-
 
     if not data:
         print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")

@@ -114,7 +114,7 @@ def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,
 
 @app.command()
 def overlay(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -124,7 +124,7 @@ def overlay(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show GW or AP Overlay details (Tunneled SSIDs) or AOS-SW User Based Tunneling
+    """Show GW or AP Overlay details (Tunneled SSIDs) or AOS-SW User Based Tunneling  (valid on AP, GW, and AOS-SW)
 
     [cyan]Returns the output of the following commands useful in troubleshooting overlay AP / gateway / ubt tunnels.[/]
 
@@ -156,17 +156,14 @@ def overlay(
         "gw": [2452, 2515, 2453, 2131, 2441, 2454, 2455],
         "sw": [1189, 1195, 1196, 1191]
     }
-    dev = cli.cache.get_dev_identifier(device)
-    if dev.type == "cx":
-        print(":warning:  Command not supported on CX switches.")
-        raise typer.Exit(1)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 @app.command()
 def clients(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
     wired: bool = typer.Option(False, "-w", "--wired", help="Include [cyan]show clients wired[/] (applies to AP)",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
@@ -177,9 +174,9 @@ def clients(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show output of client related commands
+    """Show output of client related commands  (valid on AP, GW, and AOS-SW)
 
-    [cyan]Returns the output of the following client related commands.[/]
+    [cyan]Returns the output of the following client related commands. Valid for AP, GW, and AOS-SW.[/]
 
     [bright_green]APs[/]
     [cyan]-[/] show clients
@@ -203,10 +200,7 @@ def clients(
         "sw": [1028, 1089],
         "gw": [2163, 2095],
     }
-    dev: CentralObject = cli.cache.get_dev_identifier(device)
-    if dev.type == "cx":
-        print(":warning:  Command not supported on CX switches.")
-        raise typer.Exit(1)
+    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     commands = ids_by_dev_type[dev.type]
     if wired:
@@ -230,7 +224,7 @@ def dpi(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show DPI output (valid on APs or GWs)
+    """Show DPI output (valid on APs and GWs)
 
     [cyan]Returns the output of the following DPI related commands.[/]
 
@@ -312,7 +306,7 @@ def show_tech(
 
 @app.command()
 def images(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -322,7 +316,7 @@ def images(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ):
-    """Show image versions
+    """Show image versions (Valid for AP, GW, and AOS-SW)
 
     [cyan]Returns the output of the following image related commands.[/]
 
@@ -337,10 +331,7 @@ def images(
     [bright_green]AOS-SW[/]
     [cyan]-[/] show flash
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device)
-    if dev.type == "cx":
-        print(":warning:  Command not supported on CX switches.")
-        raise typer.Exit(1)
+    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     ids_by_dev_type = {
         "ap": [119, 213],

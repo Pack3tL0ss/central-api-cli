@@ -13,6 +13,7 @@ from enum import Enum
 from functools import wraps
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
+from yarl import URL
 
 # from aiohttp import ClientSession
 import aiohttp
@@ -22,7 +23,8 @@ from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
                models, utils)
 from .utils import Mac
 from .response import Response, Session
-# buried import: requests is imported in add_template as a workaround until figure out aiohttp form data
+from .exceptions import CentralCliException
+# buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
 
 
 
@@ -71,6 +73,7 @@ class WlanType(str, Enum):
     employee = "employee"
     guest = "guest"
 
+CloudAuthUploadType = constants.CloudAuthUploadType
 
 def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     if formatter is None:
@@ -898,12 +901,18 @@ class CentralApi(Session):
 
         return templates.update_template(self.auth, **kwargs)
 
-    async def _get_group_names(self) -> Response:
+    async def get_group_names(self) -> Response:
+        """Get a listing of all group names defined in Aruba Central
+
+        Returns:
+            Response: CentralAPI Respose object
+                output attribute will be List[str]
+        """
         url = "/configuration/v2/groups"
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
         if resp.ok:
-            resp.output = cleaner._get_group_names(resp.output)
+            resp.output = cleaner.get_group_names(resp.output)
         return resp
 
     async def delete_template(
@@ -924,40 +933,89 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    # TODO deprecate this used by group cache update.  _get_group_names then get_groups_properties.  More info in single call
     async def get_all_groups(self) -> Response:
-        """Get template group details for all groups.
+        """Get properties and template info for all groups
 
         This method will first call configuration/v2/groups to get a list of group names.
-        Then /configuration/v2/groups/template_info to get the template details (template_group or not)
-        for each group.
+
+        It then combines the responses from /configuration/v2/groups/template_info
+        and /configuration/v1/groups/properties to get the template details
+         (template_group or not) and properties for each group.
+
+         The template_info and properties endpoints both allow 20 groups per request.
+         Multiple requests will be performed async if there are more than 20 groups.
+
+        Raises:
+            CentralCliException: Raised when validation of combined responses fails.
 
         Returns:
             Response: centralcli Response Object
         """
-        resp = await self._get_group_names()
+        resp = await self.get_group_names()
         if not resp.ok:
             return resp
-        else:
-            url = "/configuration/v2/groups/template_info"
-            # return await self.get_groups_properties(resp.output)
-            batch_reqs = []
-            for groups in utils.chunker(resp.output, 20):  # This call allows a max of 20
-                params = {"groups": ",".join(groups)}
-                batch_reqs += [self.BatchRequest(self.get, url, params=params)]
-                # all_groups = await self.get(url, params=params)
-                # TODO dunder add in Response
-            batch_resp = await self._batch_request(batch_reqs)
-            # TODO method to combine raw and output attrs of all responses into last resp
-            output = [r for res in batch_resp for r in res.output]
-            resp = batch_resp[-1]
-            resp.output = output
-            if "data" in resp.raw:
-                resp.raw["data"] = output
-            else:
-                log.warning("raw attr in resp from get_all_groups lacks expected outer key 'data'")
 
-            return resp
+        groups = resp.output
+
+        template_resp, props_resp = await self._batch_request(
+            [
+                self.BatchRequest(self.get_groups_template_status, (groups,)),
+                self.BatchRequest(self.get_groups_properties, (groups,))
+            ]
+        )
+
+        template_by_group = {d["group"]: d["template_details"] for d in template_resp.output}
+        props_by_group = {d["group"]: d["properties"] for d in props_resp.output}
+
+        combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
+        if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
+            raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
+
+        resp = props_resp
+        resp.output = [{"group": k, **v} for k, v in combined.items()]
+        resp.raw = {"properties": resp.raw, "template_info": template_resp.raw}
+
+        return resp
+
+
+    async def get_groups_template_status(self, groups: List[str] | str = None) -> Response:
+        """Get template group status for provided groups or all if none are provided.  (if it is a template group or not)
+
+        Will return response from /configuration/v2/groups/template_info endpoint.
+        If no groups are provided /configuration/v2/groups is first called to get a list of all group names.
+
+        Args:
+            groups (List[str] | str, optional): A single group or list of groups. Defaults to None (all groups).
+
+        Returns:
+            Response: centralcli Response Object
+        """
+        url = "/configuration/v2/groups/template_info"
+
+        if isinstance(groups, str):
+            groups = [groups]
+
+        if not groups:
+            resp = await self.get_group_names()
+            if not resp.ok:
+                return resp
+            groups: List[str] = resp.output
+
+        batch_reqs = []
+        for chunk in utils.chunker(groups, 20):  # This call allows a max of 20
+            params = {"groups": ",".join(chunk)}
+            batch_reqs += [self.BatchRequest(self.get, url, params=params)]
+
+        batch_resp = await self._batch_request(batch_reqs)
+        output = [r for res in batch_resp for r in res.output]
+        resp = batch_resp[-1]
+        resp.output = output
+        if "data" in resp.raw:
+            resp.raw["data"] = output
+        else:
+            log.warning("raw attr in resp from get_all_groups lacks expected outer key 'data'")
+
+        return resp
 
 
     async def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
@@ -972,7 +1030,7 @@ class CentralApi(Session):
             Response: centralcli Response Object
         """
         if not groups:
-            resp = await self.get_all_groups()
+            resp = await self.get_groups_template_status()
             if not resp:
                 return resp
             groups = cleaner.get_all_groups(resp.output)
@@ -1044,7 +1102,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, calculate_client_count: bool = True, **kwargs) -> Response:
+    async def get_all_devicesv2(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = False, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1060,7 +1118,9 @@ class CentralApi(Session):
         }
         _output = {}
 
-        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, **kwargs) for dev_type in dev_types]
+        # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
+        # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
+        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs) for dev_type in dev_types]
         res = await self._batch_request(reqs)
         _failure_idxs = [idx for idx, r in enumerate(res) if not r]
         if _failure_idxs:
@@ -1076,21 +1136,33 @@ class CentralApi(Session):
 
 
         resp = res[-1]
-        # TODO pass raw JSON use pydantic models in cleaner for non-verbose, verbose, --clients --stats outputs
         if calculate_client_count:
             _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
         else:
             _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
         resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
 
+        # TODO use below once everything that references it has been refactored so resp.raw["aps"][0]["aps"] becomes resp.raw["aps"]["aps"]
+        # resp.raw = {k: v for k, v in zip(dev_types, [r.raw for r in res]) if v}
+        def _get_swack_id(dev_type: str, dev_data: dict) -> str | None:
+            if dev_type == "gateways":
+                return None
+            elif dev_type == "switches":
+                return dev_data.get("stack_id")
+            elif dev_type == "aps":
+                return dev_data.get("swarm_id") if dev_data.get("firmware_version", "8").split(".")[0] == 8 else dev_data.get("serial")
+
         if _output:
             # Add type key to all dicts covert "switch-type" to cencli type (cx or sw)
+            # Add switch_role and swack_id (swarm/stack id) to all devices, both for the sake of cache
             # TODO move to cleaner? set type to switch_type for switches let cleaner change value to lib vals
             dicts = [
                 {
                     **{
                         "type": lib_dev_types.get(k, k) if k != "switches" else
-                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch"))
+                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch")),
+                        "swack_id": _get_swack_id(k, inner_dict),
+                        "switch_role": inner_dict.get("switch_role")
                     },
                     **{
                         kk: vv for kk, vv in inner_dict.items()
@@ -1110,20 +1182,25 @@ class CentralApi(Session):
     # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for an access port, include all VLANs on a trunk port, no indication of native)
     # API-FLAW aos-sw always shows mode as access, cx does as well, but has vlan_mode which is accurate
     # API-FLAW neither show interface name/description
-    async def get_switch_ports(self, serial: str, slot: str = None, aos_sw: bool = False) -> Response:
+    async def get_switch_ports(self, iden: str, slot: str = None, stack: bool = False, aos_sw: bool = False) -> Response:
         """Switch Ports Details.
 
         Args:
-            serial (str): Serial number of switch to be queried
+            iden (str): Serial number of switch to be queried or the stack_id if it's a stack
             slot (str, optional): Slot name of the ports to be queried {For chassis type switches
                 only}.
+            stack: (bool, optional) : Get details for stack vs individual switch (iden needs to be the stack_id)
+                Defaults to False.
             aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False (indicating CX switch)
 
         Returns:
             Response: CentralAPI Response object
         """
-        sw_path = "cx_switches" if not aos_sw else "switches"
-        url = f"/monitoring/v1/{sw_path}/{serial}/ports"
+        if stack:
+            sw_path = "cx_switch_stacks" if not aos_sw else "switch_stacks"
+        else:
+            sw_path = "cx_switches" if not aos_sw else "switches"
+        url = f"/monitoring/v1/{sw_path}/{iden}/ports"
 
         params = {"slot": slot}
 
@@ -1140,7 +1217,7 @@ class CentralApi(Session):
         Args:
             serial (str): Switch serial
             port (str, optional): Filter by switch port
-            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False
+            aos_sw (bool, optional): Device is ArubaOS-Switch. Defaults to False (CX Switch)
 
         Returns:
             Response: CentralAPI Response object
@@ -1412,7 +1489,7 @@ class CentralApi(Session):
         hostname: str = None,
         group: str = None,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 1000,
     ) -> Response:
         """List Switch Stacks.
 
@@ -1420,7 +1497,7 @@ class CentralApi(Session):
             hostname (str, optional): Filter by stack hostname
             group (str, optional): Filter by group name
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. Default is 1000 and max is 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -1435,6 +1512,22 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_switch_stack_details(
+        self,
+        stack_id: str,
+    ) -> Response:
+        """Switch Stack Details.
+
+        Args:
+            stack_id (str): Filter by Switch stack_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/switch_stacks/{stack_id}"
+
+        return await self.get(url)
 
     async def get_dev_details(
         self,
@@ -1496,6 +1589,24 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_wlan_cluster_by_group(
+        self,
+        group_name: str,
+        ssid: str
+    ) -> Response:
+        """Retrieve Cluster mapping for given group/SSID.
+
+        Args:
+            group_name (str): The name of the group.
+            ssid (str): Wlan ssid name
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/overlay-wlan-config/v2/node_list/GROUP/{group_name}/config/ssid_cluster/{ssid}/WIRELESS_PROFILE/"
+
+        return await self.get(url)
 
     # TODO Under test 3/7/2024
     async def get_full_wlan_list(
@@ -1924,7 +2035,7 @@ class CentralApi(Session):
         primary_vlan_id: int = None,
         status: str = None,
         sort: str = None,
-        calculate_total: bool = None,
+        calculate_total: bool = True,
         aos_sw: bool = False,
         offset: int = 0,
         limit: int = 500,
@@ -1932,7 +2043,7 @@ class CentralApi(Session):
         """Get vlan info for switch (CX and SW).
 
         Args:
-            iden (str): Serial Number of Stack ID, Identifies the dev to return VLANs from.
+            iden (str): Serial Number or Stack ID, Identifies the dev to return VLANs from.
             stack (bool, optional): Set to True for stack. Default: False
             name (str, optional): Filter by vlan name
             id (int, optional): Filter by vlan id
@@ -1969,7 +2080,7 @@ class CentralApi(Session):
             "primary_vlan_id": primary_vlan_id,
             "status": status,
             "sort": sort,
-            "calculate_total": calculate_total,
+            "calculate_total": None if not calculate_total else str(calculate_total),  # sending str of False/false will be interpreted as true.  None will strip the param
             "offset": offset,
             "limit": limit,
         }
@@ -2146,13 +2257,15 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_switch_neighbors_v1(
+    async def get_cx_switch_neighbors(
         self,
         serial: str,
     ) -> Response:
         """Get lldp device neighbor info for CX switch.
 
         If used on AOS-SW will only return neighbors that are CX switches
+        For a stack this will return neighbors for the individual member
+        use get_cx_switch_stack_neighbors to get neighbors for entire stack
 
         Args:
             serial (str): id of the switch
@@ -2164,7 +2277,7 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_cx_switch_stack_neighbors_v1(
+    async def get_cx_switch_stack_neighbors(
         self,
         stack_id: str,
     ) -> Response:
@@ -3033,7 +3146,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_groups_properties(self, groups: Union[str, List[str]] = None) -> Response:
+    async def get_groups_properties(self, groups: str | List[str] = None) -> Response:
         """Get properties set for groups.
 
         // Used by show groups when -v flag is provided //
@@ -3051,7 +3164,7 @@ class CentralApi(Session):
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
         if groups is None:
-            resp = await self._get_group_names()
+            resp = await self.get_group_names()
             if not resp.ok:
                 return resp
             else:
@@ -3510,6 +3623,36 @@ class CentralApi(Session):
             'firmware_version': firmware_version,
             'reboot': reboot,
             'model': model
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cancel_upgrade(
+        self,
+        device_type: str,
+        serial: str = None,
+        swarm_id: str = None,
+        group: str = None,
+    ) -> Response:
+        """Cancel scheduled firmware upgrade.
+
+        Args:
+            device_type (str): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
+            serial (str): Serial of device
+            swarm_id (str): Swarm ID
+            group (str): Specify Group Name to cancel upgrade for devices in that group
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        device_type = constants.lib_to_api('firmware', device_type)
+        url = "/firmware/v1/upgrade/cancel"
+
+        json_data = {
+            'swarm_id': swarm_id,
+            'serial': serial,
+            'device_type': device_type,
+            'group': group
         }
 
         return await self.post(url, json_data=json_data)
@@ -5651,6 +5794,200 @@ class CentralApi(Session):
                 log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True)
 
         return resp
+
+    async def cloudauth_upload_fixme(
+        self,
+        upload_type: CloudAuthUploadType,
+        file: Union[Path, str],
+        ssid: str = None,
+    ) -> Response:
+        """Upload file.
+
+        This doesn't work still sorting the format of FormData
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            file (Union[Path, str]): The csv file to upload
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}"
+        file = file if isinstance(file, Path) else Path(str(file))
+        # data = multipartify(file.read_bytes())
+        # data = aiohttp.FormData(file.open())
+
+        params = {
+            'ssid': ssid
+        }
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        form_data = aiohttp.FormData(files)
+        # files = {f'{upload_type}_import': (f'{upload_type}_import.csv', file.read_bytes())}
+        headers = {
+            "Content-Type": "multipart/form-data",
+            'Accept': 'application/json'
+        }
+        headers = {**headers, **dict(aiohttp.FormData(files)._writer._headers)}
+
+        return await self.post(url, headers=headers, params=params, payload=form_data)
+
+    async def cloudauth_upload(
+        self,
+        upload_type: CloudAuthUploadType,
+        file: Union[Path, str],
+        ssid: str = None,
+    ) -> Response:
+
+        """Upload file.
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            file (Union[Path, str]): The csv file to upload
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}"
+        file = file if isinstance(file, Path) else Path(str(file))
+        params = {
+            'ssid': ssid
+        }
+
+        # HACK need to make the above async function work
+        import requests
+        headers = {
+            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            'Accept': 'application/json'
+        }
+
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        url=f"{self.auth.central_info['base_url']}{url}"
+
+        for _ in range(2):
+            _resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
+            output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+            # Make requests Response look like aiohttp.ClientResponse
+            _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
+            resp = Response(_resp, output=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2), status_code=_resp.status_code, rl_str="-")
+            if "invalid_token" in resp.output:
+                self.refresh_token()
+                headers["Authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
+            else:
+                break
+        return resp
+
+    async def cloudauth_upload_status(
+        self,
+        upload_type: CloudAuthUploadType,
+        ssid: str = None,
+    ) -> Response:
+        """Read upload status of last file upload.
+
+        Args:
+            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
+            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudauth/api/v3/bulk/{upload_type}/status"
+
+        params = {
+            'ssid': ssid
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_get_mpsk_networks(
+        self,
+    ) -> Response:
+        """Read all configured MPSK networks.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/mpsk"
+
+        return await self.get(url)
+
+    async def cloudauth_get_namedmpsk(
+        self,
+        mpsk_id: str,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        cursor: str = None,
+        sort: str = None,
+        limit: int = 100,
+    ) -> Response:
+        """Read all named MPSK.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            cursor (str, optional): For cursor based pagination.
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+            limit (int, optional): Number of items to be fetched Defaults to 100.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
+
+        params = {
+            'name': name,
+            'role': role,
+            'status': status,
+            'cursor': cursor,
+            'sort': sort,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+    async def cloudauth_download_mpsk_csv(
+        self,
+        ssid: str,
+        filename: str = None,
+        name: str = None,
+        role: str = None,
+        status: str = None,
+        sort: str = None,
+    ) -> Response:
+        """Fetch all Named MPSK as a CSV file.
+
+        Args:
+            ssid (str): Configured MPSK SSID for which Named MPSKs are to be downloaded.
+            filename (str, optional): Suggest a file name for the downloading file via content
+                disposition header.
+            name (str, optional): Filter by name of the named MPSK. Does a 'contains' match.
+            role (str, optional): Filter by role of the named MPSK. Does an 'equals' match.
+            status (str, optional): Filter by status of the named MPSK. Does an 'equals' match.
+                Valid Values: enabled, disabled
+            sort (str, optional): Sort order  Valid Values: +name, -name, +role, -role, +status,
+                -status
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/cloudAuth/api/v2/download/mpsk"
+
+        params = {
+            'ssid': ssid,
+            'filename': filename,
+            'name': name,
+            'role': role,
+            'status': status,
+            'sort': sort
+        }
+
+        return await self.get(url, params=params)
 
     async def get_user_accounts(
         self,

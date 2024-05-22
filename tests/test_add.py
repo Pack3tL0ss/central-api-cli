@@ -2,15 +2,12 @@
 from typer.testing import CliRunner
 
 from cli import app  # type: ignore # NoQA
-# import json
+from . import update_log
+from centralcli import cache
 
-# from . import TEST_DEVICES
+update_log(f'{__file__.split("/")[-1]}: {id(cache)}')
 
 runner = CliRunner()
-
-# test_dev_file = Path(__file__).parent / 'test_devices.json'
-# if test_dev_file.is_file():
-#     TEST_DEVICES = json.loads(test_dev_file.read_text())
 
 
 def test_add_group1():
