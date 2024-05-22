@@ -629,39 +629,86 @@ class Cache:
         for m in out:
             yield m
 
-    # TODO this is not used until get_dev_identifier is refactored to support type vs generic_type
-    # TODO Also args is not being sent by typer, would need to use ctx.params.values()
-    # def dev_cx_completion(
-    #     self,
-    #     incomplete: str,
-    #     args: List[str] = [],
-    # ) -> Generator[Tuple[str, str], None, None] | None:
-    #     """Device completion for returning matches that are CX switches
+    def dev_switch_by_type_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+        dev_type: Literal["cx", "sw"] = "cx",
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Device completion for returning matches that are of specific switch type (cx by default)
 
-    #     Args:
-    #         incomplete (str): The last partial or full command before completion invoked.
-    #         args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
-    #     Yields:
-    #         Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
-    #             Returns None if config is invalid
-    #     """
-    #     # Prevents exception during completion when config missing or invalid
-    #     if not config.valid:
-    #         err_console.print(":warning:  Invalid config")
-    #         return
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
 
-    #     match = self.get_dev_identifier(incomplete, dev_type=["cx"], completion=True)
+        match = self.get_dev_identifier(incomplete, dev_type=[dev_type], completion=True)
 
-    #     out = []
-    #     if match:
-    #         out = [
-    #             tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
-    #             if m.name not in args
-    #             ]
+        out = []
+        if match:
+            out = [
+                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+                if m.name not in args
+                ]
 
-    #     for m in out:
-    #         yield m
+        for m in out:
+            yield m
+
+    def dev_cx_completion(
+            self,
+            incomplete: str,
+            args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
+            yield match
+
+    def dev_sw_completion(
+            self,
+            incomplete: str,
+            args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
+            yield match
+
+    def dev_ap_gw_sw_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Device completion for returning matches that are ap, gw, or AOS-SW
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match: List[CentralObject] = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
+
+        out = []
+        if match:
+            out = [
+                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
+                if m.name not in args
+                ]
+
+        for m in out:
+            yield m
 
     def mpsk_completion(
         self,
@@ -1831,41 +1878,43 @@ class Cache:
 
         Past users are always retained, unless truncate=True
         """
-        if self.central.get_clients not in self.updated:
-            client_resp = await self.central.get_clients(*args, **kwargs)
-            if not client_resp.ok:
-                return client_resp
-            else:
-                if len(client_resp) > 0:
-                    client_resp.output = utils.listify(client_resp.output)
-                    self.updated.append(self.central.get_clients)
-                    data = [
-                        {
-                            "mac": c.get("macaddr"),
-                            "name": c.get("name", c.get("macaddr")),
-                            "ip": c.get("ip_address", ""),
-                            "type": c["client_type"],
-                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
-                            "connected_serial": c.get("associated_device"),
-                            "connected_name": c.get("associated_device_name"),
-                            "site": c.get("site"),
-                            "group": c.get("group_name"),
-                            "last_connected": c.get("last_connection_time")
-                        }
-                        for c in client_resp.output
-                    ]
-                    if truncate:
-                        self.ClientDB.truncate()
-                        cache_update_res = self.ClientDB.insert_multiple(data)
-                    else:
-                        Client = Query()
-                        cache_update_res = [
-                            self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
-                            for c in data
-                        ]
-                    if False in cache_update_res:
-                        log.error("Tiny DB returned an error during client db update")
+        # TODO running pytest on subsequent tests of show clients this would eval True and return None
+        # if self.central.get_clients not in self.updated:
+        client_resp = await self.central.get_clients(*args, **kwargs)
+        if not client_resp.ok:
             return client_resp
+        else:
+            if len(client_resp) > 0:
+                client_resp.output = utils.listify(client_resp.output)
+                self.updated.append(self.central.get_clients)
+                data = [
+                    {
+                        "mac": c.get("macaddr"),
+                        "name": c.get("name", c.get("macaddr")),
+                        "ip": c.get("ip_address", ""),
+                        "type": c["client_type"],
+                        "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
+                        "connected_serial": c.get("associated_device"),
+                        "connected_name": c.get("associated_device_name"),
+                        "site": c.get("site"),
+                        "group": c.get("group_name"),
+                        "last_connected": c.get("last_connection_time")
+                    }
+                    for c in client_resp.output
+                ]
+                if truncate:
+                    self.ClientDB.truncate()
+                    cache_update_res = self.ClientDB.insert_multiple(data)
+                else:
+                    Client = Query()
+                    cache_update_res = [
+                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
+                        for c in data
+                    ]
+                if False in cache_update_res:
+                    log.error("Tiny DB returned an error during client db update")
+        return client_resp
+
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
         self.LogDB.truncate()
