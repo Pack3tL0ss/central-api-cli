@@ -47,13 +47,30 @@ class SendConfigDevIdens(str, Enum):
     # sw = "sw"  # hopefully some day
     # cx = "cx"
 
-
 class PoEDetectionStatus(Enum):
     NA = 0
     Undefined = 1  # TODO figure out what this status is
     Searching = 2
     Delivering = 3
 
+# Here are all the types for the below Enum
+# 3: Bridge (Switch)
+# DOCSIS Cable Device
+# Other
+# Repeater
+# 5 but think 5: Router
+# Station
+# Telephone
+# 4: WLAN Access Point
+class LLDPCapabilityTypes(Enum):
+    unknown0 = 0
+    unknown1 = 1
+    unknown2 = 2
+    Bridge = 3  # 3 and 5 are assumption need to verify
+    Wlan_Access_Point = 4
+    Router = 5
+    unknown6 = 6
+    unknown7 = 7
 
 # Not used currently # TODO reference in cleaner
 class SwitchRoles(Enum):
