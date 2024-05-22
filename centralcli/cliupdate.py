@@ -14,12 +14,12 @@ import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, cli, caas, cleaner, config
+    from centralcli import utils, cli, caas, cleaner
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli, caas, cleaner, config
+        from centralcli import utils, cli, caas, cleaner
     else:
         print(pkg_dir.parts)
         raise e
