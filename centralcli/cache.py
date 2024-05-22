@@ -71,7 +71,7 @@ class CentralObject:
         data: Union[list, Dict[str, Any]],
     ) -> Union[list, Dict[str, Any]]:
         self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label = False, False, False, False, False
-        data = None if not data else data
+        data: Dict | List[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
 
@@ -91,6 +91,7 @@ class CentralObject:
             self.ip = self.data["ip"] = self.data.get("ip")
             self.site = self.data["site"] = self.data.get("site")
             self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
+            self.serial: str = self.data.get("serial")
 
     def __bool__(self):
         return bool(self.data)
