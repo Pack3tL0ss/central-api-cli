@@ -23,13 +23,11 @@ try:
 except Exception:
     pass
 
-# TODO remove after TESTING NEW string matching lookup
 try:
     from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
 except Exception:
     FUZZ = False
-    pass
 
 # Used to debug completion
 err_console = Console(stderr=True)
