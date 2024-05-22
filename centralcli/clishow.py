@@ -1499,7 +1499,9 @@ def lldp(
     """Show AP lldp neighbor
 
     Valid on APs and CX switches
-    Command will run on AOS-SW, but neighbor table will only show neighbors that are CX switches or APs
+
+    Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
+    NOTE: AOS-SW will return LLDP neighbors, but only it reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
 
