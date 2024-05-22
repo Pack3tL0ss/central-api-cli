@@ -492,7 +492,7 @@ def nuke(
     else:  # AP all others will error in get_dev_identifier
         func = cli.central.send_command_to_swarm
         arg = dev.swack_id
-        if dev.version.startswith("10."):  # TODO add aos8 vs aos10 flag to dev cache
+        if dev.version.startswith("10."):
             cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
         elif not swarm:
             cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [green]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster")
