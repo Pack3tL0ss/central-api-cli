@@ -1,170 +1,177 @@
 from pathlib import Path
 from typer.testing import CliRunner
-import json
+import traceback
 
-# you need to pip install -e centralcli from the root of the cloned repo
-try:
-    from cli import app  # type: ignore # NoQA
-except (ImportError, ModuleNotFoundError):
-    print('\nYou need to `pip install -e centralcli` from base directory\n')
-    raise
+
+from cli import app
+from . import test_data, common
+cache = common.cache
 
 runner = CliRunner()
 
-test_dev_file = Path(__file__).parent / 'test_devices.json'
-if test_dev_file.is_file():
-    TEST_DEVICES = json.loads(test_dev_file.read_text())
-else:
-    raise UserWarning(f'\nYou need to populate {test_dev_file}\n')
 
+def clean_mac(mac: str) -> str:
+    return mac.replace(":", "").replace("-", "").replace(".", "").lower()
 
+# Need to use --table for most tests, the default (rich) will elipsis headers
+# when they overrun the tty.  tty for test runner is 80 cols, 24 rows
+# --table wraps, does not elipsis/truncate any headers/values.
 def test_show_aps():
-    result = runner.invoke(app, ["show", "aps", "--debug"],)
+    result = runner.invoke(app, ["-d", "show", "aps", "--debug", "--table"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switches():
-    result = runner.invoke(app, ["show", "switches", "--debug"],)
+    result = runner.invoke(app, ["show", "switches", "--debug", "--table"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateways():
-    result = runner.invoke(app, ["show", "gateways"],)
+    result = runner.invoke(app, ["show", "gateways", "--table"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_all():
-    result = runner.invoke(app, ["show", "all"],)
+    result = runner.invoke(app, ["show", "all", "--table"],)
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "serial" in result.stdout
 
 
-def test_show_all_w_stats():
-    """We Use csv output as rich will truncate cols and clients is last col
-
-    tty size for test runner is 80 cols, 24 rows
-    """
-    result = runner.invoke(app, ["show", "all", "--stats", "--csv"],)
+def test_show_all_rich():
+    result = runner.invoke(app, ["show", "all"],)
+    print(result.stdout)
+    if result.exception:
+        traceback.print_exception(result.exception)
     assert result.exit_code == 0
-    assert "serial" in result.stdout.splitlines()[0]
-    assert "cpu %" in result.stdout.splitlines()[0]
+    assert "name" in result.stdout
+    assert "ip" in result.stdout
+
+
+def test_show_all_verbose():
+    cache.updated = []
+    result = runner.invoke(app, ["show", "all", "-v"],)
+    print(result.stdout)
+    if result.exception:
+        traceback.print_exception(result.exception)
+    assert result.exit_code == 0
+    assert "serial" in result.stdout
+    assert "cpu %" in result.stdout
 
 
 def test_show_switch_by_name():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["name"], "--debug"],)
+    result = runner.invoke(app, ["show", "switches", test_data["switch"]["name"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_ip():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["ip"], "--debug"],)
+    result = runner.invoke(app, ["show", "switches", test_data["switch"]["ip"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_mac():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["mac"], "--debug"],)
+    result = runner.invoke(app, ["show", "switches", test_data["switch"]["mac"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_switch_by_serial():
-    result = runner.invoke(app, ["show", "switches", TEST_DEVICES["switch"]["serial"], "--debug"],)
+    result = runner.invoke(app, ["show", "switches", test_data["switch"]["serial"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_name():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["name"], "--debug"],)
+    result = runner.invoke(app, ["show", "aps", test_data["ap"]["name"], "--debug"],)
     assert result.exit_code == 0
-    # TODO show ap details not showing site???
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_ip():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["ip"], "--debug"],)
+    result = runner.invoke(app, ["show", "aps", test_data["ap"]["ip"], "--debug"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_mac():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["mac"], "--debug"],)
+    result = runner.invoke(app, ["show", "aps", test_data["ap"]["mac"], "--debug"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_ap_by_serial():
-    result = runner.invoke(app, ["show", "aps", TEST_DEVICES["ap"]["serial"], "--debug"],)
+    result = runner.invoke(app, ["show", "aps", test_data["ap"]["serial"], "--debug"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_name():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["name"], "--debug"],)
+    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["name"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_ip():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["ip"], "--debug"],)
+    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["ip"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_mac():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["mac"], "--debug"],)
+    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["mac"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_gateway_by_serial():
-    result = runner.invoke(app, ["show", "gateways", TEST_DEVICES["gateway"]["serial"], "--debug"],)
+    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["serial"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_name():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["name"], "--debug"],)
+    result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_ip():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["ap"]["ip"], "--debug"],)
+    result = runner.invoke(app, ["show", "devices", test_data["ap"]["ip"], "--debug"],)
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_mac():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["gateway"]["mac"], "--debug"],)
+    result = runner.invoke(app, ["show", "devices", test_data["gateway"]["mac"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
 def test_show_device_by_serial():
-    result = runner.invoke(app, ["show", "devices", TEST_DEVICES["switch"]["serial"], "--debug"],)
+    result = runner.invoke(app, ["show", "devices", test_data["switch"]["serial"], "--debug"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -185,53 +192,69 @@ def test_show_variables():
 
 
 def test_show_variables_by_serial():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["template_switch"]["serial"]],)
+    result = runner.invoke(app, ["show", "variables", test_data["template_switch"]["serial"]],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_variables_by_name():
-    result = runner.invoke(app, ["show", "variables", TEST_DEVICES["template_switch"]["name"].title()],)
+    result = runner.invoke(app, ["show", "variables", test_data["template_switch"]["name"].title()],)
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
 
 
 def test_show_templates_by_group():
-    result = runner.invoke(app, ["show", "templates", "--group", TEST_DEVICES["template_switch"]["group"]],)
+    result = runner.invoke(app, ["show", "templates", "--group", test_data["template_switch"]["group"]],)
     assert result.exit_code == 0
     assert "group" in result.stdout
     assert "version" in result.stdout
 
 
 def test_show_template_by_dev_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template_switch"]["name"].lower()],)
+    result = runner.invoke(app, ["show", "templates", test_data["template_switch"]["name"].lower()],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
 
 
 def test_show_template_by_dev_serial():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template_switch"]["serial"]],)
+    result = runner.invoke(app, ["show", "templates", test_data["template_switch"]["serial"]],)
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
 
 
 def test_show_template_by_name():
-    result = runner.invoke(app, ["show", "templates", TEST_DEVICES["template"]["name"].lower(), "--group", TEST_DEVICES["template"]["group"].upper()])
+    result = runner.invoke(app, ["show", "templates", test_data["template"]["name"].lower(), "--group", test_data["template"]["group"].upper()])
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
 
 
 def test_show_lldp_by_ap_name():
-    result = runner.invoke(app, ["show", "lldp", TEST_DEVICES["ap"]["name"].lower()],)
+    result = runner.invoke(app, ["show", "lldp", test_data["ap"]["name"].lower()],)
     print(result.stdout)
     assert result.exit_code == 0
     assert "serial" in result.stdout
     assert "neighbor" in result.stdout
+
+
+def test_show_all_ap_lldp_neighbors():
+    result = runner.invoke(app, ["show", "aps", "-n", "--site", test_data["ap"]["site"].lower(), "--table"],)
+    print(result.stdout)
+    assert result.exit_code == 0
+    assert "serial" in result.stdout
+    assert "switch" in result.stdout
+
+
+def test_show_cx_switch_lldp_neighbors():
+    result = runner.invoke(app, ["show", "lldp", test_data["switch"]["mac"].lower(),],)
+    print(result.stdout)
+    assert result.exit_code == 0
+    assert "chassis" in result.stdout
+    assert "remote_port" in result.stdout
 
 
 def test_show_groups():
@@ -242,7 +265,7 @@ def test_show_groups():
 
 
 def test_show_certs():
-    result = runner.invoke(app, ["show", "certs"],)
+    result = runner.invoke(app, ["show", "certs", "--yaml"],)
     assert result.exit_code == 0
     assert "expired" in result.stdout
     assert "checksum" in result.stdout
@@ -260,7 +283,7 @@ def test_show_audit_logs_past():
 
 
 def test_show_switch_vlans_by_name():
-    result = runner.invoke(app, ["show", "vlans", TEST_DEVICES["switch"]["name"]],)
+    result = runner.invoke(app, ["show", "vlans", test_data["switch"]["name"], "--table"],)
     assert result.exit_code == 0
     assert "name" in result.stdout
     assert "pvid" in result.stdout
@@ -274,39 +297,48 @@ def test_show_logs_past():
 
 
 def test_show_clients():
-    result = runner.invoke(app, ["show", "clients"],)
+    result = runner.invoke(app, ["show", "clients", "--table"],)
     assert result.exit_code == 0
-    assert "All Clients" in result.stdout
+    assert "name" in result.stdout
     assert "mac" in result.stdout
 
 
 def test_show_clients_wireless():
-    result = runner.invoke(app, ["show", "clients", "--wireless"],)
+    cache.updated = []
+    result = runner.invoke(app, ["show", "clients", "--wireless", "--table", "--debug"],)
+    print(result.stdout)
     assert result.exit_code == 0
-    assert "All Wireless Clients" in result.stdout
+    assert "ip" in result.stdout
     assert "mac" in result.stdout
 
 
 def test_show_clients_wired():
-    result = runner.invoke(app, ["show", "clients", "--wired"],)
+    cache.updated = []
+    result = runner.invoke(app, ["show", "clients", "--wired", "--table", "--debug"],)
+    print(result.stdout)
+    if result.exception:
+        import traceback
+        traceback.print_exception(result.exception)
     assert result.exit_code == 0
-    assert "All Wired Clients" in result.stdout
+    assert "vlan" in result.stdout
     assert "mac" in result.stdout
 
 
 def test_show_client_by_mac():
-    TEST_DEVICES["client_mac"] = TEST_DEVICES.get("client_mac", TEST_DEVICES["wlan_client_mac"])
-    result = runner.invoke(app, ["show", "clients", TEST_DEVICES["client_mac"]],)
+    test_data["client_mac"] = test_data.get("client", {}).get("wireless", {}).get("mac", test_data["wlan_client_mac"])
+    result = runner.invoke(app, ["show", "clients", test_data["client_mac"]],)
+    print(result.stdout)
+    print(test_data["client_mac"])
     assert result.exit_code == 0
     assert "role" in result.stdout
-    assert f"mac: {TEST_DEVICES['wlan_client_mac']}" in result.stdout
+    assert f'mac {clean_mac(test_data["client_mac"])}' in clean_mac(result.stdout)
 
 
 def test_show_group_level_config():
     result = runner.invoke(app, [
             "show",
             "config",
-            TEST_DEVICES["gateway"]["group"],
+            test_data["gateway"]["group"],
             "--gw",
             "--out",
             f"{Path(__file__).parent.parent / 'config' / '.cache' / 'test_runner_gw_grp_config'}",
@@ -323,8 +355,9 @@ def test_show_ospf_neighbor():
             "show",
             "ospf",
             "neighbors",
-            TEST_DEVICES["gateway"]["name"],
-            "--debug"
+            test_data["gateway"]["name"],
+            "--debug",
+            "--table"
         ]
     )
     assert result.exit_code == 0
@@ -336,7 +369,7 @@ def test_show_overlay_routes_learned():
             "show",
             "overlay",
             "routes",
-            TEST_DEVICES["gateway"]["name"],
+            test_data["gateway"]["name"],
             "--debug"
         ]
     )
@@ -349,9 +382,10 @@ def test_show_overlay_routes_advertised():
             "show",
             "overlay",
             "routes",
-            TEST_DEVICES["gateway"]["name"],
+            test_data["gateway"]["name"],
             "-a",
-            "--debug"
+            "--debug",
+            "--table"
         ]
     )
     assert result.exit_code == 0
@@ -363,8 +397,9 @@ def test_show_overlay_interfaces():
             "show",
             "overlay",
             "interfaces",
-            TEST_DEVICES["gateway"]["name"],
-            "--debug"
+            test_data["gateway"]["name"],
+            "--debug",
+            "--table"
         ]
     )
     assert result.exit_code == 0
@@ -375,7 +410,7 @@ def test_show_config_gw_group():
     result = runner.invoke(app, [
             "show",
             "config",
-            TEST_DEVICES["gateway"]["group"],
+            test_data["gateway"]["group"],
             "--gw"
         ]
     )
@@ -387,7 +422,7 @@ def test_show_config_gw_dev():
     result = runner.invoke(app, [
             "show",
             "config",
-            TEST_DEVICES["gateway"]["name"]
+            test_data["gateway"]["name"]
         ]
     )
     assert result.exit_code == 0
@@ -398,7 +433,7 @@ def test_show_config_ap_group():
     result = runner.invoke(app, [
             "show",
             "config",
-            TEST_DEVICES["ap"]["group"],
+            test_data["ap"]["group"],
             "--ap"
         ]
     )
@@ -410,9 +445,8 @@ def test_show_config_ap_dev():
     result = runner.invoke(app, [
             "show",
             "config",
-            TEST_DEVICES["ap"]["name"]
+            test_data["ap"]["name"]
         ]
     )
     assert result.exit_code == 0
     assert "per-ap-settings" in result.stdout
-

@@ -1,14 +1,10 @@
 from typer.testing import CliRunner
-
 from cli import app  # type: ignore # NoQA
 
 runner = CliRunner()
 
-# test_dev_file = Path(__file__).parent / 'test_devices.json'
-# if test_dev_file.is_file():
-#     TEST_DEVICES = json.loads(test_dev_file.read_text())
 
-
+# Groups are created in test_add
 def test_del_group():
     result = runner.invoke(app, [
         "delete",
