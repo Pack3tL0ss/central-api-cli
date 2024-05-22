@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Union
 
-import tabulate
+from tabulate import tabulate
 import typer
 import yaml
 import json
@@ -24,12 +24,12 @@ from rich.text import Text
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import log, utils
+    from centralcli import utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import log, utils
+        from centralcli import utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -204,7 +204,7 @@ def tabulate_output(outdata: List[dict]) -> tuple:
 
         outdata = _do_subtables(outdata, tablefmt="tabulate")
 
-        table_data = tabulate.tabulate(outdata, headers="keys", tablefmt="tabulate")
+        table_data = tabulate(outdata, headers="keys", tablefmt="tabulate")
         td = table_data.splitlines(keepends=True)
         if td:
             table_data = f"{typer.style(td[0], fg='cyan')}{''.join(td[1:])}"
@@ -327,7 +327,7 @@ def output(
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
 ) -> Output:
-    output_by_key = output_by_key if isinstance(output_by_key, list) else [output_by_key]
+    output_by_key = utils.listify(output_by_key)
     raw_data = outdata
     _lexer = table_data = None
 
@@ -341,7 +341,7 @@ def output(
     # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
         outdata = utils.listify(outdata)
-        if outdata and isinstance(outdata[0], dict):
+        if output_by_key and outdata and isinstance(outdata[0], dict):
             if len(output_by_key) == 1 and "+" in output_by_key[0]:
                 found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
                 if len(found_keys) == len(output_by_key[0].split("+")):
