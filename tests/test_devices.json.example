@@ -1,51 +1,109 @@
 {
+    "customer_id": "112a10343536f93",
     "switch": {
-        "type": "switch",
-        "group": "WadeLab",
-        "ip": "10.0.30.5",
-        "labels": "",
-        "mac": "f4:03:43:07:57:20",
-        "model": "Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)",
-        "name": "bsmt-2930F",
-        "public ip": "68.52.67.145",
-        "serial": "CN71HKZ1CL",
-        "site": "WadeLab",
-        "version": "16.10.0011",
         "status": "Up",
-        "test_port": "2"
-        },
+        "name": "av-6100",
+        "model": "6100 12G CL4 2SFP+ 139W Swch (JL679A)",
+        "ip": "10.0.30.4",
+        "mac": "aa:bb:cc:dd:ee:ff",
+        "serial": "US0KLRP05S",
+        "group": "WadeLab",
+        "site": "WadeLab",
+        "uptime": "3w 1d 18h 15m 16s",
+        "cpu %": "33%",
+        "mem total": "30",
+        "version": "PL.10.12.0006",
+        "public ip": "1.1.1.1",
+        "type": "ArubaCX",
+        "test_port": "1/1/13",                  # This port will be bounced (both PoE and the interface) during testing
+        "comment": "Test Port is Envisalink"
+    },
+    "template_switch": {
+        "name": "ant-2930F",
+        "ip": "10.2.30.5",
+        "mac": "55:88:22:cc:bb:33",
+        "serial": "CN90HKZP2",
+        "group": "Branch1",
+        "site": "Antigua",
+        "version": "WC.16.11.0012",
+        "uplk ports": [
+          {
+            "port": "8"
+          }
+        ],
+        "type": "ArubaSwitch",
+        "public ip": "1.1.1.1"
+    },
+    "rate_limit_switch": {
+        "serial": "TW1AKGF123"          # This should be a 48 port PoE CX switch, can be the same as the "switch" defined above, but doesn't have to be
+    },
     "ap": {
+        "name": "ant-315.0c88-ap",
         "type": "ap",
         "version": "8.7.1.1_78245",
         "group": "Branch1",
-        "ip": "10.101.6.200",
+        "ip": "10.2.30.6",
         "labels": "Branch_View",
-        "mac": "A8bd.27c0.aabb",
+        "mac": "A9cd.13d0.0a88",
         "model": "315",
-        "name": "BR1_315_0c:88",
-        "serial": "CNC7J0T0GK",
+        "serial": "TWC8K0S0HK",
         "site": "Antigua",
         "status": "Up"
-        },
+    },
     "gateway": {
         "type": "gateway",
         "version": "8.6.0.4-2.2.0.3_77966",
-        "group": "WadeLab",
-        "ip": "192.168.30.202",
+        "group": "VPNC",
+        "ip": "172.30.0.243",
         "labels": "Branch_View",
-        "mac": "20-4c-03-2f-f9-54",
+        "mac": "aa-cc-ee-bb-dd-ff",
         "model": "A7005",
         "name": "VPNC2",
-        "serial": "CP0044573",
+        "serial": "CP1234546",
         "site": "WadeLab",
         "status": "Up"
-        },
+    },
     "template": {
         "device_type": "ArubaSwitch",
         "group": "Branch1",
         "model": "JL258A",
         "name": "2930F-8",
-        "template_hash": "a96df8da936389e5b71fd52d4bcb3464",
+        "template_hash": "de9419A16d6eeb4e9b75617a4249896f",
         "version": "ALL"
+    },
+    "batch": {
+        "sites": [
+            {
+                "site_name": "cencli_test_site1",
+                "site_address": {
+                    "address": "123 test ave",
+                    "city": "Nashville",
+                    "state": "TN"
+                }
+            },
+            {
+                "site_name": "cencli_test_site2",
+                "geolocation": {
+                    "latitude": "44.18911852569872",
+                    "longitude": "-85.80498510653379"
+                }
+            }
+        ]
+    },
+    "clone": {
+        "to_group": "TESTING"
+    },
+    "client": {
+        "wireless": {
+            "name": "ofc-light",
+            "mac": "2542.c11d.aabb"
+        },
+        "wired": {
+            "name": "ZAG1234567",
+            "alias": "uxi-barn",
+            "mac": "20:4c:03:00:00:00"
         }
+    },
+    "update": {},
+    "mpsk_ssid": "Aruba-MPSK"
 }
