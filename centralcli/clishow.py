@@ -954,7 +954,7 @@ def vlans(
         autocompletion=cli.cache.dev_gw_switch_site_completion,
         show_default=False,
     ),
-    stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by VLAN status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
@@ -984,7 +984,7 @@ def vlans(
     """
     # TODO cli command lacks the filtering options available from method currently.
     central = cli.central
-    obj = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), swack=stack)
+    obj: CentralObject = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
 
     if up:
         status = "Up"
@@ -998,7 +998,13 @@ def vlans(
         resp = central.request(central.get_site_vlans, obj.id)
     elif obj.is_dev:
         if obj.generic_type == "switch":
-            iden = obj.serial if not stack else obj.swack_id
+            if obj.swack_id:
+                iden = obj.swack_id
+                stack = True
+            else:
+                iden = obj.serial
+                stack = False
+
             resp = central.request(central.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw")
         elif obj.type.lower() == 'gw':
             resp = central.request(central.get_gateway_vlans, obj.serial)

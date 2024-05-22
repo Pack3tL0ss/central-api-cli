@@ -2126,6 +2126,7 @@ class Cache:
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
         swack: bool = False,
+        conductor_only: bool = False,
         group: str = None,
         all: bool = False,
         completion: bool = False,
@@ -2139,6 +2140,8 @@ class Cache:
                 Defaults to None.
             swack (bool, optional): Restrict matches to only the stack commanders matching query (filter member switches).
                 Defaults to False.
+            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
+                Does not filter non stacks, the way swack option does. Defaults to False.
             group (str, optional): applies to get_template_identifier, Only match if template is in this group.
                 Defaults to None.
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
@@ -2164,6 +2167,7 @@ class Cache:
                 if q == "dev":
                     kwargs["dev_type"] = device_type
                     kwargs["swack"] = swack
+                    kwargs["conductor_only"] = conductor_only
                 elif q == "template":
                     kwargs["group"] = group
                 this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
