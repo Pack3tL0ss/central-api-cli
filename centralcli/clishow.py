@@ -1505,7 +1505,6 @@ def lldp(
     """
     central = cli.central
 
-    # TODO need get_dev_identier to accept cx
     devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
     batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
     batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
@@ -1526,6 +1525,7 @@ def lldp(
             r,
             tablefmt=tablefmt,
             title=title,
+            caption = "  :warning:  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]" if dev.type == "sw" else None,
             pager=pager,
             outfile=outfile,
             output_by_key=["port", "localPort"],
