@@ -147,7 +147,12 @@ def show_devices(
     if not devices and dev_type is None:
         dev_type = "all"
 
+    default_tablefmt = "rich" if not verbosity and not devices else "yaml"
+
     if devices:  # cencli show devices <device iden>
+        # Asking for details of a specific device implies verbose
+        if not verbosity:
+            verbosity = 99
         if dev_type:
             dev_type = cache_generic_types.get(dev_type)
 
@@ -187,12 +192,12 @@ def show_devices(
                 caption = _build_caption(resp, status=status)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-                resp = cli.cache.responses.dev
+                resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
         caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbosity else "yaml")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
         f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
     ] if not include_inventory else ["including Devices from Inventory"]
@@ -231,7 +236,7 @@ def all_(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     verbose: int = typer.Option(
         0,
@@ -360,7 +365,7 @@ def aps(
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
     # do_ssids: bool = typer.Option(True, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show AP neighbors \[requires --site]", show_default=False,),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show all AP LLDP neighbors for a site \[requires --site]", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -389,38 +394,15 @@ def aps(
 ) -> None:
     """Show details for APs
     """
-    if neighbors:  # TODO Move this to sep func
+    if neighbors:
         if site is None:
             print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
             raise typer.Exit(1)
 
         site = cli.cache.get_site_identifier(site)
         resp = cli.central.request(cli.central.get_topo_for_site, site.id, )
-
-        # TODO check the value of tagged/untagged VLAN for AP if it has tagged mgmt VLAN.  Move to cleaner
-        if resp:
-            aps_in_cache = [dev["serial"] for dev in cli.cache.devices if dev["type"] == "ap"]
-            ap_connections = [edge for edge in resp.output["edges"] if edge["toIf"]["serial"] in aps_in_cache]
-            resp.output = [
-                {
-                    "ap": x["toIf"].get("deviceName", "--"),
-                    "ap_ip": x["toIf"].get("ipAddress", "--"),
-                    "ap_serial": x["toIf"].get("serial", "--"),
-                    "ap_port": x["toIf"].get("portNumber", "--"),
-                    # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
-                    # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
-                    "switch": x["fromIf"].get("deviceName", "--"),
-                    "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
-                    "switch_serial": x["fromIf"].get("serial", "--"),
-                    "switch_port": x["fromIf"].get("name", "--"),
-                    "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
-                    "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans", []) if v != x["fromIf"].get("untaggedVlan", 9999)]),
-                    "healthy": "✅" if x.get("health", "") == "good" else "❌"
-                } for x in ap_connections
-            ]
-
         tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site)
     else:
         if down:
             status = "Down"

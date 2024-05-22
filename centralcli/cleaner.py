@@ -1754,3 +1754,30 @@ def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> 
         data = [{k: d.get(k) for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for d in data]
 
     return data
+
+
+def show_all_ap_lldp_neighbors_for_site(data):
+    data = utils.unlistify(data)
+    # TODO circular import if placed at top review import logic
+    from centralcli import cache
+    aps_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] == "ap"]
+    ap_connections = [edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_cache]
+    data = [
+        {
+            "ap": x["toIf"].get("deviceName", "--"),
+            "ap_ip": x["toIf"].get("ipAddress", "--"),
+            "ap_serial": x["toIf"].get("serial", "--"),
+            "ap_port": x["toIf"].get("portNumber", "--"),
+            # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
+            # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
+            "switch": x["fromIf"].get("deviceName", "--"),
+            "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
+            "switch_serial": x["fromIf"].get("serial", "--"),
+            "switch_port": x["fromIf"].get("name", "--"),
+            "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
+            "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans") or [] if v != x["fromIf"].get("untaggedVlan", 9999)]),
+            "healthy": "✅" if x.get("health", "") == "good" else "❌"
+        } for x in ap_connections
+    ]
+
+    return simple_kv_formatter(data)
