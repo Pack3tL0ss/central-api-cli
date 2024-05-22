@@ -20,6 +20,7 @@ except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
 err_console = Console(stderr=True)
+clean_console = Console(emoji=False)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -133,7 +134,6 @@ def move(
     """Move device(s) to a defined group and/or site.
     """
     central = cli.central
-    console = Console()
 
     # For the benefit of the help text
     # kw1_val = site
@@ -164,8 +164,7 @@ def move(
         _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
-        print("Missing Required Argument, group and/or site is required.")
-        raise typer.Exit(1)
+        cli.exit("Missing Required Argument, group and/or site is required.")
 
     # TODO improve logic.  if they are moving to a group we can use inventory as backup
     # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
@@ -196,7 +195,7 @@ def move(
 
         if site and d.get("site"):
             if d.site == _site.name:  # device is already in desired site
-                console.print(f"[dark_orange]:warning:[/] {d.rich_help_text} is already in Site: {_site.summary_text}")
+                clean_console.print(f"\u26a0  {d.rich_help_text} is already in Site: {_site.summary_text}")  # \u26a0 is :warning: we need emoji off
                 if not group:  # remove serial from devs_by_type if already in desired site, and site move is the only operation
                     _ = devs_by_type[d.generic_type].pop(len(devs_by_type[d.generic_type]) - 1)
                     if not devs_by_type[d.generic_type]:  # if type list is empty remove the type
@@ -213,6 +212,7 @@ def move(
     else:
         _msg_devs = " & ".join(dev_all_names)
 
+    # Build confirmation message
     confirm_msg = f"[bright_green]Move[/] {_msg_devs}\n"
     if group:
         _group = CentralObject("group", {"name": "unprovisioned"}) if group.lower() == "unprovisioned" else cli.cache.get_group_identifier(group)
@@ -225,7 +225,7 @@ def move(
         if devs_by_site:
             confirm_msg += "\n  [italic bright_red]Devices will be removed from current sites.[/]\n"
 
-    print(confirm_msg)
+    clean_console.print(confirm_msg)
     confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
     # TODO currently will ask to confirm even if it will result in no calls (dev already in site) Need to build reqs list
     #      Then ask for confirmation if there are reqs to perform...  Need to refactor/simplify
