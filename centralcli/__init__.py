@@ -140,9 +140,9 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
     vscode_arg_handler()
 
 raw_out = False
-if "-vv" in sys.argv:
+if "--raw" in sys.argv:
     raw_out = True
-    _ = sys.argv.pop(sys.argv.index("-vv"))
+    _ = sys.argv.pop(sys.argv.index("--raw"))
 if "--debug-limit" in sys.argv:
     _idx = sys.argv.index("--debug-limit")
     _ = sys.argv.pop(sys.argv.index("--debug-limit"))

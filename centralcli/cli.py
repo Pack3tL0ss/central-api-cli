@@ -892,6 +892,7 @@ def convert(
 
 
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
+    # --raw and --debug-limit are honored and stripped out in init
     if ctx.resilient_parsing:
         config.is_completion = True
     if not ctx.resilient_parsing:
