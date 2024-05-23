@@ -927,8 +927,6 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
                 err_console.print(f":warning:  Both [cyan]-d[/] and [cyan]--account[/] flag used.  Honoring [cyan]-d[/], ignoring account [cyan]{account}[/]")
                 account = config.default_account
             cli.account_name_callback(ctx, account=config.default_account, default=True)
-            # default = cli.default_callback(ctx, True)
-        # elif account:
         else:
             cli.account_name_callback(ctx, account=account)
 
