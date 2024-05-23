@@ -8,7 +8,7 @@ import pendulum
 import asyncio
 import sys
 import json
-from typing import List, Iterable, Literal
+from typing import List, Iterable, Literal, Dict
 from pathlib import Path
 from rich import print
 from rich.console import Console
@@ -54,7 +54,15 @@ app.add_typer(clishowmpsk.app, name="mpsk")
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
+class Counts:
+    def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
+        self.total = total
+        self.up = up
+        self.inventory = not_checked_in
+        self.down = down or total - not_checked_in - up
+
 def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
+    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     def get_switch_counts(data) -> dict:
         dev_types = set([t.get("switch_type", "ERR") for t in data])
         # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
@@ -66,9 +74,25 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             for _type in dev_types
         }
 
+    def get_counts(data: List[Dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
+        _match_type = [d for d in data if d["type"] == dev_type]
+        _tot = len(_match_type)
+        _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
+        _inv = len([d for d in _match_type if not d.get("status")])
+        return Counts(_tot, _up, _inv)
+
+
     if not dev_type:
-        counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
-        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+        if inventory:  # cencli show inventory -v or cencli show all --inv
+            status_by_type = {}
+            _types = set(d["type"] for d in resp.output)
+            for t in _types:
+                counts = get_counts(resp.output, t)
+                status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+
+        else:  # show all [--inv], or show ivnentory -v
+            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         counts_by_type = get_switch_counts(resp.raw["switches"])
         status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
@@ -78,23 +102,44 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         _down = _tot - _up
         status_by_type = {dev_type: {"total": _tot, "up": _up, "down": _down}}
 
+    # Put together counts caption string
     if status:
         _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+    elif inventory:
+        def _get_inv_msg(data: Dict, dev_type: DevTypes) -> str:
+            inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
+            up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
+            return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
+
+        _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
+        _cnt_str = _cnt_str + ", ".join(
+            [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
+        )
+        if "(" not in _cnt_str:
+            inventory_only = True
     else:
         _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
 
     if status is None or status.lower() != "down":
         try:
             clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
-            _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+            if clients:
+                _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
         except Exception as e:
             log.exception(f"Exception occured in _build_caption\n{e}")
 
-    caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]" if not dev_type else f"[reset]Counts: {_cnt_str}"
+    if not inventory_only:
+        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. "
+        caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}"
+        if not dev_type:
+            caption = f"{caption} To see all columns for a given device use [cyan]cencli show <DEVICE TYPE>[/cyan]"
+        else:
+            caption = f"[reset]Counts: {_cnt_str}"
+    else:
+        caption = f"[reset]Counts: {_cnt_str}"
 
-    if inventory:
-        caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+    if inventory and not inventory_only:
+        caption = f"{caption}\n  [italic green3]Devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
 def show_devices(
@@ -685,13 +730,14 @@ def inventory(
     else:
         title = "Inventory"
 
+    if verbose:
+        show_devices(
+            dev_type='all', outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+        )
+        cli.exit("", code=0)
+
     resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api("inventory", dev_type), sub=sub)
-    if verbose:  # TODO just pass this to all_() so output is consistent
-        cache_devices = cli.cache.devices
-        for idx, dev in enumerate(resp.output):
-            from_cache = [d for d in cache_devices if d["serial"] == dev["serial"]]
-            if from_cache:
-                resp.output[idx] = {**dev, **from_cache[0]}
 
     cli.display_results(
         resp,
@@ -699,7 +745,7 @@ def inventory(
         title=title,
         sort_by=sort_by,
         reverse=reverse,
-        caption=None if not verbose else _build_caption(resp, inventory=True),
+        caption=_build_caption(resp, inventory=True),
         pager=pager,
         outfile=outfile,
         cleaner=None,  # Cleaner is applied in cache update
