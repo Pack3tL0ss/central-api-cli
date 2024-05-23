@@ -1419,6 +1419,12 @@ def get_portals(data: List[dict],) -> List[dict]:
 
     return data
 
+
+def get_portal_profile(data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    # _display_output will listify the dict prior to sending it in as most outputs are List[dict]
+    data = utils.unlistify(data)
+    return {k: v for k, v in data.items() if k != "logo"}
+
 def get_ospf_neighbor(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     data = utils.listify(data)
 

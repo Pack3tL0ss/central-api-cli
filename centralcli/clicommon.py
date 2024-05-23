@@ -329,13 +329,16 @@ class CLICommon:
                 log.warning(out_msg, show=True)
 
     @staticmethod
-    def exit(msg: str, code: int = 1) -> None:
-        """Print error text and exit.
+    def exit(msg: str = None, code: int = 1) -> None:
+        """Print msg text and exit.
+
+        Prepends warning emoji to msg if code indicates an error.
         """
         if code != 0:
-            msg = f":warning:  {msg}"
+            msg = f":warning:  {msg}" if msg else msg
 
-        print(msg)
+        if msg:
+            print(msg)
         raise typer.Exit(code=code)
 
     def _display_results(

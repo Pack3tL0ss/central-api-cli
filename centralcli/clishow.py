@@ -8,6 +8,7 @@ import pendulum
 import asyncio
 import sys
 import json
+import os
 from typing import List, Iterable, Literal, Dict
 from pathlib import Path
 from rich import print
@@ -270,6 +271,22 @@ def show_devices(
         verbosity=verbosity,
     )
 
+def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
+    if not resp.output.get("logo"):
+        cli.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
+
+    import base64
+    file = path / resp.output["logo_name"] if path.is_dir() else path
+    if not os.access(file.parent, os.W_OK):
+        cli.exit(f"{file.parent} is not writable")
+
+    img_data = base64.b64decode(resp.output["logo"].split(",")[1])
+    if file.write_bytes(img_data):
+        cli.exit(f"Logo saved to {file}", code=0)
+    else:
+        cli.exit(
+            f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
+        )
 
 @app.command("all")
 def all_(
@@ -2992,7 +3009,28 @@ def archived(
 # TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
 @app.command()
 def portals(
-    portal: str = typer.Argument(None, metavar="[name|id]", help="show details for a specific portal profile [grey42]\[default: show summary for all portals][/]", show_default=False,),
+    portal: List[str] = typer.Argument(
+        None,
+        metavar="[name|id]",
+        help="show details for a specific portal profile [grey42]\[default: show summary for all portals][/]",
+        autocompletion=cli.cache.portal_completion,
+        show_default=False,),
+    logo: bool = typer.Option(
+        False,
+        "-L", "--logo",
+        metavar="PATH",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]\[default: {Path.cwd()}/<original_logo_filename>[/]]",
+        show_default = False,
+        writable=True,
+    ),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
     ),
@@ -3006,16 +3044,31 @@ def portals(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show Configured Guest Portals or details for a specific portal"""
+    """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
+    path = Path.cwd()
+    if portal and len(portal) > 2:
+        cli.exit("Too many Arguments")
+    elif len(portal) > 1:
+        if not logo:
+            cli.exit("Too many Arguments")
+        path = Path(portal[-1])
+        if not path.is_dir() and not path.parent.is_dir():
+            cli.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
+
+    portal = portal[0] if portal else portal
+
     if portal is None:
         resp: Response = cli.central.request(cli.cache.update_portal_db)
         _cleaner = cleaner.get_portals
     else:
         p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
         resp: Response = cli.central.request(cli.central.get_portal_profile, p.id)
-        _cleaner = None
+        _cleaner = cleaner.get_portal_profile
+        if logo and resp.ok:
+            download_logo(resp, path, p)  # this will exit CLI after writing to file
 
-    cli.display_results(resp, tablefmt="yaml" if portal else "rich", cleaner=_cleaner, fold_cols=["url"],)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if portal else "rich")
+    cli.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
 
 
 # TODO add sort_by completion
