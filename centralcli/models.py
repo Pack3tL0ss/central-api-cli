@@ -611,3 +611,20 @@ class CacheMpskNetwork(BaseModel):
 
 class CacheMpskNetworks(BaseModel):
     items: List[CacheMpskNetwork]
+
+
+class CachePortal(BaseModel):
+    name: str
+    id: str
+    url: str = Field(alias="capture_url")
+    auth_type: str
+    is_aruba_cert: bool
+    is_default: bool
+    is_editable: bool
+    is_shared: bool
+    register_accept_email: bool
+    register_accept_phone: bool
+
+
+class CachePortals(BaseModel):
+    portals: List[CachePortal]

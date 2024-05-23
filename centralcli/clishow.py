@@ -2989,9 +2989,10 @@ def archived(
     cli.display_results(resp, tablefmt="yaml")
 
 
-# TODO cahce portal/name ids
+# TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
 @app.command()
 def portals(
+    portal: str = typer.Argument(None, metavar="[name|id]", help="show details for a specific portal profile [grey42]\[default: show summary for all portals][/]", show_default=False,),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
     ),
@@ -3005,9 +3006,16 @@ def portals(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show Configured Guest Portals"""
-    resp = cli.central.request(cli.central.get_portals)
-    cli.display_results(resp, cleaner=cleaner.get_portals, fold_cols=["url"],)
+    """Show Configured Guest Portals or details for a specific portal"""
+    if portal is None:
+        resp: Response = cli.central.request(cli.cache.update_portal_db)
+        _cleaner = cleaner.get_portals
+    else:
+        p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
+        resp: Response = cli.central.request(cli.central.get_portal_profile, p.id)
+        _cleaner = None
+
+    cli.display_results(resp, tablefmt="yaml" if portal else "rich", cleaner=_cleaner, fold_cols=["url"],)
 
 
 # TODO add sort_by completion

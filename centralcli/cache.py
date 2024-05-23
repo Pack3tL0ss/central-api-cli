@@ -7,13 +7,13 @@ import asyncio
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable
 
 import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from tinydb.table import Table
+from tinydb.table import Table, Document
 from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
@@ -65,10 +65,10 @@ def get_cencli_devtype(dev_type: str) -> str:
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group", "label"],
+        db: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
         data: Union[list, Dict[str, Any]],
     ) -> Union[list, Dict[str, Any]]:
-        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label = False, False, False, False, False
+        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_portal = False, False, False, False, False, False, False
         data: Dict | List[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -213,6 +213,8 @@ class CacheResponses:
         template: Response = None,
         group: Response = None,
         label: Response = None,
+        mpsk: Response = None,
+        portal: Response = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -220,11 +222,13 @@ class CacheResponses:
         self._template = template
         self._group = group
         self._label = label
+        self._mpsk = mpsk
+        self._portal = portal
 
     def update_rl(self, resp: Response) -> Response:
         """Returns provided Response object with the RateLimit info from the most recent API call.
         """
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group] if r is not None], key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal] if r is not None], key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -277,6 +281,22 @@ class CacheResponses:
     def label(self, resp: Response):
         self._label = resp
 
+    @property
+    def mpsk(self):
+        return self.update_rl(self._mpsk)
+
+    @mpsk.setter
+    def mpsk(self, resp: Response):
+        self._mpsk = resp
+
+    @property
+    def portal(self):
+        return self.update_rl(self._portal)
+
+    @portal.setter
+    def portal(self, resp: Response):
+        self._portal = resp
+
 
 class Cache:
     def __init__(
@@ -308,6 +328,7 @@ class Cache:
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
             self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
+            self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
             self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
@@ -329,7 +350,8 @@ class Cache:
 
     @property
     def device_types(self) -> Set[str]:
-        return set([d["type"] if d["type"] not in ["cx", "sw"] else "switch" for d in self.DevDB.all()])
+        db = self.InvDB if self.InvDB else self.DevDB
+        return set([d["type"] for d in db.all()])
 
     @property
     def devices_by_serial(self) -> dict:
@@ -376,6 +398,10 @@ class Cache:
     @property
     def mpsk(self) -> list:
         return self.MpskDB.all()
+
+    @property
+    def portals(self) -> list:
+        return self.PortalDB.all()
 
     @property
     def logs(self) -> list:
@@ -727,7 +753,40 @@ class Cache:
         out = []
         args = args or ctx.params.values()  # HACK as args stopped working
         if match:
-            # remove devices that are already on the command line
+            # remove items that are already on the command line
+            match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete):
+                    out += [tuple([m.name, m.id])]
+                elif m.id.startswith(incomplete):
+                    out += [tuple([m.id, m.name])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
+    # TODO one common completion that is referenced by multiple xx_completions passing in ctx and the get__identifier func/args
+    def portal_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        match = self.get_name_id_identifier(
+            "portal",
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or ctx.params.values()  # HACK as args stopped working
+        if match:
+            # remove items that are already on the command line
             match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
@@ -1957,8 +2016,10 @@ class Cache:
 
     async def update_mpsk_db(self, data: List[Dict[str, Any]] = None) -> bool:
         if data:
-            data = models.CacheMpskNetworks(data)
-            data = data.dict()
+            if isinstance(data, list):
+                data = {"items": data}
+            data = models.CacheMpskNetworks(**data)
+            data = data.dict()["items"]
             self.MpskDB.truncate()
             return self.MpskDB.insert_multiple(data)
         else:
@@ -1976,7 +2037,32 @@ class Cache:
 
                 # TODO change updated from  list of funcs to class with bool attributes or something
                 self.updated.append(self.central.cloudauth_get_mpsk_networks)
-                self.responses.dev = resp
+                self.responses.mpsk = resp
+            return resp
+
+    async def update_portal_db(self, data: List[Dict[str, Any]] = None) -> bool:
+        if data:
+            if isinstance(data, list):
+                data = {"portals": data}
+            data = models.CachePortals(**data)
+            data = data.dict()["portals"]
+            self.PortalDB.truncate()
+            return self.PortalDB.insert_multiple(data)
+        else:
+            resp = await self.central.get_portals()
+            if resp.ok:
+                if resp.output:
+                    _update_data = utils.listify(deepcopy(resp.output))
+                    _update_data = models.CachePortals(**resp.raw)
+                    _update_data = _update_data.dict()["portals"]
+
+                    self.PortalDB.truncate()
+                    update_res = self.PortalDB.insert_multiple(_update_data)
+                    if False in update_res:
+                        log.error("Tiny DB returned an error during Portal db update", caption=True)
+
+                self.updated.append(self.central.get_portals)
+                self.responses.portal = resp
             return resp
 
     # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
@@ -2913,3 +2999,104 @@ class Cache:
                 log.error(
                     f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
                 )
+
+
+    def get_name_id_identifier(
+        self,
+        cache_name: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CentralObject | List[CentralObject]:
+        cache_details = CacheDetails(self)
+        this: CacheAttributes = getattr(cache_details, cache_name)
+        db_all = this.db.all()
+        db = this.db
+        """Allows Case insensitive ssid match"""
+        retry = False if completion else retry
+        for _ in range(0, 2):
+            if query_str == "":
+                match = db_all
+            else:
+                match = db.search((self.Q.name == query_str))
+
+            # case insensitive
+            if not match:
+                match = db.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = db.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive ignore -_
+            if not match:
+                if "_" in query_str or "-" in query_str:
+                    match = db.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                        )
+                    )
+
+            # case insensitive startswith search for mspk id
+            if not match:
+                match = db.search(
+                    self.Q.id.test(
+                        lambda v: v.lower().startswith(query_str.lower())
+                    )
+                )
+
+            if not match and retry and this.already_updated_func not in self.updated:
+                if FUZZ:
+                    fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
+                    if fuzz_resp:
+                        fuzz_match, fuzz_confidence = fuzz_resp[0]
+                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                            match = self.db.search(self.Q.name == fuzz_match)
+                if not match:
+                    err_console.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating {cache_name} Cache")
+                    asyncio.run(this.cache_update_func())
+                _ += 1
+            if match:
+                match = [CentralObject(this.name, g) for g in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type=this.name,)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            valid = "\n".join([f'[cyan]{m["name"]}[/]' for m in db_all])
+            print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
+            print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
+            raise typer.Exit(1)
+        else:
+            if not completion:
+                log.error(
+                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                )
+
+class CacheAttributes:
+    def __init__(self, name: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"], db: Table, already_updated_func: Callable, cache_update_func: Callable) -> None:
+        self.name = name
+        self.db = db
+        self.already_updated_func = already_updated_func
+        self.cache_update_func = cache_update_func
+
+class CacheDetails:
+    def __init__(self, cache = Cache):
+        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devicesv2, cache_update_func=cache.update_dev_db)
+        self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.update_site_db)
+        self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
+        self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)

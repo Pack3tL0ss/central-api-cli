@@ -299,6 +299,7 @@ class CacheArgs(str, Enum):
     hook_data = "hook_data"
     hook_active = "hook_active"
     mpsk = "mpsk"
+    portals = "portals"
 
 
 class KickArgs(str, Enum):
