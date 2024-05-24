@@ -6,7 +6,9 @@ CLI Reference
 ..    :nested: full
 
 .. typer:: centralcli.cli:app
+    :prog: cencli
     :preferred: html
-    :width: 65
+    :theme: dark
+    :width: 80
     :show-nested:
     :make-sections:
