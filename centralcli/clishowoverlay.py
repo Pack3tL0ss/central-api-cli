@@ -155,12 +155,12 @@ def interfaces(
 @app.command()
 def connection(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    # sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),  # single entry output, no need to sort
+    # reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
+    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in alternate table format", rich_help_panel="Formatting"),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
@@ -173,7 +173,10 @@ def connection(
         rich_help_panel="Common Options",
     ),
 ):
-    """Show overlay connection (OTO/ORO) details
+    """Show overlay connection (OTO/ORO) details (GWs & APs)
+
+    In testing this API endpoint always returned an error (request to ce failed... timed out) for APs.
+    You can get similar details using [cyan]cencli tshoot overlay DEVICE[/].
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
@@ -181,12 +184,12 @@ def connection(
     resp = cli.central.request(cli.central.get_overlay_connection, dev.serial)
 
     set_width_cols = {"name": 60}
+    caption = None
     if "connection" in resp.output:
         resp.output = resp.output["connection"]
         caption=_build_caption(resp)
     elif "summary" in resp.output:
         resp.output = resp.output["summary"]
-        caption = None
         if resp.output.get("admin_status") is False:
             set_width_cols = {"admin status": {"min": 55, "max": 100}}
 
@@ -198,8 +201,8 @@ def connection(
         caption=caption,
         pager=pager,
         outfile=outfile,
-        sort_by=sort_by,
-        reverse=reverse,
+        # sort_by=sort_by,
+        # reverse=reverse,
         set_width_cols=set_width_cols,
         cleaner=cleaner.simple_kv_formatter,
     )

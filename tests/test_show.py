@@ -254,7 +254,7 @@ def test_show_cx_switch_lldp_neighbors():
     print(result.stdout)
     assert result.exit_code == 0
     assert "chassis" in result.stdout
-    assert "remote_port" in result.stdout
+    assert "remote port" in result.stdout
 
 
 def test_show_groups():
