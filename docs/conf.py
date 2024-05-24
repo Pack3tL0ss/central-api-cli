@@ -12,8 +12,8 @@
 #
 import os
 import sys
-# Add past for custom extensions
-sys.path.insert(0, os.path.abspath("./_ext"))
+# Add path for custom extensions
+# sys.path.insert(0, os.path.abspath("./_ext"))
 # path to project directory
 sys.path.insert(0, os.path.abspath(".."))
 
@@ -41,8 +41,9 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "myst_parser",
-    "sphinx_click",
-    "richunstyle",
+    "sphinxcontrib.typer",
+    # "sphinx_click",
+    # "richunstyle",
 ]
 source_suffix = [".rst", ".md"]
 
