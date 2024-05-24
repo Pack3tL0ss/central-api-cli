@@ -1,6 +1,6 @@
 from os import environ
 from pathlib import Path
-from typing import Union
+from typing import Union, List, Any
 from logging.handlers import RotatingFileHandler
 from time import sleep
 from rich.console import Console
@@ -33,19 +33,19 @@ to_debug = [
 
 class MyLogger:
     def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False):
-        self._DEBUG = debug
-        self.log_msgs = []
-        self.verbose = verbose
+        self._DEBUG: bool = debug
+        self.log_msgs: List[str] = []
+        self.verbose: bool = verbose
         if isinstance(log_file, Path):
-            self.log_file = log_file
+            self.log_file: Path = log_file
         else:
-            self.log_file = Path(log_file)
-        self._log = self.get_logger()
-        self.name = self._log.name
-        self.show = show  # Sets default log behavior (other than debug)
-        self._caption = []  # Log messages will be logged and displayed in caption output
+            self.log_file: Path = Path(log_file)
+        self._log: logging.Logger = self.get_logger()
+        self.name: str = self._log.name
+        self.show: bool = show  # Sets default log behavior (other than debug)
+        self._caption: List[str] = []  # Log messages will be logged and displayed in caption output
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         if hasattr(self, "_log") and hasattr(self._log, name):
             return getattr(self._log, name)
         else:
@@ -70,10 +70,10 @@ class MyLogger:
         )
         return logging.getLogger(self.log_file.stem)
 
-    def print_file(self):
+    def print_file(self) -> None:
         console.print(self.log_file.read_text(),)
 
-    def follow(self):
+    def follow(self) -> None:
         '''generator function that yields new lines in log file
         '''
         with self.log_file.open("r") as lf:
@@ -92,7 +92,7 @@ class MyLogger:
                     break
 
     @property
-    def caption(self):
+    def caption(self) -> None | str:
         """render log messages queued for display in output caption
         """
         if not self._caption:
@@ -100,7 +100,7 @@ class MyLogger:
         else:
             return "\n".join([f'  {msg}' for msg in self._caption])
 
-    def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs):
+    def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs) -> None:
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         _msgs = []
         _logged = []
@@ -123,14 +123,14 @@ class MyLogger:
             self.log_msgs = []
 
         if caption:
-            self._caption = [*self._caption, *msgs]
+            self._caption = [*self._caption, *[f"{':warning:  ' if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
 
     @property
-    def level_name(self):
+    def level_name(self) -> str | int:
         return logging.getLevelName(self._log.level)
 
     @property
-    def DEBUG(self):
+    def DEBUG(self) -> bool:
         return self._DEBUG
 
     @DEBUG.setter
@@ -138,9 +138,6 @@ class MyLogger:
         self._DEBUG = value
         self.show = value
         self.setLevel(logging.DEBUG if value else logging.INFO)
-
-    def show(self, msgs: Union[list, str], log: bool = False, show: bool = True, *args, **kwargs) -> None:
-        self.log_print(msgs, show=show, log=log, *args, **kwargs)
 
     def debug(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
 
