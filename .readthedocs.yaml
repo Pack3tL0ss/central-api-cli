@@ -25,6 +25,5 @@ sphinx:
 python:
   install:
     - requirements: docs/requirements.txt
-    - path: sphinxcontrib-typer
       extra_requirements:
-        - html
+        - docs/extra_requirements.txt
