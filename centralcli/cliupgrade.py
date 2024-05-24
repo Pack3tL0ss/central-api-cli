@@ -64,7 +64,7 @@ def device(
 ) -> None:
     """Upgrade firmware on a device
     """
-    dev = cli.cache.get_dev_identifier(device, swack=True)
+    dev = cli.cache.get_dev_identifier(device, conductor_only=True)
     if dev.generic_type == "ap":
         reboot = True
     at = None if not at else int(round(at.timestamp()))

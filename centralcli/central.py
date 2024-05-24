@@ -5235,6 +5235,22 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_portal_profile(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Get guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        return await self.get(url)
+
     async def get_visitors(
         self,
         portal_id: str,

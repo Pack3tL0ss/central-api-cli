@@ -8,7 +8,8 @@ import pendulum
 import asyncio
 import sys
 import json
-from typing import List, Iterable, Literal
+import os
+from typing import List, Iterable, Literal, Dict
 from pathlib import Path
 from rich import print
 from rich.console import Console
@@ -54,7 +55,15 @@ app.add_typer(clishowmpsk.app, name="mpsk")
 tty = utils.tty
 iden_meta = IdenMetaVars()
 
+class Counts:
+    def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
+        self.total = total
+        self.up = up
+        self.inventory = not_checked_in
+        self.down = down or total - not_checked_in - up
+
 def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
+    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     def get_switch_counts(data) -> dict:
         dev_types = set([t.get("switch_type", "ERR") for t in data])
         # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
@@ -66,9 +75,25 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             for _type in dev_types
         }
 
+    def get_counts(data: List[Dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
+        _match_type = [d for d in data if d["type"] == dev_type]
+        _tot = len(_match_type)
+        _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
+        _inv = len([d for d in _match_type if not d.get("status")])
+        return Counts(_tot, _up, _inv)
+
+
     if not dev_type:
-        counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
-        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+        if inventory:  # cencli show inventory -v or cencli show all --inv
+            status_by_type = {}
+            _types = set(d["type"] for d in resp.output)
+            for t in _types:
+                counts = get_counts(resp.output, t)
+                status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+
+        else:  # show all [--inv], or show ivnentory -v
+            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         counts_by_type = get_switch_counts(resp.raw["switches"])
         status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
@@ -78,23 +103,44 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         _down = _tot - _up
         status_by_type = {dev_type: {"total": _tot, "up": _up, "down": _down}}
 
+    # Put together counts caption string
     if status:
         _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+    elif inventory:
+        def _get_inv_msg(data: Dict, dev_type: DevTypes) -> str:
+            inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
+            up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
+            return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
+
+        _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
+        _cnt_str = _cnt_str + ", ".join(
+            [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
+        )
+        if "(" not in _cnt_str:
+            inventory_only = True
     else:
         _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
 
     if status is None or status.lower() != "down":
         try:
             clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
-            _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+            if clients:
+                _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
         except Exception as e:
             log.exception(f"Exception occured in _build_caption\n{e}")
 
-    caption = "  [cyan]Show all[/cyan] displays fields common to all device types. "
-    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}To see all columns for a given device use [cyan]show <DEVICE TYPE>[/cyan]" if not dev_type else f"[reset]Counts: {_cnt_str}"
+    if not inventory_only:
+        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. "
+        caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}"
+        if not dev_type:
+            caption = f"{caption} To see all columns for a given device use [cyan]cencli show <DEVICE TYPE>[/cyan]"
+        else:
+            caption = f"[reset]Counts: {_cnt_str}"
+    else:
+        caption = f"[reset]Counts: {_cnt_str}"
 
-    if inventory:
-        caption = f"{caption}\n  [italic green3]verbose listing, devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+    if inventory and not inventory_only:
+        caption = f"{caption}\n  [italic green3]Devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
 def show_devices(
@@ -225,6 +271,22 @@ def show_devices(
         verbosity=verbosity,
     )
 
+def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
+    if not resp.output.get("logo"):
+        cli.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
+
+    import base64
+    file = path / resp.output["logo_name"] if path.is_dir() else path
+    if not os.access(file.parent, os.W_OK):
+        cli.exit(f"{file.parent} is not writable")
+
+    img_data = base64.b64decode(resp.output["logo"].split(",")[1])
+    if file.write_bytes(img_data):
+        cli.exit(f"Logo saved to {file}", code=0)
+    else:
+        cli.exit(
+            f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
+        )
 
 @app.command("all")
 def all_(
@@ -685,13 +747,14 @@ def inventory(
     else:
         title = "Inventory"
 
+    if verbose:
+        show_devices(
+            dev_type='all', outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+        )
+        cli.exit("", code=0)
+
     resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api("inventory", dev_type), sub=sub)
-    if verbose:  # TODO just pass this to all_() so output is consistent
-        cache_devices = cli.cache.devices
-        for idx, dev in enumerate(resp.output):
-            from_cache = [d for d in cache_devices if d["serial"] == dev["serial"]]
-            if from_cache:
-                resp.output[idx] = {**dev, **from_cache[0]}
 
     cli.display_results(
         resp,
@@ -699,7 +762,7 @@ def inventory(
         title=title,
         sort_by=sort_by,
         reverse=reverse,
-        caption=None if not verbose else _build_caption(resp, inventory=True),
+        caption=_build_caption(resp, inventory=True),
         pager=pager,
         outfile=outfile,
         cleaner=None,  # Cleaner is applied in cache update
@@ -1499,11 +1562,12 @@ def lldp(
     """Show AP lldp neighbor
 
     Valid on APs and CX switches
-    Command will run on AOS-SW, but neighbor table will only show neighbors that are CX switches or APs
+
+    Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
+    NOTE: AOS-SW will return LLDP neighbors, but only it reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
 
-    # TODO need get_dev_identier to accept cx
     devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
     batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
     batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
@@ -1524,6 +1588,7 @@ def lldp(
             r,
             tablefmt=tablefmt,
             title=title,
+            caption = "  :warning:  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]" if dev.type == "sw" else None,
             pager=pager,
             outfile=outfile,
             output_by_key=["port", "localPort"],
@@ -1637,22 +1702,13 @@ def run(
 
 # TODO --status does not work
 # https://web.yammer.com/main/org/hpe.com/threads/eyJfdHlwZSI6IlRocmVhZCIsImlkIjoiMTQyNzU1MDg5MTQ0MjE3NiJ9
-@app.command(
-    "config",
-    short_help="Show Central Group/Device or cencli Config",
-    help=(
-        "Show Effective Group/Device Config (UI Group) or cencli config."
-        "    Examples: 'cencli show config GROUPNAME --gw', "
-        "'cencli show config DEVICENAME', "
-        "'cencli show config cencli'"
-    ),
-)
+@app.command("config")
 def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.group_dev_cencli}",
         autocompletion=cli.cache.group_dev_ap_gw_completion,
-        help = "Device Identifier for (AP or GW), Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
+        help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
         show_default=False,
     ),
     device: str = typer.Argument(
@@ -1687,11 +1743,23 @@ def config_(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
+    """Show Effective Group/Device Config (UI Group) or cencli config.
+
+    Group level configs are available for APs or GWs.
+    Device level configs are available for all device types, however
+    AP and GW, show what Aruba Central has configured at the group or device level.
+    Switches fetch the running config from the device.  [italic]Same as [cyan]cencli show run[/cyan][/italic].
+
+    Examples:
+    \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for a GW
+    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if device is AP or GW, or running config from device if switch
+    \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
+    """
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
-    if all:
+    if all:  # TODO move this either to cliexport or clibatch (cencli batch export configs)
         if not any([do_gw, do_ap]):
             print(":warning:  Invalid combination [cyan]--all[/] requires [cyan]--ap[/] or [cyan]--gw[/] flag.")
             raise typer.Exit(1)
@@ -1743,21 +1811,18 @@ def config_(
         if device:
             device = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
-            print(":warning:  Invalid Input, --gw or --ap option must be supplied for group level config.")
-            raise typer.Exit(1)
+            cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
     else:  # group_dev is a device iden
         group = cli.cache.get_group_identifier(group_dev.group)
         if device is not None:
-            print(":warning:  Invalid input enter \[[cyan]Group[/]] \[[cyan]device iden[/]] or \[[cyan]device iden[/]]")
-            raise typer.Exit(1)
+            cli.exit("Invalid input enter \[[cyan]Group[/]] \[[cyan]device iden[/]] or \[[cyan]device iden[/]]")
         else:
             device = group_dev
 
     _data_key = None
     if do_gw or (device and device.generic_type == "gw"):
         if device and device.generic_type != "gw":
-            print(f":warning:  Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
-            raise typer.Exit(1)
+            cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
         caasapi = caas.CaasAPI(central=cli.central)
         if not status:
             func = caasapi.show_config
@@ -1770,14 +1835,19 @@ def config_(
                 func = cli.central.get_per_ap_config
                 args = [device.serial]
             else:
-                print(f":warning:  Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
-                raise typer.Exit(1)
+                cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
         else:
             func = cli.central.get_ap_config
             args = [group.name]
+    elif device and device.type == "cx":
+        clitshoot.send_cmds_by_id(device, commands=[6002], pager=pager, outfile=outfile)
+        cli.exit(code=0)
+    elif device and device.type == "sw":
+        clitshoot.send_cmds_by_id(device, commands=[1022], pager=pager, outfile=outfile)
+        cli.exit(code=0)
     else:
-        print(f"This command is currently only supported for gw and ap, not {device.generic_type}")
-        raise typer.Exit(1)
+        log.error("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
+        cli.exit()
 
     # Build arguments cli.central method associated with each device type supported.
     if device:
@@ -2941,9 +3011,31 @@ def archived(
     cli.display_results(resp, tablefmt="yaml")
 
 
-# TODO cahce portal/name ids
+# TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
 @app.command()
 def portals(
+    portal: List[str] = typer.Argument(
+        None,
+        metavar="[name|id]",
+        help="show details for a specific portal profile [grey42]\[default: show summary for all portals][/]",
+        autocompletion=cli.cache.portal_completion,
+        show_default=False,),
+    logo: bool = typer.Option(
+        False,
+        "-L", "--logo",
+        metavar="PATH",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]\[default: {Path.cwd()}/<original_logo_filename>[/]]",
+        show_default = False,
+        writable=True,
+    ),
+    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
+    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False,
     ),
@@ -2957,9 +3049,31 @@ def portals(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show Configured Guest Portals"""
-    resp = cli.central.request(cli.central.get_portals)
-    cli.display_results(resp, cleaner=cleaner.get_portals, fold_cols=["url"],)
+    """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
+    path = Path.cwd()
+    if portal and len(portal) > 2:
+        cli.exit("Too many Arguments")
+    elif len(portal) > 1:
+        if not logo:
+            cli.exit("Too many Arguments")
+        path = Path(portal[-1])
+        if not path.is_dir() and not path.parent.is_dir():
+            cli.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
+
+    portal = portal[0] if portal else portal
+
+    if portal is None:
+        resp: Response = cli.central.request(cli.cache.update_portal_db)
+        _cleaner = cleaner.get_portals
+    else:
+        p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
+        resp: Response = cli.central.request(cli.central.get_portal_profile, p.id)
+        _cleaner = cleaner.get_portal_profile
+        if logo and resp.ok:
+            download_logo(resp, path, p)  # this will exit CLI after writing to file
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if portal else "rich")
+    cli.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
 
 
 # TODO add sort_by completion

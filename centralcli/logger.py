@@ -101,7 +101,6 @@ class MyLogger:
             return "\n".join([f'  {msg}' for msg in self._caption])
 
     def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs):
-        # TODO can prob remove log_msgs, used by another project I re-used this object from (ConsolePi)
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         _msgs = []
         _logged = []
@@ -120,7 +119,7 @@ class MyLogger:
             self.log_msgs += _msgs
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
-                    emoji_console.print(f"{':warning:  ' if not level=='info' else ''}{m}")
+                    emoji_console.print(f"{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
             self.log_msgs = []
 
         if caption:

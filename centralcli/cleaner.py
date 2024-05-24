@@ -31,7 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes
 from centralcli.objects import DateTime
 from centralcli.models import CloudAuthUploadResponse
 
@@ -233,6 +233,11 @@ _short_value = {
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
     "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
     "reserved_power_in_watts": lambda v: round(v, 2),
+    "speed": lambda v: "1000BaseT FD" if v == "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode" else v,
+    "ec": lambda v: v if not isinstance(v, list) else ", ".join([LLDPCapabilityTypes(ec).name.replace("_", " ") for ec in v]),
+    "sc": lambda v: v if not isinstance(v, list) else ", ".join([LLDPCapabilityTypes(ec).name.replace("_", " ") for ec in v]),
+    "chassis_id_type": lambda v: None,
+    "chassis_id_type_str": lambda v: None,
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -312,6 +317,9 @@ _short_key = {
     "power_class": "class",
     "cluster_group_name": "group",
     "cluster_redundancy_type": "redundancy type",
+    "ec": "enabled capabilities",
+    "sc": "system capabilities",
+    "ec_str": "enabled capabilities"
 }
 
 
@@ -1018,11 +1026,12 @@ def get_lldp_neighbor(data: List[Dict[str, str]]) -> Dict[str: Dict[str, str]]:
         "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode": "1000BaseT FD"
     }
     # grab the key details from switch lldp return, make data look closer to lldp return from AP
+
     if data and "dn" in data[0].keys():
         data = [{**dict(d if "dn" not in d else d["dn"]), "vlan_id": ",".join(d.get("vlan_id", [])), "lldp_poe": d.get("lldp_poe_enabled")} for d in data]
         data = sort_interfaces(data, interface_key="port")
     # simplify some of the values and strip the bond0 entry from AP
-    data = [{k: _short_val.get(d[k], d[k]) for k in d if d.get("localPort", "") != "bond0" and k not in strip_keys} for d in data]
+    data = [dict(short_value(k, d[k]) for k in d if d.get("localPort", "") != "bond0" and k not in strip_keys) for d in data]
 
     return strip_no_value(data)
 
@@ -1409,6 +1418,12 @@ def get_portals(data: List[dict],) -> List[dict]:
     data = strip_no_value(data)
 
     return data
+
+
+def get_portal_profile(data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    # _display_output will listify the dict prior to sending it in as most outputs are List[dict]
+    data = utils.unlistify(data)
+    return {k: v for k, v in data.items() if k != "logo"}
 
 def get_ospf_neighbor(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
     data = utils.listify(data)
