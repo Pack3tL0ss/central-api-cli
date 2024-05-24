@@ -7,7 +7,6 @@ CLI Reference
 
 .. typer:: centralcli.cli:app
     :prog: cencli
-    :preferred: html
     :theme: dark
     :width: 80
     :show-nested:
