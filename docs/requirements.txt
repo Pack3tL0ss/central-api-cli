@@ -26,7 +26,8 @@ fuzzywuzzy
 levenshtein
 
 # doc requirements
-docutils==0.17.1
+centralcli
+docutils>=0.17.1
 # m2r2>=0.3.2
 myst-parser>=0.17.2
 Sphinx>=4.3.2
@@ -40,4 +41,3 @@ sphinxcontrib-jsmath>=1.0.1
 sphinxcontrib-qthelp>=1.0.3
 sphinxcontrib-serializinghtml>=1.1.5
 sphinxcontrib-napoleon>=0.7
-centralcli>=0.17.4
