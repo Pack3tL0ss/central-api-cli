@@ -359,12 +359,6 @@ class CLICommon:
         cleaner: callable = None,
         **cleaner_kwargs,
     ):
-        # @staticmethod
-        # def get_sort(sort_value: Any, type_):
-        #     if isinstance(sort_value, DateTime):
-        #         return sort_value.epoch
-        #     elif  type_ == int or all([v == "-" for v in d[sort_by]]):
-        #         return 0
         if data:
             data = utils.listify(data)
 
@@ -372,15 +366,17 @@ class CLICommon:
                 data = cleaner(data, **cleaner_kwargs)
                 data = utils.listify(data)
 
+            # TODO make separate function
             if sort_by and all(isinstance(d, dict) for d in data):
                 if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
                     sort_by = sort_by.replace("_", " ")
 
-                # TODO move this to log.caption so it's at end of output
-                if not all([True if sort_by in d else False for d in data]):
-                    print(f":x: [dark_orange3]Error: [cyan]{sort_by}[reset] does not appear to be a valid field")
-                    print("Valid Fields:\n----------\n{}\n----------".format("\n".join(data[0].keys())))
-                    # print("Valid Fields:\n----------\n{}\n----------".format("\n".join([k.replace(" ", "_") for k in data[0].keys()])))  # TODO verify if sort field name is b4 or after cleaner and how sort handles space
+                sort_msg = None
+                if not all([sort_by in d for d in data]):
+                    sort_msg = [
+                            f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
+                            "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "_")}' for k in data[0].keys()))
+                    ]
                 else:
                     try:
                         type_ = str
@@ -389,11 +385,19 @@ class CLICommon:
                                 type_ = type(d[sort_by])
                                 break
                         data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
-                        # data = sorted(data, key=get_sort(d[sort_by], type_=type_))
                     except TypeError as e:
-                        print(
-                            f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "
-                        )
+                        sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
+
+                if sort_msg:
+                    _caption = "\n".join([f"  {m}" for m in sort_msg])
+                    _caption = _caption if tablefmt != "rich" else render.rich_capture(_caption, emoji=True)
+                    if caption:
+                        c = caption.splitlines()
+                        c.insert(-1, _caption)
+                        caption = "\n".join(c)
+                    else:
+                        caption = _caption
+            # End sort function
 
             if reverse:
                 data = data[::-1]
@@ -456,7 +460,7 @@ class CLICommon:
         reverse: bool = False,
         stash: bool = True,
         output_by_key: str | List[str] = "name",
-        exit_on_fail: bool = False,
+        exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -471,9 +475,10 @@ class CLICommon:
             resp (Union[Response, List[Response], None], optional): API Response objects.
             data (Union[List[dict], List[str], None], optional): API Response output data.
             tablefmt (str, optional): Format of output. Defaults to "rich" (tabular).
-                Valid Values: "json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"
+                Valid Values: "json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"
                 Where "raw" is unformatted raw response and "action" is formatted for POST|PATCH etc.
                 where the result is a simple success/error.
+                clean bypasses all formatters.
             title: (str, optional): Title of output table.
                 Only applies to "rich" tablefmt. Defaults to None.
             caption: (str, optional): Caption displayed at bottom of table.
@@ -486,15 +491,10 @@ class CLICommon:
                 show last.  Default: True
             output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
                 the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
-            ok_status (Union[int, List[int], Tuple[int, str], List[Tuple[int, str]]], optional): By default
-                responses with status_code 2xx are considered OK and are rendered as green by
-                Output class.  provide int or list of int to override additional status_codes that
-                should also be rendered as success/green.  provide a dict with {int: str, ...}
-                where string can be any color supported by Output class or "neutral" "success" "fail"
-                where neutral is no formatting, and success / fail will use the default green / red respectively.
             set_width_cols (Dict[str: Dict[str, int]]): Passed to output function defines cols with min/max width
-                example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}
-            full_cols (list): columns to ensure are displayed at full length (no wrap no truncate)
+                example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}.  Applies to tablefmt=rich.
+            full_cols (list): columns to ensure are displayed at full length (no wrap no truncate). Applies to tablfmt=rich. Defaults to [].
+            fold_cols (Union[List[str], str], optional): columns that will be folded (wrapped within the same column). Applies to tablfmt=rich. Defaults to [].
             cleaner (callable, optional): The Cleaner function to use.
         """
         if resp is not None:
@@ -505,8 +505,12 @@ class CLICommon:
                 rl_str = f"[reset][italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
                 caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
 
-            if log.caption:
-                caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
+            if log.caption:  # TODO change caption to list of Tuples or dict or objects with loglevel so we can determine if :warning: should be prepended.  Or do it in the log
+                if len(resp) > 1 and ":warning:" in log.caption:
+                    caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
+                else:
+                    caption = f'{caption}\n{log.caption}[/]'
+
 
             for idx, r in enumerate(resp):
                 # Multi request url line (example below)
