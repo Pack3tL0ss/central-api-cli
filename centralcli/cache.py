@@ -1008,9 +1008,6 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
-        from rich import inspect
-        inspect(ctx, console=err_console)
-        inspect(ctx.params)
         if not config.valid:
             err_console.print(":warning:  Invalid config")
             return
