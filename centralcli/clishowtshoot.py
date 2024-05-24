@@ -5,7 +5,6 @@ import typer
 import sys
 from pathlib import Path
 from rich import print
-from rich.console import Console
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -34,7 +33,7 @@ def results(
     device: str = typer.Argument(
         ...,
         metavar=iden_meta.dev,
-        help="Aruba Central Device",
+        help="Aruba Central Device or the session id of a previously run troubleshooting session",
         autocompletion=cli.cache.dev_completion,
         show_default=False,
     ),
@@ -43,13 +42,14 @@ def results(
         help="The troubleshooting session id.",
         show_default=False,
     ),
-    verbose2: bool = typer.Option(
+    clean: bool = typer.Option(
         False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        "--clean",
+        help="Clean response, don't send through any formatters.  [grey42 italic]Useful for excessively long output[/]",
         show_default=False,
     ),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -71,13 +71,12 @@ def results(
     ),
 ) -> None:
     """
-    [cyan]Show Troubleshooting results from an existing session.[/]
+    [cyan]Show Troubleshooting results from a previously run troubleshooting session.[/]
 
     Use [cyan]cencli tshoot...[/] to start a troubleshooting session.
 
     """
     central = cli.central
-    con = Console(emoji=False)
     dev = cli.cache.get_dev_identifier(device)
 
     # Fetch session ID if not provided
@@ -87,18 +86,21 @@ def results(
             session_id = resp.output["session_id"]
         else:
             print(f"No session id provided, unable to find active session id for {dev.name}")
-            cli.display_results(resp)
-            raise typer.Exit(1)
+            cli.display_results(resp, exit_on_fail=True)
 
     title = f"Troubleshooting output for {dev.name} session {session_id}"
+
     resp = central.request(central.get_ts_output, dev.serial, session_id=session_id)
     if not resp or resp.output.get("status", "") != "COMPLETED":
         cli.display_results(resp, title=title, tablefmt="rich",)
-    elif verbose2:
-        cli.display_results(resp)
     else:
-        con.print(resp)
-        con.print(f"\n   {resp.rl}")
+        if "output" in resp.output:
+            _output = resp.output["output"]
+            del resp.output["output"]
+            cli.display_results(resp, tablefmt="action")
+            resp.output = _output
+
+        cli.display_results(resp, pager=pager, outfile=outfile, tablefmt="simple" if not clean else "clean")
 
 
 @app.command(short_help="Show available troubleshooting commands")
