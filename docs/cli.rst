@@ -6,6 +6,7 @@ CLI Reference
 ..    :nested: full
 
 .. typer:: centralcli.cli:app
+    :preferred: html
     :width: 65
     :show-nested:
     :make-sections:
