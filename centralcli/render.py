@@ -40,7 +40,7 @@ from centralcli.objects import Encoder
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
-TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"]
+TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate", "simple"]  #, "raw", "action"]
 REDACT = ["mac", "serial", "neighborMac", "neighborSerial", "neighborPortMac", "longitude", "latitude"]
 RICH_FULL_COLS = ['mac', 'serial', 'ip', 'public ip', 'version', 'radio', 'id']
 RICH_FOLD_COLS = ["description"]
@@ -127,7 +127,12 @@ class Output:
 
     @property
     def file(self):
-        return "" if not self._file else typer.unstyle(self._file)
+        if not self._file:
+            return self.tty  # this should not happen
+        try:
+            return typer.unstyle(self._file)
+        except TypeError:
+            return self._file
 
 
 def do_pretty(key: str, value: str) -> str:
@@ -317,7 +322,7 @@ def rich_output(
 
 def output(
     outdata: Union[List[str], Dict[str, Any]],
-    tablefmt: str = "rich",
+    tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
     title: str = None,
     caption: str = None,
     account: str = None,
@@ -335,8 +340,8 @@ def output(
         outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]
 
     # -- // List[str, ...] \\ --  Bypass all formatters, (config file output, etc...)
-    if outdata and all(isinstance(x, str) for x in outdata):
-        tablefmt = "strings"
+    if tablefmt != "simple" and outdata and all(isinstance(x, str) for x in outdata):
+        tablefmt = "simple"
 
     # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
