@@ -18,7 +18,7 @@ import sys
 sys.path.insert(0, os.path.abspath(".."))
 
 # Make README the index
-# index_master = True
+index_master = True
 
 # -- Project information -----------------------------------------------------
 
