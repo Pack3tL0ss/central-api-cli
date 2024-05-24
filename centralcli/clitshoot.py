@@ -55,15 +55,17 @@ def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = Fa
             _delay = 15 if device.type == "cx" else 10
             for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
-            # with console.status("Waiting for Troubleshooting Response..."):
-            #     sleep(10)
+
             ts_resp = cli.central.request(cli.central.get_ts_output, device.serial, resp.session_id)
 
             if ts_resp.output.get("status", "") == "COMPLETED":
                 lines = "\n".join([line for line in ts_resp.output["output"].splitlines() if line != " "])
                 ts_resp.raw = ts_resp.output["output"]
                 ts_resp.output = lines
-                cli.display_results(ts_resp, pager=pager, outfile=outfile)
+                show_tech_ap = [115, 369, 465]
+                tablefmt = "clean" if sorted(commands) != show_tech_ap else "raw"
+
+                cli.display_results(ts_resp, pager=pager, outfile=outfile, tablefmt=tablefmt)
                 complete = True
                 break
             else:
