@@ -1,5 +1,5 @@
 colorama
-click>=7.1.2
+click<=7.1.2
 pygments
 tabulate
 halo
