@@ -32,7 +32,7 @@ from centralcli.objects import DateTime, Encoder
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
-TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action"]
+TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 console = Console(emoji=False)
 err_console = Console(emoji=False, stderr=True)
@@ -520,7 +520,7 @@ class CLICommon:
                     "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
-                conditions = [len(resp) > 1, tablefmt in ["action", "raw"], r.ok and not r.output]
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output]
                 if any(conditions):
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
@@ -539,21 +539,29 @@ class CLICommon:
                 elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
-                if not r or tablefmt in ["action", "raw"]:
+                if not r or tablefmt in ["action", "raw", "clean"]:
 
                     # raw output (unformatted response from Aruba Central API GW)
-                    if tablefmt == "raw":
+                    if tablefmt in ["raw", "clean"]:
                         status_code = f"[{fg}]status code: {r.status}[/{fg}]"
                         print(r.url)
                         print(status_code)
                         if not r.ok:
                             print(r.error)
-                        print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
-                        plain_console = Console(color_system=None, emoji=False)
-                        plain_console.print(r.raw)
+
+                        if tablefmt == "clean":
+                            typer.echo_via_pager(r.output) if pager else typer.echo(r.output)
+                        else:
+                            print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
+                            plain_console = Console(color_system=None, emoji=False)
+                            if pager:
+                                with plain_console.pager:
+                                    plain_console.print(r.raw)
+                            else:
+                                plain_console.print(r.raw)
 
                         if outfile:
-                            self.write_file(outfile, r.raw)
+                            self.write_file(outfile, r.raw if tablefmt != "clean" else r.output)
 
                     # prints the Response objects __str__ method which includes status_code
                     # and formatted contents of any payload. example below
