@@ -1,29 +1,29 @@
 # cencli requirements
 # cchardet
-colorama>=0.4.6
-click<=7.1.2
-pygments>=2.17.2
-tabulate>=0.9.0
-halo>=0.0.31
-typer==0.10.0
-pylibyaml>=0.1.0
-pyYAML>=6.0.1
-tinydb>=4.8.0
-shellingham>=1.5.4
-pendulum>=3.0.0
-pycentral>=0.0.3
-aiohttp>=3.9.3
-asyncio>=3.4.3
-rich>=10.0
-tablib>=3.6.0
-jinja2>=3.1.3
-fastapi>=0.110.0
-uvicorn>=0.29.0
-psutil>=5.9.8
-pydantic >=1.9.0,<2.0.0
-ipaddress>=1.0.23
-fuzzywuzzy>=0.18.0
-levenshtein>=0.25.0
+# colorama>=0.4.6
+# click<=7.1.2
+# pygments>=2.17.2
+# tabulate>=0.9.0
+# halo>=0.0.31
+# typer==0.10.0
+# pylibyaml>=0.1.0
+# pyYAML>=6.0.1
+# tinydb>=4.8.0
+# shellingham>=1.5.4
+# pendulum>=3.0.0
+# pycentral>=0.0.3
+# aiohttp>=3.9.3
+# asyncio>=3.4.3
+# rich>=10.0
+# tablib>=3.6.0
+# jinja2>=3.1.3
+# fastapi>=0.110.0
+# uvicorn>=0.29.0
+# psutil>=5.9.8
+# pydantic >=1.9.0,<2.0.0
+# ipaddress>=1.0.23
+# fuzzywuzzy>=0.18.0
+# levenshtein>=0.25.0
 
 # doc requirements
 docutils>=0.17.1
@@ -40,4 +40,4 @@ sphinxcontrib-jsmath>=1.0.1
 sphinxcontrib-qthelp>=1.0.3
 sphinxcontrib-serializinghtml>=1.1.5
 sphinxcontrib-napoleon>=0.7
-centralcli>=4.2.0
+centralcli>=5.1.1
