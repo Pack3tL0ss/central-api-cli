@@ -976,4 +976,4 @@ log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
 if __name__ == "__main__":
     app()
 
-click_object = typer.main.get_command(app)  # exposed for documentation
+# click_object = typer.main.get_command(app)  # exposed for documentation

@@ -940,7 +940,7 @@ class CentralApi(Session):
 
         It then combines the responses from /configuration/v2/groups/template_info
         and /configuration/v1/groups/properties to get the template details
-         (template_group or not) and properties for each group.
+        (template_group or not) and properties for each group.
 
          The template_info and properties endpoints both allow 20 groups per request.
          Multiple requests will be performed async if there are more than 20 groups.
@@ -5217,8 +5217,7 @@ class CentralApi(Session):
         """Get all portals with limited data.
 
         Args:
-            sort (str, optional): + is for ascending  and - for descending order , sorts by name for now
-                Valid Values: +name, -name
+            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.  Defaults to +name.
             offset (int, optional): Starting index of element for a paginated query Defaults to 0.
             limit (int, optional): Number of items required per query Defaults to 100.
 
@@ -5264,8 +5263,7 @@ class CentralApi(Session):
 
         Args:
             portal_id (str): Portal ID of the splash page
-            sort (str, optional): + is for ascending  and - for descending order , sorts by name for
-                now  Valid Values: +name, -name
+            sort (str, optional): + is for ascending  and - for descending order, Valid Values: '+name', '-name'. Defaults to +name.
             filter_by (str, optional): filter by email or name  Valid Values: name, email
             filter_value (str, optional): filter value
             offset (int, optional): Starting index of element for a paginated query Defaults to 0.
