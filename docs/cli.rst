@@ -8,6 +8,6 @@ CLI Reference
 .. typer:: centralcli.cli:app
     :prog: cencli
     :theme: dark
-    :width: 80
+    :width: 65
     :show-nested:
     :make-sections:
