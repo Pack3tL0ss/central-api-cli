@@ -1,29 +1,29 @@
 # cencli requirements
 # cchardet
-colorama
+colorama>=0.4.6
 click<=7.1.2
-pygments
-tabulate
-halo
+pygments>=2.17.2
+tabulate>=0.9.0
+halo>=0.0.31
 typer==0.10.0
-pylibyaml
-pyYAML
-tinydb
-shellingham
-pendulum
+pylibyaml>=0.1.0
+pyYAML>=6.0.1
+tinydb>=4.8.0
+shellingham>=1.5.4
+pendulum>=3.0.0
 pycentral>=0.0.3
-aiohttp
-asyncio
+aiohttp>=3.9.3
+asyncio>=3.4.3
 rich>=10.0
-tablib
-jinja2
-fastapi
-uvicorn
-psutil
+tablib>=3.6.0
+jinja2>=3.1.3
+fastapi>=0.110.0
+uvicorn>=0.29.0
+psutil>=5.9.8
 pydantic >=1.9.0,<2.0.0
-ipaddress
-fuzzywuzzy
-levenshtein
+ipaddress>=1.0.23
+fuzzywuzzy>=0.18.0
+levenshtein>=0.25.0
 
 # doc requirements
 centralcli>=4.2.0
