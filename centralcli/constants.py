@@ -435,6 +435,7 @@ class ArgToWhat:
         self.group = self.groups = "group"
         self.webhooks = self.webhook = "webhook"
         self.sites = self.site = "site"
+        self.wlan = self.wlans = "wlan"
 
     def _init_rename(self):
         self.group = self.groups = "group"
