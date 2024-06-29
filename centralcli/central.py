@@ -3117,14 +3117,14 @@ class CentralApi(Session):
         return await self.post(url, json_data=json_data)
 
     # TODO NotUsed Yet.  Shows any updates not yet pushed to the device (device offline, etc)
-    # May only be valid for APs not sure.
+    # Only valid for APs.
     async def get_dirty_diff(
         self,
         group: str,
         offset: int = 0,
         limit: int = 20
     ) -> Response:
-        """Get dirty diff.
+        """Get AP dirty diff (config items not pushed) by group.
 
         Args:
             group (str): Group name of the group or guid of the swarm.
@@ -3463,23 +3463,31 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def configuration_clean_up_and_update_wlan_v2(self, group_name_or_guid: str,
-                                                        wlan_name: str, essid: str, type: str,
-                                                        hide_ssid: bool, vlan: str, zone: str,
-                                                        wpa_passphrase: str,
-                                                        wpa_passphrase_changed: bool,
-                                                        is_locked: bool,
-                                                        captive_profile_name: str,
-                                                        bandwidth_limit_up: str,
-                                                        bandwidth_limit_down: str,
-                                                        bandwidth_limit_peruser_up: str,
-                                                        bandwidth_limit_peruser_down: str,
-                                                        access_rules: list) -> Response:
+
+    async def update_wlan(
+        self,
+        scope: str,
+        wlan_name: str,
+        essid: str = None,
+        type: str = None,
+        hide_ssid: bool = None,
+        vlan: str = None,
+        zone: str = None,
+        wpa_passphrase: str = None,
+        is_locked: bool = None,
+        captive_profile_name: str = None,
+        bandwidth_limit_up: str = None,
+        bandwidth_limit_down: str = None,
+        bandwidth_limit_peruser_up: str = None,
+        bandwidth_limit_peruser_down: str = None,
+        access_rules: list = None,
+    ) -> Response:
         """Update an existing WLAN and clean up unsupported fields.
 
         Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            scope (str): Group name of the group or guid of the swarm
+                or serial number of 10x AP.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
             essid (str): essid
             type (str): type  Valid Values: employee, guest
@@ -3499,7 +3507,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
+        url = f"/configuration/v2/wlan/{scope}/{wlan_name}"
 
         json_data = {
             'essid': essid,
@@ -3508,7 +3516,7 @@ class CentralApi(Session):
             'vlan': vlan,
             'zone': zone,
             'wpa_passphrase': wpa_passphrase,
-            'wpa_passphrase_changed': wpa_passphrase_changed,
+            'wpa_passphrase_changed': wpa_passphrase is not None,
             'is_locked': is_locked,
             'captive_profile_name': captive_profile_name,
             'bandwidth_limit_up': bandwidth_limit_up,
@@ -3517,6 +3525,7 @@ class CentralApi(Session):
             'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
             'access_rules': access_rules
         }
+        json_data = {'wlan': utils.strip_none(json_data)}
 
         return await self.patch(url, json_data=json_data)
 

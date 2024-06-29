@@ -347,9 +347,6 @@ def get_multiline_input(prompt: str = None, print_func: callable = print,
 
 
 class Session():
-    RATE = 1
-    MAX_TOKENS = 6
-
     def __init__(
         self,
         auth: ArubaCentralBase = None,
@@ -367,7 +364,6 @@ class Session():
         self.throttle: int = 0
         self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
         self.spinner._spinner_id = "spin_thread"
-        self.tokens = self.MAX_TOKENS
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
@@ -488,7 +484,7 @@ class Session():
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
             if not resp:
-                self.spinner.fail(fail_msg)
+                self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
                 self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"

@@ -13,7 +13,7 @@ import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from tinydb.table import Table, Document
+from tinydb.table import Table
 from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils

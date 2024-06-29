@@ -2,6 +2,8 @@
 
 [![Latest Version](https://img.shields.io/pypi/v/centralcli.svg)](https://pypi.org/project/centralcli)
 [![Documentation Status](https://readthedocs.org/projects/central-api-cli/badge/?version=latest)](https://central-api-cli.readthedocs.io/en/latest/?badge=latest)
+[![Downloads](https://static.pepy.tech/badge/centralcli)](https://pepy.tech/project/centralcli)
+[![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](https://lbesson.mit-license.org/)
 
 A CLI app for interacting with Aruba Central Cloud Management Platform. With cross-platform shell support. Auto Completion, easy device/site/group/template identification (fuzzy match), support for batch import, and a lot more.
 

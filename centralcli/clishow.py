@@ -92,7 +92,7 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
                 status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
         else:  # show all [--inv], or show ivnentory -v
-            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"], resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         counts_by_type = get_switch_counts(resp.raw["switches"])
@@ -775,7 +775,7 @@ def inventory(
 def subscription(
     what: SubscriptionArgs = typer.Argument("details"),
     service: str = typer.Option(None, hidden=True),  # TODO this is for show subscription stats also a couple more options we could allow
-    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),  # Need to adapt a bit for stats or make sub-command
+    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort", show_default=False,),  # Need to adapt a bit for stats or make sub-command
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
