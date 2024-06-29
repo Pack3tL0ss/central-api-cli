@@ -775,7 +775,7 @@ def inventory(
 def subscription(
     what: SubscriptionArgs = typer.Argument("details"),
     service: str = typer.Option(None, hidden=True),  # TODO this is for show subscription stats also a couple more options we could allow
-    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort"),  # Need to adapt a bit for stats or make sub-command
+    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort", show_default=False,),  # Need to adapt a bit for stats or make sub-command
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
