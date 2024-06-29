@@ -126,7 +126,7 @@ class CLICommon:
         emoji_console = Console()
 
         if default:  # They used the -d flag
-            emoji_console.print(":information:  [bright_green]Using default central account[/]",)
+            emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
             if config.sticky_account_file.is_file():
                 config.sticky_account_file.unlink()
             if account in config.data:
@@ -236,7 +236,7 @@ class CLICommon:
 
         if default and config.sticky_account_file.is_file():
             emoji_console = Console()
-            emoji_console.print(":information:  [bright_green]Using default central account[/]",)
+            emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
             config.sticky_account_file.unlink()
             return default
 
