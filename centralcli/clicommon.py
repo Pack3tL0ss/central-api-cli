@@ -501,10 +501,15 @@ class CLICommon:
             resp = utils.listify(resp)
 
             # update caption with rate limit
-            if resp[-1].rl:
-                rl_str = f"[reset][italic dark_olive_green2]{resp[-1].rl}[/]".lstrip()
-                caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
+            try:
+                last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
+                if last_rl:
+                    rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
+                    caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
+            except Exception as e:
+                log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
+            caption = caption or ""
             if log.caption:  # TODO change caption to list of Tuples or dict or objects with loglevel so we can determine if :warning: should be prepended.  Or do it in the log
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
