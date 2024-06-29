@@ -264,7 +264,7 @@ def show_archive_results(res: Response) -> None:
         data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
         cli.display_results(data=data, title=title, caption=caption)
     if res.get("failed_devices"):
-        title = f"Fevices that [bright_red]failed[/] to {action}d."
+        title = f"Devices that [bright_red]failed[/] to {action}d."
         data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
         cli.display_results(data=data, title=title, caption=caption)
 
