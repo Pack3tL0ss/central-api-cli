@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 import asyncio
 import sys
 from pathlib import Path
 from time import sleep
-from typing import List, Tuple, Union, Dict
-from tinydb.table import Document
+from typing import Dict, List, Tuple, Union
 
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.progress import track
+from tinydb.table import Document
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -26,8 +27,19 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import AllDevTypes, BatchAddArgs, BatchDelArgs, BatchRenameArgs, GatewayRole, IdenMetaVars, SendConfigDevIdens, SiteStates, state_abbrev_to_pretty, CloudAuthUploadType
-from centralcli.exceptions import ImportException, MissingFieldException, DevException
+from centralcli.constants import (
+    AllDevTypes,
+    BatchAddArgs,
+    BatchDelArgs,
+    BatchRenameArgs,
+    CloudAuthUploadType,
+    GatewayRole,
+    IdenMetaVars,
+    SendConfigDevIdens,
+    SiteStates,
+    state_abbrev_to_pretty,
+)
+from centralcli.exceptions import DevException, ImportException, MissingFieldException
 from centralcli.strings import ImportExamples, LongHelp
 
 # from centralcli.models import GroupImport
@@ -1056,21 +1068,20 @@ def show_archive_results(res: Response) -> None:
         data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
         cli.display_results(data=data, title=title, caption=caption)
     if res.get("failed_devices"):
-        title = f"Fevices that [bright_red]failed[/] to {action}d."
+        title = f"Devices that [bright_red]failed[/] to {action}d."
         data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
         cli.display_results(data=data, title=title, caption=caption)
 
 
 def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
-    all_ok = True if all(r.ok for r in batch_resp) else False
+    all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
     cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        if cache_devs:
-            if all_ok:
-                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
-            else:
-                cache_update_reqs += [br(cli.cache.update_dev_db)]
+        if cache_devs and all_ok:
+            cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+        else:
+            cache_update_reqs += [br(cli.cache.update_dev_db)]
 
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
         if cache_devs or inv_del_serials and not ui_only:
@@ -1141,13 +1152,12 @@ def batch_delete_devices_dry_run(data: Union[list, dict], *, ui_only: bool = Fal
     # inspect(cli.cache, console=console)
 
 
-def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
+def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
     br = cli.central.BatchRequest
     console = Console(emoji=False)
 
     if not data:
-        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
-        raise typer.Exit(1)
+        cli.exit("[bright_red]Error[/]: Parsing of import file resulted in [bright_red italic bold]no[/] data.")
 
     serials_in = [dev["serial"].upper() for dev in data]
 
@@ -1181,16 +1191,17 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
     devs_in_monitoring = [*aps, *switches, *stacks, *gws]
 
+    _serials = inv_del_serials if not force else serials_in
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
-    arch_reqs = [] if ui_only or not inv_del_serials else [
-        br(cli.central.archive_devices, (inv_del_serials,)),
-        br(cli.central.unarchive_devices, (inv_del_serials,)),
+    arch_reqs = [] if ui_only or not _serials else [
+        br(cli.central.archive_devices, (_serials,)),
+        br(cli.central.unarchive_devices, (_serials,)),
     ]
 
     # cop only delete devices from GreenLake inventory
-    cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, (inv_del_serials,))
+    cop_del_reqs = [] if not _serials or not config.is_cop else [
+        br(cli.central.cop_delete_device_from_inventory, (_serials,))
     ]
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1208,22 +1219,23 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
     # warn about devices that were not found
     if not_in_inventory:
-        if len(not_in_inventory) == 1:
-            console.print(f"\n[dark_orange]Warning[/]: Skipping [cyan]{not_in_inventory[0]}[/] as it was not found in inventory.")
-        else:
-            console.print("\n[dark_orange]Warning[/]: Skipping the following as they were not found in inventory.")
-            _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
-        print("")
+        console.print("\n[dark_orange]Warning[/]: The following provided devices were not found in the inventory.")
+        _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
+        print(f"{'[bright_green italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
 
     # None of the provided devices were found in cache or inventory
     if not [*arch_reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
-        print("Everything is as it should be, nothing to do.")
-        raise typer.Exit(0)
+        cli.exit("Everything is as it should be, nothing to do.", code=0)
 
     # construnct confirmation msg
-    _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
-    if len(cache_devs) > 1:
-        _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
+    if force:
+        _msg = f"[bright_red]Delete[/] [cyan]{serials_in[0]}[/]\n"
+        if len(serials_in) > 1:
+            _msg += "\n".join([f"       [cyan]{d}[/]" for d in serials_in[1:]])
+    else:
+        _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
+        if len(cache_devs) > 1:
+            _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
 
     if ui_only:
         _total_reqs = len(mon_del_reqs)
@@ -1237,8 +1249,7 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
             print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
             delayed_mon_del_reqs = []
         if not mon_del_reqs:
-            print("No devices found to remove from UI... Exiting")
-            raise typer.Exit(1)
+            cli.exit("No devices found to remove from UI... Exiting")
         else:
             _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
 
@@ -1260,11 +1271,8 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
                     show_archive_results(batch_resp[1])  # unarchive
                     batch_resp = batch_resp[2:]
 
-            if not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE
-                # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
+            if not force and not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE (archive failures alone will proceed as they are removed from batch_resp)
                 log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
-                # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
-                # log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
                 update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
 
                 cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
@@ -1273,8 +1281,9 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
         # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
         update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
 
-        cli.display_results(batch_resp, tablefmt="action")
-        raise typer.Exit(0)
+        if batch_resp:  # Can occur if archive/unarchive has failures batch_resp[2:] could be an empty list.
+            cli.display_results(batch_resp, tablefmt="action")
+        cli.exit("[green italic]No more calls to perform[/]", code=0)
 
     elif delayed_mon_del_reqs and not cop_inv_only:
         del_resp = []
@@ -1303,6 +1312,9 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
 
         batch_resp += del_resp or _del_resp
 
+        if batch_resp:
+            update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
+
     # On COP delete devices from GreenLake inventory (only available on CoP)
     # TODO test against a cop system
     # TODO add to cencli delete device ...
@@ -1312,18 +1324,8 @@ def batch_delete_devices(data: Union[list, dict], *, ui_only: bool = False, cop_
         if not all(r.ok for r in cop_del_resp):
             log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
 
-        #     cli.display_results(cop_del_resp, tablefmt="action")
-        # else:
-        #     # display results (below) with results of previous calls
-        #     batch_resp += cop_del_resp
-
-    # TODO need to update cache after ui-only delete
-    # TODO need to improve logic throughout and update inventory cache
-    if batch_resp:
-        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-        if cop_del_resp:
-            batch_resp += cop_del_resp
+    if cop_del_resp:
+        batch_resp += cop_del_resp
     elif cop_inv_only and cop_del_resp:
         batch_resp = cop_del_resp
 
@@ -1429,6 +1431,7 @@ def delete(
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
     dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),
+    force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices)"),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1472,7 +1475,7 @@ def delete(
         if isinstance(data, dict) and "devices" in data:
             data = data["devices"]
         if not dry_run:
-            resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+            resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
         else:
             resp = batch_delete_devices_dry_run(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
