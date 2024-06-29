@@ -14,12 +14,12 @@ import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, cli, caas, cleaner
+    from centralcli import utils, cli, caas, cleaner, BatchRequest, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli, caas, cleaner
+        from centralcli import utils, cli, caas, cleaner, BatchRequest, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -522,6 +522,105 @@ def site(
         cli.display_results(resp, exit_on_fail=True)
         if resp:
             asyncio.run(cli.cache.update_site_db(data={"name": new_name or site_now.name, "id": site_now.id, **address_fields}))
+
+
+@app.command()
+def wlan(
+    wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
+    groups: List[str] = typer.Argument(
+        None,
+        help="Group(s) to update (SSID must be defined in each group) [grey42]\[default: All Groups that contain specified SSIDs will be updated][/]",
+        autocompletion=cli.cache.group_completion,
+        show_default=False,
+    ),
+    ssid: str = typer.Option(None, help="Update SSID name", show_default=False,),
+    hide: bool = typer.Option(None, show_default=False,),
+    vlan: str = typer.Option(None, show_default=False,),
+    zone: str = typer.Option(None, show_default=False,),
+    psk: str = typer.Option(None, show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    """Update configuration options of an existing WLAN/SSID
+    """
+    if groups:
+        _groups = [cli.cache.get_group_identifier(group) for group in groups]
+        batch_req = [BatchRequest(cli.central.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
+    else:  # TODO coppied from show wlans -v make common func
+        group_res = cli.central.request(cli.central.get_groups_properties)
+        if not group_res:
+            log.error(f"Unable to determine Groups that contain SSID {wlan}", caption=True,)
+            cli.display_results(group_res, exit_on_fail=True)
+
+        groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
+        batch_req = [BatchRequest(cli.central.get_wlan, group=group, wlan_name=wlan) for group in groups]
+
+    cli.central.silent = True
+    batch_resp = cli.central.batch_request(batch_req)
+    cli.central.silent = False
+
+    failed, passed = [], []
+    config_b4_dict = {}
+    for group, res in zip(groups, batch_resp):
+        if res.ok:
+            passed += [res]
+            config_b4_dict[group] = res.output.get("wlan", res.output)
+        else:
+            failed += [res]
+
+    if failed:
+        unexpected_failures = [
+            f for f in failed
+            if "cannot find" not in f.output.get("description").lower() and f.output.get("description") != "Invalid configuration ID"
+        ]
+        if unexpected_failures:
+            print(f":warning:  Unexpected error while querying groups for existense of {wlan}")
+            cli.display_results(unexpected_failures, exit_on_fail=False)
+
+    if not config_b4_dict:
+        cli.exit("Nothing to do", code=0)
+
+    # TODO check if provided values differ from what's there already
+    update_req = []
+    for group in config_b4_dict:
+        kwargs = {
+            "scope": group,
+            "wlan_name": wlan,
+            "essid": ssid or config_b4_dict[group]["essid"],
+            "type": config_b4_dict[group]["type"],
+            "hide_ssid": hide if hide is not None else config_b4_dict[group]["hide_ssid"],
+            "vlan": vlan or config_b4_dict[group]["vlan"],
+            "zone": zone or config_b4_dict[group]["zone"],
+            "wpa_passphrase": psk or config_b4_dict[group]["wpa_passphrase"],
+            "captive_profile_name": config_b4_dict[group]["captive_profile_name"],
+            "bandwidth_limit_up": config_b4_dict[group]["bandwidth_limit_up"],
+            "bandwidth_limit_down": config_b4_dict[group]["bandwidth_limit_down"],
+            "bandwidth_limit_peruser_up": config_b4_dict[group]["bandwidth_limit_peruser_up"],
+            "bandwidth_limit_peruser_down": config_b4_dict[group]["bandwidth_limit_peruser_down"],
+            "access_rules": config_b4_dict[group]["access_rules"],
+        }
+        update_req += [
+            BatchRequest(cli.central.update_wlan, **kwargs)
+        ]
+
+    options = {
+        "SSID name": ssid,
+        "vlan": vlan,
+        "zone": zone,
+        "psk": psk,
+    }
+    print(f"Update WLAN Profile {wlan} in groups [cyan]{'[/], [cyan]'.join(list(config_b4_dict.keys()))}[/]")
+    print('\n'.join([f"  [bright_green]-[/] Update [cyan]{k}[/] -> [bright_green]{v}[/]" for k, v in options.items() if v is not None]))
+    if hide is not None:
+        print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        update_res = cli.central.batch_request(update_req)
+        cli.display_results(update_res)
 
 
 @app.callback()
