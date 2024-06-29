@@ -509,7 +509,7 @@ class CLICommon:
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
                 else:
-                    caption = f'{caption}\n{log.caption}[/]'
+                    caption = f'{caption}\n{log.caption}'
 
 
             for idx, r in enumerate(resp):
