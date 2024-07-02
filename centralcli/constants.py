@@ -484,6 +484,7 @@ class ArgToWhat:
         self.switch = self.switch = self.switches = "switch"
         self.cx = "cx"
         self.mas = "mas"
+        self.ssid = self.ssids = "ssid"
 
     def _init_clone(self):
         self.group = self.groups = "group"
