@@ -149,9 +149,10 @@ if "--debug-limit" in sys.argv:
     if len(sys.argv) - 1 >= _idx and sys.argv[_idx].isdigit():
         config.limit = int(sys.argv[_idx])
         _ = sys.argv.pop(_idx)
-    else:
-        print(f"Invalid Value ({sys.argv[_idx]}) for --debug-limit expected an int")
-        sys.exit(1)
+if "--sanitize" in sys.argv:
+    _ = sys.argv.pop(sys.argv.index("--sanitize"))
+    config.sanitize = True
+
 
 central = CentralApi(config.account)
 cache = Cache(central)

@@ -735,7 +735,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
                 _data = None
-        # asyncio.run(cli.cache.update_inv_db(data=_data))
+
         # always perform full dev_db update as we don't know the other fields.
         console = Console()
         with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
@@ -894,7 +894,7 @@ def verify(
 
         if file_by_serial[s].get("site"):
             if not central_by_serial[s].get("status"):
-                validation[s] += [f"{_pfx}  Also unable to assign site prior to device checking in."]
+                validation[s] += [f"{_pfx}Unable to assign/verify site prior to device checking in."]
             elif not central_by_serial[s].get("site"):
                 validation[s] += [f"{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
             elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
@@ -903,7 +903,7 @@ def verify(
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
             if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"{_pfx}License: [bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services']}[/] reflected in Central."]
+                validation[s] += [f"{_pfx}Subscription: [bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
@@ -1014,8 +1014,6 @@ def add(
     ),
 ) -> None:
     """Perform batch Add operations using import data from file
-
-
     """
     if show_example:
         print(getattr(examples, f"add_{what}"))
@@ -1039,6 +1037,9 @@ def add(
         cleaner = cleaner.parse_caas_response
     elif what == "devices":
         resp = batch_add_devices(import_file, yes=yes)
+        if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:
+            log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will typically stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True)
+            log.info(f"Use [cyan]cencli batch verify {import_file}[/] to check status of license assignment.", caption=True, log=False)
     elif what == "labels":
         resp = batch_add_labels(import_file, yes=yes)
     elif what == "macs":
@@ -1164,6 +1165,10 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
     # to avoid duplication ... # FIXME update clidel with corrections made below
     cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
+    if len(serials_in) != len(cache_devs):
+        log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
+    else:
+        log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
     not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
     cache_devs: List[CentralObject] = [c for c in cache_devs if c]
     _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
