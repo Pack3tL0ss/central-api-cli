@@ -90,8 +90,8 @@ class Output:
             str: Sanitized str output with sensitive data redacted.
         """
         config = config or self.config
-        if config and config.sanitize and config.sanatize_file.is_file():
-            sanitize_data = config.get_file_data(config.sanatize_file)
+        if config and config.sanitize and config.sanitize_file.is_file():
+            sanitize_data = config.get_file_data(config.sanitize_file)
             for s in sanitize_data.get("redact_strings", {}):
                 strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
             for s in sanitize_data.get("replace_strings", []):
