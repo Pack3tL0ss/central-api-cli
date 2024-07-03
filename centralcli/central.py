@@ -2784,6 +2784,8 @@ class CentralApi(Session):
         return await self.post(url, json_data=json_data)
 
     # API-FLAW add ap and gw to group with gw-role as wlan and upgrade to aos10.  Returns 200, but no changes made
+    # TODO need to add flag for SD_WAN_Gateway architecture (Silver Peak), only valid associated GwNetworkRole is VPNConcentrator
+    # TODO need to add SD_WAN_Gateway to AllowedDevTypes
     async def update_group_properties(
         self,
         group: str,
@@ -2794,7 +2796,7 @@ class CentralApi(Session):
         microbranch: bool = None,
         gw_role: constants.GatewayRole = None,
         monitor_only_sw: bool = None,
-        monitor_only_cx: bool = None,  # Not supported by central yet
+        monitor_only_cx: bool = None,
     ) -> Response:
         """Update properties for the given group.
 
@@ -2822,7 +2824,7 @@ class CentralApi(Session):
             microbranch (bool): True to enable Microbranch network role for APs is applicable only for AOS10 architecture.
             gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
-            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only (Future capability)
+            monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
 
         Returns:
             Response: CentralAPI Response object
@@ -2906,7 +2908,6 @@ class CentralApi(Session):
             mon_only_switches += ["AOS_S"]
         if monitor_only_cx:
             mon_only_switches += ["AOS_CX"]
-            raise NotImplementedError("AOS_CX Monitor Only not supported in Central yet.")
 
         arch = None
         if microbranch is not None:
