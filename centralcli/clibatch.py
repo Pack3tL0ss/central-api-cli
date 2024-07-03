@@ -735,7 +735,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
                 _data = None
-        # asyncio.run(cli.cache.update_inv_db(data=_data))
+
         # always perform full dev_db update as we don't know the other fields.
         console = Console()
         with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
@@ -1014,8 +1014,6 @@ def add(
     ),
 ) -> None:
     """Perform batch Add operations using import data from file
-
-
     """
     if show_example:
         print(getattr(examples, f"add_{what}"))
