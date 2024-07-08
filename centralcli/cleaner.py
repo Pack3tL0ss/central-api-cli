@@ -13,7 +13,7 @@ import sys
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Literal
 
 import pendulum
 from rich.console import Console
@@ -1774,9 +1774,10 @@ def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> 
 def show_all_ap_lldp_neighbors_for_site(data):
     data = utils.unlistify(data)
     # TODO circular import if placed at top review import logic
-    from centralcli import cache
-    aps_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] == "ap"]
-    ap_connections = [edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_cache]
+    # from centralcli import cache
+    # aps_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] == "ap"]
+    aps_in_site = [dev.get("serial") for dev in data["devices"] if dev["role"] == "IAP"]
+    ap_connections = [edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_site]
     data = [
         {
             "ap": x["toIf"].get("deviceName", "--"),
@@ -1790,9 +1791,41 @@ def show_all_ap_lldp_neighbors_for_site(data):
             "switch_serial": x["fromIf"].get("serial", "--"),
             "switch_port": x["fromIf"].get("name", "--"),
             "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
-            "tagged_vlans": ",".join([str(v) for v in x["fromIf"].get("taggedVlans") or [] if v != x["fromIf"].get("untaggedVlan", 9999)]),
+            "tagged_vlans": ",".join([str(v) for v in sorted(x["fromIf"].get("taggedVlans") or []) if v != x["fromIf"].get("untaggedVlan", 9999)]),
             "healthy": "✅" if x.get("health", "") == "good" else "❌"
         } for x in ap_connections
+    ]
+
+    return simple_kv_formatter(data)
+
+
+def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = None):
+    data = utils.unlistify(data)
+    # TODO circular import if placed at top review import logic
+    from centralcli import cache
+    # switches_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] in ["cx", "sw"]]
+    if filter is None:
+        aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP"}
+    else:
+        status = 0 if filter == "down" else 1
+        aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP" and dev["status"] == status}
+    ap_connections = {edge["toIf"]["serial"]: edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_site}
+    data = [
+        {
+            "ap": aps_in_site[ap].get("name", "--"),
+            "ap_ip": aps_in_site[ap].get("ipAddress", "--"),
+            "ap_serial": aps_in_site[ap].get("serial", "--"),
+            "ap_port": ap_connections.get(ap, {"toIf": {}})["toIf"].get("portNumber", "--"),
+            # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
+            # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
+            "switch": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("deviceName", "--"),
+            "switch_ip": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress", "--") if ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress") not in [None, "Unknown"] else cache.devices_by_serial.get(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"), {}).get("ip", "--"),
+            "switch_serial": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"),
+            "switch_port": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("name", "--"),
+            "untagged_vlan": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", "--"),
+            "tagged_vlans": ",".join([str(v) for v in sorted(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("taggedVlans") or []) if v != ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", 9999)]),
+            "healthy": "✅" if aps_in_site[ap].get("health", "") == "good" else "❌"
+        } for ap in aps_in_site
     ]
 
     return simple_kv_formatter(data)
