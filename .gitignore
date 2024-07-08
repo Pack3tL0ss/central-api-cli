@@ -189,3 +189,6 @@ centralcli/dashboard/*
 
 *.ignore
 centralcli/_*
+
+# ignore cnx allcalls file for now WiP
+cnx_allcalls.py

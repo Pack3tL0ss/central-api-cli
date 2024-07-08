@@ -200,7 +200,7 @@ def group(
     cx: bool = typer.Option(None, "--cx", help="Allow ArubaOS-CX switches in group."),
     gw: bool = typer.Option(None, "--gw", help=f"Allow gateways in group.\n{' ':34}If No device types specified all are allowed."),
     mo_sw: bool = typer.Option(None, is_flag=True, help="Monitor Only for ArubaOS-SW"),
-    mo_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX", hidden=True),
+    mo_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX"),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),

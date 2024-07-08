@@ -461,15 +461,22 @@ def aps(
             print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
             raise typer.Exit(1)
 
-        site = cli.cache.get_site_identifier(site)
-        resp = cli.central.request(cli.central.get_topo_for_site, site.id, )
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title="AP Neighbors", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site)
+        site: CentralObject = cli.cache.get_site_identifier(site)
+        resp: Response = cli.central.request(cli.central.get_topo_for_site, site.id, )
+        tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+        cleaner_kwargs = {}
+        if up and down:
+            ...  # They used both flags.  ignore
+        elif up or down:
+            cleaner_kwargs["filter"] = "down" if down else "up"
+        cli.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
     else:
-        if down:
-            status = "Down"
-        elif up:
-            status = "Up"
+        if up and down:
+            ...  # They used both flags.  ignore
+        elif up or down:
+            status = "Down" if down else "Up"
+
         show_devices(
             aps, dev_type="aps", verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
