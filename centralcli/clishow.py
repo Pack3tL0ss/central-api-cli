@@ -2147,12 +2147,6 @@ def clients(
     sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
     verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-    ),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
@@ -2265,7 +2259,7 @@ def clients(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     verbose_kwargs = {}
-    if not verbose2 and not denylisted:
+    if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
         verbose_kwargs["verbose"] = verbose
