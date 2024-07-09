@@ -990,8 +990,9 @@ def poe(
     caption = "  Power values are in watts."
     if resp:
         resp.output = utils.listify(resp.output)  # if they specify an interface output will be a single dict.
-        _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
-        caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+        if not port:
+            _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
+            caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
         if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
             caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
             caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
@@ -1577,7 +1578,7 @@ def lldp(
     Valid on APs and CX switches
 
     Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
-    NOTE: AOS-SW will return LLDP neighbors, but only it reports neighbors for connected Aruba devices managed in Central
+    NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
 
@@ -1902,6 +1903,7 @@ def token(
 
 
 # TODO clean up output ... single line output
+# TODO restrict to GWs appears to only work on GW
 @app.command(short_help="Show device routing table")
 def routes(
     device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
