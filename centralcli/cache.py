@@ -1086,7 +1086,7 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
-        match = self.get_dev_identifier(incomplete, device_type="gw", completion=True)
+        match = self.get_dev_identifier(incomplete, dev_type="gw", completion=True)
 
         out = []
         if match:
