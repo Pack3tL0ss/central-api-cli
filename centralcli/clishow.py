@@ -937,7 +937,7 @@ def interfaces(
         try:
             up = len([i for i in resp.output if i.get("status").lower() == "up"])
             down = len(resp.output) - up
-            caption += [f"  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
+            caption += [f"Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
         except Exception as e:
             log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
 
@@ -946,7 +946,7 @@ def interfaces(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption="\n".join(caption),
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -990,8 +990,9 @@ def poe(
     caption = "  Power values are in watts."
     if resp:
         resp.output = utils.listify(resp.output)  # if they specify an interface output will be a single dict.
-        _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
-        caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+        if not port:
+            _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
+            caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
         if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
             caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
             caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
@@ -1159,12 +1160,18 @@ def dhcp(
 
 @app.command(short_help="Show firmware upgrade status")
 def upgrade(
-    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_completion),
+    device: List[str] = typer.Argument(
+        ...,
+        metavar=iden_meta.dev,
+        hidden=False,
+        autocompletion=cli.cache.dev_completion,
+        show_default=False,
+    ),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
     do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1571,7 +1578,7 @@ def lldp(
     Valid on APs and CX switches
 
     Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
-    NOTE: AOS-SW will return LLDP neighbors, but only it reports neighbors for connected Aruba devices managed in Central
+    NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
 
@@ -1896,6 +1903,7 @@ def token(
 
 
 # TODO clean up output ... single line output
+# TODO restrict to GWs appears to only work on GW
 @app.command(short_help="Show device routing table")
 def routes(
     device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
@@ -1924,16 +1932,14 @@ def routes(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_device_ip_routes, device.serial)
-    if "summary" in resp.output:
-        s = resp.summary
+    caption = ""
+    if "summary" in resp.raw:
+        s = resp.raw["summary"]
         caption = (
             f'max: {s.get("maximum")} total: {s.get("total")} default: {s.get("default")} connected: {s.get("connected")} '
             f'static: {s.get("static")} dynamic: {s.get("dynamic")} overlay: {s.get("overlay")} '
         )
-    else:
-        caption = ""
-    if "routes" in resp.output:
-        resp.output = resp.output["routes"]
+
 
     cli.display_results(
         resp,
@@ -2008,11 +2014,11 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO only verbosity 0 currently if group is specified
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    if group:
-        resp = central.request(central.get_full_wlan_list, group)
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose)
+    if group:  # Specifying the group implies verbose (same # of API calls either way.)
+        resp = central.request(central.get_full_wlan_list, group)  # TODO have get_full_wlan_list covert to list of dicts
+        caption = None  # if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"  # It's a str need JSON.loads...
+        cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
         import json
         group_res = central.request(central.get_groups_properties)
@@ -2039,10 +2045,14 @@ def wlans(
         else:
             resp = group_res
 
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
         resp = central.request(central.get_wlans, **params)
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)
+        caption = None
+        if resp:
+            caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
+            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
+        cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
 
 
 @app.command()
@@ -2141,12 +2151,6 @@ def clients(
     sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
     verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-    ),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
     default: bool = typer.Option(
         False, "-d",
@@ -2259,7 +2263,7 @@ def clients(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     verbose_kwargs = {}
-    if not verbose2 and not denylisted:
+    if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
         verbose_kwargs["verbose"] = verbose
@@ -2284,7 +2288,7 @@ def clients(
         **verbose_kwargs
     )
 
-# TODO Sortby Enum
+
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),

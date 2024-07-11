@@ -4041,7 +4041,7 @@ class CentralApi(Session):
         self,
         serial_num: str,
         api: str = "V1",
-        offset: int = 0,
+        marker: str = None,
         limit: int = 100
     ) -> Response:
         """Get routes for a device.
@@ -4049,7 +4049,7 @@ class CentralApi(Session):
         Args:
             serial_num (str): Device serial number
             api (str, optional): API version (V0|V1), Defaults to V1.
-            offset (str, optional): Pagination offset.
+            marker (str, optional): Pagination offset.
             limit (int, optional): page size Defaults to 100.
 
         Returns:
@@ -4060,7 +4060,7 @@ class CentralApi(Session):
         params = {
             'device': serial_num,
             'api': api,
-            'marker': offset,
+            'marker': marker,
             'limit': limit
         }
 

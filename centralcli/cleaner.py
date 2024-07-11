@@ -35,6 +35,7 @@ from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes
 from centralcli.objects import DateTime
 from centralcli.models import CloudAuthUploadResponse
 
+TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
 def epoch_convert(func):
     @functools.wraps(func)
@@ -1359,16 +1360,15 @@ def get_client_roaming_history(data: List[dict]) -> List[dict]:
 
     return data
 
-def get_fw_version_list(data: List[dict], format: str = "rich") -> List[dict]:
+def get_fw_version_list(data: List[dict], format: TableFormat = "rich") -> List[dict]:
+    # Override default behavior of k, v formatter (default which implies rich will use unicode check mark for beta)
+    if format != "rich" and "release_status" in data[-1].keys():
+        _short_value["release_status"] = lambda v: "True" if "beta" in v.lower() else "False"
+
     data = [
         dict(short_value(k, d[k]) for k in d) for d in data
     ]
     data = strip_no_value(data)
-    if format != "rich" and data and "beta" in data[-1].keys():
-        data = [
-            {k: v.replace("\u2705", "True") for k, v in d.items()}
-            for d in data
-        ]
 
     return data
 
@@ -1590,7 +1590,7 @@ def show_ts_commands(data: Union[List[dict], dict],) -> Union[List[dict], dict]:
 
     return data
 
-def get_overlay_routes(data: Union[List[dict], dict], format: str = "rich", simplify: bool = True) -> Union[List[dict], dict]:
+def get_overlay_routes(data: Union[List[dict], dict], format: TableFormat = "rich", simplify: bool = True) -> Union[List[dict], dict]:
     if "routes" in data:
         data = data["routes"]
 
@@ -1624,7 +1624,6 @@ def get_overlay_routes(data: Union[List[dict], dict], format: str = "rich", simp
                     route = {**base, **route}
                 else:
                     route = {**{k: "" for k in base.keys()}, **route}
-                # outdata += [route]  # Put fields in desired order
                 outdata += [{k: route.get(k) for k in field_order if k in route.keys()}]  # Put fields in desired order
 
         if format == "rich" and data and "is_best" in outdata[-1].keys():
@@ -1633,16 +1632,8 @@ def get_overlay_routes(data: Union[List[dict], dict], format: str = "rich", simp
                 for d in outdata
             ]
 
-    _short_value["0.0.0.0"] = "0.0.0.0"  # OVERRIDE default
+    _short_value["0.0.0.0"] = "0.0.0.0"  # OVERRIDE default referenced by simple_kv_formatter.  Otherwise will replace with "-"
     data = simple_kv_formatter(outdata)
-    # data = simple_kv_formatter(
-    #     [
-    #         {
-    #             **{k: v for k, v in r.items() if k != "nexthop"},
-    #             "nexthop": [{k: v if k != "interface" else utils.unlistify(v) for k, v in hops.items()} for hops in r["nexthop"]]
-    #         } for r in data
-    #     ]
-    # )
 
     return data
 
@@ -1660,12 +1651,13 @@ def get_overlay_interfaces(data: Union[List[dict], dict]) -> Union[List[dict], d
 
     return simple_kv_formatter(data)
 
-def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> List[dict]:
+def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0, format: TableFormat = "rich") -> List[dict]:
     if isinstance(data, list) and data and isinstance(data[0], str):
         data = json.loads(data[0])
     if isinstance(data, dict) and "wlans" in data:
         data = data["wlans"]
 
+    # TODO PlaceHolder logic, currently only support verbosity level 0
     verbosity_keys = {
         0: [
             'group',
@@ -1683,6 +1675,7 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
         ]
     }
     pretty_data = []
+
     # rf_band all is a legacy key so all means 2.4 and 5, this updates so that all is only the value if 6 is also enabled.
     # also grabs values for keys that are stored in dicts
     def _simplify_value(wlan: dict, k: str, v: Any) -> Any:
@@ -1703,6 +1696,10 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0) -> Lis
         if ssid_data.get("name", "") == ssid_data.get("essid", ""):
             ssid_data["name"] = None
         pretty_data += [ssid_data]
+
+    # override default which swaps in unicode checkmark/X (for rich output)
+    if format != "rich" and "disable_ssid" in data[-1].keys():
+        _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
 
     pretty_data = simple_kv_formatter(pretty_data)
     pretty_data = strip_no_value(pretty_data)

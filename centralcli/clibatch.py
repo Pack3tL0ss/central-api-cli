@@ -1429,11 +1429,12 @@ def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False,
 
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
-@app.command(short_help="Delete devices.", help=help_text.batch_delete_devices)
+# TODO make sub-command clibatchdelete.py seperate out sites devices...
+@app.command(short_help="Delete devices.",)
 def delete(
     what: BatchDelArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False, autocompletion=lambda incomplete: [],),
-    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  Devices remains assigned and licensed.  Devices must be offline."),
+    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
     dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices)"),
@@ -1456,7 +1457,17 @@ def delete(
         help="The Aruba Central Account to use (must be defined in the config)",
     ),
 ) -> None:
-    """Batch delete Aruba Central Objects [devices|sites|groups|labels] based on input from file.
+    """[bright_green]Perform batch Delete operations using import data from file.[/]
+
+    [cyan]cencli delete sites <IMPORT_FILE>[/] and
+    [cyan]cencli delte groups <IMPORT_FILE>[/]
+        Do what you'd expect.
+
+    [cyan]cencli batch delete devices <IMPORT_FILE>[/]
+
+    Delete devices will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
+
+    Note: devices can only be removed from monitoring views if they are in a down state.  This command will delay/wait for any Up devices to go Down after the subscriptions/assignment to Central is removed, but it can also be ran again.  It will pick up where it left off, skipping any steps that have already been performed.
     """
     if show_example:
         print(getattr(examples, f"delete_{what}"))

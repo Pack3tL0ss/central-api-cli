@@ -426,8 +426,8 @@ def output(
                                 formatters.Terminal256Formatter(style='solarized-dark')
                                 )
 
-    if isinstance(raw_data, str):  # HACK
-        raw_data = raw_data.replace('✅', 'True').replace('❌', 'False')   #  TODO handle this better messes up column spacing if replacing string.
+    if isinstance(raw_data, str):  # HACK replace first pass is to line up cols but if table is tighter second pass will swap them regardless
+        raw_data = raw_data.replace('✅  ', 'True').replace('❌   ', 'False').replace('✅', 'True').replace('❌', 'False')   #  TODO handle this better
 
     return Output(rawdata=raw_data, prettydata=table_data, config=config)
 

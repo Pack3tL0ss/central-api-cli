@@ -46,12 +46,13 @@ def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
     return cencli
 
 
+# TODO remove verbose2 using --raw now
 @app.command(
     help="Show Audit Logs. Audit Logs will displays prior 5 days if no time options are provided.",
     short_help="Show Audit Logs (last 5 days default)",
 )
 def logs(
-    args: List[str] = typer.Argument(
+    log_id: str = typer.Argument(
         None,
         metavar='[LOG_ID]',
         help="Show details for a specific log_id",
@@ -111,13 +112,13 @@ def logs(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    if cencli or (args and args[-1] == "cencli"):
+    if cencli or (log_id and log_id[-1] == "cencli"):
         from centralcli import log
         log.print_file() if not tail else log.follow()
         raise typer.Exit(0)
 
-    if args:
-        log_id = cli.cache.get_log_identifier(args[-1])
+    if log_id:
+        log_id = cli.cache.get_log_identifier(log_id)
     else:
         log_id = None
         if device:

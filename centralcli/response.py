@@ -160,8 +160,14 @@ class Response:
             self.status = response.status
             self.method = response.method
             _offset_str = ""
-            if "offset" in response.url.query and int(response.url.query['offset']) > 0:
-                _offset_str = f" offset: {response.url.query['offset']} limit: {response.url.query.get('limit', '?')}"
+            # /routing endpoints use "marker" rather than "offset" for pagination
+            offset_key = "marker" if "marker" in response.url.query and ("marker" in response.url.query or response.url.path.startswith("/api/routing/")) else "offset"
+            if offset_key in response.url.query:
+                if offset_key == "offset" and int(response.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
+                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+                else:  # marker is not an int
+                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+
             _log_msg = f"[{response.reason}] {response.method}:{response.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
@@ -577,6 +583,9 @@ class Session():
         # TODO cleanup, if we do strip_none here can remove from calling funcs.
         params = utils.strip_none(params)
 
+        # /routing endpoints use "marker" rather than "offset" for pagination
+        offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
+
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
         if params and params.get("limit") and config.limit:
             log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
@@ -615,14 +624,14 @@ class Session():
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
             # TODO no strip_none for these, may need to add if we determine a scenario needs it.
-            if params.get("offset", 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
+            if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
                 _total = r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
                 if _total > len(r.output):
                     _limit = params.get("limit", 100)
-                    _offset = params.get("offset", 0)
+                    _offset = params.get(offset_key, 0)
                     br = BatchRequest
                     _reqs = [
-                        br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, "offset": i, "limit": _limit}, **kwargs)
+                        br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, offset_key: i, "limit": _limit}, **kwargs)
                         for i in range(len(r.output), _total, _limit)
                     ]
 
@@ -637,7 +646,7 @@ class Session():
                     elif len(failures) >= len(successful):
                         log.error(f"Failure rate exceeded during batch {method} calls to {url}. Stopping execution.", show=True)
                     elif failures:
-                        log_sfx = "" if len(failures) > 1 else f"?offset={failures[-1].url.query.get('offset')}&limit={failures[-1].url.query.get('limit')}..."
+                        log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
                         log.error(f":warning:  Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
 
                     page_res = [
@@ -648,22 +657,31 @@ class Session():
                     break
 
             _limit = params.get("limit", 0)
-            _offset = params.get("offset", 0)
-            if params.get("limit") and r.output and len(r.output) == _limit:
-                if count and len(paged_output) >= count:
+            if offset_key == "offset":
+                _offset = params.get(offset_key, 0)
+                if params.get("limit") and r.output and len(r.output) == _limit:
+                    if count and len(paged_output) >= count:
+                        r.output = paged_output
+                        r.raw = paged_raw
+                        break
+                    elif count and len(paged_output) < count:
+                        next_limit = count - len(paged_output)
+                        next_limit = _limit if next_limit > _limit else next_limit
+                        params[offset_key] = _offset + next_limit
+                    else:
+                        params[offset_key] = _offset + _limit
+                else:
                     r.output = paged_output
                     r.raw = paged_raw
                     break
-                elif count and len(paged_output) < count:
-                    next_limit = count - len(paged_output)
-                    next_limit = _limit if next_limit > _limit else next_limit
-                    params["offset"] = _offset + next_limit
+            else:  # The routing api endpoints use an opaque handle representing the next page or results, so they can not be batched, as we need the result to get the marker for the next call
+                if r.raw.get("marker"):
+                    params["marker"] = r.raw["marker"]
                 else:
-                    params["offset"] = _offset + _limit
-            else:
-                r.output = paged_output
-                r.raw = paged_raw
-                break
+                    r.raw, r.output = paged_raw, paged_output
+                    if r.raw.get("marker"):
+                        del r.raw["marker"]
+                    break
 
         return r
 

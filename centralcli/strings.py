@@ -251,20 +251,6 @@ name\nphl-access\nsan-dc-tor\ncom-branches
 {common_add_delete_end}
 """
 
-clibatch_delete_devices_help = """
-[bright_green]Perform batch Delete operations using import data from file.[/]
-
-[cyan]cencli delete sites <IMPORT_FILE>[/] and
-[cyan]cencli delte groups <IMPORT_FILE>[/]
-    Do what you'd expect.
-
-[cyan]cencli batch delete devices <IMPORT_FILE>[/]
-
-    Delete devices will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
-
-    Note: devices can only be removed from monitoring views if they are in a down state.  This command will delay/wait for any Up devices to go Down after the subscriptions/assignment to Central is removed, but it can also be ran again.  It will pick up where it left off, skipping any steps that have already been performed.
-"""
-
 _site_common = """
 [cyan]Provide geo-loc or address details, (Google Maps "Plus Codes" are supported) not both.
 Can provide both in subsequent calls, but api does not allow both in same call.[reset]
@@ -401,7 +387,6 @@ class ImportExamples:
 
 class LongHelp:
     def __init__(self):
-        self.batch_delete_devices = do_capture(clibatch_delete_devices_help)
         self.update_site = do_capture(cliupdate_site_help)
         self.add_site = do_capture(cliadd_site_help)
 

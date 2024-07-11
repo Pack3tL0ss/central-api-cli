@@ -34,8 +34,9 @@ app = typer.Typer()
 def device(
     device: str = typer.Argument(
         ...,
-        metavar=iden.dev, show_default=False,
+        metavar=iden.dev,
         autocompletion=cli.cache.dev_completion,
+        show_default=False,
     ),
     version: str = typer.Argument(
         None,
@@ -90,6 +91,7 @@ def group(
         metavar=iden.group,
         help="Upgrade devices by group",
         autocompletion=cli.cache.group_completion,
+        show_default=False,
     ),
     version: str = typer.Argument(
         None,
@@ -108,8 +110,8 @@ def group(
         show_default=False,
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
-    dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type",),
-    model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model"),
+    dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
+    model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),

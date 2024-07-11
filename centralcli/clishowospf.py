@@ -57,7 +57,7 @@ def neighbors(
     dev = cli.cache.get_dev_identifier(device)
     resp = central.request(central.get_ospf_neighbor, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-    cf = "[reset][italic dark_olive_green2]"
+    # cf = "[reset][italic dark_olive_green2]"
     caption = ""
 
     if resp.raw.get("summary"):
@@ -67,23 +67,20 @@ def neighbors(
             raise typer.Exit(0)
         else:
             caption = [
-                f'{cf} Router ID:[/] {summary["router_id"]} | {cf}OSPF Neigbors:[/] {summary["neighbor_count"]} | {cf}OSPF Interfaces:[/] {summary["interface_count"]}',
-                f'{cf}OSPF Areas:[/] {summary["area_count"]} | {cf}active LSA:[/] {summary["active_lsa_count"]} | {cf}rexmt LSA:[/] {summary["rexmt_lsa_count"]}'
+                f'[cyan]Router ID[/]: {summary["router_id"]} | [cyan]OSPF Neigbors[/]: {summary["neighbor_count"]} | [cyan]OSPF Interfaces[/]: {summary["interface_count"]}',
+                f'[cyan]OSPF Areas[/]: {summary["area_count"]} | [cyan]active LSA[/]: {summary["active_lsa_count"]} | [cyan]rexmt LSA[/]: {summary["rexmt_lsa_count"]}'
             ]
-            caption = "\n   ".join(caption)
 
-    title = f"{dev.name} OSPF Neighbors"
-
-    cli.display_results(\
+    cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title=title,
+        title=f"{dev.name} OSPF Neighbors",
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.get_ospf_neighbor if not verbose else None,
-        caption=f"{caption}\n"
+        caption=caption
     )
 
 
@@ -120,33 +117,29 @@ def interfaces(
     dev = cli.cache.get_dev_identifier(device)
     resp = central.request(central.get_ospf_interface, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-    cf = "[reset][italic dark_olive_green2]"
+    # cf = "[reset][italic dark_olive_green2]"
     caption = ""
 
     if resp.raw.get("summary"):
         summary = resp.raw["summary"]
         if summary["admin_status"] is False:
-            print(f"OSPF is not enabled on {dev.name}")
-            raise typer.Exit(0)
+            cli.exit(f"OSPF is not enabled on {dev.name}", code=0)
         else:
             caption = [
-                f'{cf} Router ID:[/] {summary["router_id"]} | {cf}OSPF Neigbors:[/] {summary["neighbor_count"]} | {cf}OSPF Interfaces:[/] {summary["interface_count"]}',
-                f'{cf}OSPF Areas:[/] {summary["area_count"]} | {cf}active LSA:[/] {summary["active_lsa_count"]} | {cf}rexmt LSA:[/] {summary["rexmt_lsa_count"]}'
+                f'[cyan]Router ID[/]: {summary["router_id"]} | [cyan]OSPF Neigbors[/]: {summary["neighbor_count"]} | [cyan]OSPF Interfaces[/]: {summary["interface_count"]}',
+                f'[cyan]OSPF Areas[/]: {summary["area_count"]} | [cyan]active LSA[/]: {summary["active_lsa_count"]} | [cyan]rexmt LSA[/]: {summary["rexmt_lsa_count"]}'
             ]
-            caption = "\n   ".join(caption)
-
-    title = f"{dev.name} OSPF Interfaces"
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title=title,
+        title=f"{dev.name} OSPF Interfaces",
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.get_ospf_interface if not verbose else None,
-        caption=f"{caption}\n",
+        caption=caption,
         full_cols=["ip/mask", "DR IP", "BDR IP", "DR rtr id", "BDR rtr id"]
     )
 
@@ -182,33 +175,29 @@ def area(
     dev = cli.cache.get_dev_identifier(device)
     resp = central.request(central.get_ospf_area, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-    cf = "[reset][italic dark_olive_green2]"
+    # cf = "[reset][italic dark_olive_green2]"
     caption = ""
 
     if resp.raw.get("summary"):
         summary = resp.raw["summary"]
         if summary["admin_status"] is False:
-            print(f"OSPF is not enabled on {dev.name}")
-            raise typer.Exit(0)
+            cli.exit(f"OSPF is not enabled on {dev.name}", code=0)
         else:
             caption = [
-                f'{cf} Router ID:[/] {summary["router_id"]} | {cf}OSPF Neigbors:[/] {summary["neighbor_count"]} | {cf}OSPF Interfaces:[/] {summary["interface_count"]}',
-                f'{cf}OSPF Areas:[/] {summary["area_count"]} | {cf}active LSA:[/] {summary["active_lsa_count"]} | {cf}rexmt LSA:[/] {summary["rexmt_lsa_count"]}'
+                f'[cyan]Router ID[/]: {summary["router_id"]} | [cyan]OSPF Neigbors[/]: {summary["neighbor_count"]} | [cyan]OSPF Interfaces[/]: {summary["interface_count"]}',
+                f'[cyan]OSPF Areas[/]: {summary["area_count"]} | [cyan]active LSA[/]: {summary["active_lsa_count"]} | [cyan]rexmt LSA[/]: {summary["rexmt_lsa_count"]}'
             ]
-            caption = "\n   ".join(caption)
-
-    title = f"{dev.name} OSPF Area Details"
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title=title,
+        title=f"{dev.name} OSPF Area Details",
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.get_ospf_neighbor if not verbose else None,  # ospf_neighbor cleaner is sufficient here
-        caption=f"{caption}\n",
+        caption=caption,
         full_cols=["ip/mask", "DR IP", "BDR IP", "DR rtr id", "BDR rtr id"]
     )
 
@@ -244,8 +233,9 @@ def database(
     dev = cli.cache.get_dev_identifier(device)
     resp = central.request(central.get_ospf_database, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
-    cf = "[reset][italic dark_olive_green2]"
+    # cf = "[reset][italic dark_olive_green2]"
     caption = ""
+    pad = "  " if tablefmt == "yaml" else ""
 
     if resp.raw.get("summary"):
         summary = resp.raw["summary"]
@@ -254,23 +244,20 @@ def database(
             raise typer.Exit(0)
         else:
             caption = [
-                f'{cf} Router ID:[/] {summary["router_id"]} | {cf}OSPF Neigbors:[/] {summary["neighbor_count"]} | {cf}OSPF Interfaces:[/] {summary["interface_count"]}',
-                f'{cf}OSPF Areas:[/] {summary["area_count"]} | {cf}active LSA:[/] {summary["active_lsa_count"]} | {cf}rexmt LSA:[/] {summary["rexmt_lsa_count"]}'
+                f'[cyan]{pad}Router ID[/]: {summary["router_id"]} | [cyan]OSPF Neigbors[/]: {summary["neighbor_count"]} | [cyan]OSPF Interfaces[/]: {summary["interface_count"]}',
+                f'[cyan]OSPF Areas[/]: {summary["area_count"]} | [cyan]active LSA[/]: {summary["active_lsa_count"]} | [cyan]rexmt LSA[/]: {summary["rexmt_lsa_count"]}'
             ]
-            caption = "\n   ".join(caption)
-
-    title = f"{dev.name} OSPF Database Details"
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title=title,
+        title=f"{dev.name} OSPF Database Details",
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.get_ospf_neighbor if not verbose else None,  # ospf_neighbor cleaner is sufficient here
-        caption=f"{caption}\n",
+        caption=caption,
         full_cols=["ip/mask", "DR IP", "BDR IP", "DR rtr id", "BDR rtr id"]
     )
 
