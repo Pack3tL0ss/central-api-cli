@@ -453,7 +453,7 @@ class CLICommon:
         data: Union[List[dict], List[str], dict, None] = None,
         tablefmt: TableFormat = "rich",
         title: str = None,
-        caption: str = None,
+        caption: str | List[str] = None,
         pager: bool = False,
         outfile: Path = None,
         sort_by: str = None,
@@ -481,7 +481,7 @@ class CLICommon:
                 clean bypasses all formatters.
             title: (str, optional): Title of output table.
                 Only applies to "rich" tablefmt. Defaults to None.
-            caption: (str, optional): Caption displayed at bottom of table.
+            caption: (str | List[str], optional): Caption displayed at bottom of table.
                 Only applies to "rich" tablefmt. Defaults to None.
             pager (bool, optional): Page Output / or not. Defaults to True.
             outfile (Path, optional): path/file of output file. Defaults to None.
@@ -497,6 +497,8 @@ class CLICommon:
             fold_cols (Union[List[str], str], optional): columns that will be folded (wrapped within the same column). Applies to tablfmt=rich. Defaults to [].
             cleaner (callable, optional): The Cleaner function to use.
         """
+        if isinstance(caption, list):
+            caption = "\n  ".join(caption)
         if resp is not None:
             resp = utils.listify(resp)
 
