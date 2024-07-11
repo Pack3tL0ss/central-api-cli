@@ -2286,7 +2286,7 @@ def clients(
         **verbose_kwargs
     )
 
-# TODO Sortby Enum
+
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
