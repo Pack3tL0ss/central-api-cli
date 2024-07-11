@@ -937,7 +937,7 @@ def interfaces(
         try:
             up = len([i for i in resp.output if i.get("status").lower() == "up"])
             down = len(resp.output) - up
-            caption += [f"  Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
+            caption += [f"Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
         except Exception as e:
             log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
 
@@ -946,7 +946,7 @@ def interfaces(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption="\n".join(caption),
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -1932,16 +1932,14 @@ def routes(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_device_ip_routes, device.serial)
-    if "summary" in resp.output:
-        s = resp.summary
+    caption = ""
+    if "summary" in resp.raw:
+        s = resp.raw["summary"]
         caption = (
             f'max: {s.get("maximum")} total: {s.get("total")} default: {s.get("default")} connected: {s.get("connected")} '
             f'static: {s.get("static")} dynamic: {s.get("dynamic")} overlay: {s.get("overlay")} '
         )
-    else:
-        caption = ""
-    if "routes" in resp.output:
-        resp.output = resp.output["routes"]
+
 
     cli.display_results(
         resp,
@@ -2016,11 +2014,10 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO only verbosity 0 currently if group is specified
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    if group:
+    if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = central.request(central.get_full_wlan_list, group)
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
         import json
         group_res = central.request(central.get_groups_properties)
@@ -2047,7 +2044,7 @@ def wlans(
         else:
             resp = group_res
 
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=0)
+        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
         resp = central.request(central.get_wlans, **params)
         cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_wlans)

@@ -57,7 +57,6 @@ def _build_caption(resp: Response) -> str | None:
 
 @app.command()
 def routes(
-    # what: OverlayRoutesArgs = typer.Argument("learned", case_sensitive=False, show_default=True),
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
     advertised: bool = typer.Option(False, "--advertised", "-a", help="Show advertised routes [grey42]\[default: show learned routes][/]"),
     best: bool = typer.Option(False, "--best", "-b", help="Return only best/preferred route for each destination"),
@@ -152,11 +151,10 @@ def interfaces(
     )
 
 
+# single entry output, no need to sort
 @app.command()
 def connection(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    # sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),  # single entry output, no need to sort
-    # reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
@@ -173,25 +171,28 @@ def connection(
         rich_help_panel="Common Options",
     ),
 ):
-    """Show overlay connection (OTO/ORO) details (GWs & APs)
+    """Show overlay connection (OTO/ORO) details (Valid on SD-Branch GWs/ VPNCs Only)
 
-    In testing this API endpoint always returned an error (request to ce failed... timed out) for APs.
-    You can get similar details using [cyan]cencli tshoot overlay DEVICE[/].
+    For additional details use [cyan]cencli tshoot overlay DEVICE[/] (which also works on APs).
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
+    dev = cli.cache.get_dev_identifier(device, dev_type="gw")
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     resp = cli.central.request(cli.central.get_overlay_connection, dev.serial)
 
-    set_width_cols = {"name": 60}
+    set_width_cols = {}
     caption = None
     if "connection" in resp.output:
         resp.output = resp.output["connection"]
         caption=_build_caption(resp)
-    elif "summary" in resp.output:
+    elif "summary" in resp.output:  # For Mobility GWs this endpoint only shows Overlay for SD-Branch
         resp.output = resp.output["summary"]
         if resp.output.get("admin_status") is False:
-            set_width_cols = {"admin status": {"min": 55, "max": 100}}
+            caption = [
+                "This command only shows Overlay connection status for SD-Branch/VPNC GWs",
+                "Use [cyan]cencli tshoot overlay DEVICE[/] for Mobility GWs/APs"
+            ]
+            set_width_cols = {"admin status": {"min": 72, "max": 100}}
 
 
     cli.display_results(
@@ -201,8 +202,6 @@ def connection(
         caption=caption,
         pager=pager,
         outfile=outfile,
-        # sort_by=sort_by,
-        # reverse=reverse,
         set_width_cols=set_width_cols,
         cleaner=cleaner.simple_kv_formatter,
     )
