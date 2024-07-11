@@ -188,6 +188,7 @@ STRIP_KEYS = [
     "lsas",
     "commands",
     "stacks",
+    "routes",
 ]
 
 
