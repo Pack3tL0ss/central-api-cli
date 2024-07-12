@@ -966,7 +966,9 @@ def callback(
     update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
 ) -> None:
     """
-    Aruba Central API CLI
+    Aruba Central API CLI.  A CLI for interacting with Aruba Central APIs.
+
+    Use [cyan]--raw[/] which is supported globally, to see the raw unformatted response from Aruba Central.
     """
     pass
 
