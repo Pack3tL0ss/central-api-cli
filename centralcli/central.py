@@ -348,10 +348,8 @@ class CentralApi(Session):
         stack_id: str = None,
         cluster_id: str = None,
         band: str = None,
-        # sort_by: str = None,
         offset: int = 0,
         limit: int = 1000,
-        # **kwargs,
     ) -> Response:
         """Get All clients
 
@@ -369,7 +367,6 @@ class CentralApi(Session):
             stack_id (str, optional): Return clients connected to stack with provided id. Defaults to None.
             cluster_id (str, optional): Return clients connected to cluster with provided id. Defaults to None.
             band (str, optional): Return (WLAN) clients connected to provided band. Defaults to None.
-            FIXME sort_by (str, optional): Sort Output on provided key field. Defaults to None.
             offset (int, optional): API offset. Defaults to 0.
             limit (int, optional): API record limit. Defaults to 1000, Max 1000.
 
@@ -383,8 +380,6 @@ class CentralApi(Session):
             "site": site,
             "serial": serial,
             "cluster_id": cluster_id,
-            # 'fields': fields,
-            # 'sort_by': sort_by,
             "offset": offset,
             "limit": limit,
             "calculate_total": True
@@ -403,6 +398,7 @@ class CentralApi(Session):
             self.BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
             self.BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
         ]
+
         # FIXME if wireless clients call passes but wired fails there is no indication in cencli show clients output
         resp = await self._batch_request(reqs)
         if len(resp) == 2:  # and all(x.ok for x in resp):
@@ -417,9 +413,10 @@ class CentralApi(Session):
             resp = resp[1] if resp[1].ok else resp[0]
             resp.output = out
             resp.raw = raw
+            return resp
             # TODO need Response to have an attribute that stores failed calls so cli commands can display output of passed calls and details on errors (when some calls fail)
 
-        return resp
+        return resp[-1]
 
     async def get_client_roaming_history(
         self,
