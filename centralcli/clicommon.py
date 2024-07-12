@@ -64,12 +64,12 @@ class CLICommon:
 
         @property
         def envvar(self):
-            return f'Using Account: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
+            return f'[magenta]Using Account[/]: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
 
         @property
         def initial(self):
             msg = (
-                f'[magenta]Using Account:[/] [cyan]{self.account}[/].\n'
+                f'[magenta]Using Account[/]: [cyan]{self.account}[/].\n'
                 f'[bright_red blink]Account setting is sticky.[/]  '
                 f'[cyan]{self.account}[/] [magenta]will be used for subsequent commands until[/]\n'
                 f'[cyan]--account <account name>[/] or [cyan]-d[/] (revert to default). is used.\n'
@@ -341,6 +341,48 @@ class CLICommon:
             print(msg)
         raise typer.Exit(code=code)
 
+    def _sort_results(
+            self,
+            data: List[dict] | List[str] | dict | None,
+            *,
+            sort_by: str,
+            reverse: bool,
+            tablefmt: TableFormat,
+            caption: str = None,
+    ) -> Tuple:
+        if sort_by and all(isinstance(d, dict) for d in data):
+            if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
+                sort_by = sort_by.replace("_", " ")
+
+            sort_msg = None
+            if not all([sort_by in d for d in data]):
+                sort_msg = [
+                        f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
+                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "_")}' for k in data[0].keys()))
+                ]
+            else:
+                try:
+                    type_ = str
+                    for d in data:
+                        if d[sort_by] is not None:
+                            type_ = type(d[sort_by])
+                            break
+                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
+                except TypeError as e:
+                    sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
+
+            if sort_msg:
+                _caption = "\n".join([f"  {m}" for m in sort_msg])
+                _caption = _caption if tablefmt != "rich" else render.rich_capture(_caption, emoji=True)
+                if caption:
+                    c = caption.splitlines()
+                    c.insert(-1, _caption)
+                    caption = "\n".join(c)
+                else:
+                    caption = _caption
+
+        return data if not reverse else data[::-1], caption
+
     def _display_results(
         self,
         data: Union[List[dict], List[str], dict, None] = None,
@@ -359,93 +401,48 @@ class CLICommon:
         cleaner: callable = None,
         **cleaner_kwargs,
     ):
-        if data:
+        if not data:
+            log.warning(f"No data passed to _display_output {title} {caption}")
+            return
+
+        data = utils.listify(data)
+
+        if cleaner and not self.raw_out:
+            data = cleaner(data, **cleaner_kwargs)
             data = utils.listify(data)
 
-            if cleaner and not self.raw_out:
-                data = cleaner(data, **cleaner_kwargs)
-                data = utils.listify(data)
+        data, caption = self._sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
-            # TODO make separate function
-            if sort_by and all(isinstance(d, dict) for d in data):
-                if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
-                    sort_by = sort_by.replace("_", " ")
+        if self.raw_out and tablefmt in ["simple", "rich"]:
+            tablefmt = "json"
 
-                sort_msg = None
-                if not all([sort_by in d for d in data]):
-                    sort_msg = [
-                            f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
-                            "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "_")}' for k in data[0].keys()))
-                    ]
-                else:
-                    try:
-                        type_ = str
-                        for d in data:
-                            if d[sort_by] is not None:
-                                type_ = type(d[sort_by])
-                                break
-                        data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
-                    except TypeError as e:
-                        sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
+        kwargs = {
+            "outdata": data,
+            "tablefmt": tablefmt,
+            "title": title,
+            "caption": caption,
+            "account": None if config.account in ["central_info", "default"] else config.account,
+            "config": config,
+            "output_by_key": output_by_key,
+            "set_width_cols": set_width_cols,
+            "full_cols": full_cols,
+            "fold_cols": fold_cols,
+        }
+        with console.status("Rendering Output..."):
+            outdata = render.output(**kwargs)
 
-                if sort_msg:
-                    _caption = "\n".join([f"  {m}" for m in sort_msg])
-                    _caption = _caption if tablefmt != "rich" else render.rich_capture(_caption, emoji=True)
-                    if caption:
-                        c = caption.splitlines()
-                        c.insert(-1, _caption)
-                        caption = "\n".join(c)
-                    else:
-                        caption = _caption
-            # End sort function
+        if stash:
+            config.last_command_file.write_text(
+                json.dumps({k: v if not isinstance(v, DateTime) else v.epoch for k, v in kwargs.items() if k != "config"}, cls=Encoder)
+            )
 
-            if reverse:
-                data = data[::-1]
+        typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-            if self.raw_out and tablefmt in ["simple", "rich"]:
-                tablefmt = "json"
+        if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
+            print(caption)
 
-            # TODO make sure "account" is not valid then remove from list below
-            if config.account == "account":
-                log.warning("DEV NOTE account is 'account'", show=True)
-
-            kwargs = {
-                "outdata": data,
-                "tablefmt": tablefmt,
-                "title": title,
-                "caption": caption,
-                "account": None if config.account in ["central_info", "default", "account"] else config.account,
-                "config": config,
-                "output_by_key": output_by_key,
-                "set_width_cols": set_width_cols,
-                "full_cols": full_cols,
-                "fold_cols": fold_cols,
-            }
-            with console.status("Rendering Output..."):
-                outdata = render.output(**kwargs)
-
-            if stash:
-                config.last_command_file.write_text(
-                    json.dumps({k: v if not isinstance(v, DateTime) else v.epoch for k, v in kwargs.items() if k != "config"}, cls=Encoder)
-                )
-
-            typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
-
-            # TODO test speed of use normal console object.
-            # rich pager may render faster, but need to modify render.output .. rich_output
-            # if pager and tty and len(outdata) > tty.rows:
-            #     with console.pager():
-            #         console.print(outdata)
-            # else:
-            #     console.print(outdata)
-
-            if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
-                print(caption)
-
-            if outfile and outdata:
-                self.write_file(outfile, outdata.file)
-        else:
-            log.warning(f"No data passed to _display_output {title} {caption}")
+        if outfile and outdata:
+            self.write_file(outfile, outdata.file)
 
     def display_results(
         self,
