@@ -97,25 +97,25 @@ class DateTime():
         return self.pretty
 
     def __bool__(self):
-        return self.epoch and self.epoch > 0
+        return bool(self.epoch and self.epoch > 0)
 
     def __len__(self) -> int:
         return len(self.epoch)
 
     def __lt__(self, other) -> bool:
-        return self.epoch < other
+        return True if self.epoch is None else bool(self.epoch < other)
 
     def __le__(self, other) -> bool:
-        return self.epoch <= other
+        return False if self.epoch is None else bool(self.epoch <= other)
 
     def __eq__(self, other) -> bool:
-        return self.epoch == other
+        return False if self.epoch is None else bool(self.epoch == other)
 
     def __gt__(self, other) -> bool:
-        return self.epoch > other
+        return False if self.epoch is None else bool(self.epoch > other)
 
     def __ge__(self, other) -> bool:
-        return self.epoch >= other
+        return False if self.epoch is None else bool(self.epoch >= other)
 
 
 class Encoder(JSONEncoder):

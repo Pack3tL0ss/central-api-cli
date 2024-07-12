@@ -189,7 +189,7 @@ vlan_modes = {
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
-    "last_connection_time": _time_diff_words,
+    "last_connection_time": lambda x: DateTime(x, "timediff"),  # _time_diff_words,
     "uptime": lambda x: DateTime(x, "durwords-short"),
     "updated_at": lambda x: DateTime(x, "mdyt"),
     "last_modified": _convert_epoch,
