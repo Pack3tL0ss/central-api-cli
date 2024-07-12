@@ -299,7 +299,7 @@ def rich_output(
         if account or caption:
             table.caption_justify = 'left'
             table.caption = '' if not account else f'[italic dark_olive_green2] Account: {account}[/]'
-            table.caption = table.caption if not caption else f"{table.caption}  {caption.lstrip()}"
+            table.caption = table.caption if not caption else f"{table.caption} {caption.lstrip()}"
 
         data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
 
