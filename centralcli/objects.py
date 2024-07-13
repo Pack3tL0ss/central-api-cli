@@ -4,20 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 from json import JSONEncoder
-from enum import Enum
 import pendulum
 from pathlib import Path
 
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log"]
 
-# class TimeFormat(str, Enum):
-#     day_datetime = "day-datetime"
-#     durwords = "durwords"
-#     durwords_short = "durwords-short"
-#     timediff = "timediff"
-#     mydt = "mydt"
-#     log = "log"
 
 def _convert_epoch(epoch: float) -> str:
     """Thu, May 7, 2020 3:49 AM"""
@@ -97,25 +89,25 @@ class DateTime():
         return self.pretty
 
     def __bool__(self):
-        return self.epoch and self.epoch > 0
+        return bool(self.epoch and self.epoch > 0)
 
     def __len__(self) -> int:
         return len(self.epoch)
 
     def __lt__(self, other) -> bool:
-        return self.epoch < other
+        return True if self.epoch is None else bool(self.epoch < other)
 
     def __le__(self, other) -> bool:
-        return self.epoch <= other
+        return False if self.epoch is None else bool(self.epoch <= other)
 
     def __eq__(self, other) -> bool:
-        return self.epoch == other
+        return False if self.epoch is None else bool(self.epoch == other)
 
     def __gt__(self, other) -> bool:
-        return self.epoch > other
+        return False if self.epoch is None else bool(self.epoch > other)
 
     def __ge__(self, other) -> bool:
-        return self.epoch >= other
+        return False if self.epoch is None else bool(self.epoch >= other)
 
 
 class Encoder(JSONEncoder):

@@ -37,7 +37,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
-    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, lib_to_api, what_to_pretty, LIB_DEV_TYPE  # noqa
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, ClientTimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -2126,7 +2126,7 @@ def vsx(
 # FIXME show clients wireless <tab completion> does not filter based on type of device
 # FIXME show clients wireless AP-NAME does not filter only devices on that AP
 # Same applies for wired
-@app.command(help="Show clients/details")
+@app.command()
 def clients(
     client: str = typer.Argument(
         None,
@@ -2135,13 +2135,16 @@ def clients(
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
+    past: ClientTimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
+    ssid: str = typer.Option(None, help="Filter by SSID [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
     denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev must also be supplied)[/]",),
-    device: str = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by Device", autocompletion=cli.cache.dev_client_completion, show_default=False,),
+    failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
+    device: str = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by Device(s)", autocompletion=cli.cache.dev_client_completion, show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
@@ -2150,8 +2153,8 @@ def clients(
     update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
     sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    verbose: bool = typer.Option(False, "-v", help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
+    verbose: int = typer.Option(0, "-v", count=True, help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     default: bool = typer.Option(
         False, "-d",
         is_flag=True,
@@ -2175,11 +2178,11 @@ def clients(
         rich_help_panel="Common Options",
     ),
 ) -> None:
+    """Show clients/details
+
+    Shows clients that have connected within the last 3 hours by default.
+    """
     central = cli.central
-    # device = utils.listify(device) if device else []
-    # device = device if not _dev else [*device, *_dev]
-    # TODO test --device and potentially restore multi-dev support
-    device = device or []
 
     kwargs = {}
     dev = None
@@ -2189,16 +2192,33 @@ def clients(
         _client = cli.cache.get_client_identifier(client, exit_on_fail=True)
         kwargs["mac"] = _client.mac
         title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
-        verbose = True
+        verbose = verbose or 1
     elif device:
-        dev = cli.cache.get_dev_identifier(device)
-        kwargs["serial"] = dev.serial
-        title = f"{dev.name} Clients"
+        dev: CentralObject = cli.cache.get_dev_identifier(device)
+        args += ("wireless",) if dev.type == "ap" else ("wired",)
+        if dev.generic_type == "switch":
+            if dev.swack_id:
+                kwargs["stack_id"] = dev.swack_id
+        else:
+            kwargs["serial"] = dev.serial
+        title = f'{dev.name} Clients'
+        ignored = {
+            "group": group,
+            "site": site,
+            "label": label
+        }
+        if any([ignored.values()]):
+            for k, v in ignored.items():
+                if v:
+                    log.warning(f"[cyan]--{k}[/] [green]{v}[/] ignored.  Doesn't make sense with [cyan]--dev[/] [green]{dev.name}[/] specified.", log=False, caption=True)
+            group = site = label = None
+
 
     if denylisted:
         if not dev:
-            print(":warning:  [cyan]--device[/] is required when [cyan]-D|--denylisted[/] flag is set.")
-            raise typer.Exit(1)
+            cli.exit(":warning:  [cyan]--device[/] is required when [cyan]-D|--denylisted[/] flag is set.")
+        elif dev.type != "ap":
+            cli.exit(f"[cyan]--denylisted[/] flag is only valid for APs not {lib_to_gen_plural(dev.type)}.")
         else:
             args = (dev.serial,)
             title = f"{dev.name} Denylisted Clients"
@@ -2226,6 +2246,21 @@ def clients(
             kwargs["label"] = cli.cache.get_label_identifier(label).name
             title = f"{title} on devices with label {label}"
 
+        if ssid:
+            kwargs["network"] = ssid
+            if "Wired Clients" in title:
+                log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
+            else:
+                title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
+
+        if failed:
+            kwargs["client_status"] = "FAILED_TO_CONNECT"
+            title = title.replace("Clients", "Failed Clients")
+
+        if past:
+            kwargs["past"] = past.upper()
+            title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
+
     if not denylisted:
         resp = central.request(cli.cache.update_client_db, *args, **kwargs)
     else:
@@ -2239,13 +2274,9 @@ def clients(
     _last_mac_text = ""
     if not client and not denylisted:
         if wired:
-            _count_text = f"{len(resp)} Wired Clients."
-            if resp.raw.get("last_client_mac"):
-                _count_text = f'{_count_text} [bright_green]Last Wired Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
+            _count_text = f"[cyan]{len(resp)}[/] Wired Clients."
         elif wireless:
-            _count_text = f"{len(resp)} Wireless Clients."
-            if resp.raw.get("last_client_mac"):
-                _count_text = f'{_count_text} [bright_green]Last Wireless Mac[/]: [cyan]{resp.raw["last_client_mac"]}[/]'
+            _count_text = f"[cyan]{len(resp)}[/] Wireless Clients."
         else:
             _tot = len(resp)
             wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
@@ -2254,11 +2285,8 @@ def clients(
             for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
                 caption_data[_type] = {
                     "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
-                    "last_client_mac": "" if not data or "last_client_mac" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["last_client_mac"]
                 }
             _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
-            _last_mac_text = f"[bright_green]Last Wired Mac[/]: [cyan]{caption_data['wired']['last_client_mac']}[/], [bright_green]Last Wireless Mac[/]: [cyan]{caption_data['wireless']['last_client_mac']}[/]"
-
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
@@ -2266,7 +2294,8 @@ def clients(
     if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
-        verbose_kwargs["verbose"] = verbose
+        verbose_kwargs["verbosity"] = int(verbose)
+        verbose_kwargs["format"] = tablefmt
 
         # filter output on multiple devices
         # TODO maybe restore multi-device looks like was handled in filter
@@ -2275,12 +2304,14 @@ def clients(
 
     if sort_by:
         sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
+        if sort_by == "last connected":  # We invert so the most recent client is on top
+            reverse = not reverse
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=f"{_count_text} Use -v for more details, -vv for unformatted response.\n  {_last_mac_text}".rstrip() if not verbose and not denylisted else None,
+        caption=f"{_count_text} Use [cyan]-v[/] for more details, [cyan]--raw[/] for unformatted response." if not verbose and not denylisted else None,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -2343,7 +2374,7 @@ def tunnels(
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
-    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=None)
+    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
 

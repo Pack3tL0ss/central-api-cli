@@ -803,3 +803,29 @@ class Utils:
             return [f"{prefix}/{p}" for p in range(int(_start.split("/")[-1]), int(_end.split("/")[-1]) + 1)]
 
         return [iface for port in interfaces for p in port.split(",") for iface in expand_range(p)]
+
+    @staticmethod
+    def convert_bytes_to_human(size: int | float | Dict[str, int | float] | None, precision: int = 2, throughput: bool = False, speed: bool = False,) -> str | None:
+        if size is None:
+            return size
+
+        def _number_to_human(_size: int | float, precision: int = precision, throughput: bool = throughput, speed: bool = speed) -> str:
+            factor = 1000 if throughput or speed else 1024
+            suffixes=['B','KB','MB','GB','TB', 'PB'] if not speed else ["Mbps", "Gbps", "Tbps", "Pbps", "err", "err"]
+            suffix_idx = 0
+            while _size > factor and suffix_idx < 4:
+                suffix_idx += 1  # increment the index of the suffix
+                _size = _size/float(factor)  # apply the division
+
+            out = f"{round(_size, precision):.2f}"
+            out = out if not int(out.split(".")[-1]) == 0 else out.split(".")[0]
+
+            return f"{out} {suffixes[suffix_idx]}"
+
+        if isinstance(size, (int, float)):
+            return _number_to_human(size)
+
+        if isinstance(size, dict) and all([isinstance(v, (int, float)) for v in size.values()]):
+            return {k: _number_to_human(v) for k, v in size.items()}
+        else:
+            return size

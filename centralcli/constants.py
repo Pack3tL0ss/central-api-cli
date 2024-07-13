@@ -192,31 +192,12 @@ STRIP_KEYS = [
 ]
 
 
-CLIENT_STRIP_KEYS_VERBOSE = ["group_id", "label_id", "swarm_id"]
-CLIENT_STRIP_KEYS = [
-    *CLIENT_STRIP_KEYS_VERBOSE,
-    "interface_mac",
-    "labels",
-    "phy_type",
-    "radio_mac",
-    "radio_number",
-    "ht_type",
-    "maxspeed",
-    "speed",
-    "signal_db",
-    "signal_strength",
-    "encryption_method",
-    "usage",
-    "manufacturer",
-    "health",
-    "signal_strength"
-    "channel",
-    "os_type",
-    "band",
-    "snr",
-    "username",
-    "client_type",
-    ]
+class ClientTimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1m", "3m"]
+    _3h = "3h"
+    _1d = "1d"
+    _1w = "1w"
+    _1m = "1m"
+    _3m = "3m"
 
 
 class ShowArgs(str, Enum):
@@ -527,6 +508,7 @@ APIMethodType = Literal[
     "inventory"
 ]
 
+ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 
 class LibToAPI:
     """Convert device type stored in Cache to type required by the different API methods

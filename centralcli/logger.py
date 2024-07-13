@@ -139,8 +139,9 @@ class MyLogger:
         self.show = value
         self.setLevel(logging.DEBUG if value else logging.INFO)
 
-    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-
+    # If caption=True we assume log=False unless you specify log=True, default it to log, no caption.
+    def debug(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='debug', *args, **kwargs)
 
     def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
@@ -150,28 +151,28 @@ class MyLogger:
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
-    def info(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def info(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, *args, **kwargs)
 
-    def warning(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def warning(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='warning', *args, **kwargs)
 
-    def error(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def error(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='error', *args, **kwargs)
 
-    def exception(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def exception(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='exception', *args, **kwargs)
 
-    def critical(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def critical(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='critical', *args, **kwargs)
 
-    def fatal(self, msgs: Union[list, str], log: bool = True, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        # show = show or self.show
+    def fatal(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
+        log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='fatal', *args, **kwargs)
 
     def setLevel(self, level):
