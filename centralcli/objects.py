@@ -4,20 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 from json import JSONEncoder
-from enum import Enum
 import pendulum
 from pathlib import Path
 
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log"]
 
-# class TimeFormat(str, Enum):
-#     day_datetime = "day-datetime"
-#     durwords = "durwords"
-#     durwords_short = "durwords-short"
-#     timediff = "timediff"
-#     mydt = "mydt"
-#     log = "log"
 
 def _convert_epoch(epoch: float) -> str:
     """Thu, May 7, 2020 3:49 AM"""
