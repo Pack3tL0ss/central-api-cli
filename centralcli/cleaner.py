@@ -193,6 +193,8 @@ _short_value = {
     "uptime": lambda x: DateTime(x, "durwords-short"),
     "updated_at": lambda x: DateTime(x, "mdyt"),
     "last_modified": _convert_epoch,
+    "next_rekey": lambda x: DateTime(x, "log"),
+    "connected_uptime": lambda x: DateTime(x, "durwords"),
     "lease_start_ts": _log_timestamp,
     "lease_end_ts": _log_timestamp,
     "create_date": _convert_iso_to_words,
@@ -239,6 +241,7 @@ _short_value = {
     "sc": lambda v: v if not isinstance(v, list) else ", ".join([LLDPCapabilityTypes(ec).name.replace("_", " ") for ec in v]),
     "chassis_id_type": lambda v: None,
     "chassis_id_type_str": lambda v: None,
+    "usage": lambda v: utils.convert_bytes_to_human(v),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -252,6 +255,7 @@ _short_key = {
     "ip_address": "ip",
     "ip_addr": "ip",
     "ip_address_v6": "ip (v6)",
+    "ip_v6_address": "ip (v6)",
     "macaddr": "mac",
     "switch_type": "type",
     "uplink_ports": "uplk ports",
@@ -524,19 +528,26 @@ def _client_concat_associated_dev(
     if cache is None:
         from centralcli import cache
     strip_keys = [
-        "associated device",
-        "associated device mac",
-        "connected device type",
-        "interface",
-        "interface mac",
-        "gateway serial",
+        "associated_device_name",
+        "associated_device",
+        "associated_device_mac",
+        "connected_device_type",
+        # "interface_port",  # Needed to collapse interface for wired
+        "interface_mac",
+        "gateway_serial",
+        # "group_name",
+        # "site",
+        "group_id",
+        "group id",
+        "label_id",
+        "swarm_id",
     ]
 
     # FIXME get_dev_identifier can fail if client is connected to device that is not in the cache.
     # even with a cache update.  doing show all is fine, but update cache for whatever reason with this method
     # is causing some kind of SSL error, which results in cache lookup failure.
     # silent=True, retry=False, resolves.  Would need no_match OK as get_dev_identifier fails if no match.
-    dev, _gw, data["gateway"] = "", "", {}
+    dev, _gw = "", ""
     if data.get("associated_device"):
         dev = cache.get_dev_identifier(data["associated_device"])
 
@@ -557,16 +568,60 @@ def _client_concat_associated_dev(
         "mac": data.get("associated_device_mac"),
         "interface": data.get("interface_port"),
         "interface mac": data.get("interface_mac"),
+        # "group": data.get("group_name"),
+        # "site": data.get("site"),
     }
-    for key in strip_keys:
-        if key in data:
-            del data[key]
+
+    # collapse radio details into sub dict
+    _radio = {}
+    if "radio_number" in data:
+        _radio = {
+            "radio number": data["radio_number"],
+            "band": data.get("band"),
+            "channel": data.get("channel"),
+            "radio mac": data.get("radio_mac"),
+        }
+        strip_keys += ["radio_number", "band", "channel", "radio_mac"]
+
+    _signal = {}
+    if "signal_db" in data and data["signal_db"] != "NA":
+        _signal = {
+            "snr": data.get("snr"),
+            "signal db": data["signal_db"],
+            "signal strength": data.get("signal_strenth"),  # TODO need to define enum to convert int strength to human readable.  1-5?
+            "health": data.get("health"),
+        }
+        strip_keys += ["snr", "signal_db", "signal_strength", "health"]
+
+    _fingerprint = {}
+    if "client_category" in data:
+        _fingerprint = {
+            "category": data["client_category"],
+            "OS": data.get("os_type"),
+        }
+        if data.get("manufacturer"):
+            _fingerprint["manufacturer"] = data["manufacturer"]
+
+        strip_keys += ["client_category", "os_type", "manufacturer"]
+
+    # for key in strip_keys:
+    #     if key in data:
+    #         del data[key]
+    data = {k: v for k, v in data.items() if k not in strip_keys}
+
+    if _radio:
+        data["radio"] = _unlist(strip_no_value([_radio]))
+    if _signal:
+        data["signal"] = _unlist(strip_no_value([_signal]))
+    if _fingerprint:
+        data["fingerprint"] = _unlist(strip_no_value([_fingerprint]))
+
     if verbose:
         data["connected device"] = _unlist(strip_no_value([_connected]))
     else:
         # More work than is prob warranted by if the device name includes the type, and the adjacent characters are
-        # not alpha then we don't append the type.  So an ap with a name of Zrm-655-ap will not have (AP) appended
-        # but Zrm-655-nap would have it appended
+        # not alpha then we don't append the type.  So an ap with a name of zrm-655-ap will not have (AP) appended
+        # but zrm-655 would have it appended
         data["connected device"] = f"{_connected['name']}"
         add_type = False
         if _connected['type'].lower() in _connected['name'].lower():
@@ -590,86 +645,130 @@ def _client_concat_associated_dev(
 
 def get_clients(
     data: List[dict],
-    verbose: bool = False,
+    verbosity: int = 0,
     cache: callable = None,
     filters: List[str] = None,
+    format: TableFormat = None,
     **kwargs
 ) -> list:
-    """Remove all columns that are NA for all clients in the list"""
     data = utils.listify(data)
+    data = [_client_concat_associated_dev(d, verbose=verbosity, cache=cache, **kwargs) for d in data]
+    format = format or "rich" if not verbosity else "yaml"
 
-    data = [_client_concat_associated_dev(d, verbose=verbose, cache=cache, **kwargs) for d in data]
-    if verbose:
-        strip_keys = constants.CLIENT_STRIP_KEYS_VERBOSE
-        if data and all([isinstance(d, dict) for d in data]):
-            all_keys = set([k for d in data for k in d])
-            data = [
-                dict(
-                    short_value(
-                        k,
-                        d.get(k),
-                    )
-                    for k in all_keys
-                    if k not in strip_keys
-                )
-                for d in data
-            ]
-    else:
-        _sort_keys = [
+    verbosity_keys = {
+        0:  [
             "name",
-            "macaddr",
-            "vlan",
             "ip_address",
+            "macaddr",
             "user_role",
+            "vlan",
             "network",
             "connection",
             "connected device",
             "gateway",
-            "site",
+            "failure_reason",
+            "failure_stage",
             "group_name",
+            "site",
             "last_connection_time",
+        ],
+        1: [
+            "client_type",
+            "name",
+            "ip_address",
+            "macaddr",
+            "user_role",
+            "vlan",
+            "network",
+            "authentication_type",
+            "usage",
+            "connection",
+            "connected device",
+            "gateway",
+            "radio",
+            "signal",
+            "fingerprint",
+            "failure_reason",
+            "failure_stage",
+            "group_name",
+            "site",
+            "last_connection_time"
         ]
-        if data and all([isinstance(d, dict) for d in data]):
-            data = [
-                dict(
-                    short_value(
-                        k,
-                        f"wired ({data[idx].get('interface_port', '?')})" if d.get(k) == "NA" and k == "network" else d.get(k),
-                    )
-                    for k in _sort_keys
-                )
-                for idx, d in enumerate(data)
-            ]
+    }
 
-    if filters:
+    _short_value["speed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
+    _short_value["maxspeed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
+
+    if data and all([isinstance(d, dict) for d in data]):
+        data = [
+            dict(
+                short_value(
+                    k,
+                    f"wired ({data[idx].get('interface_port', '?')})" if d.get(k) == "NA" and k == "network" else d.get(k),
+                ) if not verbosity or format == "csv" else short_value(k, d.get(k))
+                for k in verbosity_keys.get(verbosity, [*verbosity_keys[max(verbosity_keys.keys())], *d.keys()])  # All keys if verbosity level exceeds what's defined
+                if k != "interface_port"  # it's collapsed into the network key, so don't need it as separate key
+            )
+            for idx, d in enumerate(data)
+        ]
+
+    if filters:  # filter by devices which is a list of serial numbers
         _filter = "~|~".join(filters)
-        data = [d for d in data if d["connected device"].lower() in _filter.lower()]
-    # data = [_client_concat_associated_dev(d, verbose=verbose, cache=cache, **kwargs) for d in data]
-    data = strip_no_value(data)
+        data = [d for d in data if d["connected device"]["serial"].upper() in _filter.upper()]
+
+
+    # if tablefmt is tabular we need each row to have the same columns
+    if format in ["csv", "rich", "table"]:
+        all_keys = list(set([key for d in data for key in d.keys()]))
+        data = [
+            {k: d.get(k) for k in [*list(d.keys()), *[k for k in sorted(all_keys) if k not in d.keys()]]}
+            for d in data
+        ]
+
+    data = strip_no_value(data, aggressive=bool(verbosity and format not in  ["csv", "rich", "table"]))
 
     return data
 
 
-def strip_no_value(data: List[dict] | Dict[dict]) -> List[dict] | Dict[dict]:
+def strip_no_value(data: List[dict] | Dict[dict], aggressive: bool = False) -> List[dict] | Dict[dict]:
     """strip out any columns that have no value in any row
 
     Accepts either List of dicts, or a Dict where the value for each key is a dict
+
+    Args:
+        data (List[dict] | Dict[dict]): data to process
+        aggressive (bool, optional): If True will strip any key with no value, Default is to only strip if all instances of a given key have no value.
+
+
+    Returns:
+        List[dict] | Dict[dict]: processed data
     """
     no_val_strings = ["Unknown", "NA", "None", "--", ""]
     if isinstance(data, list):
-        no_val: List[List[int]] = [
-            [
-                idx
-                for idx, v in enumerate(id.values())
-                if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
+        if aggressive:
+            return [
+                {
+                    k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, bool) and not v)]
+                } for inner in data
             ]
-            for id in data
+
+        no_val: List[List[str]] = [
+            [k for k, v in inner.items() if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
+            for inner in data
         ]
         if no_val:
-            common_idx: set = set.intersection(*map(set, no_val))
-            data = [{k: v for idx, (k, v) in enumerate(id.items()) if idx not in common_idx} for id in data]
+            common_keys: set = set.intersection(*map(set, no_val))  # common keys that have no value
+            data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
 
     elif isinstance(data, dict) and all(isinstance(d, dict) for d in data.values()):
+        if aggressive:
+            return {k:
+                {
+                    sub_k: sub_v for sub_k, sub_v in v.items() if k not in [k for k in v.keys() if (isinstance(sub_v, str) and sub_v in no_val_strings) or (not isinstance(sub_v, bool) and not sub_v)]
+                }
+                for k, v in data.items()
+            }
+        # TODO REFACTOR like above using idx can be problematic with unsorted data where keys may be in different order
         no_val: List[List[int]] = [
             [
                 idx
@@ -679,8 +778,8 @@ def strip_no_value(data: List[dict] | Dict[dict]) -> List[dict] | Dict[dict]:
             for id in data
         ]
         if no_val:
-            common_idx: set = set.intersection(*map(set, no_val))
-            data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_idx} for id in data}
+            common_keys: set = set.intersection(*map(set, no_val))
+            data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_keys} for id in data}
     else:
         log.error(
             f"cleaner.strip_no_value recieved unexpected type {type(data)}. Expects List[dict], or Dict[dict]. Data was returned as is."
@@ -1825,4 +1924,8 @@ def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = 
         } for ap in aps_in_site
     ]
 
+    return simple_kv_formatter(data)
+
+def get_gw_tunnels(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    _short_value["throughput"] = lambda x: utils.convert_bytes_to_human(x, throughput=True)
     return simple_kv_formatter(data)
