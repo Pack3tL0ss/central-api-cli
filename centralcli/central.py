@@ -252,10 +252,10 @@ class CentralApi(Session):
         cluster_id: str = None,
         band: str = None,
         mac: str = None,
-        # sort_by: str = None,
+        client_status: constants.ClientStatus = "CONNECTED",
+        past: str = "3H",
         offset: int = 0,
         limit: int = 1000,
-        # **kwargs,
     ) -> Response:
         """Get Clients details.
 
@@ -271,6 +271,10 @@ class CentralApi(Session):
             cluster_id (str, optional): Filter by Cluster ID. Defaults to None.
             band (str, optional): Filter by band. Defaults to None.
             mac (str, optional): Filter by client MAC. Defaults to None.
+            client_status (Literal["FAILED_TO_CONNECT", "CONNECTED"], optional): Return clients that are
+                connected, or clients that have failed to connect.  Defaults to CONNECTED.
+            past: (str, optional): Time-range to show client details for.  Format:
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.  Defaults to 3H
             offset (int, optional): API Paging offset. Defaults to 0.
             limit (int, optional): API record limit per request. Defaults to 1000 Max 1000.
 
@@ -284,8 +288,8 @@ class CentralApi(Session):
             "site": site,
             "serial": serial,
             "cluster_id": cluster_id,
-            # 'fields': fields,
-            # 'sort_by': sort_by,
+            "client_status": client_status,
+            "past": past,
             "offset": offset,
             "limit": limit,
         }
@@ -348,6 +352,8 @@ class CentralApi(Session):
         stack_id: str = None,
         cluster_id: str = None,
         band: str = None,
+        client_status: constants.ClientStatus = "CONNECTED",
+        past: str = "3H",
         offset: int = 0,
         limit: int = 1000,
     ) -> Response:
@@ -367,6 +373,10 @@ class CentralApi(Session):
             stack_id (str, optional): Return clients connected to stack with provided id. Defaults to None.
             cluster_id (str, optional): Return clients connected to cluster with provided id. Defaults to None.
             band (str, optional): Return (WLAN) clients connected to provided band. Defaults to None.
+            client_status (Literal["FAILED_TO_CONNECT", "CONNECTED"], optional): Return clients that are
+                connected, or clients that have failed to connect.  Defaults to CONNECTED.
+            past: (str, optional): Time-range to show client details for where
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.  Defaults to 3H
             offset (int, optional): API offset. Defaults to 0.
             limit (int, optional): API record limit. Defaults to 1000, Max 1000.
 
@@ -380,6 +390,8 @@ class CentralApi(Session):
             "site": site,
             "serial": serial,
             "cluster_id": cluster_id,
+            "client_status": client_status,
+            "past": past,
             "offset": offset,
             "limit": limit,
             "calculate_total": True
@@ -387,21 +399,15 @@ class CentralApi(Session):
         wlan_only_params = {"network": network, "os_type": os_type, "band": band}
         wired_only_params = {"stack_id": stack_id}
 
-        # resp = await self.get_wireless_clients(**{**params, **wlan_only_params},)  # **kwargs)
-        # if resp.ok:
-        #     wlan_resp = resp
-        #     wired_resp = await self.get_wired_clients(**{**params, **wired_only_params})  # **kwargs)
-        #     if wired_resp.ok:
-        #         resp.output = wlan_resp.output + wired_resp.output
-
         reqs = [
             self.BatchRequest(self.get_wireless_clients, **{**params, **wlan_only_params}),
             self.BatchRequest(self.get_wired_clients, **{**params, **wired_only_params})
         ]
 
         # FIXME if wireless clients call passes but wired fails there is no indication in cencli show clients output
+        # TODO need Response to have an attribute that stores failed calls so cli commands can display output of passed calls and details on errors (when some calls fail)
         resp = await self._batch_request(reqs)
-        if len(resp) == 2:  # and all(x.ok for x in resp):
+        if len(resp) == 2:
             out = []
             for r in resp:
                 if r.ok:
@@ -414,45 +420,8 @@ class CentralApi(Session):
             resp.output = out
             resp.raw = raw
             return resp
-            # TODO need Response to have an attribute that stores failed calls so cli commands can display output of passed calls and details on errors (when some calls fail)
 
         return resp[-1]
-
-    async def get_client_roaming_history(
-        self,
-        macaddr: str,
-        calculate_total: bool = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
-        offset: int = 0,
-        limit: int = 100,
-    ) -> Response:
-        """Wireless Client Mobility Trail.
-
-        Args:
-            macaddr (str): MAC address of the Wireless Client to be queried
-            calculate_total (bool, optional): Whether to calculate total transitions
-            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
-                in seconds. Default is current timestamp minus 3 hours
-            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
-                seconds. Default is current timestamp
-            offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 1000, max is 1000.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
-
-        params = {
-            'calculate_total': calculate_total,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
-            'offset': offset,
-            'limit': limit
-        }
-
-        return await self.get(url, params=params)
 
     async def get_wireless_clients(
         self,
@@ -467,10 +436,10 @@ class CentralApi(Session):
         band: str = None,
         fields: str = None,
         calculate_total: bool = True,
-        # sort_by: str = None,
+        client_status: constants.ClientStatus = "CONNECTED",
+        past: str = "3H",
         offset: int = 0,
         limit: int = 1000,
-        # **kwargs,
     ) -> Response:
         """List Wireless Clients.
 
@@ -489,8 +458,10 @@ class CentralApi(Session):
                 swarm_id, network, radio_mac, manufacturer, vlan, encryption_method, radio_number,
                 speed, usage, health, labels, site, signal_strength, signal_db, snr
             calculate_total (bool, optional): Whether to calculate total wireless Clients
-            sort (str, optional): Sort parameter may be one of +macaddr, -macaddr.  Default is
-                '+macaddr'
+            client_status (Literal["FAILED_TO_CONNECT", "CONNECTED"], optional): Return clients that are
+                connected, or clients that have failed to connect.  Defaults to CONNECTED.
+            past: (str, optional): Time-range to show client details for where
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.  Defaults to 3H
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 1000, max 1000.
 
@@ -511,7 +482,8 @@ class CentralApi(Session):
             "band": band,
             "fields": fields,
             "calculate_total": str(calculate_total).lower(),
-            # 'sort': sort_by,
+            "client_status": client_status,
+            "timerange": past,
             "offset": offset,
             "limit": limit,
         }
@@ -529,10 +501,10 @@ class CentralApi(Session):
         stack_id: str = None,
         fields: str = None,
         calculate_total: bool = True,
-        # sort_by: str = None,
+        client_status: constants.ClientStatus = "CONNECTED",
+        past: str = "3H",
         offset: int = 0,
         limit: int = 1000,
-        # **kwargs,
     ) -> Response:
         """List Wired Clients.
 
@@ -547,6 +519,10 @@ class CentralApi(Session):
             fields (str, optional): Comma separated list of fields to be returned. Valid fields are
                 name, ip_address, username, associated_device, group_name, interface_mac, vlan
             calculate_total (bool, optional): Whether to calculate total wired Clients
+            client_status (Literal["FAILED_TO_CONNECT", "CONNECTED"], optional): Return clients that are
+                connected, or clients that have failed to connect.  Defaults to CONNECTED.
+            past: (str, optional): Time-range to show client details for where
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.  Defaults to 3H
             FIXME sort (str, optional): Field to sort on.  Defaults to mac
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default 1000, max 1000.
@@ -566,7 +542,8 @@ class CentralApi(Session):
             "stack_id": stack_id,
             "fields": fields,
             "calculate_total": str(calculate_total).lower(),
-            # 'sort': sort_by,
+            "client_status": client_status,
+            "timerange": past,
             "offset": offset,
             "limit": limit,
         }
@@ -616,6 +593,42 @@ class CentralApi(Session):
         else:
             url = f"/monitoring/v1/clients/{dev_type}/{mac.url}"
             return await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
+
+    async def get_client_roaming_history(
+        self,
+        macaddr: str,
+        calculate_total: bool = None,
+        from_timestamp: int = None,
+        to_timestamp: int = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """Wireless Client Mobility Trail.
+
+        Args:
+            macaddr (str): MAC address of the Wireless Client to be queried
+            calculate_total (bool, optional): Whether to calculate total transitions
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 1000, max is 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
+
+        params = {
+            'calculate_total': calculate_total,
+            'from_timestamp': from_timestamp,
+            'to_timestamp': to_timestamp,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
 
     async def get_certificates(
         self, q: str = None, offset: int = 0, limit: int = 20, callback: callable = None, callback_kwargs: dict = None
