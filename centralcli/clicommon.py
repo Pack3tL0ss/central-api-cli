@@ -509,11 +509,13 @@ class CLICommon:
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
             caption = caption or ""
-            if log.caption:  # TODO change caption to list of Tuples or dict or objects with loglevel so we can determine if :warning: should be prepended.  Or do it in the log
+            if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
+                # TODO see if table has option to only do emoji in caption
+                _log_caption = log.caption if log.caption.count(":") < 2 else log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
                 if len(resp) > 1 and ":warning:" in log.caption:
-                    caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{log.caption}[/]'
+                    caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
-                    caption = f'{caption}\n{log.caption}'
+                    caption = f'{caption}\n{_log_caption}'
 
 
             for idx, r in enumerate(resp):
