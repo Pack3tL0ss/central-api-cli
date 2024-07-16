@@ -50,7 +50,7 @@ def test_show_all_rich():
     if result.exception:
         traceback.print_exception(result.exception)
     assert result.exit_code == 0
-    assert "name" in result.stdout
+    assert "mac" in result.stdout
     assert "ip" in result.stdout
 
 
