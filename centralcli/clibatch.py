@@ -664,8 +664,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     if import_file is not None:
         data = config.get_file_data(import_file)
     elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
+        cli.exit("No import file provided")
 
     if "devices" in data:
         data = data["devices"]
@@ -1167,8 +1166,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
     if len(serials_in) != len(cache_devs):
         log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
-    else:
-        log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
+
     not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
     cache_devs: List[CentralObject] = [c for c in cache_devs if c]
     _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
