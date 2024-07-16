@@ -2196,9 +2196,8 @@ def clients(
     elif device:
         dev: CentralObject = cli.cache.get_dev_identifier(device)
         args += ("wireless",) if dev.type == "ap" else ("wired",)
-        if dev.generic_type == "switch":
-            if dev.swack_id:
-                kwargs["stack_id"] = dev.swack_id
+        if dev.generic_type == "switch" and dev.swack_id:
+            kwargs["stack_id"] = dev.swack_id
         else:
             kwargs["serial"] = dev.serial
         title = f'{dev.name} Clients'
@@ -2282,11 +2281,14 @@ def clients(
             wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
             wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
             caption_data = {}
-            for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
-                caption_data[_type] = {
-                    "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
-                }
-            _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+            if not device:
+                for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
+                    caption_data[_type] = {
+                        "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
+                    }
+                _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+            else:
+                _count_text = f"[reset][bright_green]Client Count[/]: [cyan]{_tot}[/],"
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
