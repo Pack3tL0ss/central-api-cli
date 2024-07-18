@@ -49,6 +49,13 @@ LIB_DEV_TYPE = {
     "gateway": "gw"
 }
 
+# HACK  rich is leading to an exception as it tried to inspect the Cache object during an exception
+# Cache LookUp Failure: 'CentralObject' has no attribute ... (attributes below).
+RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
+    "awehoi234_wdfjwljet234_234wdfoijsdfmmnxpi492",
+    "__rich_repr__",
+    "_fields"
+]
 
 def get_cencli_devtype(dev_type: str) -> str:
     """Convert device type returned by API to consistent cencli types
@@ -115,8 +122,9 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
-        raise typer.Exit(1)
+        if name not in RICH_EXCEPTION_IGNORE_ATTRIBUTES:
+            log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
+            raise typer.Exit(1)
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
