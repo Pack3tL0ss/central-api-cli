@@ -1927,5 +1927,6 @@ def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = 
     return simple_kv_formatter(data)
 
 def get_gw_tunnels(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    # Also used for get_gw_uplinks_details
     _short_value["throughput"] = lambda x: utils.convert_bytes_to_human(x, throughput=True)
     return simple_kv_formatter(data)

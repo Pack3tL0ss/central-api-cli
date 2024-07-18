@@ -2359,7 +2359,7 @@ class CentralApi(Session):
 
     async def get_gw_tunnels(
         self, serial: str,
-        timerange: str = "1M",
+        timerange: constants.TimeRange = "1m",
         limit: int = 250,
         offset: int = 0
     ) -> Response:
@@ -2380,9 +2380,34 @@ class CentralApi(Session):
         url = f"/monitoring/v1/gateways/{serial}/tunnels"
 
         params = {
-            "timerange": timerange,
+            "timerange": timerange.upper(),
             "offset": offset,
             "limit": limit
+        }
+
+        return await self.get(url, params=params)
+
+
+    async def get_gw_uplinks_details(
+        self,
+        serial: str,
+        timerange: constants.TimeRange = "1m",
+    ) -> Response:
+        """Gateway Uplink Details.
+
+        Args:
+            serial (str): Serial number of gateway to be queried
+            timerange (str): Time range for Uplink stats information.
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.
+                Valid Values: 3H, 1D, 1W, 1M, 3M
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/uplinks"
+
+        params = {
+            'timerange': timerange.upper()
         }
 
         return await self.get(url, params=params)

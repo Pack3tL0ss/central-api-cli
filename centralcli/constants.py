@@ -192,7 +192,7 @@ STRIP_KEYS = [
 ]
 
 
-class ClientTimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1m", "3m"]
+class TimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1m", "3m"]
     _3h = "3h"
     _1d = "1d"
     _1w = "1w"
@@ -312,14 +312,6 @@ class BatchDelArgs(str, Enum):
     groups = "groups"
     devices = "devices"
     labels = "labels"
-
-
-class TunnelTimeRange(str, Enum):
-    three_hours = "3H"
-    one_day = "1D"
-    one_week = "1W"
-    one_month = "1M"
-    three_months = "3M"
 
 
 class BatchRenameArgs(str, Enum):

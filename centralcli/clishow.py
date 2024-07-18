@@ -37,7 +37,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
-    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, ClientTimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -2135,7 +2135,7 @@ def clients(
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
-    past: ClientTimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
+    past: TimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
@@ -2325,7 +2325,7 @@ def clients(
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
-    time_range: TunnelTimeRange = typer.Argument("3H"),
+    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
@@ -2377,6 +2377,57 @@ def tunnels(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
     cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+
+
+@app.command()
+def uplinks(
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
+    sort_by: str = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    verbose2: bool = typer.Option(
+        False,
+        "-vv",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show Branch Gateway/VPNC Uplink details"""
+    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
+    resp = cli.central.request(cli.central.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+
+    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
 
