@@ -1184,13 +1184,11 @@ def upgrade(
         autocompletion=cli.cache.account_completion,
     ),
 ):
-    """Show firmware upgrade status (device upgrades)
-
-    :warning:  Status for upgrade by group is not supported by the API
+    """Show firmware upgrade status (by device)
     """
     central = cli.central
-    # Allow unnecessary keyword status `cencli show upgrade status <dev>`
-    ignored_subcommands = ["status", "device", "group"]
+    # Allow unnecessary keyword status `cencli show upgrade status <dev>` or `cencli show upgrade device <dev>`
+    ignored_subcommands = ["status", "device"]
     devices = [d for d in devices if d not in ignored_subcommands]
 
     if not devices:
