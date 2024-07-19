@@ -2412,6 +2412,48 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_gw_uplinks_bandwidth_usage(
+        self,
+        serial: str,
+        uplink_id: str = None,
+        interval: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """Gateway Uplink Bandwidth Usage.
+
+        Args:
+            serial (str): Gateway serial
+            uplink_id (str, optional): Filter by uplink ID.
+            interval (str, optional): Filter by interval (5minutes or 1hour or 1day or 1week).
+            from (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/uplinks/bandwidth_usage"
+        if isinstance(from_time, datetime):
+            from_time = round(from_time.timestamp())
+        if isinstance(to_time, datetime):
+            from_time = round(to_time.timestamp())
+        if isinstance(from_time, float):
+            from_time = round(from_time)
+        if isinstance(to_time, float):
+            to_time = round(to_time)
+
+
+        params = {
+            'uplink_id': uplink_id,
+            'interval': interval,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
+        }
+
+        return await self.get(url, params=params)
+
     # API-FLAW max limit 100 enforced if you provide the limit parameter, otherwise no limit? returned 811 w/ no param provided
     # API-FLAW does not return all logs available in UI wtf??
     async def get_audit_logs(
