@@ -200,6 +200,13 @@ class TimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1m", "3m"]
     _3m = "3m"
 
 
+class BandwidthInterval(str, Enum):  # 5m, 1h, 1d, 1w
+    _5m = "5m"
+    _1h = "1h"
+    _1d = "1d"
+    _1w = "1w"
+
+
 class ShowArgs(str, Enum):
     all = "all"
     device = "device"

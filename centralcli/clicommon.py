@@ -638,7 +638,7 @@ class CLICommon:
             past (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
 
         Returns:
-            pendulum.DateTime | None: returns DateTime object or None if past argument was None.
+            pendulum.DateTime | None: returns DateTime object in UTC or None if past argument was None.
 
         Raises:
             typer.Exit: If past str has value but is invalid.

@@ -24,12 +24,12 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
+    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowuplink, BatchRequest, caas, render, cli, utils, config, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
+        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowuplink, BatchRequest, caas, render, cli, utils, config, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -51,6 +51,7 @@ app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
 app.add_typer(clishowmpsk.app, name="mpsk")
+app.add_typer(clishowuplink.app, name="uplink")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -2334,9 +2335,9 @@ def tunnels(
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    verbose2: bool = typer.Option(
+    raw: bool = typer.Option(
         False,
-        "-vv",
+        "---raw",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
         rich_help_panel="Common Options",
@@ -2391,9 +2392,9 @@ def uplinks(
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    verbose2: bool = typer.Option(
+    raw: bool = typer.Option(
         False,
-        "-vv",
+        "--raw",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
         rich_help_panel="Common Options",

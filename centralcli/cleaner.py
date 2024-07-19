@@ -190,7 +190,7 @@ _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
     "last_connection_time": lambda x: DateTime(x, "timediff"),  # _time_diff_words,
-    "uptime": lambda x: DateTime(x, "durwords-short"),
+    "uptime": lambda x: DateTime(x, "durwords-short",),  #  round_to_minute=True),
     "updated_at": lambda x: DateTime(x, "mdyt"),
     "last_modified": _convert_epoch,
     "next_rekey": lambda x: DateTime(x, "log"),
@@ -222,8 +222,8 @@ _short_value = {
     "AOS-CX": "cx",
     "type": lambda t: t.lower(),
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
-    "start_date": _mdyt_timestamp,
-    "end_date": _mdyt_timestamp,
+    "start_date": lambda x: DateTime(x, "mdyt"),
+    "end_date": lambda x: DateTime(x, "mdyt"),
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
@@ -242,6 +242,8 @@ _short_value = {
     "chassis_id_type": lambda v: None,
     "chassis_id_type_str": lambda v: None,
     "usage": lambda v: utils.convert_bytes_to_human(v),
+    "tx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
+    "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -324,7 +326,9 @@ _short_key = {
     "cluster_redundancy_type": "redundancy type",
     "ec": "enabled capabilities",
     "sc": "system capabilities",
-    "ec_str": "enabled capabilities"
+    "ec_str": "enabled capabilities",
+    "tx_data_bytes": "TX",
+    "rx_data_bytes": "RX",
 }
 
 
@@ -417,7 +421,7 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List) -> List:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None) -> List[Dict[str, Any]]:
     """Default simple formatter
 
     runs all key/values through _short_key, _short_value
@@ -431,6 +435,9 @@ def simple_kv_formatter(data: List) -> List:
     if not isinstance(data, list):
         log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
         return data
+
+    if key_order:
+        data = [{k: inner_dict.get(k, "err") for k in key_order} for inner_dict in data]
 
     data = [
         dict(
@@ -1926,7 +1933,17 @@ def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = 
 
     return simple_kv_formatter(data)
 
+
 def get_gw_tunnels(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Also used for get_gw_uplinks_details
     _short_value["throughput"] = lambda x: utils.convert_bytes_to_human(x, throughput=True)
     return simple_kv_formatter(data)
+
+
+def get_gw_uplinks_bandwidth(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "timestamp",
+        "tx_data_bytes",
+        "rx_data_bytes",
+    ]
+    return simple_kv_formatter(data, key_order=key_order)
