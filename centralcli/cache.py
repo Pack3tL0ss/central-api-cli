@@ -95,6 +95,7 @@ class CentralObject:
             self.status = self.data["status"] = self.data.get("status")
             self.ip = self.data["ip"] = self.data.get("ip")
             self.site = self.data["site"] = self.data.get("site")
+            self.group = self.data["group"] = self.data.get("group")
             self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
             self.serial: str = self.data.get("serial")
 
