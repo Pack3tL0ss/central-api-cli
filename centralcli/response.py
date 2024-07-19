@@ -115,6 +115,21 @@ class RateLimit():
         full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
         return full_text if self.call_performed else str(self)
 
+    def __lt__(self, other) -> bool:
+        return True if self.remain_day is None else bool(self.remain_day < other)
+
+    def __le__(self, other) -> bool:
+        return False if self.remain_day is None else bool(self.remain_day <= other)
+
+    def __eq__(self, other) -> bool:
+        return False if self.remain_day is None else bool(self.remain_day == other)
+
+    def __gt__(self, other) -> bool:
+        return False if self.remain_day is None else bool(self.remain_day > other)
+
+    def __ge__(self, other) -> bool:
+        return False if self.remain_day is None else bool(self.remain_day >= other)
+
 
 class Response:
     '''wrapper ClientResponse object
