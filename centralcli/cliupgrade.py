@@ -111,9 +111,10 @@ def group(
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
-    model: str = typer.Option(None, help="[applies to switches only] Upgrade a specific switch model", show_default=False,),
+    model: str = typer.Option(None, help="Upgrade a specific switch model [grey42]\[applies to AOS-SW switches only]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    update_cache: bool = typer.Option(False, "-U", hidden=True,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
     account: str = typer.Option("central_info",
@@ -123,7 +124,7 @@ def group(
 ) -> None:
     """Update devices by group.
 
-    Device type must be provided.  For switches you can/should filter to a specific switch model via the --model flag.
+    Device type must be provided.  For AOS-SW switches you can filter to a specific model via the --model flag.
     """
     group = cli.cache.get_group_identifier(group)
     at = None if not at else int(round(at.timestamp()))
@@ -136,6 +137,10 @@ def group(
         dev_type = lib_to_api("firmware", dev_type)
 
     if model:
+        if "sw" not in group.AllowedDevTypes:
+            cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] AOS-SW is not configured as an allowed device type for this group.")
+        elif "sw" not in [d["type"] for d in cli.cache.devices if d["group"] == group.name]:
+            cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\nIf local cache is stale, run command again with hidden [cyan]-U[/] option to update the cache.")
         ver_msg += [f"model {typer.style(f'{model}', fg='bright_green')}"]
 
     ver_msg += [f"in group {typer.style(f'{group.name}', fg='bright_green')}"]
