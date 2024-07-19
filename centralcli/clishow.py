@@ -1159,11 +1159,11 @@ def dhcp(
         )
 
 
-@app.command(short_help="Show firmware upgrade status")
+@app.command()
 def upgrade(
-    device: List[str] = typer.Argument(
+    devices: List[str] = typer.Argument(
         ...,
-        metavar=iden_meta.dev,
+        metavar=iden_meta.dev_many,
         hidden=False,
         autocompletion=cli.cache.dev_completion,
         show_default=False,
@@ -1184,30 +1184,42 @@ def upgrade(
         autocompletion=cli.cache.account_completion,
     ),
 ):
+    """Show firmware upgrade status (device upgrades)
+
+    :warning:  Status for upgrade by group is not supported by the API
+    """
     central = cli.central
     # Allow unnecessary keyword status `cencli show upgrade status <dev>`
-    device = [d for d in device if d != "status"]
+    ignored_subcommands = ["status", "device", "group"]
+    devices = [d for d in devices if d not in ignored_subcommands]
 
-    if not device:
+    if not devices:
         cli.exit("Missing required parameter [cyan]<device>[/]")
-    elif len(device) > 1:
-        cli.exit("Specify only one device.")
 
-    params, dev = {}, None
-    dev: CentralObject = cli.cache.get_dev_identifier(device[-1], conductor_only=True)
-    if dev.type == "ap":
-        params["swarm_id"] = dev.swack_id
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
+    batch_reqs: List[BatchRequest] = [BatchRequest(central.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp: List[Response] = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    failed = [r for r in batch_resp if not r.ok]
+    passed = [r for r in batch_resp if r.ok]
+
+    if passed:
+        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, passed)]
+        rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
+        resp = passed[-1]
+        resp.rl = rl[0]
+        resp.output = combined_out
+        if failed:
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
     else:
-        params["serial"] = dev.serial
-
-    resp = central.request(central.get_upgrade_status, **params)
+        resp = batch_resp
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Upgrade Status" if not dev else f"{dev.name} Upgrade Status",
+        title="Upgrade Status",
         pager=pager,
         outfile=outfile
     )
