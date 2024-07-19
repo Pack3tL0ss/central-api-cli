@@ -24,7 +24,7 @@ clean_console = Console(emoji=False)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+    from centralcli import (Response, BatchRequest, cleaner, cli, cliadd, cliassign,
                             clibatch, clicaas, cliclone, clidel, clikick, cliset,
                             clirefresh, clirename, clishow, clitest, clitshoot,
                             cliunassign, cliupdate, cliupgrade, cliexport,
@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (Response, cleaner, cli, cliadd, cliassign,
+        from centralcli import (Response, BatchRequest, cleaner, cli, cliadd, cliassign,
                                 clibatch, clicaas, cliclone, clidel, clikick,
                                 cliset, clirefresh, clirename, clishow, clitest,
                                 clitshoot, cliunassign, cliupdate, cliupgrade,
@@ -376,7 +376,7 @@ def remove(
 
 @app.command()
 def reboot(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
     swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -386,35 +386,40 @@ def reboot(
                                 help="The Aruba Central Account to use (must be defined in the config)",
                                 autocompletion=cli.cache.account_completion),
 ) -> None:
-    """Reboot a device
+    """Reboot devices or swarms
 
     Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device, conductor_only=True)
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
 
-    conf_msg = dev.rich_help_text
-    func = cli.central.send_command_to_device
-    arg = dev.serial
+    batch_reqs, confirm_msgs = [], []
+    _confirm_pfx = "Reboot:" if not yes else "Rebooting:"
+    for idx, dev in enumerate(devs):
+        conf_msg = dev.rich_help_text
+        func = cli.central.send_command_to_device
+        arg = dev.serial
 
-    if swarm:
-        if dev.generic_type != "ap":
-            print(f":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
-        elif dev.version.startswith("10."):
-            print(":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
-        else:
-            func = cli.central.send_command_to_swarm
-            arg = dev.swack_id
-            conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
-            # TODO reboot swarm has not been tested
+        if swarm:  # TODO reboot swarm has not been tested
+            if dev.type != "ap":
+                print(f":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
+            elif dev.version.startswith("10."):
+                print(":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
+            else:
+                func = cli.central.send_command_to_swarm
+                arg = dev.swack_id
+                conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
-    console = Console(emoji=False)
-    _msg = "Reboot" if not yes else "Rebooting"
-    _msg = f"{_msg} {conf_msg}"
+        batch_reqs += [BatchRequest(func, (arg, 'reboot',))]
+        confirm_msgs += [conf_msg]
 
-    console.print(_msg)
-    if yes or typer.confirm("Proceed?", abort=True):
-        resp = cli.central.request(func, arg, 'reboot')
-        cli.display_results(resp, tablefmt="action")
+    confirm_msgs_str = "\n  ".join(confirm_msgs)
+    print(f':warning:  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')
+    if len(batch_reqs) > 1:
+        print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
+
+    if yes or typer.confirm("\nProceed?", abort=True):
+        batch_resp = cli.central.batch_request(batch_reqs)
+        cli.display_results(batch_resp, tablefmt="action")
 
 
 @app.command()
