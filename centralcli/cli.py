@@ -413,7 +413,7 @@ def reboot(
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
-    print(f':warning:  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')
+    clean_console.print(f':warning:  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')
     if len(batch_reqs) > 1:
         print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
