@@ -1194,7 +1194,7 @@ def upgrade(
     if not devices:
         cli.exit("Missing required parameter [cyan]<device>[/]")
 
-    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
     batch_reqs: List[BatchRequest] = [BatchRequest(central.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
     batch_resp: List[Response] = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
