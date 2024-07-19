@@ -37,27 +37,26 @@ def _duration_words(secs: int | str) -> str:
     return pendulum.duration(seconds=int(secs)).in_words()
 
 
-def _duration_words_short(secs: int | str) -> str:
-    """2w 1d 1h 21m 2s"""
-    words = pendulum.duration(seconds=int(secs)).in_words()
-    # a bit cheesy, but didn't want to mess with regex
-    replace_words = [
-        (" years", "y"),
-        (" year", "y"),
-        (" weeks", "w"),
-        (" week", "w"),
-        (" days", "d"),
-        (" day", "d"),
-        (" hours", "h"),
-        (" hour", "h"),
-        (" minutes", "m"),
-        (" minute", "m"),
-        (" seconds", "s"),
-        (" second", "s"),
-    ]
-    for orig, short in replace_words:
-        words = words.replace(orig, short)
-    return words
+def _duration_words_short(secs: int | str, round_to_minute: bool = False) -> str:
+    """2w 1d 1h 21m 2s (without seconds if round_to_minute = True)"""
+    if not secs:
+        return ""
+
+    _words = pendulum.duration(seconds=int(secs)).in_words()
+    value_pairs = [(int(_words.split()[idx]), _words.split()[idx + 1])  for idx in range(0, len(_words.split()), 2)]
+    words, minute = "", None
+    for value, word in value_pairs:
+        if round_to_minute:
+            if word.startswith("minute"):
+                minute = value
+            elif word.startswith("second"):
+                if minute:
+                    if minute > 30:
+                        words = words.replace(f"{minute}m", f"{minute + 1}m")
+                continue
+        words = f'{words} {value}{list(word)[0]}'
+
+    return words.strip()
 
 
 def _time_diff_words(epoch: float | None) -> str:
@@ -75,9 +74,9 @@ TIME_FUNCS = {
 }
 
 class DateTime():
-    def __init__(self, epoch: int | float, format: TimeFormat = "day-datetime") -> None:
+    def __init__(self, epoch: int | float, format: TimeFormat = "day-datetime", *formatter_args, **formatter_kwargs) -> None:
         self.epoch = self.normalize_epoch(epoch)
-        self.pretty = TIME_FUNCS[format](self.epoch)
+        self.pretty = TIME_FUNCS[format](self.epoch, *formatter_args, **formatter_kwargs)
 
     def normalize_epoch(self, epoch: int | float) -> int | float:
         if str(epoch).isdigit() and len(str(int(epoch))) > 10:
