@@ -8,7 +8,7 @@ def vscode_arg_handler():
     try:
         if len(sys.argv) > 1:
             if " " in sys.argv[1] or not sys.argv[1]:
-                vsc_args = sys.argv.pop(1)
+                vsc_args = sys.argv.pop(1).strip()
                 if vsc_args:
                     # strip 'cli ' and 'cencli ' from 'cli command options' ocasionally paste in command from
                     # external terminal where we use an alias cli to run cli.py with venv for dev.
