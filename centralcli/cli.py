@@ -974,6 +974,12 @@ def callback(
     Aruba Central API CLI.  A CLI for interacting with Aruba Central APIs.
 
     Use [cyan]--raw[/] which is supported globally, to see the raw unformatted response from Aruba Central.
+    Append [cyan]--again[/] to any command to re-display the output of the [bright_green]last[/] command from local cache.
+       - This is intended for use with up arrow. It's the equivalent of [cyan]cencli show last[/].
+       - Ignores the command on the command line and converts it to [cyan]cencli show last[/]
+       - Only retains options valid for [cyan]cencli show last[/] i.e. --json -r ...
+       - Useful if you want to see the same output in a different format or you want to output to file (--out <FILE>)
+       - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
     pass
 
