@@ -162,7 +162,10 @@ if "--debugv" in sys.argv:
     # config var updated above, just stripping flag here.
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
-
+if "--again" in sys.argv:
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "--out", "-d", "--debug", "--account"]
+    args = [arg for arg in sys.argv if arg in valid_options]
+    sys.argv = [sys.argv[0], "show", "last", *args]
 
 central = CentralApi(config.account)
 cache = Cache(central)
