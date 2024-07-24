@@ -75,10 +75,18 @@ class LLDPCapabilityTypes(Enum):
 # Not used currently # TODO reference in cleaner
 class SwitchRoles(Enum):
     ERR = 0
-    StandAlone = 1
-    StackConductor = 2
-    StackSecondary = 3
-    StackMember = 4
+    stand_alone = 1
+    stack_conductor = 2
+    stack_standby = 3
+    stack_member = 4
+
+
+class SwitchRolesShort(Enum):
+    ERR = 0
+    stand_alone = 1
+    conductor = 2
+    stby = 3
+    mbr = 4
 
 
 class ShowInventoryArgs(str, Enum):
@@ -189,6 +197,7 @@ STRIP_KEYS = [
     "commands",
     "stacks",
     "routes",
+    "samples",
 ]
 
 
@@ -206,6 +215,19 @@ class BandwidthInterval(str, Enum):  # 5m, 1h, 1d, 1w
     _1d = "1d"
     _1w = "1w"
 
+
+class BandwidthRadioOptions(str, Enum):  # 5m, 1h, 1d, 1w
+    _24 = "2.4"
+    _5 = "5"
+    _6 = "6"
+
+
+class UplinkNames(str, Enum):
+    uplink101 = "uplink101"
+    uplink102 = "uplink102"
+    uplink103 = "uplink103"
+    uplink104 = "uplink104"
+    uplink105 = "uplink105"
 
 class ShowArgs(str, Enum):
     all = "all"
@@ -240,6 +262,14 @@ class RefreshWhat(str, Enum):
     cache = "cache"
     token = "token"
     tokens = "tokens"
+
+
+class FirmwareDeviceType(str, Enum):
+    cx = "cx"
+    sw = "sw"
+    switch = "switch"
+    gw = "gw"
+    mas = "mas"
 
 
 class BlinkArgs(str, Enum):
@@ -417,6 +447,7 @@ class ArgToWhat:
         self.token = self.tokens = "token"
         self.subscription = self.subscriptions = "subscription"
         self.portal = self.portals = "portals"
+        self.certs = self.certificates = "certs"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -555,7 +586,8 @@ class LibToAPI:
             "ap": "IAP",
             "switch": "HP",
             "cx": "CX",
-            "sw": "HP"
+            "sw": "HP",
+            "mas": "MAS"
         }
         self.event_to_api = {
             "gw": "GATEWAY",
@@ -959,6 +991,7 @@ class IdenMetaVars:
         self.group = "[GROUP NAME]"
         self.group_many = "[GROUP NAME] ... (multiple allowed)"
         self.site = "[name|site id|address|city|state|zip]"
+        self.label = "[LABEL]"
         self.client = "[username|ip|mac]"
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
         self.generic_dev_types = "[ap|gw|switch]"
