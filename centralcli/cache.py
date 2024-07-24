@@ -135,6 +135,13 @@ class CentralObject:
         if "type" in self.data:
             return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
 
+    @property
+    def is_aos10(self) -> bool:
+        if self.data.get("type", "") == "ap" and self.data.get("version", "").startswith("10"):
+            return True
+        else:
+            return False
+
     def _get_help_text_parts(self):
         parts = []
         if self.cache == "site":
@@ -234,9 +241,12 @@ class CacheResponses:
         self._mpsk = mpsk
         self._portal = portal
 
-    def update_rl(self, resp: Response) -> Response:
+    def update_rl(self, resp: Response | None) -> Response | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
         """
+        if resp is None:
+            return
+
         _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal] if r is not None], key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
@@ -484,21 +494,26 @@ class Cache:
             res = [self.responses.dev or Response()]
 
         _inv_by_ser = self.inventory_by_serial
-        # Need to use the resp value not what was just stored in cache as we don't store all fields
-        dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
-        if dev_res:
-            _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        # Need to use the resp value not what was just stored in cache (self.devices_by_serial) as we don't store all fields
+        # dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
+        # if dev_res:
+        #     _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        if self.responses.dev:
+            _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}
         else:
             _dev_by_ser = self.devices_by_serial
 
         _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
-            {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
+            {**{k: v for k, v in _inv_by_ser.get(serial, {}).items() if k != "mac"}, **_dev_by_ser.get(serial, {})}
             for serial in _all_serials
 
         ]
-        res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
-        return res[-1]
+        # res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
+        resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
+        resp.output = combined
+        resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+        return resp
 
     # using shell_complete to see if it improves click 8 compat... it does not still have ^M with click 8
     @staticmethod
@@ -1509,6 +1524,37 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_gw_switch_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        # typer stopped providing args pulling from ctx.params
+        if not args:
+            args = [arg for p in ctx.params.values() for arg in utils.listify(p)]
+
+        match = self.get_dev_identifier(
+            incomplete,
+            dev_type=["gw", "switch"],
+            completion=True,
+        )
+        match = match or []
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if all([attr not in args for attr in [m.name, m.serial, m.mac, m.ip]]):  # TODO many completions won't filter items on command line already as it's eval is m not in args but m is a CentralObject
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
     def dev_gw_switch_site_completion(
         self,
         incomplete: str,
@@ -1532,7 +1578,7 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                if m not in args:
+                if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
 
         for m in out:
