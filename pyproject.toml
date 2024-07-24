@@ -52,7 +52,7 @@ ipaddress = "*"
 fuzzywuzzy = "*"
 levenshtein = "*"
 click = "<=7.1.2"
-plotext = ">=5"
+uniplot = ">=0.13.0"
 
 
 # Optional dependencies see tool.poetry.extras

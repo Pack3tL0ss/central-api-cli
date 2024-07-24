@@ -21,20 +21,23 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from rich import print
+from datetime import datetime
+from uniplot import plot
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils
+    from centralcli import utils, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils
+        from centralcli import utils, log
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli import constants
+from centralcli import constants, Response
 from centralcli.config import Config
 from centralcli.objects import Encoder
 
@@ -453,3 +456,21 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     console.print(text)
     out = console.end_capture()
     return out if len(out.splitlines()) > 1 else out.rstrip("\n")
+
+
+def bandwidth_graph(resp: Response, title: str = "Bandwidth Usage") -> None:
+    tx_data = [x["tx_data_bytes"] for x in resp.output]
+    rx_data = [x["rx_data_bytes"] for x in resp.output]
+
+    lowest = utils.convert_bytes_to_human(min([min(tx_data), min(rx_data)]), speed=True)
+    return_size = "B" if lowest.split()[-1] == "bps" else "".join(list(lowest.split()[-1])[0:2]).upper()
+
+    tx_data = [float(utils.convert_bytes_to_human(x, speed=True, return_size=return_size).split()[0]) for x in tx_data]
+    rx_data = [float(utils.convert_bytes_to_human(x, speed=True, return_size=return_size).split()[0]) for x in rx_data]
+
+    title = rich_capture(title)
+    dates = [datetime.fromtimestamp(bw_data["timestamp"]) for bw_data in resp.output]
+    plot(xs=[dates, dates], ys=[tx_data, rx_data], lines=True, title=title, y_unit=f" {return_size}", legend_labels=["TX", "RX"], color=True, height=tty.rows - 10, width=tty.cols - 15)
+
+    if log.caption:
+        print(log.caption)

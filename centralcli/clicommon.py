@@ -546,6 +546,9 @@ class CLICommon:
                 if not r.output:
                     print(f"  Status Code: [{fg}]{r.status}[/]")
                     print("  :warning: Empty Response.  This may be normal.")
+
+                    if log.caption:
+                        print(log.caption)
                 elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 

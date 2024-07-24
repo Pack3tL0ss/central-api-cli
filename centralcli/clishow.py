@@ -24,12 +24,18 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowuplink, BatchRequest, caas, render, cli, utils, config, log
+    from centralcli import (
+        Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+        BatchRequest, caas, render, cli, utils, config, log
+    )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowuplink, BatchRequest, caas, render, cli, utils, config, log
+        from centralcli import (
+            Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+            BatchRequest, caas, render, cli, utils, config, log
+        )
     else:
         print(pkg_dir.parts)
         raise e
@@ -51,7 +57,7 @@ app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
 app.add_typer(clishowmpsk.app, name="mpsk")
-app.add_typer(clishowuplink.app, name="uplink")
+app.add_typer(clishowbandwidth.app, name="bandwidth")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -144,6 +150,7 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         caption = f"{caption}\n  [italic green3]Devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
+# TODO break this into multiple functions
 def show_devices(
     devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
     update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
@@ -546,8 +553,8 @@ def gateways_(
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
-    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
-    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
     verbose: int = typer.Option(
@@ -557,6 +564,7 @@ def gateways_(
         help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
+    # with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # Not functional yet
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -2390,7 +2398,7 @@ def tunnels(
     cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
-@app.command()
+@app.command(hidden=config.is_cop)
 def uplinks(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
     time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
