@@ -118,7 +118,9 @@ def _short_connection(value: str) -> str:
     return "" if value is None else value.replace("802.11", "")
 
 
-def _serial_to_name(sernum: str) -> str:
+def _serial_to_name(sernum: str | None) -> str | None:
+    if sernum is None:  #  show audit logs ... have seen "target" of None
+        return sernum
     # TODO circular import if placed at top review import logic
     from centralcli import cache
     if not (
@@ -230,6 +232,7 @@ _short_value = {
     "mem_total": _format_memory,
     "mem_free": _format_memory,
     "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
+    "recommended": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "learn_time": _log_timestamp,
     "last_state_change": _log_timestamp,
     "graceful_restart_timer": _duration_words,
@@ -259,7 +262,9 @@ _short_key = {
     "ip_address_v6": "ip (v6)",
     "ip_v6_address": "ip (v6)",
     "macaddr": "mac",
+    "mac_address": "mac",
     "switch_type": "type",
+    "stack_member_id": "stck mbr #",
     "uplink_ports": "uplk ports",
     "total_clients": "clients",
     "updated_at": "updated",
@@ -416,7 +421,7 @@ def short_value(key: str, value: Any):
             value = _extract_names_from_id_name_dict(value)
         elif key in ["events_details"]:
             value = _extract_event_details(value)
-    elif key in _short_value:
+    elif key in _short_value and value is not None:
         value = _short_value[key](value)
 
     return short_key(key), _unlist(value)
@@ -437,7 +442,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None)
         return data
 
     if key_order:
-        data = [{k: inner_dict.get(k, "err") for k in key_order} for inner_dict in data]
+        data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data]
 
     data = [
         dict(
@@ -824,6 +829,14 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
                 mem_pct = 0
             inner["mem_pct"] = f'{mem_pct}%'
 
+    # concat stack_member_id and switch_role
+    stack_fields = ["stack_member_id", "switch_role"]
+    stack_remove_fields = ["stack_member_id"]
+    if all([key in all_keys for key in stack_fields]):
+        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] < 3 else f"{v} ({inner.get('stack_member_id')}:{constants.SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
+    elif "switch_role" in all_keys:
+        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] or 0 < 3 else f"{v} ({inner.get('stack_member_id')}:{constants.SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
+
     if order:
         to_front = order
     else:
@@ -832,6 +845,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             "name",
             "status",
             "type",
+            "stack_member_id",
             "client_count",
             "model",
             'mode',
@@ -891,6 +905,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
         Union[List[dict], dict]: The cleaned data with consistent field heading, and human readable values.
     """
     data = utils.listify(data)
+    all_keys = set([k for inner in data for k in inner.keys()])
 
     # Both lists below are pre cleaned key values
     verbosity_keys = {
@@ -898,6 +913,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "name",
                 "status",
                 "type",
+                "stack_member_id",
                 "client_count",
                 "model",
                 "ip_address",
@@ -911,8 +927,12 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "mem_total",
                 "mem_free",
                 "firmware_version",
+                "services",
         ]
     }
+    # show all does not include the stack_member_id
+    if "stack_member_id" in all_keys:
+        verbosity_keys[0].insert(4, "switch_role")
     # we don't actually use model for anything yet
     cache_keys = [
         "name",
@@ -926,7 +946,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
         "site",
         "firmware_version",
         "swack_id",
-        "switch_role"
+        "switch_role",
     ]
     if cache:
         # We want these 2 keys to retain the underscore. if it's a cahce update.
@@ -938,6 +958,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
 
     # gather all keys from all dicts in list each dict could potentially be a diff size
     # Also concats ip/mask if provided in sep fields
+    # and concats stack_role and stack member number
     data = sort_result_keys(data)
 
     # strip any cols that have no value across all rows
@@ -949,7 +970,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
             dict(
                 short_value(k, _check_inner_dict(v))
                 for k, v in pre_clean(inner).items()
-                if k == "swack_id" or ("id" not in k[-3:] and k != "mac_range")
+                if k in ["swack_id", "stack_member_id"] or ("id" not in k[-3:] and k != "mac_range")
             )
             for inner in data
         ]
@@ -1946,4 +1967,90 @@ def get_gw_uplinks_bandwidth(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         "tx_data_bytes",
         "rx_data_bytes",
     ]
+    return simple_kv_formatter(data, key_order=key_order)
+
+
+def get_device_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "hostname",
+        "device_status",
+        "model",
+        "mac_address",
+        "serial",
+        "is_stack",
+        "recommended",
+        "firmware_version",
+    ]
+    if data:
+        key_order = [*key_order, *[k for k in data[0].keys() if k not in key_order]]
+    def collapse_status(key: str, value: Any) -> Any:
+        if key != "status" or not isinstance(value, dict):
+            return value
+        else:
+            return value.get("reason", value.get("state"))
+
+    # We use firmware/swarms/swarm_id for APs as firmware/device/serial doesn't respond to APs so need to make it consistent with device endpoint
+    def swarm_to_device(data: dict) -> dict:
+        if "aps" not in data:
+            return data
+
+        out = {**data, **{k if k != "name" else "hostname": v for k, v in data["aps"][0].items()}}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
+        del out["aps"]
+        del out["aps_count"]
+        return out
+
+
+    data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
+    global _short_key
+    _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
+    _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
+
+    return simple_kv_formatter(data, key_order=key_order)
+
+
+def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "name",
+        "device_status",
+        "model",
+        "mac_address",
+        "serial",
+        "recommended",
+        "firmware_version",
+    ]
+    # keys are not stripped until return.  aps is available and is used to flatten the dict
+    strip_keys = [
+        "aps",
+        "aps_count",
+    ]
+    if data:
+        key_order = [*key_order, *[k for k in data[0].keys() if k not in [*key_order, *strip_keys]]]
+    def collapse_status(key: str, value: Any) -> Any:
+        if key != "status" or not isinstance(value, dict):
+            return value
+        else:
+            return value.get("reason", value.get("state"))
+
+    # We use firmware/swarms/swarm_id for APs as firmware/device/serial doesn't respond to APs so need to make it consistent with device endpoint
+    def swarm_to_device(data: dict) -> dict:
+        if "aps" not in data:
+            return data
+
+        out = {**data, **data["aps"][0]}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
+        del out["aps"]
+        del out["aps_count"]
+        return out
+
+    data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
+
+    # if ap name == swarm_name no need to include swarm_name
+    if all([inner.get("name", "name") == inner.get("swarm_name", "swarm_name") for inner in data]):
+        data = [{k: v for k, v in inner.items() if k != "swarm_name"} for inner in data]
+        if "swarm_name" in key_order:
+            _ = key_order.pop(key_order.index("swarm_name"))
+
+    global _short_key
+    _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
+    _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
+
     return simple_kv_formatter(data, key_order=key_order)
