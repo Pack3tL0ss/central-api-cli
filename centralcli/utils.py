@@ -24,6 +24,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.pretty import pprint
 from jinja2 import FileSystemLoader, Environment
+from datetime import datetime
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -831,3 +832,30 @@ class Utils:
             return {k: _number_to_human(v) for k, v in size.items()}
         else:
             return size
+
+    @staticmethod
+    def parse_time_options(
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Tuple[int | None, int | None]:
+        """parse time options (from_time, to_time) from user if any provided and return int timestamp for each.
+
+        Args:
+            from_time (int | float | datetime, optional): from time. Defaults to None.
+            to_time (int | float | datetime, optional): to time. Defaults to None.
+
+        Returns:
+            Tuple(int | None, int | None): returns Tuple with int timestamps for from_time
+            and to_time or None (user didn't use the option).
+        """
+        if isinstance(from_time, datetime):
+            from_time = round(from_time.timestamp())
+        elif isinstance(from_time, float):
+            from_time = round(from_time)
+
+        if isinstance(to_time, datetime):
+            to_time = round(to_time.timestamp())
+        elif isinstance(to_time, float):
+            to_time = round(to_time)
+
+        return from_time, to_time
