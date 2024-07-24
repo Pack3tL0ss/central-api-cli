@@ -5,6 +5,7 @@ from typing import List, Optional, Union, Dict, Any
 
 import pendulum
 from pydantic import BaseModel, Field, validator, IPvAnyAddress
+from centralcli import utils, constants
 
 
 
@@ -39,15 +40,17 @@ class Inventory(BaseModel):
 class Device(BaseModel):
     name: str
     status: DeviceStatus
-    type: DevType
+    type: DevType = Field(alias="switch_type")
     model: str
-    ip: IPvAnyAddress
-    mac: str
+    ip: IPvAnyAddress = Field(alias="ip_address")
+    mac: str = Field(alias="macaddr")
     serial: str
-    group: str
+    group: str = Field(alias="group_name")
     site: str
-    version: str
-    swack_id: Optional[str] = None  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
+    version: str = Field(alias="firmware_version")
+    swack_id: Optional[str] = Field(None, alias="stack_id")  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
+    swack_id: Optional[str] = Field(None, alias="starm_id")  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
+    switch_role: constants.SwitchRoles = Field(None)
 
 class Site(BaseModel):
     name: str
@@ -97,6 +100,16 @@ class Client(BaseModel):
     site: str = Field(default_factory=str)
     group: str = Field(default_factory=str)
     last_connected: datetime = Field(default=None)
+
+    @property
+    def summary_text(self):
+        parts = [self.name, self.mac, self.ip, self.connected_name]
+        parts = utils.unique([p for p in parts if p is not None])
+        return "[reset]" + "|".join(
+            [
+                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
+            ]
+        )
 
 
 
