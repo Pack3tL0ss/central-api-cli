@@ -120,6 +120,33 @@ Where '[cyan]group[/]' Move device to specified group
 {common_add_delete_end}
 """
 
+data="""
+serial,hostname
+CN12345678,barn.615.ab12
+CN12345679,snantx.655.afb1
+CN12345680,ind.755.af9b
+"""
+
+clibatch_rename_aps = f"""
+[italic cyan]cencli batch rename aps IMPORT_FILE[/]:
+Requires the following keys (include as header row for csv import):
+    [cyan]serial[/],[cyan]hostname[/]
+
+    [italic grey42]If importing yaml or json the APs can be located under a parent [cyan]devices[/] key[/italic grey42]
+    [italic grey42]APs can also optionally be keyed by serial for json/yaml[/italic grey42]
+
+Where '[cyan]serial[/]' The serial of the AP to be renamedd
+      '[cyan]hostname[/]' The desired name to be applied to the AP
+
+{Example(data)}
+
+[italic]MAC Address can be nearly any format imaginable.[/]
+
+[italic]Note: Most imports use a common format, so the same import file can be leveraged for multiple batch operations.
+      i.e. The same file can be used to batch add the APs, then to batch rename the APs (once they've checked in).
+      Fields not required for a specific batch operation are ignored.[/]
+"""
+
 clibatch_delete_devices = f"""
 [italic cyan]cencli batch delete devices IMPORT_FILE[/]:
 Accepts the following keys (include as header row for csv import):
@@ -379,6 +406,7 @@ class ImportExamples:
         self.archive = clibatch_unsubscribe.replace("unsubscribe", "archive")
         self.unarchive = clibatch_unsubscribe.replace("unsubscribe", "unarchive")
         self.move_devices = clibatch_move_devices
+        self.rename_aps = clibatch_rename_aps
 
     def __getattr__(self, key: str):
         if key not in self.__dict__.keys():
