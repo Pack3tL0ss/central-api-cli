@@ -22,7 +22,7 @@ from pycentral.base_utils import tokenLocalStoreUtil
 from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
                models, utils)
 from .utils import Mac
-from .response import Response, Session
+from .response import Response, Session, CombinedResponse
 from .exceptions import CentralCliException
 # buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
 
@@ -1112,7 +1112,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = False, **kwargs) -> Response:
+    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1122,72 +1122,25 @@ class CentralApi(Session):
             includes only keys common across all device types in central.
         """
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
-        lib_dev_types = {
-            "aps": "ap",
-            "gateways": "gw",
-        }
-        _output = {}
 
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
-        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs) for dev_type in dev_types]
-        res = await self._batch_request(reqs)
-        _failure_idxs = [idx for idx, r in enumerate(res) if not r]
-        if _failure_idxs:
-            resp = res[_failure_idxs[-1]]
-            resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
-            if len(res) == len(_failure_idxs):  # all calls failed
-                return resp
-            else:
-                failed_calls = [r for r in res if not r.ok]
-                res = [r for r in res if r.ok]
-                for r in failed_calls:
-                    log.error(f'API call failed to [{r.method}]{r.url.path}: status code: {r.status}, Error: {r.error}', log=False, caption=True)
+        reqs = [
+            self.BatchRequest(
+                self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs
+            )
+            for dev_type in dev_types
+        ]
+        batch_resp = await self._batch_request(reqs)
+        combined = CombinedResponse(batch_resp)
 
+        if not combined.passed:
+            return batch_resp
+        elif combined.failed:
+            for r in combined.failed:
+                log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
-        resp = res[-1]
-        if calculate_client_count:
-            _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
-        else:
-            _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
-        resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
-
-        # TODO use below once everything that references it has been refactored so resp.raw["aps"][0]["aps"] becomes resp.raw["aps"]["aps"]
-        # resp.raw = {k: v for k, v in zip(dev_types, [r.raw for r in res]) if v}
-        def _get_swack_id(dev_type: str, dev_data: dict) -> str | None:
-            if dev_type == "gateways":
-                return None
-            elif dev_type == "switches":
-                return dev_data.get("stack_id")
-            elif dev_type == "aps":
-                return dev_data.get("swarm_id") if dev_data.get("firmware_version", "8").split(".")[0] == 8 else dev_data.get("serial")
-
-        if _output:
-            # Add type key to all dicts covert "switch-type" to cencli type (cx or sw)
-            # Add switch_role and swack_id (swarm/stack id) to all devices, both for the sake of cache
-            # TODO move to cleaner? set type to switch_type for switches let cleaner change value to lib vals
-            dicts = [
-                {
-                    **{
-                        "type": lib_dev_types.get(k, k) if k != "switches" else
-                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch")),
-                        "swack_id": _get_swack_id(k, inner_dict),
-                        "switch_role": inner_dict.get("switch_role")
-                    },
-                    **{
-                        kk: vv for kk, vv in inner_dict.items()
-                    }
-                } for k, v in _output.items() for inner_dict in v
-            ]
-            # TODO keep all fields in output dict, let cleaner define field for normal and verbose options
-            #      if user selects --json or --yaml keep all fields
-            # return just the keys common across all device types
-            common_keys = set.intersection(*map(set, dicts))
-            _output = [{k: d[k] for k in common_keys} for d in dicts]
-
-            resp.output = _output
-
-        return resp
+        return combined
 
     # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for an access port, include all VLANs on a trunk port, no indication of native)
     # API-FLAW aos-sw always shows mode as access, cx does as well, but has vlan_mode which is accurate
@@ -2359,7 +2312,7 @@ class CentralApi(Session):
 
     async def get_gw_tunnels(
         self, serial: str,
-        timerange: str = "1M",
+        timerange: constants.TimeRange = "1m",
         limit: int = 250,
         offset: int = 0
     ) -> Response:
@@ -2380,9 +2333,182 @@ class CentralApi(Session):
         url = f"/monitoring/v1/gateways/{serial}/tunnels"
 
         params = {
-            "timerange": timerange,
+            "timerange": timerange.upper(),
             "offset": offset,
             "limit": limit
+        }
+
+        return await self.get(url, params=params)
+
+
+    async def get_gw_uplinks_details(
+        self,
+        serial: str,
+        timerange: constants.TimeRange = "1m",
+    ) -> Response:
+        """Gateway Uplink Details.
+
+        Args:
+            serial (str): Serial number of gateway to be queried
+            timerange (str): Time range for Uplink stats information.
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.
+                Valid Values: 3H, 1D, 1W, 1M, 3M
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/uplinks"
+
+        params = {
+            'timerange': timerange.upper()
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_gw_uplinks_bandwidth_usage(
+        self,
+        serial: str,
+        uplink_id: str = None,
+        interval: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """Gateway Uplink Bandwidth Usage.
+
+        Args:
+            serial (str): Gateway serial
+            uplink_id (str, optional): Filter by uplink ID.
+            interval (str, optional): Filter by interval (5minutes or 1hour or 1day or 1week).
+            from (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/monitoring/v1/gateways/{serial}/uplinks/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+
+        params = {
+            'uplink_id': uplink_id,
+            'interval': interval,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
+        }
+
+        return await self.get(url, params=params)
+
+    #  TODO add monitoring_external_controller_get_ap_rf_summary_v3 similar to bandwidth calls, "samples" key has timestamp, noise_floor, and utilization.
+
+    async def get_aps_bandwidth_usage(
+        self,
+        serial: str = None,
+        group: str = None,
+        site: str = None,
+        label: str = None,
+        swarm_id: str = None,
+        cluster_id: str = None,
+        band: str = None,
+        radio_number: int = None,
+        network: str = None,
+        ethernet_interface_index: int = None,
+        interval: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """AP Bandwidth Usage.
+
+        Args:
+            serial (str, optional): Filter by AP serial
+            group (str, optional): Filter by group name
+            site (str, optional): Filter by Site name
+            label (str, optional): Filter by Label name
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            band (str, optional): Filter by band (2.4, 5 or 6). Valid only when serial parameter is
+                specified.
+            radio_number (int, optional): Filter by radio_number (0, 1 or 2). Valid only when serial
+                parameter is specified.
+            network (str, optional): Filter by network name. Valid only when serial parameter is
+                specified.
+            ethernet_interface_index (int, optional): Filter by ethernet interface index. Valid only
+                when serial parameter is specified. Valid range is 0-3.
+            interval (str, optional): Filter by interval (5minutes or 1hour or 1day or 1week).
+                API endpoint defaults to 5minutes when no value is provided.
+            from_time (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_time (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v3/aps/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'serial': serial,
+            'cluster_id': cluster_id,
+            'interval': interval,
+            'band': band,
+            'radio_number': radio_number,
+            'ethernet_interface_index': ethernet_interface_index,
+            'network': network,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_clients_bandwidth_usage(
+        self,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        cluster_id: str = None,
+        stack_id: str = None,
+        serial: str = None,
+        mac: str = None,
+        from_time: int = None,
+        to_time: int = None,
+    ) -> Response:
+        """Client Bandwidth Usage.
+
+        Args:
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
+            label (str, optional): Filter by Label name
+            cluster_id (str, optional): Filter by Mobility Controller serial number
+            stack_id (str, optional): Filter by Switch stack_id
+            serial (str, optional): Filter by switch serial
+            mac (str, optional): Filter by Client mac
+            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v1/clients/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'cluster_id': cluster_id,
+            'stack_id': stack_id,
+            'serial': serial,
+            'macaddr': mac,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
         }
 
         return await self.get(url, params=params)
@@ -3595,6 +3721,52 @@ class CentralApi(Session):
 
         return await self.put(url, json_data=json_data)
 
+    async def move_devices_to_group(
+        self,
+        group: str,
+        serial_nums: Union[str, List[str]],
+        *,
+        cx_retain_config: bool = True,  # TODO can we send this attribute even if it's not CX, will it ignore or error
+    ) -> Response:
+        """Move devices to a group.
+
+        Args:
+            group (str): Group Name to move device to.
+            serials (List[str]): Serial numbers of devices to be added to group.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        # API-FLAW report flawed API method
+        # Returns 500 status code when result is essentially success
+        # Please Confirm: move Aruba9004_81_E8_FA & PommoreGW1 to group WLNET? [y/N]: y
+        # ✖ Sending Data [configuration/v1/devices/move]
+        # status code: 500 <-- 500 on success.  At least for gw would need to double check others.
+        # description:
+        # Controller/Gateway group move has been initiated, please check audit trail for details
+        # error_code: 0001
+        # service_name: Configuration
+        url = "/configuration/v1/devices/move"
+        serial_nums = utils.listify(serial_nums)
+
+        json_data = {
+            'group': group,
+            'serials': serial_nums
+        }
+
+        if cx_retain_config:
+            json_data["preserve_config_overrides"] = ["AOS_CX"]
+
+        resp = await self.post(url, json_data=json_data)
+
+        # This method returns status 500 with msg that move is initiated on success.
+        if not resp and resp.status == 500:
+            match_str = "group move has been initiated, please check audit trail for details"
+            if match_str in resp.output.get("description", ""):
+                resp.ok = True
+
+        return resp
+
     # TODO changte to use consistent dev tpe ap gw cx sw
     # convert to the stuff apigw wants inside method
     # API-FLAW no API to upgrade cluster
@@ -3789,51 +3961,102 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def move_devices_to_group(
+    async def get_device_firmware_details(
         self,
-        group: str,
-        serial_nums: Union[str, List[str]],
-        *,
-        cx_retain_config: bool = True,  # TODO can we send this attribute even if it's not CX, will it ignore or error
+        serial: str,
     ) -> Response:
-        """Move devices to a group.
+        """Firmware Details of Device.
 
         Args:
-            group (str): Group Name to move device to.
-            serials (List[str]): Serial numbers of devices to be added to group.
+            serial (str): Serial of the device for which the firmware detail to be queried
 
         Returns:
             Response: CentralAPI Response object
         """
-        # API-FLAW report flawed API method
-        # Returns 500 status code when result is essentially success
-        # Please Confirm: move Aruba9004_81_E8_FA & PommoreGW1 to group WLNET? [y/N]: y
-        # ✖ Sending Data [configuration/v1/devices/move]
-        # status code: 500 <-- 500 on success.  At least for gw would need to double check others.
-        # description:
-        # Controller/Gateway group move has been initiated, please check audit trail for details
-        # error_code: 0001
-        # service_name: Configuration
-        url = "/configuration/v1/devices/move"
-        serial_nums = utils.listify(serial_nums)
+        url = f"/firmware/v1/devices/{serial}"
 
-        json_data = {
+        return await self.get(url)
+
+    async def get_device_firmware_details_by_type(
+        self,
+        device_type: Literal["mas", "cx", "sw", "gw"],
+        group: str = None,
+        offset: int = 0,
+        limit: int = 500,
+    ) -> Response:
+        """List Firmware Details by type for switches or gateways.
+
+        Args:
+            device_type (str): Specify one of "mas|sw|cx|gw"
+            group (str, optional): Group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. max 1000, Defaults to 500.
+
+        Returns:
+            Response: CentralAPI Response object
+
+        Raises:
+            ValueError: if device_type is not valid/supported by API endpoint.
+        """
+        url = "/firmware/v1/devices"
+        device_type = constants.lib_to_api("firmware", device_type)
+        if not device_type:
+            raise ValueError(
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
+            )
+
+        params = {
+            'device_type': device_type,
             'group': group,
-            'serials': serial_nums
+            'offset': offset,
+            'limit': limit
         }
 
-        if cx_retain_config:
-            json_data["preserve_config_overrides"] = ["AOS_CX"]
+        return await self.get(url, params=params)
 
-        resp = await self.post(url, json_data=json_data)
+    async def get_all_swarms_firmware_details(
+        self,
+        group: str = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> Response:
+        """List Firmware Details of all Swarms.
 
-        # This method returns status 500 with msg that move is initiated on success.
-        if not resp and resp.status == 500:
-            match_str = "group move has been initiated, please check audit trail for details"
-            if match_str in resp.output.get("description", ""):
-                resp.ok = True
+        Args:
+            group (str, optional): Group name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Default is 20 and max is 1000 Defaults to 100.
 
-        return resp
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/firmware/v1/swarms"
+
+        params = {
+            'group': group,
+            'offset': offset,
+            'limit': limit
+        }
+
+        return await self.get(url, params=params)
+
+
+    async def get_swarm_firmware_details(
+        self,
+        swarm_id: str,
+    ) -> Response:
+        """Firmware Details of Swarm or AOS10 AP.
+
+        Args:
+            swarm_id (str): Swarm ID for which the firmware detail to be queried
+                AOS10 APs provide serial as swarm_id
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/swarms/{swarm_id}"
+
+        return await self.get(url)
 
     async def get_default_group(self,) -> Response:
         """Get default group.
@@ -4891,7 +5114,7 @@ class CentralApi(Session):
                 resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
                 resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
                 resp.output = [*resp.output, *batch_res[idx].output]
-        # resp.output = [*resp.output, *batch_res[0].output, *batch_res[1].output, *batch_res[2].output]
+
         try:
             resp.output = [models.WIDS(**d).dict() for d in resp.output]
         except Exception as e:

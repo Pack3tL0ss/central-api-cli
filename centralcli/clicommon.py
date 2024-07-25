@@ -12,7 +12,7 @@ from rich import print
 import json
 import pkg_resources
 import os
-
+import pendulum
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -402,7 +402,7 @@ class CLICommon:
         **cleaner_kwargs,
     ):
         if not data:
-            log.warning(f"No data passed to _display_output {title} {caption}")
+            log.warning(f"No data passed to _display_output {typer.unstyle(render.rich_capture(title))} {typer.unstyle(render.rich_capture(caption))}")
             return
 
         data = utils.listify(data)
@@ -546,6 +546,9 @@ class CLICommon:
                 if not r.output:
                     print(f"  Status Code: [{fg}]{r.status}[/]")
                     print("  :warning: Empty Response.  This may be normal.")
+
+                    if log.caption:
+                        print(log.caption)
                 elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
@@ -630,6 +633,48 @@ class CLICommon:
                 cleaner=cleaner,
                 **cleaner_kwargs
             )
+
+    def past_to_start(self, past: str = None,) -> pendulum.DateTime | None:
+        """Common helper to parse --past option and return
+
+        Args:
+            past (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
+
+        Returns:
+            pendulum.DateTime | None: returns DateTime object in UTC or None if past argument was None.
+
+        Raises:
+            typer.Exit: If past str has value but is invalid.
+        """
+        if not past:
+            return
+
+        past = past.replace(" ", "")
+        now: pendulum.DateTime = pendulum.now(tz="UTC")
+        try:
+            if past.endswith("d"):
+                start = now.subtract(days=int(past.rstrip("d")))
+            elif past.endswith("h"):
+                start = now.subtract(hours=int(past.rstrip("h")))
+            elif past.endswith("m"):
+                start = now.subtract(minutes=int(past.rstrip("m")))
+            elif past.endswith("M"):
+                start = now.subtract(months=int(past.rstrip("M")))
+            elif past.endswith("w"):
+                start = now.subtract(weeks=int(past.rstrip("w")))
+            else:
+                self.exit(
+                    '\n'.join(
+                        [
+                            f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid. Specifically timeframe suffix [bright_red]{list(past)[-1]}[/] is not a recognized specifier.",
+                            "Valid suffixes: [cyan]M[/]=Months, [cyan]w[/]=weeks, [cyan]d[/]=days, [cyan]h[/]=hours, [cyan]m[/]=minutes"
+                        ]
+                    )
+                )
+        except ValueError:
+            self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
+
+        return start
 
 
 if __name__ == "__main__":

@@ -11,17 +11,17 @@ from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, cleaner
+    from centralcli import cli, utils, log, cleaner, BatchRequest
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner
+        from centralcli import cli, utils, log, cleaner, BatchRequest
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes  # noqa
+from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes, FirmwareDeviceType  # noqa
 from centralcli.cache import CentralObject
 
 app = typer.Typer()
@@ -34,6 +34,136 @@ iden_meta = IdenMetaVars()
 class ShowFirmwareKwags(str, Enum):
     group = "group"
     type = "type"
+
+
+@app.command()
+def device(
+    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
+    dev_type: FirmwareDeviceType = typer.Option(None, help="Show firmware by device type", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    """Show firmware details for device(s)
+
+    Either provide one or more devices as arguments or [cyan]--dev-type[/]
+
+    [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
+    API endpoint treats them all the same and returns all switches.
+
+    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
+    """
+    if device:
+        devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in device]
+        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, (dev.serial if dev.type != "ap" else dev.swack_id,)) for dev in devs]
+        if dev_type:
+            log.warning(
+                f'[cyan]--dev-type[/] [bright_green]{dev_type.value}[/] ignored as device{"s" if len(devs) > 1 else ""} [bright_green]{"[/], [bright_green]".join([dev.name for dev in devs])}[/] {"were" if len(devs) > 1 else "was"} specified.',
+                caption=True
+            )
+    elif dev_type:
+        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+    else:
+        cli.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
+
+    batch_resp = cli.central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+
+    resp = batch_resp
+    if len(batch_resp) > 1:
+        failed = [r for r in batch_resp if not r.ok]
+        passed = [r for r in batch_resp if r.ok]
+
+        if passed:  # combine outputs for multiple calls into a single table/resp
+            rl = min([r.rl for r in passed])
+            resp = passed[-1]
+            resp.rl = rl
+            resp.output = [r.output for r in passed]
+            if failed:
+                _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Firmware Details",
+        pager=pager,
+        outfile=outfile,
+        cleaner=cleaner.get_device_firmware_details
+    )
+
+
+@app.command()
+def swarms(
+    device: List[str] = typer.Argument(None, help="Show firmware for the swarm the provided device(s) belongs to", metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    group: str = typer.Option(None, "--group", help="Filter swarms by group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output",),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",),
+) -> None:
+    """Show firmware details for swarms
+
+    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
+    """
+    central = cli.central
+
+    if device:
+        devs = [cli.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
+        batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, (dev.swack_id,)) for dev in devs]
+    else:
+        if group:
+            group: CentralObject = cli.cache.get_group_identifier(group)
+            kwargs = {"group": group.name}
+        else:
+            kwargs = {}
+
+        batch_reqs = [BatchRequest(cli.central.get_all_swarms_firmware_details, **kwargs)]
+
+    batch_resp = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    failed = [r for r in batch_resp if not r.ok]
+    passed = [r for r in batch_resp if r.ok]
+
+    if passed:  # combine outputs for multiple calls into a single table/resp
+        if len(passed) > 1:
+            rl = min([r.rl for r in passed])
+            resp = passed[-1]
+            resp.rl = rl
+            resp.output = [r.output for r in passed]
+        else:
+            resp = passed[0]
+
+        if failed:
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
+    else:  # all failed
+        resp = batch_resp
+
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Firmware Details",
+        pager=pager,
+        outfile=outfile,
+        cleaner=cleaner.get_swarm_firmware_details
+    )
 
 
 @app.command(short_help="Show firmware compliance details")

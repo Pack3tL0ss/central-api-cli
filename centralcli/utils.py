@@ -10,7 +10,7 @@ import string
 import sys
 import urllib.parse
 # from pprint import pprint
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Literal
 import typer
 import logging
 
@@ -24,6 +24,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.pretty import pprint
 from jinja2 import FileSystemLoader, Environment
+from datetime import datetime
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -805,17 +806,19 @@ class Utils:
         return [iface for port in interfaces for p in port.split(",") for iface in expand_range(p)]
 
     @staticmethod
-    def convert_bytes_to_human(size: int | float | Dict[str, int | float] | None, precision: int = 2, throughput: bool = False, speed: bool = False,) -> str | None:
+    def convert_bytes_to_human(size: int | float | Dict[str, int | float] | None, precision: int = 2, throughput: bool = False, speed: bool = False, return_size: Literal['B','KB','MB','GB','TB', 'PB'] = None) -> str | None:
         if size is None:
             return size
 
-        def _number_to_human(_size: int | float, precision: int = precision, throughput: bool = throughput, speed: bool = speed) -> str:
+        def _number_to_human(_size: int | float, precision: int = precision, throughput: bool = throughput, speed: bool = speed, return_size: Literal['B','KB','MB','GB','TB', 'PB'] = return_size) -> str:
             factor = 1000 if throughput or speed else 1024
-            suffixes=['B','KB','MB','GB','TB', 'PB'] if not speed else ["Mbps", "Gbps", "Tbps", "Pbps", "err", "err"]
+            suffixes=['B','KB','MB','GB','TB', 'PB'] if not speed else ["bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps"]
             suffix_idx = 0
-            while _size > factor and suffix_idx < 4:
+            while _size > factor and suffix_idx < 5:
                 suffix_idx += 1  # increment the index of the suffix
                 _size = _size/float(factor)  # apply the division
+                if return_size and suffixes[suffix_idx].upper().startswith(return_size.upper()):
+                    break
 
             out = f"{round(_size, precision):.2f}"
             out = out if not int(out.split(".")[-1]) == 0 else out.split(".")[0]
@@ -829,3 +832,30 @@ class Utils:
             return {k: _number_to_human(v) for k, v in size.items()}
         else:
             return size
+
+    @staticmethod
+    def parse_time_options(
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Tuple[int | None, int | None]:
+        """parse time options (from_time, to_time) from user if any provided and return int timestamp for each.
+
+        Args:
+            from_time (int | float | datetime, optional): from time. Defaults to None.
+            to_time (int | float | datetime, optional): to time. Defaults to None.
+
+        Returns:
+            Tuple(int | None, int | None): returns Tuple with int timestamps for from_time
+            and to_time or None (user didn't use the option).
+        """
+        if isinstance(from_time, datetime):
+            from_time = round(from_time.timestamp())
+        elif isinstance(from_time, float):
+            from_time = round(from_time)
+
+        if isinstance(to_time, datetime):
+            to_time = round(to_time.timestamp())
+        elif isinstance(to_time, float):
+            to_time = round(to_time)
+
+        return from_time, to_time

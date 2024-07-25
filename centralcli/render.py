@@ -21,20 +21,23 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from rich import print
+from datetime import datetime
+from uniplot import plot
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils
+    from centralcli import utils, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils
+        from centralcli import utils, log
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli import constants
+from centralcli import constants, Response
 from centralcli.config import Config
 from centralcli.objects import Encoder
 
@@ -269,7 +272,7 @@ def rich_output(
 
         _min_max = {'min': 10, 'max': 30}
         if not set_width_cols:
-            set_width_cols = {'name': _min_max, 'model': _min_max}
+            set_width_cols = {'name': _min_max, 'services': {'min': 20, 'max': 30}}
         else:
             for col, value in set_width_cols.items():
                 if isinstance(value, int):  # allow simply specifying max width
@@ -278,18 +281,20 @@ def rich_output(
         full_cols = [*full_cols, *RICH_FULL_COLS]
 
         for k in outdata[0].keys():
-            if k in fold_cols:
+            if k == "model":
+                table.add_column(k, max_width=10, no_wrap=True)
+            elif k in fold_cols:
                 table.add_column(k, overflow='fold', max_width=115, justify='left')
             elif k in set_width_cols:
                 table.add_column(
                     k, min_width=set_width_cols[k].get('min', 0),
                     max_width=set_width_cols[k]['max'],
-                    justify='left'
+                    justify='left',
                 )
             elif k in full_cols:
                 table.add_column(k, no_wrap=True, justify='left')
             else:
-                table.add_column(k, justify='left')
+                table.add_column(k, justify='left', overflow='ellipses')
 
         formatted = _do_subtables(outdata)
         [table.add_row(*list(in_dict.values())) for in_dict in formatted]
@@ -453,3 +458,21 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     console.print(text)
     out = console.end_capture()
     return out if len(out.splitlines()) > 1 else out.rstrip("\n")
+
+
+def bandwidth_graph(resp: Response, title: str = "Bandwidth Usage") -> None:
+    tx_data = [x["tx_data_bytes"] for x in resp.output]
+    rx_data = [x["rx_data_bytes"] for x in resp.output]
+
+    lowest = utils.convert_bytes_to_human(min([min(tx_data), min(rx_data)]), speed=True)
+    return_size = "B" if lowest.split()[-1] == "bps" else "".join(list(lowest.split()[-1])[0:2]).upper()
+
+    tx_data = [float(utils.convert_bytes_to_human(x, speed=True, return_size=return_size).split()[0]) for x in tx_data]
+    rx_data = [float(utils.convert_bytes_to_human(x, speed=True, return_size=return_size).split()[0]) for x in rx_data]
+
+    title = rich_capture(title)
+    dates = [datetime.fromtimestamp(bw_data["timestamp"]) for bw_data in resp.output]
+    plot(xs=[dates, dates], ys=[tx_data, rx_data], lines=True, title=title, y_unit=f" {return_size}", legend_labels=["TX", "RX"], color=True, height=tty.rows - 10, width=tty.cols - 15)
+
+    if log.caption:
+        print(log.caption)

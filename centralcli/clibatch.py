@@ -6,7 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Literal
 
 import typer
 from pydantic import BaseModel, Extra, Field, ValidationError, validator
@@ -388,6 +388,23 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
+def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels"] = None) -> List[Dict] | Dict:
+    data = None
+    if import_file is not None:
+        data = config.get_file_data(import_file)
+
+    if not data:
+        cli.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
+
+    if import_type and import_type in data:
+        data = data[import_type]
+
+    # accept yaml/json keyed by serial #
+    if data and isinstance(data, dict):
+        if utils.isserial(list(data.keys())[0]):
+            data = [{"serial": k, **v} for k, v in data.items()]
+
+    return data
 
 def _convert_site_key(_data: dict) -> dict:
     _site_aliases = {
@@ -405,6 +422,7 @@ def _convert_site_key(_data: dict) -> dict:
         **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
     }
     _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
+
     return _data
 
 def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
@@ -1678,7 +1696,7 @@ def unsubscribe(
 @app.command()
 def rename(
     what: BatchRenameArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),  # TODO completion
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", exists=True, show_default=False,),  # TODO completion
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
@@ -1687,7 +1705,7 @@ def rename(
     site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     debug: bool = typer.Option(
         False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
@@ -1700,49 +1718,45 @@ def rename(
     ),
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
+    if show_example:
+        print(getattr(examples, f"rename_{what}"))
+        return
 
     if str(import_file).lower() == "lldp":
         lldp = True
         import_file = None
 
     if not import_file and not lldp:
-        print(":warning:  [bright_red]ERROR[/]: Missing required parameter [IMPORT_FILE|'lldp']")
-        raise typer.Exit(1)
+        cli.exit("Missing required parameter [IMPORT_FILE|'lldp']")
 
-    central = cli.central
     if import_file:
-        data = config.get_file_data(import_file)
-
-        if not data:
-            print(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
-            raise typer.Exit(1)
+        data = _get_import_file(import_file)
 
         resp = None
         if what == "aps":
             # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
-            if import_file.suffix in [".csv", ".tsv", ".dbf"]:
-                if data and len(data.headers) < 3:
-                    if "name" in data.headers:
-                        data = [{k if k != "name" else "hostname": d[k] for k in d} for d in data.dict]
-                        data.headers["hostname"] = data.headers.pop(
-                            data.headers.index(data.headers["name"])
-                        )
-                    data = {
-                        i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
-                        {k: v for k, v in i.items() if not k.startswith("serial")} for i in data.dict
-                    }
+            data = {
+                i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
+                {
+                    k if k != "name" else "hostname": v for k, v in i.items() if k in ["name", "hostname"]
+                } for i in data
+            }
 
-            calls, conf_msg = [], [typer.style("\nNames gathered from import:", fg="bright_green")]
+            calls, conf_msg = [], ["\n[bright_green]Names gathered from import[/]:"]
             for ap in data:  # keyed by serial num
-                conf_msg += [f"  {ap}: {data[ap]['hostname']}"]
-                calls.append(central.BatchRequest(central.update_ap_settings, ap, **data[ap]))
+                conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
+                calls.append(cli.central.BatchRequest(cli.central.update_ap_settings, ap, **data[ap]))
 
             if len(conf_msg) > 6:
                 conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
-            typer.echo("\n".join(conf_msg))
+            print("\n".join(conf_msg))
+
+            # We only spot check the last serial.  If first call in a batch_request fails the process stops.
+            if ap not in cli.cache.devices_by_serial:
+                print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
 
             if yes or typer.confirm("\nProceed with AP rename?", abort=True):
-                resp = central.batch_request(calls)
+                resp = cli.central.batch_request(calls)
 
     elif lldp:
         kwargs = {}
@@ -1760,6 +1774,14 @@ def rename(
         resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, **kwargs)
 
     cli.display_results(resp, tablefmt="action")
+    # cache update
+    if import_file: # TODO have lldp return dict same as import file for reference during cache update
+        for r in resp:
+            if r.ok:
+                dev = cli.cache.get_dev_identifier(r.output)
+                dev.data["name"] = data[r.output]["hostname"]
+                cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
+
 
 
 def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):

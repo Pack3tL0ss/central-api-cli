@@ -24,12 +24,18 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
+    from centralcli import (
+        Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+        BatchRequest, caas, render, cli, utils, config, log
+    )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, BatchRequest, caas, render, cli, utils, config, log
+        from centralcli import (
+            Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+            BatchRequest, caas, render, cli, utils, config, log
+        )
     else:
         print(pkg_dir.parts)
         raise e
@@ -37,7 +43,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
-    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, TunnelTimeRange, GenericDevTypes, ClientTimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -51,6 +57,7 @@ app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
 app.add_typer(clishowmpsk.app, name="mpsk")
+app.add_typer(clishowbandwidth.app, name="bandwidth")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
@@ -92,7 +99,11 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
                 status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
         else:  # show all [--inv], or show ivnentory -v
-            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            def url_to_key(url) -> str:
+                return url.split("/")[-1]
+
+            counts_by_type = {**{url_to_key(k): {"total": resp.raw[k]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][url_to_key(k) if url_to_key(k) != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if not k.endswith("switches")}, **get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])}
+            # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         counts_by_type = get_switch_counts(resp.raw["switches"])
@@ -143,6 +154,7 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         caption = f"{caption}\n  [italic green3]Devices lacking name/ip are in the inventory, but have not connected to central.[/]"
     return caption
 
+# TODO break this into multiple functions
 def show_devices(
     devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
     update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
@@ -227,13 +239,13 @@ def show_devices(
             if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
-            resp = central.request(central.get_all_devicesv2, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
+            resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:
                 cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
                 _ = central.request(cli.cache.update_dev_db, cache_output)
             caption = None if not resp.ok else _build_caption(resp)
         else:  # No filtering params, get update from cache
-            if central.get_all_devicesv2 not in cli.cache.updated:
+            if central.get_all_devices not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db, **params)
                 caption = _build_caption(resp, status=status)
             else:
@@ -241,6 +253,7 @@ def show_devices(
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
+        # TODO cache update here.  Need to verify cache.format_raw_devices_for_cache to make sure it can handle single call
         caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
@@ -308,7 +321,7 @@ def all_(
         show_default=False,
     ),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
@@ -335,7 +348,7 @@ def all_(
         status = "Up"
     show_devices(
         dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=bool(verbose), do_clients=True, sort_by=sort_by, reverse=reverse,
+        state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -372,7 +385,7 @@ def devices(
         show_default=False,
     ),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
@@ -545,8 +558,8 @@ def gateways_(
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
-    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
-    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
     verbose: int = typer.Option(
@@ -556,6 +569,7 @@ def gateways_(
         help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
+    # with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # Not functional yet
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -1158,11 +1172,11 @@ def dhcp(
         )
 
 
-@app.command(short_help="Show firmware upgrade status")
+@app.command()
 def upgrade(
-    device: List[str] = typer.Argument(
+    devices: List[str] = typer.Argument(
         ...,
-        metavar=iden_meta.dev,
+        metavar=iden_meta.dev_many,
         hidden=False,
         autocompletion=cli.cache.dev_completion,
         show_default=False,
@@ -1183,30 +1197,40 @@ def upgrade(
         autocompletion=cli.cache.account_completion,
     ),
 ):
+    """Show firmware upgrade status (by device)
+    """
     central = cli.central
-    # Allow unnecessary keyword status `cencli show upgrade status <dev>`
-    device = [d for d in device if d != "status"]
+    # Allow unnecessary keyword status `cencli show upgrade status <dev>` or `cencli show upgrade device <dev>`
+    ignored_subcommands = ["status", "device"]
+    devices = [d for d in devices if d not in ignored_subcommands]
 
-    if not device:
+    if not devices:
         cli.exit("Missing required parameter [cyan]<device>[/]")
-    elif len(device) > 1:
-        cli.exit("Specify only one device.")
 
-    params, dev = {}, None
-    dev: CentralObject = cli.cache.get_dev_identifier(device[-1], conductor_only=True)
-    if dev.type == "ap":
-        params["swarm_id"] = dev.swack_id
+    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
+    kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
+    batch_reqs: List[BatchRequest] = [BatchRequest(central.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp: List[Response] = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    failed = [r for r in batch_resp if not r.ok]
+    passed = [r for r in batch_resp if r.ok]
+
+    if passed:
+        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, passed)]
+        rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
+        resp = passed[-1]
+        resp.rl = rl[0]
+        resp.output = combined_out
+        if failed:
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
     else:
-        params["serial"] = dev.serial
-
-    resp = central.request(central.get_upgrade_status, **params)
+        resp = batch_resp
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Upgrade Status" if not dev else f"{dev.name} Upgrade Status",
+        title="Upgrade Status",
         pager=pager,
         outfile=outfile
     )
@@ -2135,7 +2159,7 @@ def clients(
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
-    past: ClientTimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
+    past: TimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
@@ -2325,7 +2349,7 @@ def clients(
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
-    time_range: TunnelTimeRange = typer.Argument("3H"),
+    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
@@ -2334,9 +2358,9 @@ def tunnels(
     reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
     pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
     outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    verbose2: bool = typer.Option(
+    raw: bool = typer.Option(
         False,
-        "-vv",
+        "---raw",
         help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
         show_default=False,
         rich_help_panel="Common Options",
@@ -2377,6 +2401,57 @@ def tunnels(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
     cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+
+
+@app.command(hidden=config.is_cop)
+def uplinks(
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
+    sort_by: str = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
+    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    raw: bool = typer.Option(
+        False,
+        "--raw",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show Branch Gateway/VPNC Uplink details"""
+    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
+    resp = cli.central.request(cli.central.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
+
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+
+    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
 

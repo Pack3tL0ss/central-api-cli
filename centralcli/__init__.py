@@ -3,7 +3,7 @@
 
 # flake8: noqa
 
-import json
+import yaml
 import os
 import typer
 
@@ -53,19 +53,23 @@ if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in
     config.debug = True  # for the benefit of the 2 log messages below
 if '--debugv' in str(sys.argv):
     config.debug = config.debugv = True
-    try:
-        _ = sys.argv.pop(sys.argv.index("--debugv"))
-    except ValueError:
-        # handles vscode issue as arg parsing for vscode is below
-        sys.argv = [arg.replace("--debugv", "").rstrip().replace("  ", " ") for arg in sys.argv]
+    # debugv is stripped from args below
 
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
-log.debugv(f"config attributes: {json.dumps({k: str(v) for k, v in config.__dict__.items()}, indent=4)}")
+if config.debugv:
+    _ignore = ["data", "valid_suffix", "debug", "debugv"]
+    _account_data = {k: v for k, v in config.data.get(config.account, {}).items() if k != "token"}  # strip the token from the config, current token is stored in cache.
+    _config = {
+        "current account settings": _account_data or f'{config.account} not found in config',
+        **{k: v if isinstance(v, (str, list, dict, bool, type(None))) else str(v) for k, v in config.__dict__.items() if k not in _ignore}
+    }
+    log.debugv(f"config attributes: {yaml.safe_dump(_config, indent=4)}")
 
 
-# HACK completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
+# HACK Windows completion fix for upstream issue.
+# completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
 # This hack manually adds the _expand_args functionality to click.utils which is pinned to 7.1.2  Otherwise an exception is thrown on Windows.
 if os.name == "nt":  # pragma: no cover
     def _expand_args(
@@ -139,6 +143,7 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
     from .vscodeargs import vscode_arg_handler
     vscode_arg_handler()
 
+# These are global hidden flags/args that are stripped before sending to cli
 raw_out = False
 if "--raw" in sys.argv:
     raw_out = True
@@ -152,7 +157,15 @@ if "--debug-limit" in sys.argv:
 if "--sanitize" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--sanitize"))
     config.sanitize = True
-
+if "--debugv" in sys.argv:
+    _ = sys.argv.pop(sys.argv.index("--debugv"))
+    # config var updated above, just stripping flag here.
+if "?" in sys.argv:
+    sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
+if "--again" in sys.argv:
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "--out", "-d", "--debug", "--account"]
+    args = [arg for arg in sys.argv if arg in valid_options]
+    sys.argv = [sys.argv[0], "show", "last", *args]
 
 central = CentralApi(config.account)
 cache = Cache(central)
@@ -162,6 +175,3 @@ cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 # show switches / show switch ...
 if len(sys.argv) > 2:
     sys.argv[2] = constants.arg_to_what(sys.argv[2], cmd=sys.argv[1])
-
-if "?" in sys.argv:
-    sys.argv[sys.argv.index("?")] = "--help"

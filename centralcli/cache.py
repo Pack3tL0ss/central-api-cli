@@ -49,6 +49,13 @@ LIB_DEV_TYPE = {
     "gateway": "gw"
 }
 
+# HACK  rich is leading to an exception as it tried to inspect the Cache object during an exception
+# Cache LookUp Failure: 'CentralObject' has no attribute ... (attributes below).
+RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
+    "awehoi234_wdfjwljet234_234wdfoijsdfmmnxpi492",
+    "__rich_repr__",
+    "_fields"
+]
 
 def get_cencli_devtype(dev_type: str) -> str:
     """Convert device type returned by API to consistent cencli types
@@ -88,6 +95,7 @@ class CentralObject:
             self.status = self.data["status"] = self.data.get("status")
             self.ip = self.data["ip"] = self.data.get("ip")
             self.site = self.data["site"] = self.data.get("site")
+            self.group = self.data["group"] = self.data.get("group")
             self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
             self.serial: str = self.data.get("serial")
 
@@ -115,8 +123,9 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
-        raise typer.Exit(1)
+        if name not in RICH_EXCEPTION_IGNORE_ATTRIBUTES:
+            log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
+            raise typer.Exit(1)
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -125,6 +134,13 @@ class CentralObject:
     def generic_type(self):
         if "type" in self.data:
             return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
+
+    @property
+    def is_aos10(self) -> bool:
+        if self.data.get("type", "") == "ap" and self.data.get("version", "").startswith("10"):
+            return True
+        else:
+            return False
 
     def _get_help_text_parts(self):
         parts = []
@@ -225,9 +241,12 @@ class CacheResponses:
         self._mpsk = mpsk
         self._portal = portal
 
-    def update_rl(self, resp: Response) -> Response:
+    def update_rl(self, resp: Response | None) -> Response | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
         """
+        if resp is None:
+            return
+
         _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal] if r is not None], key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
@@ -475,21 +494,26 @@ class Cache:
             res = [self.responses.dev or Response()]
 
         _inv_by_ser = self.inventory_by_serial
-        # Need to use the resp value not what was just stored in cache as we don't store all fields
-        dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
-        if dev_res:
-            _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        # Need to use the resp value not what was just stored in cache (self.devices_by_serial) as we don't store all fields
+        # dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
+        # if dev_res:
+        #     _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        if self.responses.dev:
+            _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}
         else:
             _dev_by_ser = self.devices_by_serial
 
         _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
-            {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
+            {**{k: v for k, v in _inv_by_ser.get(serial, {}).items() if k != "mac"}, **_dev_by_ser.get(serial, {})}
             for serial in _all_serials
 
         ]
-        res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
-        return res[-1]
+        # res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
+        resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
+        resp.output = combined
+        resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+        return resp
 
     # using shell_complete to see if it improves click 8 compat... it does not still have ^M with click 8
     @staticmethod
@@ -1500,6 +1524,37 @@ class Cache:
         for m in out:
             yield m
 
+    def dev_gw_switch_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        # typer stopped providing args pulling from ctx.params
+        if not args:
+            args = [arg for p in ctx.params.values() for arg in utils.listify(p)]
+
+        match = self.get_dev_identifier(
+            incomplete,
+            dev_type=["gw", "switch"],
+            completion=True,
+        )
+        match = match or []
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if all([attr not in args for attr in [m.name, m.serial, m.mac, m.ip]]):  # TODO many completions won't filter items on command line already as it's eval is m not in args but m is a CentralObject
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
     def dev_gw_switch_site_completion(
         self,
         incomplete: str,
@@ -1523,7 +1578,7 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                if m not in args:
+                if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
 
         for m in out:
@@ -1630,6 +1685,27 @@ class Cache:
 
         return len(ret) == len(data)
 
+    async def format_raw_devices_for_cache(self, resp: Response):
+        dev_types = {
+            "aps": "ap",
+            "gateways": "gw",
+        }
+        switch_types = {
+            "AOS-S": "sw",
+            "AOS-CX": "cx"
+        }
+        raw_data = {
+            url.split("/")[-1]: [
+                {
+                    "type": dev_types.get(url.split("/")[-1], switch_types.get(inner.get("switch_type", "err"))),
+                    "swack_id": inner.get("stack_id", inner.get("swarm_id")) or (inner.get("serial", "err") if "swarm_id" in inner and inner.get("firmware_version", "").startswith("10.") else None),
+                    **inner
+                } for inner in resp.raw[url][url.split("/")[-1]]
+            ] for url in resp.raw
+        }
+
+        return raw_data
+
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
@@ -1655,9 +1731,7 @@ class Cache:
                 if False in upd:
                     log.error(f"TinyDB DevDB update returned an error.  db_resp: {upd}", show=True)
                 return upd
-                # db_res = self.DevDB.insert_multiple(data)
-                # if False in db_res:
-                #     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+
             else:
                 doc_ids = []
                 for qry in data:
@@ -1685,22 +1759,16 @@ class Cache:
                 if False in db_res:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
-            # TODO update device inventory first then only get details for device types in inventory
-            resp = await self.central.get_all_devicesv2(cache=True, **kwargs)
+            resp = await self.central.get_all_devices(cache=True, **kwargs)
             if resp.ok:
-                if resp.output:
-                    _update_data = utils.listify(deepcopy(resp.output))
-                    _update_data = cleaner.get_devices(_update_data, cache=True)
-
-                    # Cache update  # TODO make own function
-                    self.DevDB.truncate()
-                    update_res = self.DevDB.insert_multiple(_update_data)
-                    if False in update_res:
-                        log.error("Tiny DB returned an error during dev db update", caption=True)
-
-                # TODO change updated from  list of funcs to class with bool attributes or something
-                self.updated.append(self.central.get_all_devicesv2)
+                raw_data = await self.format_raw_devices_for_cache(resp)
+                raw_models = models.Devices(**raw_data)
+                raw_models = [*raw_models.aps, *raw_models.switches, *raw_models.gateways]
+                self.DevDB.truncate()
+                _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                self.updated.append(self.central.get_all_devices)
                 self.responses.dev = resp
+
             return resp
 
     async def update_inv_db(
@@ -2371,7 +2439,7 @@ class Cache:
                         )
 
             # no match found initiate cache update
-            if retry and not match and self.central.get_all_devicesv2 not in self.updated:
+            if retry and not match and self.central.get_all_devices not in self.updated:
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")

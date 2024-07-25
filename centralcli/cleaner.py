@@ -118,7 +118,9 @@ def _short_connection(value: str) -> str:
     return "" if value is None else value.replace("802.11", "")
 
 
-def _serial_to_name(sernum: str) -> str:
+def _serial_to_name(sernum: str | None) -> str | None:
+    if sernum is None:  #  show audit logs ... have seen "target" of None
+        return sernum
     # TODO circular import if placed at top review import logic
     from centralcli import cache
     if not (
@@ -190,7 +192,7 @@ _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
     "last_connection_time": lambda x: DateTime(x, "timediff"),  # _time_diff_words,
-    "uptime": lambda x: DateTime(x, "durwords-short"),
+    "uptime": lambda x: DateTime(x, "durwords-short",),  #  round_to_minute=True),
     "updated_at": lambda x: DateTime(x, "mdyt"),
     "last_modified": _convert_epoch,
     "next_rekey": lambda x: DateTime(x, "log"),
@@ -222,14 +224,15 @@ _short_value = {
     "AOS-CX": "cx",
     "type": lambda t: t.lower(),
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
-    "start_date": _mdyt_timestamp,
-    "end_date": _mdyt_timestamp,
+    "start_date": lambda x: DateTime(x, "mdyt"),
+    "end_date": lambda x: DateTime(x, "mdyt"),
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
     "mem_total": _format_memory,
     "mem_free": _format_memory,
     "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
+    "recommended": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "learn_time": _log_timestamp,
     "last_state_change": _log_timestamp,
     "graceful_restart_timer": _duration_words,
@@ -242,6 +245,9 @@ _short_value = {
     "chassis_id_type": lambda v: None,
     "chassis_id_type_str": lambda v: None,
     "usage": lambda v: utils.convert_bytes_to_human(v),
+    "tx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
+    "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
+    "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -257,7 +263,9 @@ _short_key = {
     "ip_address_v6": "ip (v6)",
     "ip_v6_address": "ip (v6)",
     "macaddr": "mac",
+    "mac_address": "mac",
     "switch_type": "type",
+    "stack_member_id": "stck mbr #",
     "uplink_ports": "uplk ports",
     "total_clients": "clients",
     "updated_at": "updated",
@@ -324,7 +332,9 @@ _short_key = {
     "cluster_redundancy_type": "redundancy type",
     "ec": "enabled capabilities",
     "sc": "system capabilities",
-    "ec_str": "enabled capabilities"
+    "ec_str": "enabled capabilities",
+    "tx_data_bytes": "TX",
+    "rx_data_bytes": "RX",
 }
 
 
@@ -412,12 +422,12 @@ def short_value(key: str, value: Any):
             value = _extract_names_from_id_name_dict(value)
         elif key in ["events_details"]:
             value = _extract_event_details(value)
-    elif key in _short_value:
+    elif key in _short_value and value is not None:
         value = _short_value[key](value)
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List) -> List:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None) -> List[Dict[str, Any]]:
     """Default simple formatter
 
     runs all key/values through _short_key, _short_value
@@ -431,6 +441,9 @@ def simple_kv_formatter(data: List) -> List:
     if not isinstance(data, list):
         log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
         return data
+
+    if key_order:
+        data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data]
 
     data = [
         dict(
@@ -809,13 +822,21 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             if inner.get("mem_total") is None or inner.get("mem_free") is None:
                 continue
             if inner["mem_total"] and inner["mem_free"]:
-                mem_pct = round(((inner["mem_total"] - inner["mem_free"]) / inner["mem_total"]) * 100, 2)
+                mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
             elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
                 mem_pct = inner["mem_total"]
                 inner["mem_total"], inner["mem_free"] = "--", "--"
             else:
                 mem_pct = 0
             inner["mem_pct"] = f'{mem_pct}%'
+
+    # concat stack_member_id and switch_role
+    stack_fields = ["stack_member_id", "switch_role"]
+    stack_remove_fields = ["stack_member_id"]
+    if all([key in all_keys for key in stack_fields]):
+        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] < 3 else f"{v} ({inner.get('stack_member_id')}:{constants.SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
+    elif "switch_role" in all_keys:
+        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] or 0 < 3 else f"{v} ({inner.get('stack_member_id')}:{constants.SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
 
     if order:
         to_front = order
@@ -825,6 +846,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             "name",
             "status",
             "type",
+            "stack_member_id",
             "client_count",
             "model",
             'mode',
@@ -884,8 +906,10 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
         Union[List[dict], dict]: The cleaned data with consistent field heading, and human readable values.
     """
     data = utils.listify(data)
+    all_keys = set([k for inner in data for k in inner.keys()])
+    # common_keys = set.intersection(*map(set, data))
 
-    # Both lists below are pre cleaned key values
+    # pre cleaned key values
     verbosity_keys = {
         0:  [
                 "name",
@@ -898,57 +922,25 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "serial",
                 "group_name",
                 "site",
-                "labels",
-                "uptime",
-                "cpu_utilization",
-                "mem_total",
-                "mem_free",
                 "firmware_version",
+                "services",
         ]
     }
-    # we don't actually use model for anything yet
-    cache_keys = [
-        "name",
-        "status",
-        "type",
-        "model",
-        "ip_address",
-        "macaddr",
-        "serial",
-        "group_name",
-        "site",
-        "firmware_version",
-        "swack_id",
-        "switch_role"
-    ]
-    if cache:
-        # We want these 2 keys to retain the underscore. if it's a cahce update.
-        global _short_key
-        _short_key = {**_short_key, "swack_id": "swack_id", "switch_role": "switch_role"}
-        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
-    elif verbosity == 0:  # If verbosity > 0 we simply don't filter any fields.
-        data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for inner in data]
+    if "services" not in all_keys:  # indicates inventory is not part of the listing
+        verbosity_keys[0].insert(10, "uptime")
+    if "type" not in all_keys:  # indicates data is for single device type. typicall allows more space
+        verbosity_keys[0].insert(10, "cpu_utilization")
+        verbosity_keys[0].insert(10, "mem_pct")
 
-    # gather all keys from all dicts in list each dict could potentially be a diff size
-    # Also concats ip/mask if provided in sep fields
     data = sort_result_keys(data)
 
-    # strip any cols that have no value across all rows
-    data = strip_no_value(data)
+    data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)} for inner in data]
 
-    # send all key/value pairs through formatters and return
-    data = _unlist(
-        [
-            dict(
-                short_value(k, _check_inner_dict(v))
-                for k, v in pre_clean(inner).items()
-                if k == "swack_id" or ("id" not in k[-3:] and k != "mac_range")
-            )
-            for inner in data
-        ]
-    )
+    data = simple_kv_formatter(data)
 
-    data = utils.listify(data)
+    # strip any cols that have no value across all rows,
+    # if verbose strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical for verbose)
+    data = strip_no_value(data, aggressive=bool(verbosity))
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
@@ -1926,6 +1918,106 @@ def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = 
 
     return simple_kv_formatter(data)
 
+
 def get_gw_tunnels(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    # Also used for get_gw_uplinks_details
     _short_value["throughput"] = lambda x: utils.convert_bytes_to_human(x, throughput=True)
     return simple_kv_formatter(data)
+
+
+def get_gw_uplinks_bandwidth(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "timestamp",
+        "tx_data_bytes",
+        "rx_data_bytes",
+    ]
+    return simple_kv_formatter(data, key_order=key_order)
+
+
+def get_device_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "hostname",
+        "device_status",
+        "model",
+        "mac_address",
+        "serial",
+        "is_stack",
+        "recommended",
+        "firmware_version",
+    ]
+    if data:
+        key_order = [*key_order, *[k for k in data[0].keys() if k not in key_order]]
+    def collapse_status(key: str, value: Any) -> Any:
+        if key != "status" or not isinstance(value, dict):
+            return value
+        else:
+            return value.get("reason", value.get("state"))
+
+    # We use firmware/swarms/swarm_id for APs as firmware/device/serial doesn't respond to APs so need to make it consistent with device endpoint
+    def swarm_to_device(data: dict) -> dict:
+        if "aps" not in data:
+            return data
+
+        out = {**data, **{k if k != "name" else "hostname": v for k, v in data["aps"][0].items()}}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
+        del out["aps"]
+        del out["aps_count"]
+        return out
+
+
+    data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
+    global _short_key
+    _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
+    _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
+
+    return simple_kv_formatter(data, key_order=key_order)
+
+
+def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "name",
+        "device_status",
+        "model",
+        "mac_address",
+        "serial",
+        "recommended",
+        "firmware_version",
+    ]
+    # keys are not stripped until return.  aps is available and is used to flatten the dict
+    strip_keys = [
+        "aps",
+        "aps_count",
+    ]
+    if data:
+        key_order = [*key_order, *[k for k in data[0].keys() if k not in [*key_order, *strip_keys]]]
+    def collapse_status(key: str, value: Any) -> Any:
+        if key != "status" or not isinstance(value, dict):
+            return value
+        else:
+            return value.get("reason", value.get("state"))
+
+    # We use firmware/swarms/swarm_id for APs as firmware/device/serial doesn't respond to APs so need to make it consistent with device endpoint
+    def swarm_to_device(data: dict) -> dict:
+        if "aps" not in data:
+            return data
+
+        if data["aps"]:  # Down APs don't show the AP details
+            out = {**data, **data["aps"][0]}
+        else:
+            out = {"name": data.get("swarm_name") if data.get('firmware_version', '').startswith('10.') else None, **data}
+        del out["aps"]
+        del out["aps_count"]
+        return out
+
+    data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
+
+    # if ap name == swarm_name no need to include swarm_name
+    if all([inner.get("name", "name") == inner.get("swarm_name", "swarm_name") for inner in data]):
+        data = [{k: v for k, v in inner.items() if k != "swarm_name"} for inner in data]
+        if "swarm_name" in key_order:
+            _ = key_order.pop(key_order.index("swarm_name"))
+
+    global _short_key
+    _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
+    _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
+
+    return simple_kv_formatter(data, key_order=key_order)
