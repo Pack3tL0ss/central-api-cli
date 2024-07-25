@@ -1685,6 +1685,27 @@ class Cache:
 
         return len(ret) == len(data)
 
+    async def format_raw_devices_for_cache(self, resp: Response):
+        dev_types = {
+            "aps": "ap",
+            "gateways": "gw",
+        }
+        switch_types = {
+            "AOS-S": "sw",
+            "AOS-CX": "cx"
+        }
+        raw_data = {
+            url.split("/")[-1]: [
+                {
+                    "type": dev_types.get(url.split("/")[-1], switch_types.get(inner.get("switch_type", "err"))),
+                    "swack_id": inner.get("stack_id", inner.get("swarm_id")) or (inner.get("serial", "err") if "swarm_id" in inner and inner.get("firmware_version", "").startswith("10.") else None),
+                    **inner
+                } for inner in resp.raw[url][url.split("/")[-1]]
+            ] for url in resp.raw
+        }
+
+        return raw_data
+
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
@@ -1710,9 +1731,7 @@ class Cache:
                 if False in upd:
                     log.error(f"TinyDB DevDB update returned an error.  db_resp: {upd}", show=True)
                 return upd
-                # db_res = self.DevDB.insert_multiple(data)
-                # if False in db_res:
-                #     log.error(f"TinyDB DevDB update returned an error.  db_resp: {db_res}", show=True)
+
             else:
                 doc_ids = []
                 for qry in data:
@@ -1740,22 +1759,16 @@ class Cache:
                 if False in db_res:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
-            # TODO update device inventory first then only get details for device types in inventory
-            resp = await self.central.get_all_devicesv2(cache=True, **kwargs)
+            resp = await self.central.get_all_devices(cache=True, **kwargs)
             if resp.ok:
-                if resp.output:
-                    _update_data = utils.listify(deepcopy(resp.output))
-                    _update_data = cleaner.get_devices(_update_data, cache=True)
-
-                    # Cache update  # TODO make own function
-                    self.DevDB.truncate()
-                    update_res = self.DevDB.insert_multiple(_update_data)
-                    if False in update_res:
-                        log.error("Tiny DB returned an error during dev db update", caption=True)
-
-                # TODO change updated from  list of funcs to class with bool attributes or something
-                self.updated.append(self.central.get_all_devicesv2)
+                raw_data = await self.format_raw_devices_for_cache(resp)
+                raw_models = models.Devices(**raw_data)
+                raw_models = [*raw_models.aps, *raw_models.switches, *raw_models.gateways]
+                self.DevDB.truncate()
+                _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                self.updated.append(self.central.get_all_devices)
                 self.responses.dev = resp
+
             return resp
 
     async def update_inv_db(
@@ -2426,7 +2439,7 @@ class Cache:
                         )
 
             # no match found initiate cache update
-            if retry and not match and self.central.get_all_devicesv2 not in self.updated:
+            if retry and not match and self.central.get_all_devices not in self.updated:
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")

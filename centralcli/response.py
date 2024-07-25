@@ -5,12 +5,13 @@ import asyncio
 from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
-from typing import Union, List, Any, Dict, Tuple
+from typing import Union, List, Any, Dict, Tuple, Literal
 from rich import print
 from yarl import URL
 
 
 from centralcli import config, utils, log
+from centralcli.exceptions import CentralCliException
 from halo import Halo
 
 import sys
@@ -18,13 +19,6 @@ import typer
 import json
 from aiohttp import ClientSession, ClientResponse
 import time
-
-
-# FIXME  Based on logs failed req is logged in 2 places
-# 02/09/2022 12:46:40 AM [1169][ERROR]: [Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/%5B'cencli'%5D Elapsed: 0.37046146392822266
-# 02/09/2022 12:46:40 AM [1169][ERROR]: [GET][Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/['cencli']
-# 02/09/2022 12:48:14 AM [1181][ERROR]: [Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/%5B'cencli'%5D Elapsed: 0.4578061103820801
-# 02/09/2022 12:48:14 AM [1181][ERROR]: [GET][Bad Request] https://internal-apigw.central.arubanetworks.com/platform/auditlogs/v1/logs/['cencli']
 
 
 DEFAULT_HEADERS = {
@@ -166,10 +160,11 @@ class Response:
         self._response = response
         self.output = output
         self.raw = raw
-        self.ok = ok
+        self._ok = ok
         self.method = ""
+        self.elapsed = elapsed
         if response:
-            self.ok = response.ok
+            # self.ok = response.ok
             self.url = response.url
             self.error = response.reason
             self.status = response.status
@@ -187,15 +182,15 @@ class Response:
             if not self.ok:
                 self.output = self.output or self.error
                 log.error(_log_msg)
-            else:
+            elif not isinstance(self, CombinedResponse):
                 log.info(_log_msg)
         else:
             if error:
-                self.ok = ok or False
+                # self.ok = self._ok or False
                 self.error = error
                 self.output = output or error
             elif output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
-                self.ok = ok or True
+                # self.ok = ok or True
                 self.error = error or "OK"
 
             self.url = URL(url)
@@ -205,7 +200,20 @@ class Response:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
     def __bool__(self):
-        return self.ok
+        if self._response:
+            return self._response.ok
+
+        if self.error:
+            return self._ok or False
+
+        if self.output or isinstance(self.output, (list, dict)):
+            return self._ok or True
+
+        raise CentralCliException("Unable to determine success status of Response")
+
+    @property
+    def ok(self):
+        return self.__bool__()
 
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
@@ -968,3 +976,98 @@ class Session():
         params = self.strip_none(params)
         return await self.api_call(f_url, method="DELETE", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
+
+
+class CombinedResponse(Response):
+    def flatten_resp(responses: List[Response]) -> Response:
+        _failed = len([r.error for r in responses if not r.ok])
+        if _failed:
+            raise CentralCliException(f"multi-response flattener should only receive successful responses.  Received {_failed} failed responses out of {len(responses)}")
+
+        # raw = {r.url.path: r.raw for r in responses}
+
+        elapsed = 0
+        for idx, r in enumerate(responses):
+            if idx == 0:
+                output = r.output.copy()
+                output_type = type(r.output)
+                raw = {r.url.path: r.raw.copy()}
+            else:
+                raw[r.url.path] = r.raw
+                if output_type == list:
+                    output += r.output
+                elif output_type == dict:
+                    output = {**output, **r.output}
+                else:
+                    raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")
+            if r.elapsed:
+                elapsed += r.elapsed
+
+        # for combining device calls, adds consistent "type" to all devices
+        def _get_type(data: dict) -> Literal["ap", "gw", "sw", "cx"] | None:
+            if "ap_deployment_mode" in data:
+                return "ap"
+
+            if "switch_type" in data:
+                switch_types = {
+                    "AOS-S": "sw",
+                    "AOS-CX": "cx"
+                }
+                return switch_types.get(data["switch_type"], data["switch_type"])
+
+            if "device_type" in data:
+                if data["device_type"].lower() == "mc":
+                    return "gw"
+                else:
+                    raise CentralCliException(f'Unexpected device type {data["device_type"]}')
+
+        if all(
+            [
+                u.startswith("/monitoring") and any([u.endswith(s)] for s in ["/gateways", "/aps", "/switches"]) for u in [r.url.path for r in responses]
+            ]
+        ):
+            if isinstance(output, list) and all([isinstance(inner, dict) for inner in output]):
+                output = [
+                    {
+                        **inner,
+                        "type": _get_type(inner)
+                    }
+                    for inner in output
+                ]
+
+        resp = responses[-1]
+        resp.rl = min([r.rl for r in responses])
+        resp.output = output
+        resp.raw = raw
+        resp.elapsed = round(elapsed, 2)
+
+        return resp
+
+
+    def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
+        self.responses = responses
+        combined = combiner_func(self.passed)
+        super().__init__(combined, output=combined.output, raw=combined.raw, elapsed=combined.elapsed)
+
+    def __bool__(self):
+        return all([r.ok for r in self.responses])
+
+    def __len__(self):
+        return len(self.responses)
+
+    @property
+    def ok(self):
+        return self.__bool__()
+
+    @property
+    def passed(self):
+        return [r for r in self.responses if r.ok]
+
+    @property
+    def failed(self):
+        return [r for r in self.responses if not r.ok]
+
+    @property
+    def urls(self) -> List[URL]:
+        return [r.url for r in self.responses]
+

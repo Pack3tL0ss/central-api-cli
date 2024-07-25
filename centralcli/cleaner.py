@@ -247,6 +247,7 @@ _short_value = {
     "usage": lambda v: utils.convert_bytes_to_human(v),
     "tx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
+    "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -821,7 +822,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             if inner.get("mem_total") is None or inner.get("mem_free") is None:
                 continue
             if inner["mem_total"] and inner["mem_free"]:
-                mem_pct = round(((inner["mem_total"] - inner["mem_free"]) / inner["mem_total"]) * 100, 2)
+                mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
             elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
                 mem_pct = inner["mem_total"]
                 inner["mem_total"], inner["mem_free"] = "--", "--"
@@ -906,14 +907,14 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
     """
     data = utils.listify(data)
     all_keys = set([k for inner in data for k in inner.keys()])
+    # common_keys = set.intersection(*map(set, data))
 
-    # Both lists below are pre cleaned key values
+    # pre cleaned key values
     verbosity_keys = {
         0:  [
                 "name",
                 "status",
                 "type",
-                "stack_member_id",
                 "client_count",
                 "model",
                 "ip_address",
@@ -921,62 +922,25 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "serial",
                 "group_name",
                 "site",
-                "labels",
-                "uptime",
-                "cpu_utilization",
-                "mem_total",
-                "mem_free",
                 "firmware_version",
                 "services",
         ]
     }
-    # show all does not include the stack_member_id
-    if "stack_member_id" in all_keys:
-        verbosity_keys[0].insert(4, "switch_role")
-    # we don't actually use model for anything yet
-    cache_keys = [
-        "name",
-        "status",
-        "type",
-        "model",
-        "ip_address",
-        "macaddr",
-        "serial",
-        "group_name",
-        "site",
-        "firmware_version",
-        "swack_id",
-        "switch_role",
-    ]
-    if cache:
-        # We want these 2 keys to retain the underscore. if it's a cahce update.
-        global _short_key
-        _short_key = {**_short_key, "swack_id": "swack_id", "switch_role": "switch_role"}
-        data = [{k: v for k, v in d.items() if k in cache_keys} for d in data]
-    elif verbosity == 0:  # If verbosity > 0 we simply don't filter any fields.
-        data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for inner in data]
+    if "services" not in all_keys:  # indicates inventory is not part of the listing
+        verbosity_keys[0].insert(10, "uptime")
+    if "type" not in all_keys:  # indicates data is for single device type. typicall allows more space
+        verbosity_keys[0].insert(10, "cpu_utilization")
+        verbosity_keys[0].insert(10, "mem_pct")
 
-    # gather all keys from all dicts in list each dict could potentially be a diff size
-    # Also concats ip/mask if provided in sep fields
-    # and concats stack_role and stack member number
     data = sort_result_keys(data)
 
-    # strip any cols that have no value across all rows
-    data = strip_no_value(data)
+    data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)} for inner in data]
 
-    # send all key/value pairs through formatters and return
-    data = _unlist(
-        [
-            dict(
-                short_value(k, _check_inner_dict(v))
-                for k, v in pre_clean(inner).items()
-                if k in ["swack_id", "stack_member_id"] or ("id" not in k[-3:] and k != "mac_range")
-            )
-            for inner in data
-        ]
-    )
+    data = simple_kv_formatter(data)
 
-    data = utils.listify(data)
+    # strip any cols that have no value across all rows,
+    # if verbose strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical for verbose)
+    data = strip_no_value(data, aggressive=bool(verbosity))
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
@@ -2036,7 +2000,10 @@ def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any
         if "aps" not in data:
             return data
 
-        out = {**data, **data["aps"][0]}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
+        if data["aps"]:  # Down APs don't show the AP details
+            out = {**data, **data["aps"][0]}
+        else:
+            out = {"name": data.get("swarm_name") if data.get('firmware_version', '').startswith('10.') else None, **data}
         del out["aps"]
         del out["aps_count"]
         return out

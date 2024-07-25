@@ -99,7 +99,11 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
                 status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
         else:  # show all [--inv], or show ivnentory -v
-            counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            def url_to_key(url) -> str:
+                return url.split("/")[-1]
+
+            counts_by_type = {**{url_to_key(k): {"total": resp.raw[k]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][url_to_key(k) if url_to_key(k) != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if not k.endswith("switches")}, **get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])}
+            # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         counts_by_type = get_switch_counts(resp.raw["switches"])
@@ -235,13 +239,13 @@ def show_devices(
             if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
                 caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
-            resp = central.request(central.get_all_devicesv2, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
+            resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:
                 cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
                 _ = central.request(cli.cache.update_dev_db, cache_output)
             caption = None if not resp.ok else _build_caption(resp)
         else:  # No filtering params, get update from cache
-            if central.get_all_devicesv2 not in cli.cache.updated:
+            if central.get_all_devices not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db, **params)
                 caption = _build_caption(resp, status=status)
             else:
@@ -249,6 +253,7 @@ def show_devices(
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
+        # TODO cache update here.  Need to verify cache.format_raw_devices_for_cache to make sure it can handle single call
         caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
@@ -316,7 +321,7 @@ def all_(
         show_default=False,
     ),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
@@ -343,7 +348,7 @@ def all_(
         status = "Up"
     show_devices(
         dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=bool(verbose), do_clients=True, sort_by=sort_by, reverse=reverse,
+        state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -380,7 +385,7 @@ def devices(
         show_default=False,
     ),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
+    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),

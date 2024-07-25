@@ -4,8 +4,8 @@ from enum import Enum
 from typing import List, Optional, Union, Dict, Any
 
 import pendulum
-from pydantic import BaseModel, Field, validator, IPvAnyAddress
-from centralcli import utils, constants
+from pydantic import BaseModel, Field, validator
+from centralcli import utils
 
 
 
@@ -35,22 +35,33 @@ class Inventory(BaseModel):
     serial: str
     services: Union[List[str], str] = Field(alias="license")
 
+switch_types = {
+    "AOS-S": "sw",
+    "AOS-CX": "cx"
+}
+
 # Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE
 class Device(BaseModel):
     name: str
     status: DeviceStatus
-    type: DevType = Field(alias="switch_type")
+    type: DevType
     model: str
-    ip: IPvAnyAddress = Field(alias="ip_address")
+    ip: str = Field(None, alias="ip_address")  # can't use IPvAnyAddress here as stack members do not have IP addresses
     mac: str = Field(alias="macaddr")
     serial: str
     group: str = Field(alias="group_name")
-    site: str
+    site: Optional[str] = Field(None)
     version: str = Field(alias="firmware_version")
-    swack_id: Optional[str] = Field(None, alias="stack_id")  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
-    swack_id: Optional[str] = Field(None, alias="starm_id")  # Would need to convert swarm_id (ap) and stack_id (cx, sw) to common swack_id
-    switch_role: constants.SwitchRoles = Field(None)
+    swack_id: Optional[str] = Field(None)
+    switch_role: Optional[int] = Field(None)
+
+    # _normalize_type = validator("type", allow_reuse=True)(lambda v: switch_types.get(v, v))
+
+class Devices(BaseModel):
+    aps: List[Device]
+    switches: List[Device]
+    gateways: List[Device]
 
 class Site(BaseModel):
     name: str

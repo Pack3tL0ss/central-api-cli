@@ -22,7 +22,7 @@ from pycentral.base_utils import tokenLocalStoreUtil
 from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
                models, utils)
 from .utils import Mac
-from .response import Response, Session
+from .response import Response, Session, CombinedResponse
 from .exceptions import CentralCliException
 # buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
 
@@ -1112,7 +1112,7 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devicesv2(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = False, **kwargs) -> Response:
+    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> Response:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1122,72 +1122,25 @@ class CentralApi(Session):
             includes only keys common across all device types in central.
         """
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
-        lib_dev_types = {
-            "aps": "ap",
-            "gateways": "gw",
-        }
-        _output = {}
 
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
-        reqs = [self.BatchRequest(self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs) for dev_type in dev_types]
-        res = await self._batch_request(reqs)
-        _failure_idxs = [idx for idx, r in enumerate(res) if not r]
-        if _failure_idxs:
-            resp = res[_failure_idxs[-1]]
-            resp.output = [{"dev_type": dev_types[f], "error": res[f].output} for f in _failure_idxs]
-            if len(res) == len(_failure_idxs):  # all calls failed
-                return resp
-            else:
-                failed_calls = [r for r in res if not r.ok]
-                res = [r for r in res if r.ok]
-                for r in failed_calls:
-                    log.error(f'API call failed to [{r.method}]{r.url.path}: status code: {r.status}, Error: {r.error}', log=False, caption=True)
+        reqs = [
+            self.BatchRequest(
+                self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs
+            )
+            for dev_type in dev_types
+        ]
+        batch_resp = await self._batch_request(reqs)
+        combined = CombinedResponse(batch_resp)
 
+        if not combined.passed:
+            return batch_resp
+        elif combined.failed:
+            for r in combined.failed:
+                log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
-        resp = res[-1]
-        if calculate_client_count:
-            _output = {k: [{"client_count": inner.get("client_count", "-"), **inner} for inner in utils.listify(v)] for k, v in zip(dev_types, [r.output for r in res]) if v}
-        else:
-            _output = {k: utils.listify(v) for k, v in zip(dev_types, [r.output for r in res]) if v}
-        resp.raw = {k: utils.listify(v) for k, v in zip(dev_types, [r.raw for r in res]) if v}
-
-        # TODO use below once everything that references it has been refactored so resp.raw["aps"][0]["aps"] becomes resp.raw["aps"]["aps"]
-        # resp.raw = {k: v for k, v in zip(dev_types, [r.raw for r in res]) if v}
-        def _get_swack_id(dev_type: str, dev_data: dict) -> str | None:
-            if dev_type == "gateways":
-                return None
-            elif dev_type == "switches":
-                return dev_data.get("stack_id")
-            elif dev_type == "aps":
-                return dev_data.get("swarm_id") if dev_data.get("firmware_version", "8").split(".")[0] == 8 else dev_data.get("serial")
-
-        if _output:
-            # Add type key to all dicts covert "switch-type" to cencli type (cx or sw)
-            # Add switch_role and swack_id (swarm/stack id) to all devices, both for the sake of cache
-            # TODO move to cleaner? set type to switch_type for switches let cleaner change value to lib vals
-            dicts = [
-                {
-                    **{
-                        "type": lib_dev_types.get(k, k) if k != "switches" else
-                        constants.get_cencli_devtype(inner_dict.get("switch_type", "switch")),
-                        "swack_id": _get_swack_id(k, inner_dict),
-                        "switch_role": inner_dict.get("switch_role")
-                    },
-                    **{
-                        kk: vv for kk, vv in inner_dict.items()
-                    }
-                } for k, v in _output.items() for inner_dict in v
-            ]
-            # TODO keep all fields in output dict, let cleaner define field for normal and verbose options
-            #      if user selects --json or --yaml keep all fields
-            # return just the keys common across all device types
-            common_keys = set.intersection(*map(set, dicts))
-            _output = [{k: d[k] for k in common_keys} for d in dicts]
-
-            resp.output = _output
-
-        return resp
+        return combined
 
     # API-FLAW aos-sw always shows VLAN as 1 (allowed_vlans represents the PVID for an access port, include all VLANs on a trunk port, no indication of native)
     # API-FLAW aos-sw always shows mode as access, cx does as well, but has vlan_mode which is accurate
@@ -5161,7 +5114,7 @@ class CentralApi(Session):
                 resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
                 resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
                 resp.output = [*resp.output, *batch_res[idx].output]
-        # resp.output = [*resp.output, *batch_res[0].output, *batch_res[1].output, *batch_res[2].output]
+
         try:
             resp.output = [models.WIDS(**d).dict() for d in resp.output]
         except Exception as e:
