@@ -51,12 +51,12 @@ def device(
     ),
     at: datetime = typer.Option(
         None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [default: Now]",
+        help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [grey42]\[default: Now][/]",
         show_default=False,
         formats=["%m/%d/%Y_%H:%M", "%d_%H:%M"],
         ),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](APs will reboot regardless)[/]"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
+    yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
@@ -77,8 +77,16 @@ def device(
     print(ver_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
         if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
-            # For AOS10 AP need to specifiy serial number as the swarm_id in payload to upgrade individual AP
-            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
+            if not dev.swack_id:
+                print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
+                if yes > 1 or typer.confirm("\nRefresh cache now to check if it's populated", abort=True):
+                    cli.central.request(cli.cache.update_dev_db)
+                    dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
+
+            if dev.swack_id:
+                resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
+            else:
+                cli.exit(f"Unable to perform Upgrade on {dev.summary_text}.  [cyan]swarm_id[/] is required for APs and the API is not returning a value for it yet.")
         else:
             resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot)
         cli.display_results(resp, tablefmt="action")
