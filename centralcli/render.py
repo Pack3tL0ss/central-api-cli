@@ -272,7 +272,7 @@ def rich_output(
 
         _min_max = {'min': 10, 'max': 30}
         if not set_width_cols:
-            set_width_cols = {'name': _min_max, 'model': _min_max}
+            set_width_cols = {'name': _min_max, 'services': {'min': 20, 'max': 30}}
         else:
             for col, value in set_width_cols.items():
                 if isinstance(value, int):  # allow simply specifying max width
@@ -281,18 +281,20 @@ def rich_output(
         full_cols = [*full_cols, *RICH_FULL_COLS]
 
         for k in outdata[0].keys():
-            if k in fold_cols:
+            if k == "model":
+                table.add_column(k, max_width=10, no_wrap=True)
+            elif k in fold_cols:
                 table.add_column(k, overflow='fold', max_width=115, justify='left')
             elif k in set_width_cols:
                 table.add_column(
                     k, min_width=set_width_cols[k].get('min', 0),
                     max_width=set_width_cols[k]['max'],
-                    justify='left'
+                    justify='left',
                 )
             elif k in full_cols:
                 table.add_column(k, no_wrap=True, justify='left')
             else:
-                table.add_column(k, justify='left')
+                table.add_column(k, justify='left', overflow='ellipses')
 
         formatted = _do_subtables(outdata)
         [table.add_row(*list(in_dict.values())) for in_dict in formatted]
