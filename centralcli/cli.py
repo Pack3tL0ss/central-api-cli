@@ -147,7 +147,7 @@ def move(
         elif a == "site":
             site = b
         else:
-            device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site"]])
+            device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site", "device", "devices"]])  # Allow unnecessary keyword device(s) 'cencli batch move devices ...'
 
     group = group or _group
 
