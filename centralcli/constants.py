@@ -352,9 +352,9 @@ class BatchDelArgs(str, Enum):
 
 
 class BatchRenameArgs(str, Enum):
-    sites = "sites"
+    # sites = "sites"
     aps = "aps"
-    groups = "groups"
+    # groups = "groups"
 
 
 class EnableDisableArgs(str, Enum):
