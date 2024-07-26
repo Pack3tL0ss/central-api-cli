@@ -26,7 +26,7 @@ log_colors = {
 # }
 console = Console(emoji=False, markup=False)
 emoji_console = Console(markup=False)
-to_debug = [
+DEBUG_ONLY_MSGS = [
     "Loaded token from storage from file"
 ]
 
@@ -106,12 +106,13 @@ class MyLogger:
         _logged = []
         for i in msgs:
             i = str(i)
-            if not self.DEBUG and [i for d in to_debug if d in i]:
+            if not self.DEBUG and [i for d in DEBUG_ONLY_MSGS if d in i]:  # messages we ignore if debug is not enabled.
                 continue
 
-            if log and i not in _logged:
-                getattr(self._log, level)(i, *args, **kwargs)
-                _logged.append(i)
+            if i not in _logged:
+                if log:
+                    getattr(self._log, level)(i, *args, **kwargs)
+                    _logged.append(i)
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
 

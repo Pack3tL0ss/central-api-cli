@@ -1112,14 +1112,11 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> Response:
+    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> CombinedResponse:
         """Get all devices from Aruba Central
 
         Returns:
-            Response: CentralAPI Response object
-
-            raw attribute has all keys returned for the devices, the output attribute
-            includes only keys common across all device types in central.
+            CombinedResponse: CentralAPI Response object
         """
         dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
 

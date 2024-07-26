@@ -980,28 +980,33 @@ class Session():
 
 class CombinedResponse(Response):
     def flatten_resp(responses: List[Response]) -> Response:
-        _failed = len([r.error for r in responses if not r.ok])
-        if _failed:
-            raise CentralCliException(f"multi-response flattener should only receive successful responses.  Received {_failed} failed responses out of {len(responses)}")
-
-        # raw = {r.url.path: r.raw for r in responses}
+        _failed = [r for r in responses if not r.ok]
+        _passed = responses if not _failed else [r for r in responses if r.ok]
 
         elapsed = 0
-        for idx, r in enumerate(responses):
+        raw = {}
+        for idx, r in enumerate(_passed):
+            this_output = r.output.copy()
+            this_raw = r.raw.copy()
             if idx == 0:
-                output = r.output.copy()
+                output = this_output
                 output_type = type(r.output)
-                raw = {r.url.path: r.raw.copy()}
+                raw = {r.url.path: this_raw}
             else:
-                raw[r.url.path] = r.raw
+                raw[r.url.path] = this_raw
                 if output_type == list:
-                    output += r.output
+                    output += this_output
                 elif output_type == dict:
-                    output = {**output, **r.output}
+                    output = {**output, **this_output}
                 else:
                     raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")
             if r.elapsed:
                 elapsed += r.elapsed
+
+        # failed responses are added to end of raw output
+        for r in _failed:
+            raw[r.url.path] = r.raw.copy()
+
 
         # for combining device calls, adds consistent "type" to all devices
         def _get_type(data: dict) -> Literal["ap", "gw", "sw", "cx"] | None:
@@ -1035,7 +1040,7 @@ class CombinedResponse(Response):
                     for inner in output
                 ]
 
-        resp = responses[-1]
+        resp = [*_passed, *_failed][0]
         resp.rl = min([r.rl for r in responses])
         resp.output = output
         resp.raw = raw
@@ -1046,18 +1051,31 @@ class CombinedResponse(Response):
 
     def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
         self.responses = responses
-        combined = combiner_func(self.passed)
+        combined = combiner_func(responses)
         super().__init__(combined, output=combined.output, raw=combined.raw, elapsed=combined.elapsed)
+        self.error = self.errors = {r.url.path: r.error for r in responses}
+
 
     def __bool__(self):
-        return all([r.ok for r in self.responses])
+        return any([r.ok for r in self.responses])
 
     def __len__(self):
         return len(self.responses)
 
+    def __repr__(self):
+        _errors = list(self.errors.values())
+        _unique_errors = set(_errors)
+        err_msg = '|'.join([f'{e}:{_errors.count(e)}' for e in _unique_errors])
+
+        return f"<{self.__module__}.{type(self).__name__} ({err_msg}) object at {hex(id(self))}>"
+
     @property
     def ok(self):
         return self.__bool__()
+
+    @property
+    def all_ok(self):
+        return all([r.ok for r in self.responses])
 
     @property
     def passed(self):

@@ -17,6 +17,7 @@ from tinydb.table import Table
 from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
+from centralcli.response import CombinedResponse
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -509,10 +510,17 @@ class Cache:
             for serial in _all_serials
 
         ]
-        # res[-1].output = combined  # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
+        # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
         resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
         resp.output = combined
-        resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+        # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
+        try:
+            resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+        except AttributeError:
+            if isinstance(resp, CombinedResponse):
+                resp.raw = {**resp.raw, **{f.url.path: f.raw for f in resp.failed}}
+            else:
+                resp.raw = {"Error": "raw output not available due to partial failure."}
         return resp
 
     # using shell_complete to see if it improves click 8 compat... it does not still have ^M with click 8
@@ -1700,7 +1708,7 @@ class Cache:
                     "type": dev_types.get(url.split("/")[-1], switch_types.get(inner.get("switch_type", "err"))),
                     "swack_id": inner.get("stack_id", inner.get("swarm_id")) or (inner.get("serial", "err") if "swarm_id" in inner and inner.get("firmware_version", "").startswith("10.") else None),
                     **inner
-                } for inner in resp.raw[url][url.split("/")[-1]]
+                } for inner in resp.raw[url].get(url.split("/")[-1], {})  # Failed responses will lack the inner key with the devices
             ] for url in resp.raw
         }
 
@@ -1759,15 +1767,18 @@ class Cache:
                 if False in db_res:
                     log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
         else:
-            resp = await self.central.get_all_devices(cache=True, **kwargs)
+            resp: CombinedResponse = await self.central.get_all_devices(cache=True, **kwargs)
             if resp.ok:
                 raw_data = await self.format_raw_devices_for_cache(resp)
-                raw_models = models.Devices(**raw_data)
-                raw_models = [*raw_models.aps, *raw_models.switches, *raw_models.gateways]
-                self.DevDB.truncate()
-                _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
-                self.updated.append(self.central.get_all_devices)
-                self.responses.dev = resp
+                raw_models_by_type = models.Devices(**raw_data)
+                raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                if resp.all_ok:
+                    self.DevDB.truncate()
+                    _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                    self.updated.append(self.central.get_all_devices)
+                    self.responses.dev = resp
+                else:  # partial failure at least one of the calls (call for each device type) failed.  Partial cache update
+                    _ = [self.DevDB.upsert(dev.dict(), cond=self.Q.serial == dev.serial) for dev in raw_models]
 
             return resp
 
@@ -2142,10 +2153,10 @@ class Cache:
         license_db: bool = False,
         ):
         update_funcs, db_res = [], []
-        if dev_db:
-            update_funcs += [self.update_dev_db]
         if inv_db:
             update_funcs += [self.update_inv_db]
+        if dev_db:
+            update_funcs += [self.update_dev_db]
         if site_db:
             update_funcs += [self.update_site_db]
         if template_db:
@@ -2159,7 +2170,9 @@ class Cache:
         async with self.central.aio_session:
             if update_funcs:
                 db_res += [await update_funcs[0]()]
-                if db_res[-1]:
+                if not db_res[-1]:
+                    log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
+                else:
                     if len(update_funcs) > 1:
                         db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
 

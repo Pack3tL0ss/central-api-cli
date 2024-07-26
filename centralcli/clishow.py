@@ -151,7 +151,7 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         caption = f"[reset]Counts: {_cnt_str}"
 
     if inventory and not inventory_only:
-        caption = f"{caption}\n  [italic green3]Devices lacking name/ip are in the inventory, but have not connected to central.[/]"
+        caption = f"{caption}\n  [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
 # TODO break this into multiple functions
@@ -236,8 +236,6 @@ def show_devices(
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
-            if params.get("show_resource_details", False) is True or params.get("calculate_ssid_count", False) is True:
-                caption = f'{caption or ""}\n  [bright_red]WARNING[/]: Filtering options ignored, not valid w/ [cyan]-v[/] (include inventory devices)'
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
             resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:

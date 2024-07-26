@@ -59,9 +59,9 @@ class Device(BaseModel):
     # _normalize_type = validator("type", allow_reuse=True)(lambda v: switch_types.get(v, v))
 
 class Devices(BaseModel):
-    aps: List[Device]
-    switches: List[Device]
-    gateways: List[Device]
+    aps: Optional[List[Device]] = Field([])
+    switches: Optional[List[Device]] = Field([])
+    gateways: Optional[List[Device]] = Field([])
 
 class Site(BaseModel):
     name: str
