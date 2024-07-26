@@ -462,7 +462,7 @@ def site(
     ),
 ) -> None:
     """
-    [bright_green]Update details for an existing site.[/]
+    Update details for an existing site.
 
     Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
     [italic]Google Maps "Plus Codes" are supported for address field.[/]
