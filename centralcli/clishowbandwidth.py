@@ -210,7 +210,7 @@ def client(
     device: str = typer.Option(None, "--dev", help="Show Bandwidth details for clients connected to a specific device", metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, case_sensitive=False, show_default=False,),
     group: str = typer.Option(None, help="Show Bandwidth for clients connected to devices in a specific group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for clients connected to devices with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
-    swarm_or_stack: bool = typer.Option(False, "-s", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.[/]", show_default=False),
+    swarm_or_stack: bool = typer.Option(False, "-s", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.", show_default=False),
     start: datetime = typer.Option(
         None,
         "-s", "--start",

@@ -49,6 +49,14 @@ centralcli.constants module
    :undoc-members:
    :show-inheritance:
 
+centralcli.objects module
+---------------------------
+
+.. automodule:: centralcli.objects
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 centralcli.exceptions module
 ----------------------------
 
