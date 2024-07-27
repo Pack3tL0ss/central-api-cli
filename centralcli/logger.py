@@ -93,7 +93,7 @@ class MyLogger:
 
     @property
     def caption(self) -> None | str:
-        """render log messages queued for display in output caption
+        """render log messages queued for display in output caption.
         """
         if not self._caption:
             return
@@ -146,9 +146,8 @@ class MyLogger:
         self.log_print(msgs, log=log, show=show, caption=caption, level='debug', *args, **kwargs)
 
     def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
-        """more verbose debugging - primarily to get json dumps, set via debugv: True in config
+        """More verbose debugging - set via debugv: True in config
         """
-        # show = show or self.show
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
