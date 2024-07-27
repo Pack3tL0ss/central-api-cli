@@ -50,7 +50,8 @@ class DateTime():
 
     @property
     def day_datetime(self) -> str:
-        """Thu, May 7, 2020 3:49 AM"""
+        """Thu, May 7, 2020 3:49 AM
+        """
         return pendulum.from_timestamp(self.epoch, tz=self.tz).to_day_datetime_string()
 
     @property
@@ -84,17 +85,20 @@ class DateTime():
 
     @property
     def timediff(self) -> str:
-        """47 minutes ago"""
+        """47 minutes ago
+        """
         return "" if self.epoch is None else pendulum.from_timestamp(self.epoch, tz=self.tz).diff_for_humans()
 
     @property
     def mdyt(self) -> str:
-        """May 07, 2020 3:49:24 AM"""
+        """May 07, 2020 3:49:24 AM
+        """
         return pendulum.from_timestamp(self.epoch, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def log(self) -> str:
-        """Jan 08 7:59:00 PM"""
+        """Jan 08 7:59:00 PM
+        """
         if isinstance(self.epoch, str):
             try:
                 self.epoch = float(self.epoch)
@@ -105,8 +109,7 @@ class DateTime():
 
 
 class Encoder(JSONEncoder):
-    """
-    A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
+    """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
     def default(self, obj):
         return obj if not isinstance(obj, DateTime) and not isinstance(obj, Path) else str(obj)
