@@ -142,7 +142,7 @@ def group(
         if dev_type == "ap":
             reboot = True
         ver_msg += [lib_to_gen_plural(dev_type)]
-        dev_type = lib_to_api("firmware", dev_type)
+        dev_type = lib_to_api(dev_type, "firmware")
 
     if model:
         if "sw" not in group.AllowedDevTypes:

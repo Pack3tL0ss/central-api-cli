@@ -144,7 +144,7 @@ def commands(
     if sort_by == "id":
         sort_by = None
     central = cli.central
-    dev_type = lib_to_api("tshoot", device_type)
+    dev_type = lib_to_api(device_type, "tshoot")
 
     resp = central.request(central.get_ts_commands, device_type=dev_type,)
     cli.display_results(resp, tablefmt="rich", sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_ts_commands)

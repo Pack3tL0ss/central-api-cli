@@ -47,6 +47,7 @@ from centralcli.constants import (
 )
 from centralcli.cache import CentralObject
 
+
 app = typer.Typer()
 app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
@@ -98,7 +99,7 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
                 counts = get_counts(resp.output, t)
                 status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
-        else:  # show all [--inv], or show ivnentory -v
+        else:
             def url_to_key(url) -> str:
                 return url.split("/")[-1]
 
@@ -109,10 +110,13 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         counts_by_type = get_switch_counts(resp.raw["switches"])
         status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
-        _tot = len(resp)
-        _up = len(list(filter(lambda a: a["status"] == "Up", resp.output)))
-        _down = _tot - _up
-        status_by_type = {dev_type: {"total": _tot, "up": _up, "down": _down}}
+        counts = get_counts(resp.output, dev_type=dev_type)
+        # _tot = len(resp)
+        # _up = len(list(filter(lambda a: a["status"] == "Up", resp.output)))
+        # _down = _tot - _up
+        status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
+        if inventory:
+            status_by_type[dev_type]["inventory_only"] = counts.inventory
 
     # Put together counts caption string
     if status:
@@ -217,7 +221,7 @@ def show_devices(
         br = cli.central.BatchRequest
         devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         _types = [dev.type for dev in devs]
-        reqs = [br(central.get_dev_details, (lib_to_api("monitoring", _type), dev.serial,)) for _type, dev in zip(_types, devs)]
+        reqs = [br(central.get_dev_details, (lib_to_api(_type, "monitoring"), dev.serial,)) for _type, dev in zip(_types, devs)]
         batch_res = cli.central.batch_request(reqs)
 
         if do_table and len(_types) > 1:
@@ -251,8 +255,15 @@ def show_devices(
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
         resp = central.request(central.get_devices, dev_type, **params)
+        _ = central.request(cli.cache.update_dev_db, response=resp)
+
+        if include_inventory:
+            _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
+            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
+
+
         # TODO cache update here.  Need to verify cache.format_raw_devices_for_cache to make sure it can handle single call
-        caption = _build_caption(resp, dev_type=cache_generic_types.get(dev_type), status=status)
+        caption = _build_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -311,6 +322,7 @@ def all_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -318,7 +330,6 @@ def all_(
         help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -373,8 +384,9 @@ def devices(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
+    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -382,7 +394,6 @@ def devices(
         help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -419,7 +430,7 @@ def devices(
 
     show_devices(
         devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
-        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=do_stats, do_clients=True,
+        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=True, do_clients=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
 
@@ -439,6 +450,7 @@ def aps(
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
     # do_ssids: bool = typer.Option(True, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show all AP LLDP neighbors for a site \[requires --site]", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -489,7 +501,7 @@ def aps(
             status = "Down" if down else "Up"
 
         show_devices(
-            aps, dev_type="aps", verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            aps, dev_type="aps", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
@@ -507,6 +519,7 @@ def switches_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -541,7 +554,7 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switches', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        switches, dev_type='switches', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -560,6 +573,7 @@ def gateways_(
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = typer.Option(
         0,
         "-v",
@@ -567,7 +581,6 @@ def gateways_(
         help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
         show_default=False,
     ),
-    # with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # Not functional yet
     sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
     reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
@@ -595,7 +608,7 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gateways', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        gateways, dev_type='gateways', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -614,6 +627,7 @@ def controllers_(
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
     # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # hidden as not tested with this type
     verbose: int = typer.Option(
         0,
         "-v",
@@ -650,7 +664,7 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='mobility_controllers', verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        controllers, dev_type='mobility_controllers', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
@@ -773,7 +787,7 @@ def inventory(
         )
         cli.exit("", code=0)
 
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api("inventory", dev_type), sub=sub)
+    resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api(dev_type, "inventory"), sub=sub)
 
     cli.display_results(
         resp,

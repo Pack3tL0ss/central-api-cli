@@ -471,7 +471,7 @@ class Cache:
         return self.HookDataDB.get(self.Q.device_id == serial)
 
 
-    def get_devices_with_inventory(self, no_refresh=False) -> List[Response]:
+    def get_devices_with_inventory(self, no_refresh=False, dev_type: constants.AllDevTypes = None) -> List[Response]:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -480,6 +480,9 @@ class Cache:
 
                 Refresh will only occur if cache was not updated during this session.
                 Setting no_refresh to True means it will not occur regardless.
+            dev_type(AllDevTypes, optional): Filter devices by type:
+                Valid Types: 'ap', 'gw', 'cx', 'sw' or 'switch'
+                where 'switch' will include both 'cx' and 'sw'.  Defalts to None (no Filter/All device types)
 
         Returns:
             List[Response]: Response objects where output is list of dicts with
@@ -503,6 +506,11 @@ class Cache:
             _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}
         else:
             _dev_by_ser = self.devices_by_serial
+
+        if dev_type:
+            _dev_types = [dev_type] if dev_type != "switch" else ["cx", "sw", "mas"]
+            _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["type"] in _dev_types}
+            _inv_by_ser = {serial: _inv_by_ser[serial] for serial in _inv_by_ser if _inv_by_ser[serial]["type"] in _dev_types}
 
         _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
@@ -1714,15 +1722,35 @@ class Cache:
 
         return raw_data
 
+    async def format_dev_response_for_cache(self, resp: Response):
+        if not resp.ok:
+            return
+
+        try:
+            resp = CombinedResponse.flatten_resp([resp])
+            raw_data = await self.format_raw_devices_for_cache(resp)
+            devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
+
+            _ret = [d.dict() for d in devices]
+        except Exception as e:
+            log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")
+            log.exception(e)
+            _ret = None
+
+        return _ret
+
+
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     # TODO if we are updating inventory we only need to get those devices types
-    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, remove: bool = False, **kwargs) -> Union[List[int], Response]:
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, *, remove: bool = False, response: Response = None, **kwargs) -> Union[List[int], Response]:
         """Update Device Database (local cache).
 
         Args:
             data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
+            response (Response, optional): Response object for a call to one of the monitoring/<dev-type> endpoints
+                raw response attribute will be cleaned and prepped for cache update (upsert).
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1731,6 +1759,10 @@ class Cache:
             Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
                 If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
         """
+        if response and not data:
+            self.responses.dev = response
+            data = await self.format_dev_response_for_cache(response)
+
         if data:
             data = utils.listify(data)
             if not remove:
@@ -1805,6 +1837,22 @@ class Cache:
             Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
                 If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
         """
+        lib_to_api_dev_type = {
+            "gw": "gateway",
+            "gateway": "gateway",
+            "gateways": "gateway",
+            "sw": "switch",
+            "cx": "switch",
+            "switches": "switch",
+            "switch": "switch",
+            "ap": "all_ap",
+            "aps": "all_ap"
+        }
+
+        dev_type = lib_to_api_dev_type.get(dev_type, dev_type)
+        if config.is_cop and dev_type == "gateway":
+            dev_type = "controller"
+
         if data:
             # provide serial or list of serials to remove
             data = utils.listify(data)

@@ -1385,7 +1385,7 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
 
 def _inv_type(model: str, dev_type: str) -> DevTypes:
     if dev_type == "SWITCH":
-        aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]
+        aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
         return "sw" if model[0:4] in aos_sw_models else "cx"
 
     return "gw" if dev_type == "GATEWAY" else dev_type.lower()

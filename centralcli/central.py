@@ -702,7 +702,7 @@ class CentralApi(Session):
         model: str = None,
     ) -> Response:
         if device_type:
-            device_type = constants.lib_to_api("template", device_type)
+            device_type = constants.lib_to_api(device_type, "template")
 
         params = {
             "offset": 0,
@@ -785,7 +785,7 @@ class CentralApi(Session):
         # async with aiohttp.ClientSession() as session:
         #     response = await session.post(str(config.snow.refresh_url), data=_form)
         device_type = device_type if not hasattr(device_type, "value") else device_type.value
-        device_type = constants.lib_to_api("template", device_type)
+        device_type = constants.lib_to_api(device_type, "template")
 
         params = {
             'name': name,
@@ -867,7 +867,7 @@ class CentralApi(Session):
         template = template if isinstance(template, Path) else Path(str(template))
 
         if device_type:
-            device_type = constants.lib_to_api("template", device_type)
+            device_type = constants.lib_to_api(device_type, "template")
 
         params = {
             'name': name,
@@ -3834,7 +3834,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api('firmware', device_type)
+        device_type = constants.lib_to_api(device_type, 'firmware')
         url = "/firmware/v1/upgrade/cancel"
 
         json_data = {
@@ -3885,7 +3885,7 @@ class CentralApi(Session):
         """
         # API method returns 404 if compliance is not set!
         url = "/firmware/v1/upgrade/compliance_version"
-        device_type = constants.lib_to_api('firmware', device_type)
+        device_type = constants.lib_to_api(device_type, 'firmware')
 
         params = {
             'device_type': device_type,
@@ -3907,7 +3907,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/firmware/v1/upgrade/compliance_version"
-        device_type = constants.lib_to_api('firmware', device_type)
+        device_type = constants.lib_to_api(device_type, 'firmware')
 
         params = {
             'device_type': device_type,
@@ -3944,7 +3944,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/firmware/v2/upgrade/compliance_version"
-        device_type = constants.lib_to_api('firmware', device_type)
+        device_type = constants.lib_to_api(device_type, 'firmware')
 
 
         json_data = {
@@ -3996,7 +3996,7 @@ class CentralApi(Session):
             ValueError: if device_type is not valid/supported by API endpoint.
         """
         url = "/firmware/v1/devices"
-        device_type = constants.lib_to_api("firmware", device_type)
+        device_type = constants.lib_to_api(device_type, "firmware")
         if not device_type:
             raise ValueError(
                 f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
@@ -4084,7 +4084,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         # TODO make device_types consistent throughout
-        device_type = constants.lib_to_api("site", device_type)
+        device_type = constants.lib_to_api(device_type, "site")
         if not device_type:
             raise ValueError(
                 f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
@@ -4119,7 +4119,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api("site", device_type)
+        device_type = constants.lib_to_api(device_type, "site")
         if not device_type:
             raise ValueError(
                 f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
@@ -4210,7 +4210,7 @@ class CentralApi(Session):
         """
         url = "/central/v2/labels/associations"
         serial_nums = utils.listify(serial_nums)
-        device_type = constants.lib_to_api("site", device_type)
+        device_type = constants.lib_to_api(device_type, "site")
 
         json_data = {
             'label_id': label_id,
@@ -4240,7 +4240,7 @@ class CentralApi(Session):
         """
         url = "/central/v2/labels/associations"
         serial_nums = utils.listify(serial_nums)
-        device_type = constants.lib_to_api("site", device_type)
+        device_type = constants.lib_to_api(device_type, "site")
 
         json_data = {
             'label_id': label_id,

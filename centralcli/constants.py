@@ -530,7 +530,6 @@ arg_to_what = ArgToWhat()
 APIMethodType = Literal[
     "site",
     "monitoring",
-    "event",
     "template",
     "firmware",
     "event",
@@ -541,13 +540,9 @@ APIMethodType = Literal[
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 
 class LibToAPI:
-    """Convert device type stored in Cache to type required by the different API methods
+    """Convert consistent device types used by this library to the various types used by Central API endpoints
 
-    TODO Working toward a consistent set of device_types, needs review, goal is to have
-    all API methods in CentralApi use a consistent set of device type values.  i.e.
-    'ap', 'switch', 'gw' ('controller' appears to be the same as gw).  Then use this callable
-    object to convert appropriate device type to whatever random value is required by the API
-    method.
+    If no method str is provided converts various strings to consistent library device types.
     """
     def __init__(self):
         # default from random to CentralApi consistent value
@@ -617,16 +612,16 @@ class LibToAPI:
             "vgw": "vgw"
         }
 
-    def __call__(self, method: APIMethodType, key: str, default: str = None) -> str:
-        if isinstance(key, Enum):
-            key = key.value
+    def __call__(self, dev_type: str, method: APIMethodType = None, default: str = None) -> str:
+        if isinstance(dev_type, Enum):
+            dev_type = dev_type.value
 
         # TODO lose the _to_api in the attributes
         if hasattr(self, f"{method}_to_api"):
             self.method_iden = method
-            return getattr(self, f"{method}_to_api").get(key.lower(), default or key)
+            return getattr(self, f"{method}_to_api").get(dev_type.lower(), default or dev_type)
 
-        return getattr(self, key, default or key)
+        return getattr(self, dev_type, default or dev_type)
 
     @property
     def valid(self) -> list:
