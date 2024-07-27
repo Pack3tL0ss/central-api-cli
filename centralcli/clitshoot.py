@@ -40,7 +40,7 @@ iden_meta = IdenMetaVars()
 
 
 def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = False, outfile: Path = None) -> Response:
-    _type = lib_to_api("tshoot", device.type)
+    _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
     resp = cli.central.request(cli.central.start_ts_session, device.serial, dev_type=_type, commands=commands)
@@ -88,7 +88,7 @@ def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,
         pager (bool): Optional Use Pager
     """
     dev: CentralObject = cli.cache.get_dev_identifier(device)
-    dev_type = lib_to_api("tshoot", dev.type)
+    dev_type = lib_to_api(dev.type, "tshoot")
     if len(cmd) == 1:
         cmd = cmd[0].split()
     cmd = " ".join(cmd)
@@ -403,7 +403,7 @@ def ping(
             cmd_args["Is_Mgmt"] = str(mgmt)
 
     commands = {cmd_id: cmd_args}
-    dev_type = lib_to_api("tshoot", dev.type)
+    dev_type = lib_to_api(dev.type, "tshoot")
 
     resp = cli.central.request(cli.central.start_ts_session, dev.serial, dev_type=dev_type, commands=commands)
     cli.display_results(resp, tablefmt="action", exit_on_fail=True)
