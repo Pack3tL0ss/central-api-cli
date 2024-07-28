@@ -1349,10 +1349,9 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # TODO change dev_type to use [gw, sw, cx, ap, switch]  make consistent for all calls
     async def get_devices(
         self,
-        dev_type: Literal["switches", "aps", "gateways"],
+        dev_type: Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"],
         group: str = None,
         label: str = None,
         stack_id: str = None,
@@ -1377,7 +1376,8 @@ class CentralApi(Session):
         // Used by show <"aps"|"gateways"|"switches"> //
 
         Args:
-            dev_type (Literal["switches", "aps", "gateways"): Type of devices to get.
+            dev_type (Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"): Type of devices to get.
+                Note: "switch", "cx", "sw" all = "switches".  Return details for all switch types.
             group (str, optional): Filter on specific group. Defaults to None.
             label (str, optional): Filter by label. Defaults to None.
             stack_id (str, optional): Return switch with specific stack_id. Defaults to None.
@@ -1398,7 +1398,15 @@ class CentralApi(Session):
 
         Returns:
             Response: CentralAPI Response object
+
+        Raises:
+            ValueError: Raised if dev_type is not valid.
         """
+        if dev_type not in ["switches", "aps", "gateways"]:
+            dev_type = constants.lib_to_api(dev_type, "monitoring")
+            if dev_type not in ["switches", "aps", "gateways"]:
+                raise ValueError(f"dev_type must be one of ap, gw, cx, sw, switch, aps, gateways, switches not {dev_type}")
+
         dev_params = {
             "aps": {
                 'serial': serial,
