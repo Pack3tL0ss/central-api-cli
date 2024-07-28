@@ -107,13 +107,10 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
-        counts_by_type = get_switch_counts(resp.raw["switches"])
+        counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
         status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
         counts = get_counts(resp.output, dev_type=dev_type)
-        # _tot = len(resp)
-        # _up = len(list(filter(lambda a: a["status"] == "Up", resp.output)))
-        # _down = _tot - _up
         status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
         if inventory:
             status_by_type[dev_type]["inventory_only"] = counts.inventory
