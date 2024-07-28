@@ -265,34 +265,34 @@ def group(
 # TODO autocompletion
 @app.command(short_help="Add WLAN (SSID)")
 def wlan(
-    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion),
-    name: str = typer.Argument(..., ),
-    kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]",),
-    kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']",),
-    kw3: Tuple[AddWlanArgs, str] = typer.Argument(("vlan", ""), metavar="vlan [VLAN]",),
-    kw4: Tuple[AddWlanArgs, str] = typer.Argument(("zone", ""), metavar="zone [ZONE]",),
-    kw5: Tuple[AddWlanArgs, str] = typer.Argument(("ssid", None), metavar="ssid [SSID]",),
-    kw6: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_up", ""), metavar="bw-limit-up [LIMIT]",),
-    kw7: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_down", ""), metavar="bw-limit-down [LIMIT]",),
-    kw8: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_user_up", ""), metavar="bw-limit-user-up [LIMIT]",),
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion, show_default=False,),
+    name: str = typer.Argument(..., show_default=False,),
+    kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]", show_default=False,),
+    kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']", show_default=False,),
+    kw3: Tuple[AddWlanArgs, str] = typer.Argument(("vlan", ""), metavar="vlan [VLAN]", show_default=False,),
+    kw4: Tuple[AddWlanArgs, str] = typer.Argument(("zone", ""), metavar="zone [ZONE]", show_default=False,),
+    kw5: Tuple[AddWlanArgs, str] = typer.Argument(("ssid", None), metavar="ssid [SSID]", show_default=False,),
+    kw6: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_up", ""), metavar="bw-limit-up [LIMIT]", show_default=False,),
+    kw7: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_down", ""), metavar="bw-limit-down [LIMIT]", show_default=False,),
+    kw8: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_user_up", ""), metavar="bw-limit-user-up [LIMIT]", show_default=False,),
     kw9: Tuple[AddWlanArgs, str] = typer.Argument(
         ("bw_limit_user_down", ""),
         metavar="bw-limit-user-down [LIMIT]",
+        show_default=False,
     ),
     kw10: Tuple[AddWlanArgs, str] = typer.Argument(
         ("portal_profile", ""),
         metavar="portal-profile [PORTAL PROFILE]",
+        show_default=False,
     ),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
     _to_name = {
@@ -309,21 +309,20 @@ def wlan(
         kwargs["hide_ssid"] = True
 
     if not kwargs["wpa_passphrase"]:
-        typer.secho("psk/passphrase is currently required for this command")
-        raise typer.Exit(1)
+        cli.exit("psk/passphrase is currently required for this command")
 
-    if yes or typer.confirm(typer.style(f"Please Confirm Add wlan {name} to {group.name}", fg="cyan")):
+    print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.create_wlan, group.name, name, **kwargs)
-        typer.secho(str(resp), fg="green" if resp else "red")
-    else:
-        raise typer.Abort()
+        cli.display_results(resp, tablefmt="action")
+
 
 
 @app.command(short_help="Add a site.", help=help_text.add_site)
 def site(
-    site_name: str = typer.Argument(...),
-    address: str = typer.Argument(None, help="street address, (enclose in quotes)"),
-    city: str = typer.Argument(None,),
+    site_name: str = typer.Argument(... , show_default=False,),
+    address: str = typer.Argument(None, help="street address, (enclose in quotes)", show_default=False,),
+    city: str = typer.Argument(None, show_default=False,),
     state: str = typer.Argument(
         None,
         autocompletion=lambda incomplete: [
@@ -332,12 +331,13 @@ def site(
             *list(state_abbrev_to_pretty.values())
             ]
             if s.lower().startswith(incomplete.lower())
-        ]
+        ],
+        show_default=False,
     ),
-    zipcode: int = typer.Argument(None,),
-    country: str = typer.Argument(None,),
-    lat: str = typer.Option(None, metavar="LATITUDE"),
-    lon: str = typer.Option(None, metavar="LONGITUDE"),
+    zipcode: int = typer.Argument(None, show_default=False,),
+    country: str = typer.Argument(None, show_default=False,),
+    lat: str = typer.Option(None, metavar="LATITUDE", show_default=False,),
+    lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False,),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     default: bool = typer.Option(
         False, "-d", is_flag=True, help="Use default central account", show_default=False
@@ -382,7 +382,7 @@ def site(
 # TODO allow more than one label and use batch_request
 @app.command(help="Create a new label")
 def label(
-    name: str = typer.Argument(..., ),
+    name: str = typer.Argument(..., show_default=False,),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
@@ -486,20 +486,17 @@ def certificate(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Add a WebHook")
+@app.command(help="Add a WebHook")
 def webhook(
-    name: str = typer.Argument(..., ),
-    urls: List[str] = typer.Argument(..., help="webhook urls",),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    name: str = typer.Argument(..., show_default=False,),
+    urls: List[str] = typer.Argument(..., help="webhook urls", show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
-
     print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_webhook, name, urls)
@@ -512,10 +509,10 @@ def webhook(
 # TODO ?? add support for converting j2 template to central template
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
-    name: str = typer.Argument(..., ),
-    group: str = typer.Argument(..., help="Group to upload template to",),
-    template: Path = typer.Argument(None, exists=True),
-    dev_type: DevTypes = typer.Option("ap"),
+    name: str = typer.Argument(..., show_default=False,),
+    group: str = typer.Argument(..., help="Group to upload template to", show_default=False,),
+    template: Path = typer.Argument(None, exists=True, show_default=False,),
+    dev_type: DevTypes = typer.Option("sw"),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
     yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
@@ -550,16 +547,15 @@ def template(
 # TODO config option for different random pass formats
 @app.command()
 def guest(
-    portal_id: str = typer.Argument(..., ),
-    name: str = typer.Argument(..., ),
+    portal_id: str = typer.Argument(..., show_default=False,),
+    name: str = typer.Argument(..., show_default=False,),
     password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
-    company: str = typer.Option(None, help="Company Name",),
-    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]"),
-    email: str = typer.Option(None, help="email of guest"),
-    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'"),
-    disable: bool = typer.Option(False, "--disable", is_flag=True, show_default=False, help="add account, but set to disabled"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    company: str = typer.Option(None, help="Company Name", show_default=False,),
+    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]", show_default=False,),
+    email: str = typer.Option(None, help="email of guest", show_default=False,),
+    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'", show_default=False,),
+    disable: bool = typer.Option(False, "--disable", is_flag=True, help="add account, but set to disabled", show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
@@ -567,18 +563,16 @@ def guest(
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
     """Add a guest user to a configured portal"""
-    yes = yes_ if yes_ else yes
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
     _phone_strip = list("()-. ")
     if phone:
         phone_orig = phone
-        phone = "".join([p for p in phone if p not in _phone_strip])
+        phone = "".join([p for p in list(phone) if p not in _phone_strip])
         if not phone.startswith("+"):
             if not len(phone) == 10:
-                print(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
-                raise typer.Exit(1)
+                cli.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
             phone = f"+1{phone}"
 
     # TODO Add options for expire after / valid forever
@@ -598,7 +592,6 @@ def guest(
         payload["password"] = password
 
 
-    # portal_id = cli.cache.get_portal_identifier(portal_id)
     _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
     _msg += f"  {options}\n"
     _msg += "\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
