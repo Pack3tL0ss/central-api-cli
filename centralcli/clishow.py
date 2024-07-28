@@ -268,7 +268,7 @@ def show_devices(
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
-    else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
+    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
         resp = central.request(central.get_devices, dev_type, **params)
         _ = central.request(cli.cache.update_dev_db, response=resp)
 
@@ -276,8 +276,6 @@ def show_devices(
             _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
 
-
-        # TODO cache update here.  Need to verify cache.format_raw_devices_for_cache to make sure it can handle single call
         caption = _build_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
@@ -797,7 +795,7 @@ def inventory(
 
     if verbose:
         show_devices(
-            dev_type='all', outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
         cli.exit("", code=0)
