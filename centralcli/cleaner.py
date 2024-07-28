@@ -1412,7 +1412,10 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     # combine type / device_type for verbose output, preferring type from cache
 
     data = [
-        {"type": _inv_type(d["model"], d.get("type", d.get("device_type", "err"))), **{key: val for key, val in d.items() if key != "device_type"}}
+        {
+            "type": _inv_type(d["model"], d.get("type", d.get("device_type", "err"))),
+            **{key: val for key, val in d.items() if key != "device_type"}
+        }
         for d in data
     ]
     data = [
