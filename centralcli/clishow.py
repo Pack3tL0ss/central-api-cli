@@ -83,21 +83,34 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             for _type in dev_types
         }
 
-    def get_counts(data: List[Dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
+    def get_counts(data: List[dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
         _match_type = [d for d in data if d["type"] == dev_type]
         _tot = len(_match_type)
         _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
         _inv = len([d for d in _match_type if not d.get("status")])
         return Counts(_tot, _up, _inv)
 
+    def get_counts_with_inv(data: List[dict]) -> dict:
+        """parse combined output attr of inventory and monitoring responses to determine counts by device type.
+
+        Args:
+            data (List[dict]): Combined resp.output for monitoring and inventory response.
+
+        Returns:
+            dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
+        """
+        status_by_type = {}
+        _types = set(d["type"] for d in data)
+        for t in _types:
+            counts = get_counts(data, t)
+            status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+
+        return status_by_type
+
 
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
-            status_by_type = {}
-            _types = set(d["type"] for d in resp.output)
-            for t in _types:
-                counts = get_counts(resp.output, t)
-                status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+            status_by_type = get_counts_with_inv(resp.output)
 
         else:
             def url_to_key(url) -> str:
@@ -107,8 +120,11 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
-        counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
-        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+        if inventory:
+            status_by_type = get_counts_with_inv(resp.output)
+        else:
+            counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
         counts = get_counts(resp.output, dev_type=dev_type)
         status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
@@ -237,6 +253,8 @@ def show_devices(
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
+            if status:
+                log.warning("[cyan]--up[/], [cyan]--down[/] filters are currently ignored when [cyan]--inv[/] is used.", caption=True)
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
             resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:

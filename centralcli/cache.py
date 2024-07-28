@@ -523,7 +523,8 @@ class Cache:
         resp.output = combined
         # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
         try:
-            resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+            # resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+            resp.raw = {**self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
         except AttributeError:
             if isinstance(resp, CombinedResponse):
                 resp.raw = {**resp.raw, **{f.url.path: f.raw for f in resp.failed}}
