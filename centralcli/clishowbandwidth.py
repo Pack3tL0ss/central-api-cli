@@ -8,16 +8,16 @@ from pathlib import Path
 from rich import print
 from datetime import datetime
 import pendulum
-
+from typing import Literal
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log, utils, cleaner, render
+    from centralcli import cli, log, utils, cleaner, render, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, utils, cleaner, render
+        from centralcli import cli, log, utils, cleaner, render, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -29,6 +29,7 @@ from centralcli.models import Client
 iden_meta = IdenMetaVars()
 app = typer.Typer()
 tty = utils.tty
+
 
 def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
     if end and past:
@@ -61,6 +62,27 @@ def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime
             return cli.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
 
     return start, end
+
+
+def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", "graph"], title: str, pager: bool = False, outfile: Path = None, cleaner: callable = cleaner.get_gw_uplinks_bandwidth,) -> None:
+    if resp:
+        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
+
+    # We don't graph if there is only a single sample
+    if not tablefmt == "graph" or not resp or not resp.output or cli.raw_out or len(resp.output) < 2:
+        cli.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=title,
+            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
+            exit_on_fail=True,
+            pager=pager,
+            outfile=outfile,
+            cleaner=cleaner
+        )
+    else:
+        render.bandwidth_graph(resp, title=title)
+
 
 @app.command()
 def ap(
@@ -181,26 +203,10 @@ def ap(
     title = " ".join(title_parts)
     title = title if title != "Bandwidth Usage" else "Bandwidth Usage All APs"
 
-
     resp = cli.central.request(cli.central.get_aps_bandwidth_usage, **kwargs, interval=interval, from_time=start, to_time=end)
-    if resp:
-        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
 
-    # We don't graph if there is only a single sample
-    if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=title,
-            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
-            exit_on_fail=True,
-            pager=pager,
-            outfile=outfile,
-            cleaner = cleaner.get_gw_uplinks_bandwidth
-        )
-    else:
-        render.bandwidth_graph(resp, title=title)
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
 
 
 @app.command()
@@ -272,9 +278,6 @@ def switch(
     port = None if port == "All Ports" else port
     start, end = _verify_time_range(start, end=end, past=past)
 
-    resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
-    if resp:
-        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
 
     title = f"Bandwidth Usage [cyan]{dev.name}[/]"
     if uplink:
@@ -282,25 +285,14 @@ def switch(
     elif port:
         title = f"{title} port [bright_green]{port}[/]"
 
+    resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
+
     _interval = resp.raw.get("interval")
     if _interval and not any([do_json, do_yaml, do_csv, do_table]):
         title = f"{title}, Sample Frequency: {_interval}"
 
-    # We don't graph if there is only a single sample
-    if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=title,
-            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
-            exit_on_fail=True,
-            pager=pager,
-            outfile=outfile,
-            cleaner = cleaner.get_gw_uplinks_bandwidth
-        )
-    else:
-        render.bandwidth_graph(resp, title=title)
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
 
 
 @app.command()
@@ -424,24 +416,9 @@ def client(
 
 
     resp = cli.central.request(cli.central.get_clients_bandwidth_usage, **kwargs, from_time=start, to_time=end)
-    if resp:
-        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
 
-    # We don't graph if there is only a single sample
-    if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=title,
-            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
-            exit_on_fail=True,
-            pager=pager,
-            outfile=outfile,
-            cleaner = cleaner.get_gw_uplinks_bandwidth
-        )
-    else:
-        render.bandwidth_graph(resp, title=title)
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
 
 
 @app.command()
@@ -519,26 +496,10 @@ def uplink(
     else:
         resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, show_uplink=True)
 
-    if resp:
-        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
-
     title = f'Bandwidth Usage for [cyan]{dev.name}[/] uplink [cyan]{uplink_name}[/]'
 
-    # We don't graph if there is only a single sample
-    if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=title,
-            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
-            exit_on_fail=True,
-            pager=pager,
-            outfile=outfile,
-            cleaner = cleaner.get_gw_uplinks_bandwidth
-        )
-    else:
-        render.bandwidth_graph(resp, title=title)
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
 
 
 @app.callback()
