@@ -537,7 +537,7 @@ class CLICommon:
                     m_color = m_colors.get(r.method, "reset")
                     print(
                         f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
-                        f"[cyan]{_url}[/cyan]]\n [fg]Response[reset]:"
+                        f"[cyan]{_url}[/cyan]]\n [{fg}]Response[reset]:"
                     )
 
                 if self.raw_out:
