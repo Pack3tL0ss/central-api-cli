@@ -1813,7 +1813,19 @@ def config_(
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
-    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
+    # TODO maybe add switch support... show template for switch if it's in template group or show run if not
+    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
+    if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
+        _err = "This command is only valid for APs and GWs, Use"
+        _group = cli.cache.get_group_identifier(group_dev.group)
+        if _group.data["template group"]["Wired"]:
+            _err = f"{_err} [cyan]cencli show template {group_dev.name}[/] or [cyan]cencli show run {group_dev.name}[/]"
+        else:
+            _err = f"{_err} [cyan]cencli show run {group_dev.name}[/]"
+        _err = f"{_err} for switches."
+
+        cli.exit(_err)
+
     if all:  # TODO move this either to cliexport or clibatch (cencli batch export configs)
         if not any([do_gw, do_ap]):
             print(":warning:  Invalid combination [cyan]--all[/] requires [cyan]--ap[/] or [cyan]--gw[/] flag.")
