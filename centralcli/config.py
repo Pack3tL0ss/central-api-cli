@@ -281,7 +281,7 @@ class Config:
                     _cache_token = json.loads(self.snow_tok_file.read_text())
                     _snow_config["token"]["cache"] = _cache_token
                 _snow_config["tok_file"] = Path(self.cache_dir / f'snow_{self.tok_file.name}')
-            self.snow = ServiceNow(**_snow_config)
+            self.snow = None if not _snow_config else ServiceNow(**_snow_config)
         except ValidationError:
             self.snow = None
 
