@@ -2460,6 +2460,45 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_switch_ports_bandwidth_usage(
+        self,
+        serial: str,
+        switch_type: Literal["cx", "sw"] = "cx",
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+        port: str = None,
+        show_uplink: bool = None,
+    ) -> Response:
+        """Ports Bandwidth Usage for Switch.
+
+        Args:
+            serial (str): Serial number of switch to be queried
+            switch_type: (Literal["cx", "sw"], optional) = switch type. Valid 'cx', 'sw'.  Defaults to 'cx'
+            from (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            port (str, optional): Filter by Port
+            show_uplink (bool, optional): Show usage for Uplink ports alone
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if show_uplink in [True, False]:
+            show_uplink = str(show_uplink).lower()
+
+        url = f"/monitoring/v1/{'cx_' if switch_type == 'cx' else ''}switches/{serial}/ports/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
+            'port': port,
+            'show_uplink': show_uplink
+        }
+
+        return await self.get(url, params=params)
+
     #  TODO add monitoring_external_controller_get_ap_rf_summary_v3 similar to bandwidth calls, "samples" key has timestamp, noise_floor, and utilization.
 
     async def get_aps_bandwidth_usage(

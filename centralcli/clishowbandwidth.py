@@ -12,12 +12,12 @@ import pendulum
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log, utils, config, cleaner, render
+    from centralcli import cli, log, utils, cleaner, render
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, utils, config, cleaner, render
+        from centralcli import cli, log, utils, cleaner, render
     else:
         print(pkg_dir.parts)
         raise e
@@ -30,9 +30,19 @@ iden_meta = IdenMetaVars()
 app = typer.Typer()
 tty = utils.tty
 
-def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, max_days: int = 90) -> pendulum.DateTime | None:
+def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
+    if end and past:
+        log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
+        end = None
+
+    if start and past:
+        log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
+
+    if past:
+        start = cli.past_to_start(past=past)
+
     if start is None:
-        return start
+        return start, end
 
     if not hasattr(start, "timezone"):
         start = pendulum.from_timestamp(start.timestamp(), tz="UTC")
@@ -48,9 +58,9 @@ def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime
             cli.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
         else:
             log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
-            return cli.past_to_start("2_159h")  # 89 days and 23 hours to avoid issue with API endpoint
+            return cli.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
 
-    return start
+    return start, end
 
 @app.command()
 def ap(
@@ -125,18 +135,7 @@ def ap(
     group = None if not group else cli.cache.get_group_identifier(group)
     site = None if not site else cli.cache.get_site_identifier(site)
     label = None if not label else cli.cache.get_label_identifier(label)
-
-    if end and past:
-        log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
-        end = None
-
-    if start and past:
-        log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
-
-    if past:
-        start = cli.past_to_start(past=past)
-
-    start = _verify_time_range(start, end=end)
+    start, end = _verify_time_range(start, end=end, past=past)
 
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
 
@@ -186,6 +185,106 @@ def ap(
     resp = cli.central.request(cli.central.get_aps_bandwidth_usage, **kwargs, interval=interval, from_time=start, to_time=end)
     if resp:
         resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
+
+    # We don't graph if there is only a single sample
+    if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
+        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+        cli.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=title,
+            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
+            exit_on_fail=True,
+            pager=pager,
+            outfile=outfile,
+            cleaner = cleaner.get_gw_uplinks_bandwidth
+        )
+    else:
+        render.bandwidth_graph(resp, title=title)
+
+
+@app.command()
+def switch(
+    switch: str = typer.Argument(..., help="Switch to show Bandwidth details for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, case_sensitive=False, show_default=False,),
+    port: str = typer.Argument("All Ports", help="Show bandwidth for a specific port",),
+    uplink: bool = typer.Option(False, "--uplink", help="Show Bandwidth usage for the uplink", show_default=False,),
+    start: datetime = typer.Option(
+        None,
+        "-s", "--start",
+        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
+        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
+        show_default=False,
+    ),
+    end: datetime = typer.Option(
+        None,
+        "-e", "--end",
+        help="End time of bandwidth details [grey42]\[default: Now][/]",
+        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
+        show_default=False,
+    ),
+    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
+        False,
+        "--raw",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show Bandwidth usage for a switch or a specific port on a switch.
+
+    Default output is line graph showing bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    """
+    # start and end datetime opjects are in UTC
+    # raise NotImplementedError()
+    dev = cli.cache.get_dev_identifier(switch, dev_type="switch")
+    port = None if port == "All Ports" else port
+    start, end = _verify_time_range(start, end=end, past=past)
+
+    resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
+    if resp:
+        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
+
+    title = f"Bandwidth Usage [cyan]{dev.name}[/]"
+    if uplink:
+        title = f"{title} [bright_green]Uplink[/]"
+    elif port:
+        title = f"{title} port [bright_green]{port}[/]"
+
+    _interval = resp.raw.get("interval")
+    if _interval and not any([do_json, do_yaml, do_csv, do_table]):
+        title = f"{title}, Sample Frequency: {_interval}"
 
     # We don't graph if there is only a single sample
     if not resp or not resp.output or cli.raw_out or len(resp.output) < 2 or any([do_csv, do_json, do_yaml, do_table]):
@@ -274,18 +373,7 @@ def client(
     group: CentralObject | None = None if not group else cli.cache.get_group_identifier(group)
     label: CentralObject | None = None if not label else cli.cache.get_label_identifier(label)
     client: Client | None = None if not client else cli.cache.get_client_identifier(client, exit_on_fail=True)
-
-    if end and past:
-        log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
-        end = None
-
-    if start and past:
-        log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
-
-    if past:
-        start = cli.past_to_start(past=past)
-
-    start = _verify_time_range(start, end=end)
+    start, end = _verify_time_range(start, end=end, past=past)
 
     kwargs = {}
     title = "Bandwidth Usage"
@@ -356,10 +444,10 @@ def client(
         render.bandwidth_graph(resp, title=title)
 
 
-@app.command(hidden=config.is_cop)
+@app.command()
 def uplink(
-    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
-    uplink_name: UplinkNames = typer.Argument("uplink101", help="Name of the uplink.  Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names.", show_default=True,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
+    uplink_name: UplinkNames = typer.Argument("uplink101", help="[Applies to Gateway] Name of the uplink.  Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names.", show_default=True,),
     start: datetime = typer.Option(
         None,
         "-s", "--start",
@@ -375,7 +463,7 @@ def uplink(
         show_default=False,
     ),
     past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
-    interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
+    interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="[Applies to Gateway] One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
@@ -412,7 +500,7 @@ def uplink(
         rich_help_panel="Common Options",
     ),
 ) -> None:
-    """Show bandwidth usage graph for a gateway uplink
+    """Show bandwidth usage graph for a switch or gateway uplink
 
     Default output is line graph showing uplink bandwidth usage over the last 3 hours.
     Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
@@ -421,23 +509,15 @@ def uplink(
     Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names
     """
     # start and end datetime opjects are in UTC
-    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
-
-    if end and past:
-        log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True)
-        end = None
-
-    if start and past:
-        log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True)
-
-    if past:
-        start = cli.past_to_start(past=past)
-
-    # TODO move logic above to _verify_time_range
-    start = _verify_time_range(start, end=end)
+    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"])
+    start, end = _verify_time_range(start, end=end, past=past)
 
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
-    resp = cli.central.request(cli.central.get_gw_uplinks_bandwidth_usage, dev.serial, uplink_name, interval=interval, from_time=start, to_time=end)
+
+    if dev.type == "gw":
+        resp = cli.central.request(cli.central.get_gw_uplinks_bandwidth_usage, dev.serial, uplink_name, interval=interval, from_time=start, to_time=end)
+    else:
+        resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, show_uplink=True)
 
     if resp:
         resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
