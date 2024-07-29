@@ -13,7 +13,7 @@ import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from tinydb.table import Table
+from tinydb.table import Table, Document
 from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
@@ -1971,7 +1971,6 @@ class Cache:
             resp = await self.central.get_all_groups()
             if resp.ok:
                 resp.output = cleaner.get_all_groups(resp.output)
-                resp.output = utils.listify(resp.output)
                 self.responses.group = resp
                 self.updated.append(self.central.get_all_groups)
                 self.GroupDB.truncate()
@@ -2030,8 +2029,7 @@ class Cache:
                 log.error("Tiny DB returned an error during license db update")
         return resp
 
-    async def update_template_db(self):
-        # groups = self.groups if self.central.get_all_groups in self.updated else None
+    async def _renew_teplate_db(self):
         if self.central.get_all_groups not in self.updated:
             gr_resp = await self.update_group_db()
             if not gr_resp.ok:
@@ -2049,6 +2047,40 @@ class Cache:
                 if False in update_res:
                     log.error("Tiny DB returned an error during template db update")
         return resp
+
+
+    async def update_template_db(
+            self,
+            add: Dict[str, Any] | List[Dict[str, Any]] = None,
+            remove: CentralObject | List[CentralObject] = None,
+            update: CentralObject | List[CentralObject] = None
+        ):
+        if not any([add, remove, update]):
+            return await self._renew_teplate_db()
+        else:
+            db_res = []
+            try:
+                if remove:
+                    remove = utils.listify(remove)
+                    doc_ids = [t.doc_id for t in remove]  # TODO make sure cache object has doc_id attr for easy deletion, simplify other update funcs
+                    db_res = self.TemplateDB.remove(doc_ids=doc_ids)
+                elif update:
+                    update = utils.listify(update)
+                    db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]
+                    db_res = [doc_id for doc_id_list in db_res for doc_id in doc_id_list]  # return is like [[4], [3]]
+                    if False in db_res:
+                        log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
+                else: # add
+                    add = utils.listify(add)
+                    db_res = self.TemplateDB.insert_multiple(add)
+            except Exception as e:
+                    log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True)
+                    log.exception(e)
+
+        if False in db_res:
+            log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
+
+        return db_res
 
     # TODO need a reset cache flag in "show clients"
     async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
@@ -2339,7 +2371,7 @@ class Cache:
         device_type: Union[str, List[str]] = None,
         swack: bool = False,
         conductor_only: bool = False,
-        group: str = None,
+        group: str | List[str] = None,
         all: bool = False,
         completion: bool = False,
     ) -> Union[CentralObject, List[CentralObject]]:
@@ -2354,7 +2386,7 @@ class Cache:
                 Defaults to False.
             conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
                 Does not filter non stacks, the way swack option does. Defaults to False.
-            group (str, optional): applies to get_template_identifier, Only match if template is in this group.
+            group (str, List[str], optional): applies to get_template_identifier, Only match if template is in provided group(s).
                 Defaults to None.
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
@@ -2662,9 +2694,7 @@ class Cache:
     def get_group_identifier(
         self,
         query_str: str,
-        ret_field: str = "name",
         retry: bool = True,
-        multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject | List[CentralObject]:
@@ -2836,10 +2866,8 @@ class Cache:
     def get_template_identifier(
         self,
         query_str: str,
-        ret_field: str = "name",
-        group: str = None,
+        group: str | List[str] = None,
         retry: bool = True,
-        multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject:
@@ -2847,10 +2875,6 @@ class Cache:
         retry = False if completion else retry
         if not query_str and completion:
             return [CentralObject("template", data=t) for t in self.templates]
-
-        # TODO verify and remove
-        if multi_ok:
-            log.error("deprecated parameter multi_ok sent to get_template_identifier.")
 
         match = None
         for _ in range(0, 2 if retry else 1):
@@ -2895,24 +2919,24 @@ class Cache:
 
             if len(match) > 1:
                 if group:
-                    match = [d for d in match if d.group.lower() == group.lower()]
+                    groups = utils.listify(group)
+                    match = [d for d in match if d.group in groups]
 
             if len(match) > 1:
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
                     query_type="template",
-                    # multi_ok=multi_ok,
                 )
 
             return match[0]
 
         elif retry:
-            log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather template from provided identifier {query_str}", show=True)
             raise typer.Exit(1)
         else:
             if not completion and not silent:
-                log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
+                log.warning(f"Unable to gather template from provided identifier {query_str}", show=False)
 
     def get_client_identifier(
         self,

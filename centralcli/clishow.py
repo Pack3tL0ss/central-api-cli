@@ -1451,7 +1451,7 @@ def templates(
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
-    group: List[str] = typer.Argument(None, help="Get Templates for Group", autocompletion=cli.cache.group_completion, show_default=False),
+    group: str = typer.Argument(None, help="Get Templates for Group", autocompletion=cli.cache.group_completion, show_default=False),
     _group: str = typer.Option(
         None, "--group",
         help="Get Templates for Group",
@@ -1486,61 +1486,45 @@ def templates(
         rich_help_panel="Common Options",
     ),
 ) -> None:
-    if _group:
-        group = _group
-    elif group:
-        group = group[-1]
-
-    if group:
-        group = cli.cache.get_group_identifier(group).name
-
-    # Allows show templates group WadeLab
+    central = cli.central
+    # Allows unnecessary keyword group "cencli show templates group WadeLab"
     if name and name.lower() == "group":
         name = None
 
-    central = cli.central
+    group = group or _group
+    if group:
+        group: CentralObject = cli.cache.get_group_identifier(group)
+
+    obj = None if not name else cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=None if not group else group.name)
 
     params = {
         # "name": name,
-        "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+        "device_type": device_type,  # valid to API = IAP, ArubaSwitch, MobilityController, CX converted in api module
         "version": version,
         "model": model
     }
-
     params = {k: v for k, v in params.items() if v is not None}
 
-    if name:
-        log_name = name
-        name = cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=group)
-        if not name:
-            typer.secho(f"Unable to find a match for {log_name}.  Listing all templates.", fg="red")
-
-    if not name:
-        if not group:
-            if not params:  # show templates - Just update and show data from cache
-                if central.get_all_templates not in cli.cache.updated:
-                    resp = asyncio.run(cli.cache.update_template_db())
-                else:
-                    # cache updated this session use response from cache update
-                    resp = cli.cache.responses.template
-            else:
-                # Can't use cache due to filtering options
-                resp = central.request(central.get_all_templates, **params)
-        else:  # show templates --group <group name>
-            resp = central.request(central.get_all_templates_in_group, group, **params)
-            # TODO update cache on individual grabs
+    if obj:
+        title = f"{obj.name.title()} Template"
+        if obj.is_dev:  # They provided a dev identifier
+            resp = central.request(central.get_variablised_template, obj.serial)
+        else:  #  obj.is_template
+            resp = central.request(central.get_template, group=obj.group, template=obj.name)
+    elif group:
+        title = "Templates in Group {} {}".format(group.name, ', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = central.request(central.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
+    elif params:  # show templates - Full update and show data from cache
+        title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = central.request(central.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
-        if name.is_dev:  # They provided a dev identifier
-            resp = central.request(central.get_variablised_template, name.serial)
-        elif name.is_template:
-            group = group or name.group  # if they provided group via --group we use it
-            resp = central.request(central.get_template, group, name.name)
+        title = "All Templates"
+        if central.get_all_templates not in cli.cache.updated:
+            resp = cli.central.request(cli.cache.update_template_db)
         else:
-            print(f"Something went wrong [bright_red blink]{name}[reset]")
+            resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-
-    title = "All Templates" if not name else f"{name.name.title()} Template"
     cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by)
 
 

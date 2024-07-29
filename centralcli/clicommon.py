@@ -506,6 +506,7 @@ class CLICommon:
                     rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
                     caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
             except Exception as e:
+                rl_str = ""
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
             caption = caption or ""
@@ -675,6 +676,22 @@ class CLICommon:
             self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
 
         return start
+
+    @staticmethod
+    async def get_file_hash(file: Path = None, string: str = None) -> str:
+        import hashlib
+        md5 = hashlib.md5()
+
+        if file:
+            with file.open("rb") as f:
+                while chunk := f.read(4096):
+                    md5.update(chunk)
+        elif string:
+            md5.update(string.encode("utf-8"))
+        else:
+            raise ValueError("One of file or string argument is required")
+
+        return md5.hexdigest()
 
 
 if __name__ == "__main__":

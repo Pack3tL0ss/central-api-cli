@@ -24,8 +24,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs
+from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs, lib_to_api
 from centralcli.strings import LongHelp
+from centralcli.response import BatchRequest
 help_text = LongHelp()
 
 
@@ -510,21 +511,18 @@ def webhook(
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
     name: str = typer.Argument(..., show_default=False,),
-    group: str = typer.Argument(..., help="Group to upload template to", show_default=False,),
+    group: str = typer.Argument(..., help="Group to upload template to", autocompletion=cli.cache.group_completion, show_default=False,),
     template: Path = typer.Argument(None, exists=True, show_default=False,),
     dev_type: DevTypes = typer.Option("sw"),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
-
     group = cli.cache.get_group_identifier(group)
     if not template:
         print("[bright_green]No Template file provided[/].  Template content is required.")
@@ -534,13 +532,28 @@ def template(
 
     print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
     print("[bright_green]Template will apply to[/]:")
-    print(f"    Device Types: [cyan]{dev_type}[/]")
+    print(f"    Device Type: [cyan]{dev_type}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
     if yes or typer.confirm("\nProceed?", abort=True):
-        resp = cli.central.request(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+        template_hash, resp = cli.central.batch_request(
+            [
+                BatchRequest(cli.get_file_hash, (template,)),
+                BatchRequest(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+            ]
+        )
         cli.display_results(resp, tablefmt="action")
-    # TODO update cache
+        if resp.ok:
+            _ = cli.central.request(
+                cli.cache.update_template_db, add={
+                    "device_type": lib_to_api(dev_type, "template"),
+                    "group": group.name,
+                    "model": model,
+                    "name": name,
+                    "template_hash": template_hash,
+                    "version": version,
+                }
+            )
 
 
 # TODO cache for portal name/id

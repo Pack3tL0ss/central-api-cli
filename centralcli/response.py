@@ -163,22 +163,26 @@ class Response:
         self._ok = ok
         self.method = ""
         self.elapsed = elapsed
-        if response:
-            # self.ok = response.ok
-            self.url = response.url
+        if response is not None:
+            self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason
-            self.status = response.status
-            self.method = response.method
+            try:
+                self.status = response.status
+                self.method = response.method
+            except AttributeError:  # Using requests module for templates due to multi-part issue in aiohttp
+                self.status = response.status_code
+                self.method = response.request.method
+
             _offset_str = ""
             # /routing endpoints use "marker" rather than "offset" for pagination
-            offset_key = "marker" if "marker" in response.url.query and ("marker" in response.url.query or response.url.path.startswith("/api/routing/")) else "offset"
-            if offset_key in response.url.query:
-                if offset_key == "offset" and int(response.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
-                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+            offset_key = "marker" if "marker" in self.url.query and ("marker" in self.url.query or self.url.path.startswith("/api/routing/")) else "offset"
+            if offset_key in self.url.query:
+                if offset_key == "offset" and int(self.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
+                    _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
                 else:  # marker is not an int
-                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+                    _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{response.reason}] {response.method}:{response.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
+            _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 log.error(_log_msg)
@@ -905,7 +909,8 @@ class Session():
 
         self.silent = False
 
-        log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+        if all([hasattr(r, "rl") for r in m_resp]):
+            log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
 
         return m_resp
 

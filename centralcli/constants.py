@@ -984,6 +984,7 @@ class IdenMetaVars:
         self.dev = "[name|ip|mac|serial]"
         self.dev_many = "[name|ip|mac|serial] ... (multiple allowed)"
         self.group = "[GROUP NAME]"
+        self.template = "[TEMPLATE NAME]"
         self.group_many = "[GROUP NAME] ... (multiple allowed)"
         self.site = "[name|site id|address|city|state|zip]"
         self.label = "[LABEL]"

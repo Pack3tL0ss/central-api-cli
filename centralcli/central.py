@@ -651,8 +651,22 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
-    async def get_template(self, group: str, template: str) -> Response:
+    async def get_template(
+        self,
+        group: str,
+        template: str,
+    ) -> Response:
+        """Get template text for a template in group.
+
+        Args:
+            group (str): Name of the group for which the templates are being queried.
+            template (str): Name of template.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/configuration/v1/groups/{group}/templates/{template}"
+
         return await self.get(url)
 
     async def get_template_details_for_device(self, device_serial: str, details: bool = False) -> Response:
@@ -823,8 +837,11 @@ class CentralApi(Session):
         url=f"{self.auth.central_info['base_url']}{url}"
         for _ in range(2):
             resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            output = f"[{resp.reason}]" + " " + resp.text.lstrip('[\n "').rstrip('"\n]')
-            resp = Response(output=output, ok=resp.ok, url=url, elapsed=round(resp.elapsed.total_seconds(), 2), status_code=resp.status_code, rl_str="-")
+            if "[\n" in resp.text and "\n]" in resp.text:
+                output = "\n".join(json.loads(resp.text))
+            else:
+                output = resp.text.strip('"\n')
+            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
             else:
@@ -835,11 +852,11 @@ class CentralApi(Session):
         self,
         group: str,
         name: str,
-        template: Path = None,
         payload: str = None,
-        device_type: str = None,
-        version: str = None,
-        model: str = None,
+        template: Union[Path, str, bytes] = None,
+        device_type: constants.DevTypes ="ap",
+        version: str = "ALL",
+        model: str = "ALL",
     ) -> Response:
         """Update existing template.
 
@@ -849,22 +866,25 @@ class CentralApi(Session):
             device_type (str, optional): Device type of the template.
                 Valid Values: ap, sw (ArubaOS-SW), cx (ArubaOS-CX), gw (controllers/gateways)
             version (str, optional): Firmware version property of template.
-                Example: ALL, 6.5.4 etc.
+                Example: ALL, 6.5.4 etc.  Defaults to "ALL".
             model (str, optional): Model property of template.
                 For 'ArubaSwitch' device_type, part number (J number) can be used for the model.
-                Example: 2920, J9727A etc.
+                Example: 2920, J9727A etc.  Defaults to "ALL".
             template (Union[Path, str], optional): Template text.
                 For 'ArubaSwitch' device_type, the template text should include the following
                 commands to maintain connection with central.
                 1. aruba-central enable.
                 2. aruba-central url https://<URL | IP>/ws.
-            payload (str, optional): json representation of the required params.
+            payload (str, optional): template data passed as str.
+                One of template or payload is required.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
         template = template if isinstance(template, Path) else Path(str(template))
+        if not template.exists():
+            raise FileNotFoundError
 
         if device_type:
             device_type = constants.lib_to_api(device_type, "template")
@@ -881,9 +901,34 @@ class CentralApi(Session):
         elif payload:
             template_data: bytes = payload
         else:
-            template_data = None
+            raise FileNotFoundError(f"{template.name} not found or empty.  No template data to send.")
 
-        return await self.patch(url, params=params, payload=template_data)
+        if isinstance(template_data, bytes):
+            files = {'template': ('template.txt', template_data)}
+        else:
+            files = {'template': ('template.txt', template.read_bytes())}
+
+        # HACK aiohttp has issue here similar to add_template
+        import requests
+        headers = {
+            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            'Accept': 'application/json'
+        }
+        url=f"{self.auth.central_info['base_url']}{url}"
+        for _ in range(2):
+            resp = requests.request("PATCH", url=url, params=params, files=files, headers=headers)
+            if "[\n" in resp.text and "\n]" in resp.text:
+                output = "\n".join(json.loads(resp.text))
+            else:
+                output = resp.text.strip('"\n')
+            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+            if "invalid_token" in resp.output:
+                self.refresh_token()
+            else:
+                break
+        return resp
+
+        # return await self.patch(url, params=params, payload=files)
 
     # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
     # and it doesn't catch all exceptions so possible to get exception when eval resp our Response object is better IMHO
@@ -1043,9 +1088,10 @@ class CentralApi(Session):
             resp = await self.get_groups_template_status()
             if not resp:
                 return resp
-            groups = cleaner.get_all_groups(resp.output)
 
-        template_groups = [g["name"] for g in groups if True in g["template group"].values()]
+            template_groups = [g["group"] for g in resp.output if True in g["template_details"].values()]
+        else:
+            template_groups = [g["name"] for g in groups if True in g["template group"].values()]
 
         if not template_groups:
             return Response(
@@ -1219,8 +1265,17 @@ class CentralApi(Session):
         params = {"sku_type": dev_type}
         return await self.get(url, params=params)
 
-    async def get_variablised_template(self, serialnum: str) -> Response:  # VERIFIED
+    async def get_variablised_template(self, serialnum: str) -> Response:
+        """Get variablised template for an Aruba Switch.
+
+        Args:
+            serialnum (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
+
         return await self.get(url)
 
     async def get_variables(self, serialnum: str = None) -> Response:
