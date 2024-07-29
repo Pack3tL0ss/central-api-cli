@@ -198,6 +198,7 @@ STRIP_KEYS = [
     "stacks",
     "routes",
     "samples",
+    "dirty_diff_list",
 ]
 
 

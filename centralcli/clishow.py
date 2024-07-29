@@ -452,6 +452,7 @@ def devices(
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help="Get Dirty diff [grey42 italic](config items not pushed) \[requires [cyan]--group[/]]"),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
@@ -492,10 +493,17 @@ def aps(
 ) -> None:
     """Show details for APs
     """
-    if neighbors:
+    if dirty:
+        if not group:
+            cli.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
+
+        group = cli.cache.get_group_identifier(group)
+        resp = cli.central.request(cli.central.get_dirty_diff, group.name)
+        tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    elif neighbors:
         if site is None:
-            print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
-            raise typer.Exit(1)
+            cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
 
         site: CentralObject = cli.cache.get_site_identifier(site)
         resp: Response = cli.central.request(cli.central.get_topo_for_site, site.id, )
