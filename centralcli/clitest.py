@@ -20,7 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi  # noqa
+from centralcli.central import CentralApi, Response  # noqa
 
 app = typer.Typer()
 
@@ -159,12 +159,20 @@ def method(
         f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
     )
 
-    resp = central.request(getattr(central, method), *args, **kwargs)
-    if isinstance(resp.output, str) and "should be str" in resp.output and "bool" in resp.output:
-        c.log(f"{resp.output}.  LAME!  Converting to str!")
-        args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
-        kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
+    def _check_bool_to_str(args, kwargs, *, response: Response = None, resp_str: str = None) -> Response:
+        resp_str = resp_str or response.output
+        if isinstance(resp_str, str) and ("True" in resp_str or "False" in resp_str) and "value should be str" in resp_str:
+            log.warning(f"{resp_str} Lame! Converting to str!", show=True, caption=True)
+            args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
+            kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
+            response = central.request(getattr(central, method), *args, **kwargs)
+        return response or Response(error=resp_str)
+
+    try:
         resp = central.request(getattr(central, method), *args, **kwargs)
+        resp = _check_bool_to_str(args, kwargs, response=resp)
+    except TypeError as e:
+        resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
 
     attrs = {
         k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
