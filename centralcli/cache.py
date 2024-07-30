@@ -614,7 +614,7 @@ class Cache:
         self,
         # ctx: typer.Context,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = None
     ):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
@@ -631,7 +631,9 @@ class Cache:
 
         dev_type = None
         if args:
-            if args[-1].lower() in ["gateways", "clients", "server"]:
+            if "dev_type" in args and len(args) > 1:
+                dev_type = args[args.index("dev_type") + 1]  # HACK we can't add parameters typer doesn't expect this allows us to call this from other funcs
+            elif args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
             elif args[-1].lower().startswith("switch"):
                 dev_type = "switch"
@@ -1139,6 +1141,101 @@ class Cache:
 
     # FIXME not completing partial serial number is zsh get_dev_completion appears to return as expected
     # works in BASH and powershell
+    def _group_dev_completion(
+        self,
+        incomplete: str,
+        ctx: typer.Context = None,
+        dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None,
+        conductor_only: bool = False,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for argument that can be either group or device.
+
+        Args:
+            ctx (typer.Context): The click/typer Context.
+            incomplete (str): The last partial or full command before completion invoked.
+            dev_type: (str, optional): One of "ap", "cx", "sw", "switch", or "gw"
+                where "switch" is both switch types.  Defaults to None (all device types)
+            conductor_only (bool, optional): If there are multiple matches (stack) return only the conductor as a match.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        # match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
+
+        # Add cencli as option to show and update config commands (update not implememnted yet)
+        utils.listify(dev_type)
+        out = []
+        if args:
+            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "show cencli configuration")]
+            elif " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+        elif ctx is not None:
+            args = [a for a in ctx.params.values() if a is not None]
+            if ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+                if "cencli".lower().startswith(incomplete):
+                    out += [("cencli", "show cencli configuration")]
+            elif ctx.command_path == "cencli update config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+                if "cencli".lower().startswith(incomplete):
+                    out += [("cencli", "update cencli configuration")]
+        else:
+            args = []
+
+        group_out = self.group_completion(incomplete=incomplete, args=args)
+        if group_out:
+            out += list(group_out)
+
+
+        if not bool([t for t in out if t[0] == incomplete]):  # exact match
+            _args = args if not dev_type else [*args, "dev_type", *dev_type]  # TODO not tested yet
+            dev_out = self.dev_completion(incomplete, args=_args)
+            if dev_out:
+                out += list(dev_out)
+
+        # match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
+
+        # partial completion by serial: out appears to have list with expected tuple but does
+        # not appear in zsh
+
+        # if match:
+        #     for m in sorted(match, key=lambda i: i.name):
+        #         out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def group_dev_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for argument that can be either group or device.
+
+        Args:
+            ctx (typer.Context): The click/typer Context.
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        return self._group_dev_completion(incomplete, ctx=ctx, args=args)
+
     def group_dev_ap_gw_completion(
         self,
         ctx: typer.Context,
@@ -1222,6 +1319,7 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
+
 
     # FIXME completion doesn't pop args need ctx: typer.Context and reference ctx.params which is dict?
     def send_cmds_completion(
