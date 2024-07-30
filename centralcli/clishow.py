@@ -1762,7 +1762,7 @@ def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.group_dev_cencli}",
-        autocompletion=cli.cache.group_dev_ap_gw_completion,
+        autocompletion=cli.cache.group_dev_completion,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
         show_default=False,
     ),
@@ -1803,28 +1803,25 @@ def config_(
     Group level configs are available for APs or GWs.
     Device level configs are available for all device types, however
     AP and GW, show what Aruba Central has configured at the group or device level.
-    Switches fetch the running config from the device.  [italic]Same as [cyan]cencli show run[/cyan][/italic].
+    Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
+    \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
 
     Examples:
     \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for a GW
-    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, or per AP settings if AP
+    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, per AP settings if AP, template or
+    \t\trunning config if switch.
     \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
     """
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
-    # TODO maybe add switch support... show template for switch if it's in template group or show run if not
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
-        _err = "This command is only valid for APs and GWs, Use"
         _group = cli.cache.get_group_identifier(group_dev.group)
         if _group.data["template group"]["Wired"]:
-            _err = f"{_err} [cyan]cencli show template {group_dev.name}[/] or [cyan]cencli show run {group_dev.name}[/]"
+            return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
         else:
-            _err = f"{_err} [cyan]cencli show run {group_dev.name}[/]"
-        _err = f"{_err} for switches."
-
-        cli.exit(_err)
+            return run(group_dev.serial, outfile=outfile, pager=pager)
 
     if all:  # TODO move this either to cliexport or clibatch (cencli batch export configs)
         if not any([do_gw, do_ap]):
@@ -1906,14 +1903,8 @@ def config_(
         else:
             func = cli.central.get_ap_config
             args = [group.name]
-    elif device and device.type == "cx":
-        clitshoot.send_cmds_by_id(device, commands=[6002], pager=pager, outfile=outfile)
-        cli.exit(code=0)
-    elif device and device.type == "sw":
-        clitshoot.send_cmds_by_id(device, commands=[1022], pager=pager, outfile=outfile)
-        cli.exit(code=0)
     else:
-        log.error("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
+        cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
         cli.exit()
 
     # Build arguments cli.central method associated with each device type supported.
