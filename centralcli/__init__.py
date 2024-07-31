@@ -65,7 +65,7 @@ if config.debugv:
         "current account settings": _account_data or f'{config.account} not found in config',
         **{k: v if isinstance(v, (str, list, dict, bool, type(None))) else str(v) for k, v in config.__dict__.items() if k not in _ignore}
     }
-    log.debugv(f"config attributes: {yaml.safe_dump(_config, indent=4)}")
+    print(f"config attributes: {yaml.safe_dump(_config, indent=4)}")
 
 
 # HACK Windows completion fix for upstream issue.
