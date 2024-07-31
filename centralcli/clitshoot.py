@@ -435,6 +435,65 @@ def ping(
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
 
+@app.command(hidden=True)  # Currently hidden as the API is not returning a task_id
+def speed_test(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to run speedtest from", autocompletion=cli.cache.dev_ap_gw_completion),
+    host: str = typer.Argument("ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org", help="speedtest host (IP of FQDN)"),
+    options: str = typer.Option(None, "-o", help="Formatted string of optional arguments"),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    raw: bool = typer.Option(
+        False,
+        "--raw",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        is_flag=True,
+    ),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    account: str = typer.Option("central_info",
+                                envvar="ARUBACLI_ACCOUNT",
+                                help="The Aruba Central Account to use (must be defined in the config)",
+                                autocompletion=cli.cache.account_completion),
+):
+    """Initiate a speedtest from a device (Gateways and AOS8 IAP).
+    """
+    dev = cli.cache.get_dev_identifier(device)
+    if dev.type == "ap" and dev.is_aos10:
+        cli.exit("This command is not supported on AOS10 APs")
+    elif dev.type not in ["ap", "gw"]:
+        cli.exit(f"This command is supported on Gateways and AOS8 IAP not {dev.type}")
+
+    resp = cli.central.request(cli.central.run_speedtest, dev.serial, host=host, options=options)
+    cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+
+    # complete = False
+    # while not complete:
+    #     for x in range(3):
+    #         _delay = 15 if dev.type == "cx" else 10
+    #         for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
+    #             sleep(1)
+    #         ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
+
+    #         if ts_resp.output.get("status", "") == "COMPLETED":
+    #             # if not verbose2:  # FIXME is verbose2 not working on any of these???
+    #             if not cli.raw_out:
+    #                 print(ts_resp.output["output"])
+    #             else:
+    #                 cli.display_results(resp)
+    #             complete = True
+    #             break
+    #         else:
+    #             print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+
+
+    #     if not complete:
+    #         console.print(f'[dark_orange3]:warning: WARNING[/] Central is still waiting on response from [cyan]{dev.name}[/]')
+    #         console.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
+    #         if not typer.confirm("Continue to wait/retry?"):
+    #             cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
+    #             break
+
 @app.command(short_help="Send troubleshooting command to a device")
 def command(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
