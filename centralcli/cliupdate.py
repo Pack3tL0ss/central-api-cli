@@ -319,24 +319,12 @@ def config_(
         ...,
         metavar="GROUP|DEVICE",
         help="Group or device to update.",
-        # autocompletion=cli.cache.group_dev_ap_gw_completion
-        autocompletion = lambda incomplete: [
-           cf for cf in [*[c for c in cli.cache.group_dev_ap_gw_completion(incomplete)], ("cencli", "update cencli configuration")] if cf[0].lower().startswith(incomplete.lower())
-        ]
+        autocompletion=cli.cache.group_dev_ap_gw_completion,
+        show_default=False,
     ),
-    # TODO simplify structure can just remove device arg
-    # device: str = typer.Argument(
-    #     None,
-    #     autocompletion=cli.cache.dev_ap_gw_completion
-    #     # TODO dev type gw or ap only
-    #     # autocompletion=lambda incomplete: [
-    #     #    c for c in cli.cache.dev_completion(incomplete, dev_type="gw") if c.lower().startswith(incomplete.lower())
-    #     # ]
-    # ),
     # TODO collect multi-line input as option to paste in config
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple()),
-    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple()),
-    # TODO --vars PATH  help="File containing variables to convert jinja2 template."
+    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
+    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
@@ -346,12 +334,8 @@ def config_(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    """Update group, device level config (ap or gw) or cencli config.
+    """Update group or device level config (ap or gw).
     """
-    if group_dev == "cencli":
-        # return _update_cencli_config()
-        print("Not implemented yet")  # cli_file currently required. may be better to break this out into subcommand cliupdate_config
-        return
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
