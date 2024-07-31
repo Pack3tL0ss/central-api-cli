@@ -98,7 +98,7 @@ def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     return dict(converted)
 
 
-def get_conn_from_file(account_name, logger: MyLogger = log):
+def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase:
     """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
 
     provided in the YAML/JSON config file:
@@ -3287,10 +3287,15 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    # API-FLAW no option for 6G radio currently
+    # disable radio via UI and ap_settings uses radio-0-disable (5G), radio-1-disable (2.4G), radio-2-disable (6G)
+    # disable radio via API and ap_settings uses dot11a_radio_disable (5G), dot11g_radio_disable(2.4G), no option for (6G)
+    # however UI still shows radio as UP (in config, overview shows it down) if changed via the API, it's down in reality, but not reflected in the UI because they use different attributes
+    # API doesn't appear to take radio-n-disable, tried it.
     async def update_ap_settings(
         self,
         serial_number: str,
-        hostname: str,
+        hostname: str = None,
         ip_address: str = None,
         zonename: str = None,
         achannel: str = None,
@@ -3306,8 +3311,8 @@ class CentralApi(Session):
         // Used by batch rename aps and rename ap //
 
         Args:
-            serial_number (str, optional): AP Serial Number
-            hostname (str): hostname
+            serial_number (str: AP Serial Number
+            hostname (str, optional): hostname
             ip_address (str, optional): ip_address Default (DHCP)
             zonename (str, optional): zonename. Default "" (No Zone)
             achannel (str, optional): achannel
@@ -3333,27 +3338,22 @@ class CentralApi(Session):
             'gtxpower': gtxpower,
             'dot11a_radio_disable': dot11a_radio_disable,
             'dot11g_radio_disable': dot11g_radio_disable,
-            'usb_port_disable': usb_port_disable
+            'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
             resp = await self._request(self.get_ap_settings, serial_number)
             if not resp:
+                log.error(f"Unable to update AP settings for AP {serial_number}, API call to fetch current settings failed (all settings are required).")
                 return resp
 
             json_data = self.strip_none(_json_data)
+            if {k: v for k, v in resp.output.items() if k in json_data.keys()} == json_data:
+                return Response(url=url, ok=True, output=f"{resp.output.get('hostname', '')}|{serial_number} Nothing to Update provided AP settings match current AP settings", error="OK",)
+
             json_data = {**resp.output, **json_data}
-            if not sorted(_json_data.keys()) == sorted(json_data.keys()):
-                missing = ", ".join([f"'{k}'" for k in json_data.keys() if k not in _json_data.keys()])
-                return Response(
-                    ok=False,
-                    error=f"Update payload is missing required attributes: {missing}",
-                    reason="INVALID"
-                )
 
         return await self.post(url, json_data=json_data)
 
-    # TODO NotUsed Yet.  Shows any updates not yet pushed to the device (device offline, etc)
-    # Only valid for APs.
     async def get_dirty_diff(
         self,
         group: str,
@@ -3529,13 +3529,13 @@ class CentralApi(Session):
 
         return await self.post(url)
 
-    async def send_speed_test(
+    async def run_speedtest(
         self,
         serial: str,
         host: str = "ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org",
         options: str = None
     ) -> Response:
-        """Speed Test.
+        """Run speedtest from device (gateway only)
 
         Args:
             serial (str): Serial of device
