@@ -1678,7 +1678,7 @@ def certs(
     )
 
 # TODO show task --device  look up task by device if possible
-@app.command(short_help="Show Task/Command status")
+@app.command()
 def task(
     task_id: str = typer.Argument(..., show_default=False),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1690,13 +1690,15 @@ def task(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show status of previously issued task/command.
+    """Show status of previously issued task/command
 
     Requires task_id which is provided in the response of the previously issued command.
         Example: [cyan]cencli bounce interface idf1-6300-sw 1/1/11[/] will queue the command
                 and provide the task_id.
     """
     resp = cli.central.request(cli.central.get_task_status, task_id)
+    if "reason" in resp.output and "expired" in resp.output:
+        resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
     cli.display_results(
         resp, tablefmt="action", title=f"Task {task_id} status")
