@@ -1775,7 +1775,7 @@ def rename(
     # cache update
     if import_file: # TODO have lldp return dict same as import file for reference during cache update
         for r in resp:
-            if r.ok:
+            if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
                 dev = cli.cache.get_dev_identifier(r.output)
                 dev.data["name"] = data[r.output]["hostname"]
                 cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
