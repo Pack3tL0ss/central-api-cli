@@ -66,7 +66,8 @@ app.add_typer(clibatch.app, name="batch",)
 app.add_typer(clicaas.app, name="caas", hidden=True,)
 app.add_typer(clirefresh.app, name="refresh",)
 app.add_typer(clitest.app, name="test",)
-app.add_typer(clitshoot.app, name="tshoot",)
+app.add_typer(clitshoot.app, name="tshoot", deprecated=True, help="Deprecated Troubleshooting, use simplified sub-command [cyan]ts[/]")
+app.add_typer(clitshoot.app, name="ts",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
@@ -413,7 +414,7 @@ def reboot(
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
-    clean_console.print(f':warning:  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')
+    clean_console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
     if len(batch_reqs) > 1:
         print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
