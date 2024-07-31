@@ -119,11 +119,20 @@ class CLICommon:
         Returns:
             str: account name
         """
-        if ctx.resilient_parsing:  # tab completion, return without validating
+        if ctx.resilient_parsing:  # tab completion, return without validating, so does use of "test method" command
             return account
 
-        account = account or config.default_account  # account only has value if --account flag is used.
         emoji_console = Console()
+
+        # cencli test method requires --account when using non default, we do not honor forget_account_after
+        if " ".join(sys.argv[1:]).startswith("test method"):
+            if account:
+                emoji_console.print(f":information:  Using account [bright_green]{account}[/]\n",)
+                return account
+            else:
+                return "default" if "default" in config.data else "central_info"
+
+        account = account or config.default_account  # account only has value if --account flag is used.
 
         if default:  # They used the -d flag
             emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
@@ -329,16 +338,17 @@ class CLICommon:
                 log.warning(out_msg, show=True)
 
     @staticmethod
-    def exit(msg: str = None, code: int = 1) -> None:
+    def exit(msg: str = None, code: int = 1, emoji: bool = True) -> None:
         """Print msg text and exit.
 
         Prepends warning emoji to msg if code indicates an error.
         """
+        console = Console(emoji=emoji)
         if code != 0:
-            msg = f":warning:  {msg}" if msg else msg
+            msg = f"\u26a0  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
         if msg:
-            print(msg)
+            console.print(msg)
         raise typer.Exit(code=code)
 
     def _sort_results(
