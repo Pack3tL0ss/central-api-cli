@@ -136,9 +136,10 @@ class Response:
         - raw (Any): The original un-cleaned response from the API request
         - error (str): Error message indicating the nature of a failed response
         - status (int): http status code returned from response
+        - rl (RateLimit): Rate Limit info extracted from aiohttp.ClientResponse headers.
 
     Create instance by providing at minimum one of the following parameters:
-        - response (ClientResponse): all other parameters ignored if providing response
+        - response (ClientResponse) and output(typically List[dict]): all other parameters ignored if providing response
         - error (str): ok, output, status set to logical default if not provided
             OK / __bool__ is False if error is provided and ok is not.
         - output (Any): ok, error, status set to logical default if not provided
@@ -156,6 +157,25 @@ class Response:
         elapsed: Union[int, float] = 0,
         rl_str: str = None,
     ):
+        """Response Constructor
+
+        Provide response: (aiohttp.ClientResponse), and
+                output: Normally a List[Dict], extracted from whatever key in the raw response
+                holds the actual data
+
+        Can be used to create a Response without doing an API call by providing
+
+        Args:
+            response (ClientResponse, optional): aiohttp.ClientResponse. Defaults to None.
+            url (Union[URL, str], optional): Request URL. Defaults to "".
+            ok (bool, optional): bool indicating success. Defaults to None.
+            error (str, optional): Error info. Defaults to None.
+            output (Any, optional): Main payload of the response. Defaults to {}.
+            raw (Any, optional): raw response payload. Defaults to {}.
+            status_code (int, optional): Response http status code. Defaults to None.
+            elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
+            rl_str (str, optional): Rate Limit String. Defaults to None.
+        """
         self.rl = rl_str or RateLimit(response)
         self._response = response
         self.output = output
