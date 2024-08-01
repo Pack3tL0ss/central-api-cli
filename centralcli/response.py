@@ -26,6 +26,7 @@ DEFAULT_HEADERS = {
     'Accept': 'application/json'
 }
 INIT_TS = time.monotonic()
+MAX_CALLS_PER_CHUNK = 6
 
 
 class BatchRequest:
@@ -156,6 +157,7 @@ class Response:
         status_code: int = None,
         elapsed: Union[int, float] = 0,
         rl_str: str = None,
+        data_key: str = None,
     ):
         """Response Constructor
 
@@ -175,6 +177,7 @@ class Response:
             status_code (int, optional): Response http status code. Defaults to None.
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
             rl_str (str, optional): Rate Limit String. Defaults to None.
+            data_key: (str, optional): The dict key where the actual data is held in the response.
         """
         self.rl = rl_str or RateLimit(response)
         self._response = response
@@ -183,6 +186,7 @@ class Response:
         self._ok = ok
         self.method = ""
         self.elapsed = elapsed
+        self.data_key = data_key
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason
@@ -354,6 +358,33 @@ class Response:
         else:
             raise TypeError("output attribute is not a valid type for keys method.")
 
+    def __add__(self, other):
+        if not isinstance(self.raw, dict) or not isinstance(other.raw, dict):
+            raise TypeError("raw attribute is expected to be a dict")
+        if not isinstance(self.output, list) or not isinstance(other.output, list):
+            raise TypeError("output attribute is expected to be a list")
+
+        if not self.data_key:
+            found_keys = [k for k in self.raw if self.raw[k] == self.output]
+            if len(found_keys) != 1:
+                raise ValueError(f"Unable to add Response, unable to determine primary key with data.  Found {len(found_keys)} potential data keys.")
+
+        key = self.data_key or found_keys[0]
+
+        self.raw[key] = self.raw[key] + other.raw[key]
+        if "count" in self.raw and "count" in other.raw:
+            self.raw["count"] += other.raw["count"]
+
+
+        if isinstance(self.output, list) and isinstance(other.output, list):
+            self.output += other.output
+        else:
+            raise TypeError("Output attribute is expected to be a list")
+
+        self.rl = min([r.rl for r in [self, other]])
+
+        return self
+
     @property
     def status_code(self) -> int:
         """Make attributes used for status code for both aiohttp and requests valid."""
@@ -420,7 +451,7 @@ class Session():
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
-        self.running_spinners = []
+        self.running_spinners: List[str] = []
 
     @property
     def aio_session(self):
@@ -536,12 +567,16 @@ class Session():
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
+            self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
-                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
+                elif resp.status == 500:
+                    spin_txt_retry = "(retry after 500: Internal Server Error)"
+                    log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
+                    log.warning(f"raw 500 response:\n{resp.raw}")  # TODO remove once we've captured a raw 500
                 elif resp.status == 503:
                     spin_txt_retry = "(retry after 503: Service Unavailable)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
@@ -567,9 +602,8 @@ class Session():
                     ]
 
                 # This handles long running API calls where subsequent calls finish before the previous...
-                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if self.running_spinners:
-                    self.spinner.text = self.running_spinners[-1]
+                    self.spinner.text = self.running_spinners[0]
                 else:
                     self.spinner.stop()
                 break
@@ -598,6 +632,8 @@ class Session():
                             paged_raw[outer_key] = {**paged_raw[outer_key], **res.raw[outer_key]}
                         else:  # TODO use response magic method to do adds have Response figure this out
                             paged_raw[outer_key] += res.raw[outer_key]
+                        if all(["count" in var for var in [paged_raw, res.raw]]):
+                            paged_raw["count"] += res.raw["count"]
                         break
             else:
                 try:
@@ -652,14 +688,16 @@ class Session():
         # Output pagination loop
         paged_output = None
         paged_raw = None
+        failures = []
         while True:
             # -- // Attempt API Call \\ --
             r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
                                          params=params, **kwargs)
             if not r.ok:
+                failures = [r]
                 break
 
-            # data cleaner methods to strip any useless columns, change key names, etc.
+            # TODO OK to remove confirmed not used anywhere
             elif callback is not None:
                 # TODO [remove] moving callbacks to display output in cli, leaving methods to return raw output
                 log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}")
@@ -688,19 +726,19 @@ class Session():
 
                     # Handle failures during batch execution
                     if not successful and failures:
-                        log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True)
+                        log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True, caption=True)
                         return failures
-                    elif len(failures) >= len(successful):
-                        log.error(f"Failure rate exceeded during batch {method} calls to {url}. Stopping execution.", show=True)
                     elif failures:
                         log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
-                        log.error(f":warning:  Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
+                        log.error(f"Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
 
-                    page_res = [
-                        await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
-                        for res in successful
-                    ]
-                    r.raw, r.output = page_res[-1]
+                    # page_res = [
+                    #     await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
+                    #     for res in successful
+                    # ]
+                    # r.raw, r.output = page_res[-1]
+                    for res in successful:
+                        r += res
                     break
 
             _limit = params.get("limit", 0)
@@ -730,6 +768,9 @@ class Session():
                         del r.raw["marker"]
                     break
 
+        # No errors but the total provided by Central doesn't match the # of records
+        if not failures and "total" in r.raw and isinstance(r.output, list) and r.raw["total"] != len(r.output):
+            log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
         return r
 
     # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
@@ -875,21 +916,15 @@ class Session():
         log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
         return asyncio.run(self._request(func, *args, **kwargs))
 
-    @staticmethod
-    async def pause(start: float) -> None:
-        _elapsed = time.perf_counter() - start
-        _pause = (int(_elapsed) + 1) - _elapsed # get the time between now and start of the next second
-        # _pause = (_elapsed + 1) - _elapsed
-        log.debug(f"PAUSE {_pause:.2f}s...")
-        time.sleep(_pause)
-
     async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         # TODO implement retry_failed
         self.silent = True
-        m_resp = []
+        m_resp: List[Response] = []
         _tot_start = time.perf_counter()
-        chunked_calls = utils.chunker(api_calls, 6)
-        if not self.requests:  # only run vrfy first by itself if no calls have been made
+
+        if self.requests: # a call has been made no need to verify first call (token refresh)
+            chunked_calls = utils.chunker(api_calls, MAX_CALLS_PER_CHUNK)
+        else:
             resp: Response = await api_calls[0].func(
                 *api_calls[0].args,
                 **api_calls[0].kwargs
@@ -898,31 +933,36 @@ class Session():
                 return [resp]
 
             m_resp: List[Response] = [resp]
+            chunked_calls = utils.chunker(api_calls[1:], MAX_CALLS_PER_CHUNK)
 
-            # remove first call performed above from first chunk
-            chunked_calls[0] = chunked_calls[0][1:]
-
-
-        # Make calls 7 at a time ensuring timing so that 7 per second limit is not exceeded
+        # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
+        # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk
         for chunk in chunked_calls:
             _start = time.perf_counter()
 
-            chunk_len = len(chunk)
-
-            # TODO verify this seems like the pause would need to be after the gather below, not within the gather
-            # as the pause could be processed at any time.... or send an asyncio.sleep(1) with each chunk to ensure they take a second
+            _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
-                # _br = self.BatchRequest(self.pause, (_start,))
-                # chunk += [_br]
-                chunk += [self.BatchRequest(asyncio.sleep, (1.1,))]
-            m_resp += await asyncio.gather(
-                *[call.func(*call.args, **call.kwargs) for call in chunk]
-            )
+                chunk += [self.BatchRequest(asyncio.sleep, (1,))]
+            try:
+                task_names = [
+                    c.func.__name__ if c.func.__name__ == "sleep" else
+                    f'{c.args[0].removeprefix(f"{config.base_url}/").replace("/", "_")}_{c.kwargs["params"].get("offset", "")}-{int(c.kwargs["params"].get("offset", 0)) + int(c.kwargs["params"].get("limit", 0))}'
+                    for c in chunk
+                ]
+            except Exception:
+                task_names = [None for _ in range(0, len(chunk))]
+
+            tasks = [asyncio.create_task(call.func(*call.args, **call.kwargs), name=name) for call, name in zip(chunk, task_names)]
+            m_resp += await asyncio.gather(*tasks)
+            # m_resp += await asyncio.gather(
+            #     *[call.func(*call.args, **call.kwargs) for call in chunk]
+            # )
+
             _elapsed = time.perf_counter() - _start
-            log.debug(f"chunk of {chunk_len} took {_elapsed:.2f}.")
+            log.debug(f"chunk of {_calls_per_chunk} took {_elapsed:.2f}.")
             # await self.pause(_start)  # pause to next second
 
-        # strip out the pause/limiter responses (None)
+        # strip out the pause/limiter (asyncio.sleep) responses (None)
         m_resp = utils.strip_none(m_resp)
 
         log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
@@ -934,8 +974,6 @@ class Session():
 
         return m_resp
 
-    # TODO return a BatchResponse object (subclass Response) where OK indicates all OK
-    # and method that returns merged output from all resp...
     # TODO retry_failed not implemented remove if not going to use it.
     def batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         """non async to async wrapper for multiple parallel API calls
@@ -1085,7 +1123,7 @@ class CombinedResponse(Response):
         return any([r.ok for r in self.responses])
 
     def __len__(self):
-        return len(self.responses)
+        return sum([len(r) for r in self.responses if r.ok])
 
     def __repr__(self):
         _errors = list(self.errors.values())
