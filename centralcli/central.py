@@ -1158,13 +1158,14 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> CombinedResponse:
+    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, dev_types: constants.LibDevIdens | List[constants.LibDevIdens] = None, **kwargs) -> CombinedResponse:
         """Get all devices from Aruba Central
 
         Returns:
             CombinedResponse: CentralAPI Response object
         """
-        dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
+
+        dev_types = ["aps", "switches", "gateways"]  if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
 
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
