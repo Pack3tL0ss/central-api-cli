@@ -16,6 +16,7 @@ from tabulate import tabulate
 import typer
 import yaml
 import json
+import time
 from pygments import formatters, highlight
 from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
@@ -39,7 +40,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli import constants, Response
 from centralcli.config import Config
-from centralcli.objects import Encoder
+from centralcli.objects import Encoder, DateTime
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
@@ -296,7 +297,10 @@ def rich_output(
             else:
                 table.add_column(k, justify='left', overflow='ellipses')
 
+        _start = time.perf_counter()
         formatted = _do_subtables(outdata)
+        log.debug(f"render.rich_output.do_subtables took {time.perf_counter() - _start:.2f} to process {len(outdata)} records")
+
         [table.add_row(*list(in_dict.values())) for in_dict in formatted]
 
         if title:
@@ -386,11 +390,17 @@ def output(
         table_data = rich_capture(raw_data)
 
     elif tablefmt == "csv":
+        def normalize_for_csv(value: Any) -> str:
+            if isinstance(value, DateTime):
+                return str(value.epoch)
+            else:
+                return str(value) if "," not in str(value) else f'"{value}"'
+
         csv_data = "\n".join(
                         [
                             ",".join(
                                 [
-                                    str(v) if "," not in str(v) else f'"{v}"' for k, v in d.items() if k not in CUST_KEYS
+                                    normalize_for_csv(v) for k, v in d.items() if k not in CUST_KEYS
                                 ]
                             )
                             for d in outdata

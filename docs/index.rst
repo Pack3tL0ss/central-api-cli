@@ -5,7 +5,7 @@ Aruba Central API CLI (cencli)
    :maxdepth: 2
 
    readme
-   project_structure
+   .. project_structure
 
 .. toctree::
    :caption: CLI Reference

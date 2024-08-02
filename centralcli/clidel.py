@@ -190,27 +190,28 @@ def webhook(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(help="Delete a Template")
+@app.command(help="Delete a Template", no_args_is_help=True)
 def template(
-    template: str = typer.Argument(..., help="The name of the template", autocompletion=cli.cache.template_completion),
-    kw1: str = typer.Argument(None, metavar="[group GROUP]", autocompletion=lambda incomplete: ["group"]),
-    val1: str = typer.Argument(None, hidden=True, autocompletion=cli.cache.group_completion),
-    _group: str = typer.Option(None),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    template: str = typer.Argument(..., metavar=iden.template, help="The name of the template", autocompletion=cli.cache.template_completion, show_default=False,),
+    group: List[str] = typer.Argument(None, metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
+    _group: str = typer.Option(None, "--group", metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
+    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
-    group = kw1 if kw1 is None or kw1.lower.strip() != "group" else None
-    group = _group or group or val1
+    # allow unnecessary keyword group "cencli delete template NAME group GROUP"
+    if group:
+        group = [g for g in group if g != "group"]
+        group = None if not group else group[0]
+    group = _group or group
 
     if group is not None:
         group = cli.cache.get_group_identifier(group)
         group = group.name
+
     template = cli.cache.get_template_identifier(template, group=group)
 
     print(
@@ -219,7 +220,8 @@ def template(
     if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.delete_template, template.group, template.name)
         cli.display_results(resp, tablefmt="action")
-        # TODO update cache
+        if resp.ok:
+            _ = cli.central.request(cli.cache.update_template_db, remove=template)
 
 
 # TODO return status indicating cache update success/failure

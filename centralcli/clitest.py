@@ -20,7 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi  # noqa
+from centralcli.central import CentralApi, Response  # noqa
 
 app = typer.Typer()
 
@@ -43,15 +43,15 @@ def webhook(
 
 @app.command(hidden=False, short_help="Test Central API methods directly", epilog="Output is displayed in yaml by default.")
 def method(
-    method: str = typer.Argument(..., autocompletion=cli.cache.method_test_completion),
-    kwargs: List[str] = typer.Argument(None),
+    method: str = typer.Argument(..., autocompletion=cli.cache.method_test_completion, show_default=False,),
+    kwargs: List[str] = typer.Argument(None, metavar="args/kwargs", help="Provide args/kwargs in format: [cyan]arg1 arg2 keyword=value keyword2=value2[/]", show_default=False,),
     _help: bool = typer.Option(False, "--doc", help="Get details on required args/keyword args for provided method."),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
     do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, help="Enable Paged Output"),
+    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True, show_default=False,),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", show_default=False,),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
                                  callback=cli.default_callback),
@@ -80,59 +80,62 @@ def method(
     are coppied, tweaked if necessary and renamed (those are tested).
 
     The auto generated functions follow a consistent naming format.
-    {swagger drop down text}_{method ie get}_{descriptive stuff from schema}
-    i.e.: configuration_add_blacklist_clients
+    {swagger drop down text}_{other stuff from spec}_{method ie get}_{more stuff from spec}
+    i.e.: monitoring_external_controller_get_wireless_clients_v1
+    [italic]methods get, post, patch, delete are also available[/]
 
-    Tab completion returns available methods.
+    [dark_olive_green2]Tab completion returns available methods.[/]
 
     Args:
         method (str): CentralAPI method to test.
         kwargs (List[str], optional): list of args kwargs to pass to function.
 
-    format: arg1 arg2 keyword=value keyword2=value
-        or  arg1, arg2, keyword = value, keyword2=value
+    format: arg1 arg2 keyword=value keyword2=value2
+        or  arg1, arg2, keyword = value, keyword2 = value2
 
-    Examples: cencli test method platform_get_devices all_ap
-
+    Examples: [cyan]cencli test method monitoring_external_controller_get_switch_poe_details_for_all_ports_v1 SN24ABC123[/]
 
         [dark_olive_green2]Use --doc flag to see docstr for for the python method, which
         provides details on the required args / kwargs.[/]
-        [cyan]cencli test method platform_get_devices --doc[/]
+        [cyan]cencli test method METHOD_NAME --doc[/]
 
     Command will output all attributes of the Response object, which includes the
     raw response from the Aruba Central API gateway.
+
+    :information:  [italic][cyan]--account[/cyan]flag must be used to test alternative accounts.
+       It does not honor re-use of last-account even if [cyan]forget_account_after[/cyan] is set in config[/italic]
     """
-    # FIXME account only works if method is in central.py
-    central = CentralApi(account)
+    # Find function (method)
     cli.cache(refresh=update_cache)
-    if not hasattr(central, method):
-        if account != "central_info":
-            print("Testing methods only supports the --account option for methods in central.py")
-            raise typer.Exit(1)
-        bpdir = Path(__file__).parent / "boilerplate"
-        all_calls = [
-            importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
-            if not f.name.startswith("_") and f.suffix == ".py"
-        ]
-        for m in all_calls:
-            log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
-            if hasattr(m.AllCalls(), method):
-                central = m.AllCalls()
-                break
+    central = CentralApi(account)
+    bpdir = Path(__file__).parent / "boilerplate"
+    all_calls = [
+        importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
+        if not f.name.startswith("_") and f.suffix == ".py"
+    ]
+    for m in all_calls:
+        log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
+        if hasattr(m.AllCalls(), method):
+            central = m.AllCalls(account)
+            break
 
     if not hasattr(central, method):
-        typer.secho(f"{method} does not exist", fg="red")
-        raise typer.Exit(1)
+        cli.exit(f"[cyan]{method}[/] [bright_red]does not exist[/]")
 
     if _help:
-        if getattr(central, method).__doc__:
+        doc_str: str = getattr(central, method).__doc__
+        if doc_str:
             old_ret = "Response: CentralAPI Response object"
             new_ret = "Response from Aruba Central API gateway."
-            print(getattr(central, method).__doc__.replace(old_ret, new_ret))
+            doc_str_list = doc_str.splitlines(keepends=True)
+            doc_str = f'[bright_green]{doc_str_list[0]}[/]'
+            if len(doc_str_list) > 1:
+                doc_str = f'{doc_str}{"".join(doc_str_list[1:])}'
+            cli.exit(doc_str.replace(old_ret, new_ret), code=0, emoji=False)
         else:
-            print(f"Sorry, {getattr(central, method).__name__}, lacks a docstr.  No help.")
-        raise typer.Exit(0)
+            cli.exit(f"Sorry, {getattr(central, method).__name__}, lacks a docstr.  No help.", code=0)
 
+    # pasrse args/kwargs from command line
     kwargs = kwargs or {}
     kwargs = (
         "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
@@ -154,21 +157,29 @@ def method(
     from rich.console import Console
     c = Console(file=outfile)
 
-    req = (
-        f"central.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
-        f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
-    )
+    def _check_bool_to_str(args, kwargs, *, response: Response = None, resp_str: str = None) -> Response:
+        resp_str = resp_str or response.output
+        if isinstance(resp_str, str) and ("True" in resp_str or "False" in resp_str) and "value should be str" in resp_str:
+            log.warning(f"{resp_str} Lame! Converting to str!", show=True, caption=True)
+            args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
+            kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
+            response = central.request(getattr(central, method), *args, **kwargs)
+        return response if response is not None else Response(error=resp_str)
 
-    resp = central.request(getattr(central, method), *args, **kwargs)
-    if isinstance(resp.output, str) and "should be str" in resp.output and "bool" in resp.output:
-        c.log(f"{resp.output}.  LAME!  Converting to str!")
-        args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
-        kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
+    try:
         resp = central.request(getattr(central, method), *args, **kwargs)
+        resp = _check_bool_to_str(args, kwargs, response=resp)
+    except TypeError as e:
+        resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
 
     attrs = {
         k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
     }
+
+    req = (
+        f"central.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
+        f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
+    )
 
     c.print(req)
     c.print("\n".join([f"  {k}: {v}" for k, v in attrs.items()]))

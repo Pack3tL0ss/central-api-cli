@@ -31,7 +31,7 @@ class Inventory(BaseModel):
     type: str
     model: Optional[str]
     sku: Optional[str]
-    mac: str
+    mac: str = Field(alias="macaddr")
     serial: str
     services: Union[List[str], str] = Field(alias="license")
 

@@ -78,7 +78,16 @@ CLUSTER_URLS = {
     "us4": "https://apigw-uswest4.central.arubanetworks.com",
     "cn1": "https://app1-apigw.central.arubanetworks.com.cn",
 
-}
+}  # TODO need uswest5
+
+BYPASS_FIRST_RUN_FLAGS = [
+    "--install-completion",
+    "--show-completion",
+    "-V",
+    "-v",
+    "--help",
+    "?"
+]
 
 def get_cluster_url(cluster: ClusterName) -> str:
     return CLUSTER_URLS.get(cluster)
@@ -210,7 +219,6 @@ class Config:
                 Path().home() / ".centralcli",
                 self.cwd / "config",
                 self.cwd,
-                # Path().home() / ".config" / "centralcli" / "config",
             ]
         )
         if self.file:
@@ -242,15 +250,20 @@ class Config:
 
             # No config found trigger first run wizard
             if not self.file.exists() and sys.stdin.isatty() and not self.is_completion:
-                if "-completion" not in str(sys.argv):
+                if not any([a in BYPASS_FIRST_RUN_FLAGS for a in sys.argv]):
                     self.first_run()
                 else:
                     ...  # TODO add typer.confirm(No config found ...)
+
+        self.log_dir = self.base_dir / "logs"
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.capture_file = self.log_dir / "raw-capture.json"
 
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
         self.default_cache_file = self.cache_dir / "db.json"
+        self.default_scache_file = self.cache_dir / "dbv2.json"
         self.sticky_account_file = self.cache_dir / "last_account"
         self.sanitize_file = self.dir / "redact.yaml"
 
@@ -259,6 +272,7 @@ class Config:
         self.debug: bool = self.data.get("debug", False)
         self.debugv: bool = self.data.get("debugv", False)
         self.sanitize: bool = self.data.get("sanitize", False)
+        self.capture_raw: bool = self.data.get("capture_raw", False)
         self.default_account: str = "default" if "default" in self.data else "central_info"
         self.last_account, self.last_cmd_ts, self.last_account_msg_shown, self.last_account_expired = self.get_last_account()
         self.account = self.get_account_from_args()
@@ -281,7 +295,7 @@ class Config:
                     _cache_token = json.loads(self.snow_tok_file.read_text())
                     _snow_config["token"]["cache"] = _cache_token
                 _snow_config["tok_file"] = Path(self.cache_dir / f'snow_{self.tok_file.name}')
-            self.snow = ServiceNow(**_snow_config)
+            self.snow = None if not _snow_config else ServiceNow(**_snow_config)
         except ValidationError:
             self.snow = None
 
@@ -458,7 +472,7 @@ class Config:
             return self.default_account
         elif "--account" in sys.argv:
             account = sys.argv[sys.argv.index("--account") + 1]
-        elif "--account " in str(sys.argv):  # vscode debug workaround
+        elif " --account " in str(sys.argv):  # vscode debug workaround
             args = [a.split(" ") for a in sys.argv if "--account " in a][0]
             account = args[args.index("--account") + 1]
         else:

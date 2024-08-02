@@ -3,6 +3,7 @@
 
 import asyncio
 from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
+from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
 from typing import Union, List, Any, Dict, Tuple, Literal
@@ -26,6 +27,7 @@ DEFAULT_HEADERS = {
     'Accept': 'application/json'
 }
 INIT_TS = time.monotonic()
+MAX_CALLS_PER_CHUNK = 6
 
 
 class BatchRequest:
@@ -136,9 +138,10 @@ class Response:
         - raw (Any): The original un-cleaned response from the API request
         - error (str): Error message indicating the nature of a failed response
         - status (int): http status code returned from response
+        - rl (RateLimit): Rate Limit info extracted from aiohttp.ClientResponse headers.
 
     Create instance by providing at minimum one of the following parameters:
-        - response (ClientResponse): all other parameters ignored if providing response
+        - response (ClientResponse) and output(typically List[dict]): all other parameters ignored if providing response
         - error (str): ok, output, status set to logical default if not provided
             OK / __bool__ is False if error is provided and ok is not.
         - output (Any): ok, error, status set to logical default if not provided
@@ -155,7 +158,28 @@ class Response:
         status_code: int = None,
         elapsed: Union[int, float] = 0,
         rl_str: str = None,
+        data_key: str = None,
     ):
+        """Response Constructor
+
+        Provide response: (aiohttp.ClientResponse), and
+                output: Normally a List[Dict], extracted from whatever key in the raw response
+                holds the actual data
+
+        Can be used to create a Response without doing an API call by providing
+
+        Args:
+            response (ClientResponse, optional): aiohttp.ClientResponse. Defaults to None.
+            url (Union[URL, str], optional): Request URL. Defaults to "".
+            ok (bool, optional): bool indicating success. Defaults to None.
+            error (str, optional): Error info. Defaults to None.
+            output (Any, optional): Main payload of the response. Defaults to {}.
+            raw (Any, optional): raw response payload. Defaults to {}.
+            status_code (int, optional): Response http status code. Defaults to None.
+            elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
+            rl_str (str, optional): Rate Limit String. Defaults to None.
+            data_key: (str, optional): The dict key where the actual data is held in the response.
+        """
         self.rl = rl_str or RateLimit(response)
         self._response = response
         self.output = output
@@ -163,22 +187,27 @@ class Response:
         self._ok = ok
         self.method = ""
         self.elapsed = elapsed
-        if response:
-            # self.ok = response.ok
-            self.url = response.url
+        self.data_key = data_key
+        if response is not None:
+            self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason
-            self.status = response.status
-            self.method = response.method
+            try:
+                self.status = response.status
+                self.method = response.method
+            except AttributeError:  # Using requests module for templates due to multi-part issue in aiohttp
+                self.status = response.status_code
+                self.method = response.request.method
+
             _offset_str = ""
             # /routing endpoints use "marker" rather than "offset" for pagination
-            offset_key = "marker" if "marker" in response.url.query and ("marker" in response.url.query or response.url.path.startswith("/api/routing/")) else "offset"
-            if offset_key in response.url.query:
-                if offset_key == "offset" and int(response.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
-                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+            offset_key = "marker" if "marker" in self.url.query and ("marker" in self.url.query or self.url.path.startswith("/api/routing/")) else "offset"
+            if offset_key in self.url.query:
+                if offset_key == "offset" and int(self.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
+                    _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
                 else:  # marker is not an int
-                    _offset_str = f" {offset_key}: {response.url.query[offset_key]} limit: {response.url.query.get('limit', '?')}"
+                    _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{response.reason}] {response.method}:{response.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
+            _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 log.error(_log_msg)
@@ -330,6 +359,33 @@ class Response:
         else:
             raise TypeError("output attribute is not a valid type for keys method.")
 
+    def __add__(self, other):
+        if not isinstance(self.raw, dict) or not isinstance(other.raw, dict):
+            raise TypeError("raw attribute is expected to be a dict")
+        if not isinstance(self.output, list) or not isinstance(other.output, list):
+            raise TypeError("output attribute is expected to be a list")
+
+        if not self.data_key:
+            found_keys = [k for k in self.raw if self.raw[k] == self.output]
+            if len(found_keys) != 1:
+                raise ValueError(f"Unable to add Response, unable to determine primary key with data.  Found {len(found_keys)} potential data keys.")
+
+        key = self.data_key or found_keys[0]
+
+        self.raw[key] = self.raw[key] + other.raw[key]
+        if "count" in self.raw and "count" in other.raw:
+            self.raw["count"] += other.raw["count"]
+
+
+        if isinstance(self.output, list) and isinstance(other.output, list):
+            self.output += other.output
+        else:
+            raise TypeError("Output attribute is expected to be a list")
+
+        self.rl = min([r.rl for r in [self, other]])
+
+        return self
+
     @property
     def status_code(self) -> int:
         """Make attributes used for status code for both aiohttp and requests valid."""
@@ -396,7 +452,7 @@ class Session():
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
-        self.running_spinners = []
+        self.running_spinners: List[str] = []
 
     @property
     def aio_session(self):
@@ -413,6 +469,21 @@ class Session():
     def aio_session(self, session: ClientSession):
         self._aio_session = session
 
+    def _get_spin_text(self, spin_txt: str = None):
+        if not spin_txt:
+            return "" if not self.running_spinners else self.running_spinners[0]
+
+        try:
+            if len(self.running_spinners) > 1 and "retry" not in str(self.running_spinners) and len(set([x.split(":")[0] for x in self.running_spinners])) == 1:
+                return f'{self.running_spinners[0]},{",".join(x.split(":")[1] for x in self.running_spinners[1:])}'
+
+            return spin_txt if not self.running_spinners else self.running_spinners[0]
+        except Exception as e:
+            log.warning(f"DEV NOTE: {e.__class__.__name__} exception in combined spinner update")
+
+            return spin_txt if not self.running_spinners else self.running_spinners[0]
+
+
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
@@ -426,9 +497,10 @@ class Session():
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
         spin_txt_retry = ""
         spin_txt_fail = f"{spin_word} Data{_data_msg}"
-        self.spinner.text = spin_txt_run
+        self.spinner.text = self._get_spin_text(spin_txt_run)
         for _ in range(0, 2):
-            spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
+            # spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
+            spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -505,23 +577,30 @@ class Session():
 
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+            except ContentLengthError as e:
+                log.exception(f'[{method}:{URL(url).path}]{e}')
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
             except Exception as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
+            self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
-                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
+                elif resp.status == 500:
+                    spin_txt_retry = "(retry after 500: Internal Server Error)"
+                    log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
+                    # returns JSON: {'message': 'An unexpected error occurred'}
                 elif resp.status == 503:
                     spin_txt_retry = "(retry after 503: Service Unavailable)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
-                    log.warning(f"raw 503 response:\n{resp.raw}")  # TODO remove once we've captured a raw 503
+                    # returns a string: "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
                 elif resp.status == 504:
                     spin_txt_retry = "(retry after 504: Gatewat Time-out)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
@@ -530,6 +609,13 @@ class Session():
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
+                elif resp.status == 418:  # Spot to handle retries for any caught exceptions
+                    if resp.error == "ContentLengthError":
+                        spin_txt_retry = "(retry after ContentLengthError)"
+                        log.warning(f'{resp.url.path_qs} forced to retry after ContentLengthError')
+                    else:
+                        log.error(f'{resp.url.path_qs} {resp.error} Exception is not configured for retry')
+                        break
                 else:
                     break
             else:
@@ -543,9 +629,8 @@ class Session():
                     ]
 
                 # This handles long running API calls where subsequent calls finish before the previous...
-                self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
                 if self.running_spinners:
-                    self.spinner.text = self.running_spinners[-1]
+                    self.spinner.text = self._get_spin_text()
                 else:
                     self.spinner.stop()
                 break
@@ -574,6 +659,8 @@ class Session():
                             paged_raw[outer_key] = {**paged_raw[outer_key], **res.raw[outer_key]}
                         else:  # TODO use response magic method to do adds have Response figure this out
                             paged_raw[outer_key] += res.raw[outer_key]
+                        if all(["count" in var for var in [paged_raw, res.raw]]):
+                            paged_raw["count"] += res.raw["count"]
                         break
             else:
                 try:
@@ -628,14 +715,16 @@ class Session():
         # Output pagination loop
         paged_output = None
         paged_raw = None
+        failures = []
         while True:
             # -- // Attempt API Call \\ --
             r = await self.exec_api_call(url, data=data, json_data=json_data, method=method, headers=headers,
                                          params=params, **kwargs)
             if not r.ok:
+                failures = [r]
                 break
 
-            # data cleaner methods to strip any useless columns, change key names, etc.
+            # TODO OK to remove confirmed not used anywhere
             elif callback is not None:
                 # TODO [remove] moving callbacks to display output in cli, leaving methods to return raw output
                 log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}")
@@ -664,19 +753,19 @@ class Session():
 
                     # Handle failures during batch execution
                     if not successful and failures:
-                        log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True)
+                        log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True, caption=True)
                         return failures
-                    elif len(failures) >= len(successful):
-                        log.error(f"Failure rate exceeded during batch {method} calls to {url}. Stopping execution.", show=True)
                     elif failures:
                         log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
-                        log.error(f":warning:  Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
+                        log.error(f"Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
 
-                    page_res = [
-                        await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
-                        for res in successful
-                    ]
-                    r.raw, r.output = page_res[-1]
+                    # page_res = [
+                    #     await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
+                    #     for res in successful
+                    # ]
+                    # r.raw, r.output = page_res[-1]
+                    for res in successful:
+                        r += res
                     break
 
             _limit = params.get("limit", 0)
@@ -706,6 +795,9 @@ class Session():
                         del r.raw["marker"]
                     break
 
+        # No errors but the total provided by Central doesn't match the # of records
+        if not failures and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
+            log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
         return r
 
     # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
@@ -851,21 +943,15 @@ class Session():
         log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
         return asyncio.run(self._request(func, *args, **kwargs))
 
-    @staticmethod
-    async def pause(start: float) -> None:
-        _elapsed = time.perf_counter() - start
-        _pause = (int(_elapsed) + 1) - _elapsed # get the time between now and start of the next second
-        # _pause = (_elapsed + 1) - _elapsed
-        log.debug(f"PAUSE {_pause:.2f}s...")
-        time.sleep(_pause)
-
     async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         # TODO implement retry_failed
         self.silent = True
-        m_resp = []
+        m_resp: List[Response] = []
         _tot_start = time.perf_counter()
-        chunked_calls = utils.chunker(api_calls, 6)
-        if not self.requests:  # only run vrfy first by itself if no calls have been made
+
+        if self.requests: # a call has been made no need to verify first call (token refresh)
+            chunked_calls = utils.chunker(api_calls, MAX_CALLS_PER_CHUNK)
+        else:
             resp: Response = await api_calls[0].func(
                 *api_calls[0].args,
                 **api_calls[0].kwargs
@@ -874,43 +960,47 @@ class Session():
                 return [resp]
 
             m_resp: List[Response] = [resp]
+            chunked_calls = utils.chunker(api_calls[1:], MAX_CALLS_PER_CHUNK)
 
-            # remove first call performed above from first chunk
-            chunked_calls[0] = chunked_calls[0][1:]
-
-
-        # Make calls 7 at a time ensuring timing so that 7 per second limit is not exceeded
+        # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
+        # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk
         for chunk in chunked_calls:
             _start = time.perf_counter()
 
-            chunk_len = len(chunk)
-
-            # TODO verify this seems like the pause would need to be after the gather below, not within the gather
-            # as the pause could be processed at any time.... or send an asyncio.sleep(1) with each chunk to ensure they take a second
+            _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
-                # _br = self.BatchRequest(self.pause, (_start,))
-                # chunk += [_br]
-                chunk += [self.BatchRequest(asyncio.sleep, (1.1,))]
-            m_resp += await asyncio.gather(
-                *[call.func(*call.args, **call.kwargs) for call in chunk]
-            )
+                chunk += [self.BatchRequest(asyncio.sleep, (1,))]
+            try:
+                task_names = [
+                    c.func.__name__ if c.func.__name__ == "sleep" else
+                    f'{c.args[0].removeprefix(f"{config.base_url}/").replace("/", "_")}_{c.kwargs["params"].get("offset", "")}-{int(c.kwargs["params"].get("offset", 0)) + int(c.kwargs["params"].get("limit", 0))}'
+                    for c in chunk
+                ]
+            except Exception:
+                task_names = [None for _ in range(0, len(chunk))]
+
+            tasks = [asyncio.create_task(call.func(*call.args, **call.kwargs), name=name) for call, name in zip(chunk, task_names)]
+            m_resp += await asyncio.gather(*tasks)
+            # m_resp += await asyncio.gather(
+            #     *[call.func(*call.args, **call.kwargs) for call in chunk]
+            # )
+
             _elapsed = time.perf_counter() - _start
-            log.debug(f"chunk of {chunk_len} took {_elapsed:.2f}.")
+            log.debug(f"chunk of {_calls_per_chunk} took {_elapsed:.2f}.")
             # await self.pause(_start)  # pause to next second
 
-        # strip out the pause/limiter responses (None)
+        # strip out the pause/limiter (asyncio.sleep) responses (None)
         m_resp = utils.strip_none(m_resp)
 
         log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 
-        log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+        if all([hasattr(r, "rl") for r in m_resp]):
+            log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
 
         return m_resp
 
-    # TODO return a BatchResponse object (subclass Response) where OK indicates all OK
-    # and method that returns merged output from all resp...
     # TODO retry_failed not implemented remove if not going to use it.
     def batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         """non async to async wrapper for multiple parallel API calls
@@ -1040,19 +1130,23 @@ class CombinedResponse(Response):
                     for inner in output
                 ]
 
-        resp = [*_passed, *_failed][0]
-        resp.rl = min([r.rl for r in responses])
-        resp.output = output
-        resp.raw = raw
-        resp.elapsed = round(elapsed, 2)
+        if _passed:
+            resp = _passed[-1]
+        else:
+            resp = _failed[-1]
+        # resp.rl = min([r.rl for r in responses])
+        # resp.output = output
+        # resp.raw = raw
+        # resp.elapsed = round(elapsed, 2)
+        return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
 
-        return resp
+        # return resp
 
 
     def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
         self.responses = responses
-        combined = combiner_func(responses)
-        super().__init__(combined, output=combined.output, raw=combined.raw, elapsed=combined.elapsed)
+        combined_kwargs: dict = combiner_func(responses)
+        super().__init__(**combined_kwargs)
         self.error = self.errors = {r.url.path: r.error for r in responses}
 
 
@@ -1060,7 +1154,7 @@ class CombinedResponse(Response):
         return any([r.ok for r in self.responses])
 
     def __len__(self):
-        return len(self.responses)
+        return sum([len(r) for r in self.responses if r.ok])
 
     def __repr__(self):
         _errors = list(self.errors.values())

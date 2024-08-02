@@ -73,6 +73,8 @@ class Counts:
 def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
     inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     def get_switch_counts(data) -> dict:
+        if data is None:
+            return {}
         dev_types = set([t.get("switch_type", "ERR") for t in data])
         # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
         return {
@@ -83,32 +85,56 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
             for _type in dev_types
         }
 
-    def get_counts(data: List[Dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
+    def get_counts(data: List[dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
         _match_type = [d for d in data if d["type"] == dev_type]
         _tot = len(_match_type)
         _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
         _inv = len([d for d in _match_type if not d.get("status")])
         return Counts(_tot, _up, _inv)
 
+    def get_counts_with_inv(data: List[dict]) -> dict:
+        """parse combined output attr of inventory and monitoring responses to determine counts by device type.
+
+        Args:
+            data (List[dict]): Combined resp.output for monitoring and inventory response.
+
+        Returns:
+            dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
+        """
+        status_by_type = {}
+        _types = set(d["type"] for d in data)
+        for t in _types:
+            counts = get_counts(data, t)
+            status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+
+        return status_by_type
+
 
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
-            status_by_type = {}
-            _types = set(d["type"] for d in resp.output)
-            for t in _types:
-                counts = get_counts(resp.output, t)
-                status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+            status_by_type = get_counts_with_inv(resp.output)
 
         else:
             def url_to_key(url) -> str:
-                return url.split("/")[-1]
+                path_end = url.split("/")[-1]
+                return path_end if path_end != "mobility_controllers" else "mcs"
 
-            counts_by_type = {**{url_to_key(k): {"total": resp.raw[k]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][url_to_key(k) if url_to_key(k) != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if not k.endswith("switches")}, **get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])}
-            # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            counts_by_type = {
+                **{
+                    url_to_key(path): {
+                        "total": resp.raw[path].get("total", 0),
+                        "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[path].get(url_to_key(path), []))))
+                    } for path in resp.raw.keys() if not path.endswith("switches")
+                },
+                **get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
+            }
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
-        counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
-        status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+        if inventory:
+            status_by_type = get_counts_with_inv(resp.output)
+        else:
+            counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
         counts = get_counts(resp.output, dev_type=dev_type)
         status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
@@ -237,6 +263,8 @@ def show_devices(
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
             caption = _build_caption(resp, inventory=True)
+            if status:
+                log.warning("[cyan]--up[/], [cyan]--down[/] filters are currently ignored when [cyan]--inv[/] is used.", caption=True)
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
             resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
             if resp.ok and resp.output:
@@ -250,16 +278,12 @@ def show_devices(
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
-    else:  # cencli show switches | cencli show aps | cencli show gateways (with any params)  No cahce update here
-        resp = central.request(central.get_devices, dev_type, **params)
-        _ = central.request(cli.cache.update_dev_db, response=resp)
-
+    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
+        resp = central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
 
-
-        # TODO cache update here.  Need to verify cache.format_raw_devices_for_cache to make sure it can handle single call
         caption = _build_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
@@ -436,6 +460,7 @@ def devices(
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help="Get Dirty diff [grey42 italic](config items not pushed) \[requires [cyan]--group[/]]"),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
@@ -476,10 +501,17 @@ def aps(
 ) -> None:
     """Show details for APs
     """
-    if neighbors:
+    if dirty:
+        if not group:
+            cli.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
+
+        group = cli.cache.get_group_identifier(group)
+        resp = cli.central.request(cli.central.get_dirty_diff, group.name)
+        tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    elif neighbors:
         if site is None:
-            print(":x: [bright_red]Error:[/] [cyan]--site <site name>[/] is required for neighbors output.")
-            raise typer.Exit(1)
+            cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
 
         site: CentralObject = cli.cache.get_site_identifier(site)
         resp: Response = cli.central.request(cli.central.get_topo_for_site, site.id, )
@@ -779,7 +811,7 @@ def inventory(
 
     if verbose:
         show_devices(
-            dev_type='all', outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
         cli.exit("", code=0)
@@ -1435,7 +1467,7 @@ def templates(
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
-    group: List[str] = typer.Argument(None, help="Get Templates for Group", autocompletion=cli.cache.group_completion, show_default=False),
+    group: str = typer.Argument(None, help="Get Templates for Group", autocompletion=cli.cache.group_completion, show_default=False),
     _group: str = typer.Option(
         None, "--group",
         help="Get Templates for Group",
@@ -1470,61 +1502,45 @@ def templates(
         rich_help_panel="Common Options",
     ),
 ) -> None:
-    if _group:
-        group = _group
-    elif group:
-        group = group[-1]
-
-    if group:
-        group = cli.cache.get_group_identifier(group).name
-
-    # Allows show templates group WadeLab
+    central = cli.central
+    # Allows unnecessary keyword group "cencli show templates group WadeLab"
     if name and name.lower() == "group":
         name = None
 
-    central = cli.central
+    group = group or _group
+    if group:
+        group: CentralObject = cli.cache.get_group_identifier(group)
+
+    obj = None if not name else cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=None if not group else group.name)
 
     params = {
         # "name": name,
-        "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
+        "device_type": device_type,  # valid to API = IAP, ArubaSwitch, MobilityController, CX converted in api module
         "version": version,
         "model": model
     }
-
     params = {k: v for k, v in params.items() if v is not None}
 
-    if name:
-        log_name = name
-        name = cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=group)
-        if not name:
-            typer.secho(f"Unable to find a match for {log_name}.  Listing all templates.", fg="red")
-
-    if not name:
-        if not group:
-            if not params:  # show templates - Just update and show data from cache
-                if central.get_all_templates not in cli.cache.updated:
-                    resp = asyncio.run(cli.cache.update_template_db())
-                else:
-                    # cache updated this session use response from cache update
-                    resp = cli.cache.responses.template
-            else:
-                # Can't use cache due to filtering options
-                resp = central.request(central.get_all_templates, **params)
-        else:  # show templates --group <group name>
-            resp = central.request(central.get_all_templates_in_group, group, **params)
-            # TODO update cache on individual grabs
+    if obj:
+        title = f"{obj.name.title()} Template"
+        if obj.is_dev:  # They provided a dev identifier
+            resp = central.request(central.get_variablised_template, obj.serial)
+        else:  #  obj.is_template
+            resp = central.request(central.get_template, group=obj.group, template=obj.name)
+    elif group:
+        title = "Templates in Group {} {}".format(group.name, ', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = central.request(central.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
+    elif params:  # show templates - Full update and show data from cache
+        title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = central.request(central.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
-        if name.is_dev:  # They provided a dev identifier
-            resp = central.request(central.get_variablised_template, name.serial)
-        elif name.is_template:
-            group = group or name.group  # if they provided group via --group we use it
-            resp = central.request(central.get_template, group, name.name)
+        title = "All Templates"
+        if central.get_all_templates not in cli.cache.updated:
+            resp = cli.central.request(cli.cache.update_template_db)
         else:
-            print(f"Something went wrong [bright_red blink]{name}[reset]")
+            resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-
-    title = "All Templates" if not name else f"{name.name.title()} Template"
     cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by)
 
 
@@ -1670,7 +1686,7 @@ def certs(
     )
 
 # TODO show task --device  look up task by device if possible
-@app.command(short_help="Show Task/Command status")
+@app.command()
 def task(
     task_id: str = typer.Argument(..., show_default=False),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -1682,13 +1698,15 @@ def task(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show status of previously issued task/command.
+    """Show status of previously issued task/command
 
     Requires task_id which is provided in the response of the previously issued command.
         Example: [cyan]cencli bounce interface idf1-6300-sw 1/1/11[/] will queue the command
                 and provide the task_id.
     """
     resp = cli.central.request(cli.central.get_task_status, task_id)
+    if "reason" in resp.output and "expired" in resp.output:
+        resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
     cli.display_results(
         resp, tablefmt="action", title=f"Task {task_id} status")
@@ -1754,7 +1772,7 @@ def config_(
     group_dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.group_dev_cencli}",
-        autocompletion=cli.cache.group_dev_ap_gw_completion,
+        autocompletion=cli.cache.group_dev_completion,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
         show_default=False,
     ),
@@ -1795,17 +1813,26 @@ def config_(
     Group level configs are available for APs or GWs.
     Device level configs are available for all device types, however
     AP and GW, show what Aruba Central has configured at the group or device level.
-    Switches fetch the running config from the device.  [italic]Same as [cyan]cencli show run[/cyan][/italic].
+    Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
+    \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
 
     Examples:
     \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for a GW
-    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if device is AP or GW, or running config from device if switch
+    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, per AP settings if AP, template or
+    \t\trunning config if switch.
     \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
     """
     if group_dev == "cencli":  # Hidden show cencli config
         return _get_cencli_config()
 
-    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"], device_type=["ap", "gw"])
+    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
+    if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
+        _group = cli.cache.get_group_identifier(group_dev.group)
+        if _group.data["template group"]["Wired"]:
+            return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
+        else:
+            return run(group_dev.serial, outfile=outfile, pager=pager)
+
     if all:  # TODO move this either to cliexport or clibatch (cencli batch export configs)
         if not any([do_gw, do_ap]):
             print(":warning:  Invalid combination [cyan]--all[/] requires [cyan]--ap[/] or [cyan]--gw[/] flag.")
@@ -1886,14 +1913,8 @@ def config_(
         else:
             func = cli.central.get_ap_config
             args = [group.name]
-    elif device and device.type == "cx":
-        clitshoot.send_cmds_by_id(device, commands=[6002], pager=pager, outfile=outfile)
-        cli.exit(code=0)
-    elif device and device.type == "sw":
-        clitshoot.send_cmds_by_id(device, commands=[1022], pager=pager, outfile=outfile)
-        cli.exit(code=0)
     else:
-        log.error("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
+        cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
         cli.exit()
 
     # Build arguments cli.central method associated with each device type supported.

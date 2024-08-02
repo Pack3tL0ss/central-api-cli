@@ -120,7 +120,8 @@ class MyLogger:
             self.log_msgs += _msgs
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
-                    emoji_console.print(f"{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
+                    _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
+                    emoji_console.print(f"{_pfx}{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
             self.log_msgs = []
 
         if caption:

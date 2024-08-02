@@ -98,7 +98,7 @@ def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
     return dict(converted)
 
 
-def get_conn_from_file(account_name, logger: MyLogger = log):
+def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase:
     """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
 
     provided in the YAML/JSON config file:
@@ -651,8 +651,22 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
 
-    async def get_template(self, group: str, template: str) -> Response:
+    async def get_template(
+        self,
+        group: str,
+        template: str,
+    ) -> Response:
+        """Get template text for a template in group.
+
+        Args:
+            group (str): Name of the group for which the templates are being queried.
+            template (str): Name of template.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/configuration/v1/groups/{group}/templates/{template}"
+
         return await self.get(url)
 
     async def get_template_details_for_device(self, device_serial: str, details: bool = False) -> Response:
@@ -823,8 +837,11 @@ class CentralApi(Session):
         url=f"{self.auth.central_info['base_url']}{url}"
         for _ in range(2):
             resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            output = f"[{resp.reason}]" + " " + resp.text.lstrip('[\n "').rstrip('"\n]')
-            resp = Response(output=output, ok=resp.ok, url=url, elapsed=round(resp.elapsed.total_seconds(), 2), status_code=resp.status_code, rl_str="-")
+            if "[\n" in resp.text and "\n]" in resp.text:
+                output = "\n".join(json.loads(resp.text))
+            else:
+                output = resp.text.strip('"\n')
+            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
             else:
@@ -835,11 +852,11 @@ class CentralApi(Session):
         self,
         group: str,
         name: str,
-        template: Path = None,
         payload: str = None,
-        device_type: str = None,
-        version: str = None,
-        model: str = None,
+        template: Union[Path, str, bytes] = None,
+        device_type: constants.DevTypes ="ap",
+        version: str = "ALL",
+        model: str = "ALL",
     ) -> Response:
         """Update existing template.
 
@@ -849,22 +866,25 @@ class CentralApi(Session):
             device_type (str, optional): Device type of the template.
                 Valid Values: ap, sw (ArubaOS-SW), cx (ArubaOS-CX), gw (controllers/gateways)
             version (str, optional): Firmware version property of template.
-                Example: ALL, 6.5.4 etc.
+                Example: ALL, 6.5.4 etc.  Defaults to "ALL".
             model (str, optional): Model property of template.
                 For 'ArubaSwitch' device_type, part number (J number) can be used for the model.
-                Example: 2920, J9727A etc.
+                Example: 2920, J9727A etc.  Defaults to "ALL".
             template (Union[Path, str], optional): Template text.
                 For 'ArubaSwitch' device_type, the template text should include the following
                 commands to maintain connection with central.
                 1. aruba-central enable.
                 2. aruba-central url https://<URL | IP>/ws.
-            payload (str, optional): json representation of the required params.
+            payload (str, optional): template data passed as str.
+                One of template or payload is required.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
         template = template if isinstance(template, Path) else Path(str(template))
+        if not template.exists():
+            raise FileNotFoundError
 
         if device_type:
             device_type = constants.lib_to_api(device_type, "template")
@@ -881,9 +901,34 @@ class CentralApi(Session):
         elif payload:
             template_data: bytes = payload
         else:
-            template_data = None
+            raise FileNotFoundError(f"{template.name} not found or empty.  No template data to send.")
 
-        return await self.patch(url, params=params, payload=template_data)
+        if isinstance(template_data, bytes):
+            files = {'template': ('template.txt', template_data)}
+        else:
+            files = {'template': ('template.txt', template.read_bytes())}
+
+        # HACK aiohttp has issue here similar to add_template
+        import requests
+        headers = {
+            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            'Accept': 'application/json'
+        }
+        url=f"{self.auth.central_info['base_url']}{url}"
+        for _ in range(2):
+            resp = requests.request("PATCH", url=url, params=params, files=files, headers=headers)
+            if "[\n" in resp.text and "\n]" in resp.text:
+                output = "\n".join(json.loads(resp.text))
+            else:
+                output = resp.text.strip('"\n')
+            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+            if "invalid_token" in resp.output:
+                self.refresh_token()
+            else:
+                break
+        return resp
+
+        # return await self.patch(url, params=params, payload=files)
 
     # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
     # and it doesn't catch all exceptions so possible to get exception when eval resp our Response object is better IMHO
@@ -1043,9 +1088,10 @@ class CentralApi(Session):
             resp = await self.get_groups_template_status()
             if not resp:
                 return resp
-            groups = cleaner.get_all_groups(resp.output)
 
-        template_groups = [g["name"] for g in groups if True in g["template group"].values()]
+            template_groups = [g["group"] for g in resp.output if True in g["template_details"].values()]
+        else:
+            template_groups = [g["name"] for g in groups if True in g["template group"].values()]
 
         if not template_groups:
             return Response(
@@ -1112,13 +1158,14 @@ class CentralApi(Session):
 
     # TODO cleanup the way raw is combined, see show wids all.
     # TODO add full kwargs and type-hints
-    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, **kwargs) -> CombinedResponse:
+    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, dev_types: constants.LibDevIdens | List[constants.LibDevIdens] = None, **kwargs) -> CombinedResponse:
         """Get all devices from Aruba Central
 
         Returns:
             CombinedResponse: CentralAPI Response object
         """
-        dev_types = ["aps", "switches", "gateways"]  # mobility_controllers seems same as gw
+
+        dev_types = ["aps", "switches", "gateways"]  if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
 
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
@@ -1219,8 +1266,17 @@ class CentralApi(Session):
         params = {"sku_type": dev_type}
         return await self.get(url, params=params)
 
-    async def get_variablised_template(self, serialnum: str) -> Response:  # VERIFIED
+    async def get_variablised_template(self, serialnum: str) -> Response:
+        """Get variablised template for an Aruba Switch.
+
+        Args:
+            serialnum (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
         url = f"/configuration/v1/devices/{serialnum}/variablised_template"
+
         return await self.get(url)
 
     async def get_variables(self, serialnum: str = None) -> Response:
@@ -1349,10 +1405,9 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # TODO change dev_type to use [gw, sw, cx, ap, switch]  make consistent for all calls
     async def get_devices(
         self,
-        dev_type: Literal["switches", "aps", "gateways"],
+        dev_type: Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"],
         group: str = None,
         label: str = None,
         stack_id: str = None,
@@ -1377,7 +1432,8 @@ class CentralApi(Session):
         // Used by show <"aps"|"gateways"|"switches"> //
 
         Args:
-            dev_type (Literal["switches", "aps", "gateways"): Type of devices to get.
+            dev_type (Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"): Type of devices to get.
+                Note: "switch", "cx", "sw" all = "switches".  Return details for all switch types.
             group (str, optional): Filter on specific group. Defaults to None.
             label (str, optional): Filter by label. Defaults to None.
             stack_id (str, optional): Return switch with specific stack_id. Defaults to None.
@@ -1398,7 +1454,15 @@ class CentralApi(Session):
 
         Returns:
             Response: CentralAPI Response object
+
+        Raises:
+            ValueError: Raised if dev_type is not valid.
         """
+        if dev_type not in ["switches", "aps", "gateways"]:
+            dev_type = constants.lib_to_api(dev_type, "monitoring")
+            if dev_type not in ["switches", "aps", "gateways"]:
+                raise ValueError(f"dev_type must be one of ap, gw, cx, sw, switch, aps, gateways, switches not {dev_type}")
+
         dev_params = {
             "aps": {
                 'serial': serial,
@@ -2397,6 +2461,45 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_switch_ports_bandwidth_usage(
+        self,
+        serial: str,
+        switch_type: Literal["cx", "sw"] = "cx",
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+        port: str = None,
+        show_uplink: bool = None,
+    ) -> Response:
+        """Ports Bandwidth Usage for Switch.
+
+        Args:
+            serial (str): Serial number of switch to be queried
+            switch_type: (Literal["cx", "sw"], optional) = switch type. Valid 'cx', 'sw'.  Defaults to 'cx'
+            from (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+            port (str, optional): Filter by Port
+            show_uplink (bool, optional): Show usage for Uplink ports alone
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if show_uplink in [True, False]:
+            show_uplink = str(show_uplink).lower()
+
+        url = f"/monitoring/v1/{'cx_' if switch_type == 'cx' else ''}switches/{serial}/ports/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
+            'port': port,
+            'show_uplink': show_uplink
+        }
+
+        return await self.get(url, params=params)
+
     #  TODO add monitoring_external_controller_get_ap_rf_summary_v3 similar to bandwidth calls, "samples" key has timestamp, noise_floor, and utilization.
 
     async def get_aps_bandwidth_usage(
@@ -3185,10 +3288,15 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    # API-FLAW no option for 6G radio currently
+    # disable radio via UI and ap_settings uses radio-0-disable (5G), radio-1-disable (2.4G), radio-2-disable (6G)
+    # disable radio via API and ap_settings uses dot11a_radio_disable (5G), dot11g_radio_disable(2.4G), no option for (6G)
+    # however UI still shows radio as UP (in config, overview shows it down) if changed via the API, it's down in reality, but not reflected in the UI because they use different attributes
+    # API doesn't appear to take radio-n-disable, tried it.
     async def update_ap_settings(
         self,
         serial_number: str,
-        hostname: str,
+        hostname: str = None,
         ip_address: str = None,
         zonename: str = None,
         achannel: str = None,
@@ -3204,8 +3312,8 @@ class CentralApi(Session):
         // Used by batch rename aps and rename ap //
 
         Args:
-            serial_number (str, optional): AP Serial Number
-            hostname (str): hostname
+            serial_number (str: AP Serial Number
+            hostname (str, optional): hostname
             ip_address (str, optional): ip_address Default (DHCP)
             zonename (str, optional): zonename. Default "" (No Zone)
             achannel (str, optional): achannel
@@ -3231,27 +3339,22 @@ class CentralApi(Session):
             'gtxpower': gtxpower,
             'dot11a_radio_disable': dot11a_radio_disable,
             'dot11g_radio_disable': dot11g_radio_disable,
-            'usb_port_disable': usb_port_disable
+            'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
             resp = await self._request(self.get_ap_settings, serial_number)
             if not resp:
+                log.error(f"Unable to update AP settings for AP {serial_number}, API call to fetch current settings failed (all settings are required).")
                 return resp
 
             json_data = self.strip_none(_json_data)
+            if {k: v for k, v in resp.output.items() if k in json_data.keys()} == json_data:
+                return Response(url=url, ok=True, output=f"{resp.output.get('hostname', '')}|{serial_number} Nothing to Update provided AP settings match current AP settings", error="OK",)
+
             json_data = {**resp.output, **json_data}
-            if not sorted(_json_data.keys()) == sorted(json_data.keys()):
-                missing = ", ".join([f"'{k}'" for k in json_data.keys() if k not in _json_data.keys()])
-                return Response(
-                    ok=False,
-                    error=f"Update payload is missing required attributes: {missing}",
-                    reason="INVALID"
-                )
 
         return await self.post(url, json_data=json_data)
 
-    # TODO NotUsed Yet.  Shows any updates not yet pushed to the device (device offline, etc)
-    # Only valid for APs.
     async def get_dirty_diff(
         self,
         group: str,
@@ -3427,13 +3530,13 @@ class CentralApi(Session):
 
         return await self.post(url)
 
-    async def send_speed_test(
+    async def run_speedtest(
         self,
         serial: str,
         host: str = "ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org",
         options: str = None
     ) -> Response:
-        """Speed Test.
+        """Run speedtest from device (gateway only)
 
         Args:
             serial (str): Serial of device

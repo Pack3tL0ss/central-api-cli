@@ -388,7 +388,7 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
-def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels"] = None) -> List[Dict] | Dict:
+def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None) -> List[Dict] | Dict:
     data = None
     if import_file is not None:
         data = config.get_file_data(import_file)
@@ -862,14 +862,7 @@ def verify(
         print("Only devices and device assignments are supported at this time.")
         raise typer.Exit(1)
 
-    # TODO add param to get_file_data to pull devices or similar key
-    # make get_file_data return consistent List of pydantic models
-    data = config.get_file_data(import_file)
-    data = data if not hasattr(data, "dict") else data.dict
-    if isinstance(data, dict) and what in data:
-        data = data[what]
-
-    # TODO Verify yaml/json/csv should now all look the same... only tested with csv
+    data = _get_import_file(import_file, import_type=what)
 
     resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
@@ -892,7 +885,7 @@ def verify(
     # batch add allows the same three keys
     _keys = ["license", "services", "subscription"]
     file_key = [k for k in _keys if k in file_by_serial[list(file_by_serial.keys())[0]].keys()]
-    file_key = file_key[0] if file_key else file_key
+    file_key = None if not file_key else file_key[0]
 
     validation = {}
     for s in file_by_serial:
@@ -900,27 +893,32 @@ def verify(
         if s not in central_by_serial:
             validation[s] += ["Device not in inventory"]
             continue
-        _pfx = f"[cyan]{central_by_serial[s]['type'].upper()}[/] is in inventory, "
+        _dev_type = central_by_serial[s]['type'].upper()
+        _dev_type = _dev_type if _dev_type not in ["CX", "SW"] else f"{_dev_type} switch"
+        _pfx = f"[magenta]{_dev_type}[/] is in inventory, "
         if file_by_serial[s].get("group"):
             if not central_by_serial[s].get("status"):
-                validation[s] += [f"{_pfx}but has not connected to Central.  Not able to validate pre-provisioned group via API."]
+                validation[s] += [f"[cyan]Group:[/] {_pfx}but has not connected to Central.  Not able to validate pre-provisioned group via API."]
             elif not central_by_serial[s].get("group"):
-                validation[s] += [f"{_pfx}Group: [cyan]{file_by_serial[s]['group']}[/] from import != [italic]None[/] reflected in Central."]
+                validation[s] += [f"[cyan]Group:[/] {_pfx}Group [cyan]{file_by_serial[s]['group']}[/] from import != [italic]None[/] reflected in Central."]
             elif file_by_serial[s]["group"] != central_by_serial[s]["group"]:
-                validation[s] += [f"{_pfx}Group: [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
+                validation[s] += [f"[cyan]Group:[/] {_pfx}Group [bright_red]{file_by_serial[s]['group']}[/] from import != [bright_green]{central_by_serial[s]['group']}[/] reflected in Central."]
 
         if file_by_serial[s].get("site"):
             if not central_by_serial[s].get("status"):
-                validation[s] += [f"{_pfx}Unable to assign/verify site prior to device checking in."]
+                validation[s] += [f"[cyan]Site:[/] {_pfx}Unable to assign/verify site prior to device checking in."]
             elif not central_by_serial[s].get("site"):
-                validation[s] += [f"{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
+                validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
             elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
-                validation[s] += [f"{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
+                validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
 
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
             if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"{_pfx}Subscription: [bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
+            elif validation[s]:  # Only show positive valid results here if the device failed other items.
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
+
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
@@ -1056,7 +1054,7 @@ def add(
         resp = batch_add_devices(import_file, yes=yes)
         if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:
             log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will typically stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True)
-            log.info(f"Use [cyan]cencli batch verify {import_file}[/] to check status of license assignment.", caption=True, log=False)
+            log.info(f"Use [cyan]cencli batch verify devices {import_file}[/] to check status of license assignment.", caption=True)
     elif what == "labels":
         resp = batch_add_labels(import_file, yes=yes)
     elif what == "macs":
@@ -1777,7 +1775,7 @@ def rename(
     # cache update
     if import_file: # TODO have lldp return dict same as import file for reference during cache update
         for r in resp:
-            if r.ok:
+            if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
                 dev = cli.cache.get_dev_identifier(r.output)
                 dev.data["name"] = data[r.output]["hostname"]
                 cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])

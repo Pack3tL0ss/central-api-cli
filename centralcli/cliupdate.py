@@ -46,28 +46,31 @@ def template(
     name: str = typer.Argument(
         ...,
         metavar="IDENTIFIER",
-        help=f"Template: [name] or Device: {iden_meta.dev}",
+        help=f"Template: \[name] or Device: \{iden_meta.dev}",
         autocompletion=cli.cache.dev_template_completion,
+        show_default=False,
     ),
     template: Path = typer.Argument(
         None,
         help="Path to file containing new template",
         exists=True,
         autocompletion=lambda incomplete: [],
+        show_default=False,
     ),
     group: str = typer.Option(
         None,
-        help="The template group the template belongs to",
-        autocompletion=cli.cache.group_completion
+        help="[Templates] The template group the template belongs to",
+        autocompletion=cli.cache.group_completion,
+        show_default=False,
     ),
     device_type: DevTypes = typer.Option(
         None, "--dev-type",
-        help="Filter by Device Type",
+        help="[Templates] Filter by Device Type",
+        show_default=False,
     ),
-    version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version"),
-    model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version", show_default=False,),
+    model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model", show_default=False,),
+    yes: bool = typer.Option(False, "-Y", "-y",  help="Bypass confirmation prompts - Assume Yes"),
     update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
@@ -75,7 +78,6 @@ def template(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
     if group:
         group = cli.cache.get_group_identifier(group).name
 
@@ -85,44 +87,42 @@ def template(
     if obj.is_dev:
         _tmplt = [t for t in cli.cache.templates if t["group"] == obj.group and t["model"] in obj.model]
 
-        if version:
-            _tmplt = [t for t in cli.cache.templates if t["version"] in ["ALL", version]]
+        if _tmplt and version:
+            _tmplt = [t for t in _tmplt if t["version"] in ["ALL", version]]
 
         if len(_tmplt) != 1:
-            print(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
-            raise typer.Exit(1)
-        else:
-            obj = CentralObject("template", _tmplt[0])
+            cli.exit(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
+
+        obj = CentralObject("template", _tmplt[0])
 
     kwargs = {
-        "group": group or obj.group,
         "name": obj.name,
-        "device_type": device_type,
-        "version": version,
-        "model": model
+        "group": group or obj.group,
+        "device_type": device_type or obj.device_type,
+        "version": version or obj.version,
+        "model": model or obj.model
     }
-
-    do_prompt = False
-    if template:
-        if not template.stat().st_size > 0:
-            typer.secho(f"{template} not found or invalid.", fg="red")
-            do_prompt = True
-    else:
-        typer.secho("template file not provided.", fg="cyan")
-        do_prompt = True
 
     # TODO specify CTRL-Z / CTRL-D based on os
     payload = None
-    if do_prompt:
+    if not template:
         payload = utils.get_multiline_input(
             "Paste in new template contents then press CTRL-D to proceed. Type 'abort' to abort",
             print_func=typer.secho, fg="cyan", abort_str="abort"
         )
         payload = "\n".join(payload).encode()
 
-    # TODO add confirmation message
-    _resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
-    typer.secho(str(_resp), fg="green" if _resp else "red")
+    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{obj.name}[/] in group [cyan]{kwargs['group']}[/]")
+    print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
+    print(f"    Model: [cyan]{kwargs['model']}[/]")
+    print(f"    Version: [cyan]{kwargs['version']}[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
+        cli.display_results(resp, tablefmt="action")
+        if resp.ok:
+            # TODO need attribute setter/getters so obj.template_data = newval will update the dict in the data attribute
+            obj.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
+            _ = cli.central.request(cli.cache.update_template_db, update=obj)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")
@@ -319,24 +319,12 @@ def config_(
         ...,
         metavar="GROUP|DEVICE",
         help="Group or device to update.",
-        # autocompletion=cli.cache.group_dev_ap_gw_completion
-        autocompletion = lambda incomplete: [
-           cf for cf in [*[c for c in cli.cache.group_dev_ap_gw_completion(incomplete)], ("cencli", "update cencli configuration")] if cf[0].lower().startswith(incomplete.lower())
-        ]
+        autocompletion=cli.cache.group_dev_ap_gw_completion,
+        show_default=False,
     ),
-    # TODO simplify structure can just remove device arg
-    # device: str = typer.Argument(
-    #     None,
-    #     autocompletion=cli.cache.dev_ap_gw_completion
-    #     # TODO dev type gw or ap only
-    #     # autocompletion=lambda incomplete: [
-    #     #    c for c in cli.cache.dev_completion(incomplete, dev_type="gw") if c.lower().startswith(incomplete.lower())
-    #     # ]
-    # ),
     # TODO collect multi-line input as option to paste in config
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple()),
-    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple()),
-    # TODO --vars PATH  help="File containing variables to convert jinja2 template."
+    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
+    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
@@ -346,12 +334,8 @@ def config_(
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    """Update group, device level config (ap or gw) or cencli config.
+    """Update group or device level config (ap or gw).
     """
-    if group_dev == "cencli":
-        # return _update_cencli_config()
-        print("Not implemented yet")  # cli_file currently required. may be better to break this out into subcommand cliupdate_config
-        return
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)

@@ -13,6 +13,7 @@ import json
 import pkg_resources
 import os
 import pendulum
+import time
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -119,11 +120,20 @@ class CLICommon:
         Returns:
             str: account name
         """
-        if ctx.resilient_parsing:  # tab completion, return without validating
+        if ctx.resilient_parsing:  # tab completion, return without validating, so does use of "test method" command
             return account
 
-        account = account or config.default_account  # account only has value if --account flag is used.
         emoji_console = Console()
+
+        # cencli test method requires --account when using non default, we do not honor forget_account_after
+        if " ".join(sys.argv[1:]).startswith("test method"):
+            if account:
+                emoji_console.print(f":information:  Using account [bright_green]{account}[/]\n",)
+                return account
+            else:
+                return "default" if "default" in config.data else "central_info"
+
+        account = account or config.default_account  # account only has value if --account flag is used.
 
         if default:  # They used the -d flag
             emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
@@ -329,16 +339,17 @@ class CLICommon:
                 log.warning(out_msg, show=True)
 
     @staticmethod
-    def exit(msg: str = None, code: int = 1) -> None:
+    def exit(msg: str = None, code: int = 1, emoji: bool = True) -> None:
         """Print msg text and exit.
 
         Prepends warning emoji to msg if code indicates an error.
         """
+        console = Console(emoji=emoji)
         if code != 0:
-            msg = f":warning:  {msg}" if msg else msg
+            msg = f"\u26a0  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
         if msg:
-            print(msg)
+            console.print(msg)
         raise typer.Exit(code=code)
 
     def _sort_results(
@@ -408,8 +419,12 @@ class CLICommon:
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
-            data = cleaner(data, **cleaner_kwargs)
-            data = utils.listify(data)
+            with console.status("Cleaning Output..."):
+                _start = time.perf_counter()
+                data = cleaner(data, **cleaner_kwargs)
+                data = utils.listify(data)
+                _duration = time.perf_counter() - _start
+                log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
 
         data, caption = self._sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
@@ -506,12 +521,13 @@ class CLICommon:
                     rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
                     caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
             except Exception as e:
+                rl_str = ""
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
             caption = caption or ""
             if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
                 # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption if log.caption.count(":") < 2 else log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
+                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
@@ -536,11 +552,17 @@ class CLICommon:
                     m_color = m_colors.get(r.method, "reset")
                     print(
                         f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
-                        f"[cyan]{_url}[/cyan]]\n [fg]Response[reset]:"
+                        f"[cyan]{_url}[/cyan]]\n [{fg}]Response[reset]:"
                     )
 
                 if self.raw_out:
                     tablefmt = "raw"
+
+                if config.capture_raw:
+                    with console.status("Capturing raw response"):
+                        raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
+                        with config.capture_file.open("a") as f:
+                            f.write(json.dumps(raw))
 
                 # Nothing returned in response payload
                 if not r.output:
@@ -675,6 +697,22 @@ class CLICommon:
             self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
 
         return start
+
+    @staticmethod
+    async def get_file_hash(file: Path = None, string: str = None) -> str:
+        import hashlib
+        md5 = hashlib.md5()
+
+        if file:
+            with file.open("rb") as f:
+                while chunk := f.read(4096):
+                    md5.update(chunk)
+        elif string:
+            md5.update(string.encode("utf-8"))
+        else:
+            raise ValueError("One of file or string argument is required")
+
+        return md5.hexdigest()
 
 
 if __name__ == "__main__":

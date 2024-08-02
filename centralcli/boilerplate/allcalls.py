@@ -34,8 +34,8 @@ from centralcli.central import CentralApi
 
 
 class AllCalls(CentralApi):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, account_name: str = "central_info"):
+        super().__init__(account_name=account_name)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_get_metadata_v2(
         self,

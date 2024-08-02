@@ -13,7 +13,7 @@ import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from tinydb.table import Table
+from tinydb.table import Table, Document
 from copy import deepcopy
 
 from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
@@ -58,17 +58,7 @@ RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
     "_fields"
 ]
 
-def get_cencli_devtype(dev_type: str) -> str:
-    """Convert device type returned by API to consistent cencli types
-
-    Args:
-        dev_type(str): device type provided by API response
-
-    Returns:
-        str: One of ["ap", "sw", "cx", "gw"]
-    """
-    return LIB_DEV_TYPE.get(dev_type, dev_type)
-
+CACHE_TABLES = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
 
 class CentralObject:
     def __init__(
@@ -471,7 +461,7 @@ class Cache:
         return self.HookDataDB.get(self.Q.device_id == serial)
 
 
-    def get_devices_with_inventory(self, no_refresh=False, dev_type: constants.AllDevTypes = None) -> List[Response]:
+    def get_devices_with_inventory(self, no_refresh=False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.AllDevTypes = None) -> List[Response]:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -489,10 +479,11 @@ class Cache:
                             data from Inventory and Monitoring.
         """
         kwargs = {
-            "dev_db": self.responses.dev is None,
-            "inv_db": self.responses.inv is None
+            "dev_db": dev_db or self.responses.dev is None,
+            "inv_db": inv_db or self.responses.inv is None
         }
         if any(kwargs.values()) and not no_refresh:
+            kwargs["dev_type"] = dev_type
             res = self.check_fresh(**kwargs)
         else:
             res = [self.responses.dev or Response()]
@@ -502,6 +493,7 @@ class Cache:
         # dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
         # if dev_res:
         #     _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        # TODO The logic for show dev_type --inv sux
         if self.responses.dev:
             _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}
         else:
@@ -523,7 +515,7 @@ class Cache:
         resp.output = combined
         # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
         try:
-            resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+            resp.raw = {**self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
         except AttributeError:
             if isinstance(resp, CombinedResponse):
                 resp.raw = {**resp.raw, **{f.url.path: f.raw for f in resp.failed}}
@@ -613,7 +605,7 @@ class Cache:
         self,
         # ctx: typer.Context,
         incomplete: str,
-        args: List[str] = None,
+        args: List[str] = None
     ):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
@@ -630,7 +622,9 @@ class Cache:
 
         dev_type = None
         if args:
-            if args[-1].lower() in ["gateways", "clients", "server"]:
+            if "dev_type" in args and len(args) > 1:
+                dev_type = args[args.index("dev_type") + 1]  # HACK we can't add parameters typer doesn't expect this allows us to call this from other funcs
+            elif args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
             elif args[-1].lower().startswith("switch"):
                 dev_type = "switch"
@@ -1138,6 +1132,101 @@ class Cache:
 
     # FIXME not completing partial serial number is zsh get_dev_completion appears to return as expected
     # works in BASH and powershell
+    def _group_dev_completion(
+        self,
+        incomplete: str,
+        ctx: typer.Context = None,
+        dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None,
+        conductor_only: bool = False,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for argument that can be either group or device.
+
+        Args:
+            ctx (typer.Context): The click/typer Context.
+            incomplete (str): The last partial or full command before completion invoked.
+            dev_type: (str, optional): One of "ap", "cx", "sw", "switch", or "gw"
+                where "switch" is both switch types.  Defaults to None (all device types)
+            conductor_only (bool, optional): If there are multiple matches (stack) return only the conductor as a match.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        # match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
+
+        # Add cencli as option to show and update config commands (update not implememnted yet)
+        utils.listify(dev_type)
+        out = []
+        if args:
+            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "show cencli configuration")]
+            elif " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
+                out += [("cencli", "update cencli configuration")]
+        elif ctx is not None:
+            args = [a for a in ctx.params.values() if a is not None]
+            if ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+                if "cencli".lower().startswith(incomplete):
+                    out += [("cencli", "show cencli configuration")]
+            elif ctx.command_path == "cencli update config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
+                if "cencli".lower().startswith(incomplete):
+                    out += [("cencli", "update cencli configuration")]
+        else:
+            args = []
+
+        group_out = self.group_completion(incomplete=incomplete, args=args)
+        if group_out:
+            out += list(group_out)
+
+
+        if not bool([t for t in out if t[0] == incomplete]):  # exact match
+            _args = args if not dev_type else [*args, "dev_type", *dev_type]  # TODO not tested yet
+            dev_out = self.dev_completion(incomplete, args=_args)
+            if dev_out:
+                out += list(dev_out)
+
+        # match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
+
+        # partial completion by serial: out appears to have list with expected tuple but does
+        # not appear in zsh
+
+        # if match:
+        #     for m in sorted(match, key=lambda i: i.name):
+        #         out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    def group_dev_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for argument that can be either group or device.
+
+        Args:
+            ctx (typer.Context): The click/typer Context.
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
+
+        Yields:
+            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        return self._group_dev_completion(incomplete, ctx=ctx, args=args)
+
     def group_dev_ap_gw_completion(
         self,
         ctx: typer.Context,
@@ -1221,6 +1310,7 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
+
 
     # FIXME completion doesn't pop args need ctx: typer.Context and reference ctx.params which is dict?
     def send_cmds_completion(
@@ -1728,10 +1818,13 @@ class Cache:
 
         try:
             resp = CombinedResponse.flatten_resp([resp])
-            raw_data = await self.format_raw_devices_for_cache(resp)
-            devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
+            _start_time = time.perf_counter()
+            with console.status(f"Preparing {len(resp)} records from dev response data for cache update"):
+                raw_data = await self.format_raw_devices_for_cache(resp)
+                devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
 
-            _ret = [d.dict() for d in devices]
+                _ret = [d.dict() for d in devices]
+                log.info(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
         except Exception as e:
             log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")
             log.exception(e)
@@ -1739,18 +1832,42 @@ class Cache:
 
         return _ret
 
+    def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> None:
+        # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
+        if db == "dev":
+            DB = self.DevDB
+            cache_by_serial = self.devices_by_serial
+        else:
+            DB = self.InvDB
+            cache_by_serial = self.inventory_by_serial
 
+        _start_time = time.perf_counter()
+        with console.status(f"Performing {db} cache update, adding/updating {len(new_data)} records"):
+            new_by_serial = {dev["serial"]: dev for dev in new_data}
+            updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
+            DB.truncate()
+            db_res = DB.insert_multiple(list(updated_devs_by_serial.values()))
+            log.info(f"{db} cache update add/update {len(new_data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
+            if len(db_res) != len(updated_devs_by_serial):
+                log.error(f'TinyDB {db.replace("_", " ").title().replace(" ", "")}DB table update returned an error.  data included {len(updated_devs_by_serial)} but DB only returned {len(db_res)} doc_ids', show=True, caption=True,)
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
-    # TODO if we are updating inventory we only need to get those devices types
-    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, *, remove: bool = False, response: Response = None, **kwargs) -> Union[List[int], Response]:
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, *, remove: bool = False, dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None, **kwargs) -> Union[List[int], Response]:
         """Update Device Database (local cache).
+
+        If data or response is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
+        If dev_types is provided those device_types will be fetched from central and cache will be updated.
+
+        If None of data, response, and dev_types are provided all devices are fetched from Central and the database is truncated/re-populated.
 
         Args:
             data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
             response (Response, optional): Response object for a call to one of the monitoring/<dev-type> endpoints
-                raw response attribute will be cleaned and prepped for cache update (upsert).
+                raw response attribute will be cleaned and prepped for cache addition/update.
+            dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Literal["ap", "cx", "sw", "switch", "gw"]]): If provided calls will be made to update
+                the dev_db for only dev_types specified, the response object will be returned.
+            kwargs (dict, optional): All remaining kwargs are passed to central.get_all_devices.  Ignored if data or response is provided
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1759,58 +1876,64 @@ class Cache:
             Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
                 If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
         """
-        if response and not data:
-            self.responses.dev = response
-            data = await self.format_dev_response_for_cache(response)
 
+
+        dev_type = utils.listify(dev_type)
+        data = utils.listify(data)
+
+        _start_time = time.perf_counter()
         if data:
-            data = utils.listify(data)
-            if not remove:
-                upd = [self.DevDB.upsert(dev, cond=self.Q.serial == dev.get("serial")) for dev in data]
-                upd = [item for in_list in upd for item in in_list]
-                if False in upd:
-                    log.error(f"TinyDB DevDB update returned an error.  db_resp: {upd}", show=True)
-                return upd
+                if not remove:
+                    self._add_update_devices(data)
+                else:
+                    doc_ids = []
+                    for qry in data:
+                        # allow list of dicts with device data, only interested in serial
+                        if isinstance(qry, dict):
+                            qry = qry if "data" not in qry else qry["data"]
+                            if "serial" not in qry.keys():
+                                raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                            qry = qry["serial"]
 
-            else:
-                doc_ids = []
-                for qry in data:
-                    # allow list of dicts with device data, only interested in serial
-                    if isinstance(qry, dict):
-                        qry = qry if "data" not in qry else qry["data"]
-                        if "serial" not in qry.keys():
-                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                        qry = qry["serial"]
+                        if not isinstance(qry, str):
+                            raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
+                        if not utils.isserial(qry):
+                            raise ValueError("Provided str does not appear to be a serial number.")
+                        else:
+                            doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
 
-                    if not isinstance(qry, str):
-                        raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
-                    if not utils.isserial(qry):
-                        raise ValueError("Provided str does not appear to be a serial number.")
-                    else:
-                        doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
+                    if len(doc_ids) != len(data):
+                        log.error(
+                            f"update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
+                            show=True, caption=True
+                        )
 
-                if len(doc_ids) != len(data):
-                    log.error(
-                        f"Warning update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
-                        show=True
-                    )
-
-                db_res = self.DevDB.remove(doc_ids=doc_ids)
-                if False in db_res:
-                    log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
+                    with console.status(f"Performing dev cache update, deleting {len(data)} records"):
+                        _ = self.DevDB.remove(doc_ids=doc_ids)
+                        log.info(f"dev cache update deleted {len(data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
         else:
-            resp: CombinedResponse = await self.central.get_all_devices(cache=True, **kwargs)
+            resp: CombinedResponse = await self.central.get_all_devices(cache=True, dev_types=dev_type, **kwargs)
             if resp.ok:
                 raw_data = await self.format_raw_devices_for_cache(resp)
-                raw_models_by_type = models.Devices(**raw_data)
-                raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                with console.status(f"preparing {len(resp)} records for cache update"):
+                    _start_time = time.perf_counter()
+                    raw_models_by_type = models.Devices(**raw_data)
+                    raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                    log.info(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
+
                 if resp.all_ok:
-                    self.DevDB.truncate()
-                    _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                    if not dev_type:
+                        _start_time = time.perf_counter()
+                        with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
+                            self.DevDB.truncate()
+                            _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                            log.info(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
+                    else:
+                        self._add_update_devices([dev.dict() for dev in raw_models])
                     self.updated.append(self.central.get_all_devices)
                     self.responses.dev = resp
                 else:  # partial failure at least one of the calls (call for each device type) failed.  Partial cache update
-                    _ = [self.DevDB.upsert(dev.dict(), cond=self.Q.serial == dev.serial) for dev in raw_models]
+                    self._add_update_devices([dev.dict() for dev in raw_models])
 
             return resp
 
@@ -1857,9 +1980,7 @@ class Cache:
             # provide serial or list of serials to remove
             data = utils.listify(data)
             if not remove:
-                db_res = self.InvDB.insert_multiple(data)
-                if False in db_res:
-                    log.error(f"TinyDB InvDB table update returned an error.  db_resp: {db_res}", show=True)
+                self._add_update_devices(data, "inv")
             else:
                 doc_ids = []
                 for qry in data:
@@ -1888,8 +2009,8 @@ class Cache:
                 #     )
 
                 db_res = self.InvDB.remove(doc_ids=doc_ids)
-                if False in db_res:
-                    log.error(f"Tiny DB returned an error during Inventory db update {db_res}", show=True)
+                if len(db_res) != len(doc_ids):
+                    log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
         else:
             resp = await self.central.get_device_inventory(sku_type=dev_type)
             if resp.ok:
@@ -1900,14 +2021,9 @@ class Cache:
                         self.InvDB.truncate()
                         db_res = self.InvDB.insert_multiple(resp.output)
                     else:
-                        db_res = [
-                            self.InvDB.upsert(d, self.Q.serial == d.get("serial", "--"))
-                            for d in resp.output
-                        ]
+                        self._add_update_devices(resp.output, "inv")
                     if sub is not None:  # filtered response for display, no filter prior for benefit of cache.
                         resp.output = [dev for dev in resp.output if bool(dev["services"]) is sub]
-                    if False in db_res:
-                        log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
 
                 # TODO change updated from  list of funcs to class with bool attributes or something
                 self.updated.append(self.central.get_device_inventory)
@@ -1970,7 +2086,6 @@ class Cache:
             resp = await self.central.get_all_groups()
             if resp.ok:
                 resp.output = cleaner.get_all_groups(resp.output)
-                resp.output = utils.listify(resp.output)
                 self.responses.group = resp
                 self.updated.append(self.central.get_all_groups)
                 self.GroupDB.truncate()
@@ -2029,8 +2144,7 @@ class Cache:
                 log.error("Tiny DB returned an error during license db update")
         return resp
 
-    async def update_template_db(self):
-        # groups = self.groups if self.central.get_all_groups in self.updated else None
+    async def _renew_teplate_db(self):
         if self.central.get_all_groups not in self.updated:
             gr_resp = await self.update_group_db()
             if not gr_resp.ok:
@@ -2048,6 +2162,40 @@ class Cache:
                 if False in update_res:
                     log.error("Tiny DB returned an error during template db update")
         return resp
+
+
+    async def update_template_db(
+            self,
+            add: Dict[str, Any] | List[Dict[str, Any]] = None,
+            remove: CentralObject | List[CentralObject] = None,
+            update: CentralObject | List[CentralObject] = None
+        ):
+        if not any([add, remove, update]):
+            return await self._renew_teplate_db()
+        else:
+            db_res = []
+            try:
+                if remove:
+                    remove = utils.listify(remove)
+                    doc_ids = [t.doc_id for t in remove]  # TODO make sure cache object has doc_id attr for easy deletion, simplify other update funcs
+                    db_res = self.TemplateDB.remove(doc_ids=doc_ids)
+                elif update:
+                    update = utils.listify(update)
+                    db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]
+                    db_res = [doc_id for doc_id_list in db_res for doc_id in doc_id_list]  # return is like [[4], [3]]
+                    if False in db_res:
+                        log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
+                else: # add
+                    add = utils.listify(add)
+                    db_res = self.TemplateDB.insert_multiple(add)
+            except Exception as e:
+                    log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True)
+                    log.exception(e)
+
+        if False in db_res:
+            log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
+
+        return db_res
 
     # TODO need a reset cache flag in "show clients"
     async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
@@ -2199,8 +2347,10 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
+        dev_type: constants.AllDevTypes = None
         ):
         update_funcs, db_res = [], []
+        dev_update_funcs = ["update_inv_db", "update_dev_db"]
         if inv_db:
             update_funcs += [self.update_inv_db]
         if dev_db:
@@ -2217,7 +2367,8 @@ class Cache:
             update_funcs += [self.update_license_db]
         async with self.central.aio_session:
             if update_funcs:
-                db_res += [await update_funcs[0]()]
+                kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
+                db_res += [await update_funcs[0](**kwargs)]
                 if not db_res[-1]:
                     log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
                 else:
@@ -2253,28 +2404,39 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
+        dev_type: constants.AllDevTypes = None
     ) -> List[Response]:
         db_res = None
-        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db, license_db]:
-            refresh = True
+        db_map = {
+            "dev_db": dev_db,
+            "inv_db": inv_db,
+            "site_db": site_db,
+            "template_db": template_db,
+            "group_db": group_db,
+            "label_db": label_db,
+            "license_db": license_db
+        }
+        update_count = list(db_map.values()).count(True)
+        refresh = refresh or bool(update_count)
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
-            _word = "Refreshing" if refresh else "Populating"
+            _word = "Refreshing" if update_count else "Populating"
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
-            start = time.monotonic()
-            db_res = asyncio.run(self._check_fresh(
-                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db, license_db=license_db
-                )
-            )
+            start = time.perf_counter()
+            db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
+            elapsed = round(time.perf_counter() - start, 2)
+            passed = [r for r in db_res if r.ok]
+            failed = update_count - len(passed)
+            log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
 
-            if not all([r.ok for r in db_res]):
-                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db", "license_db"]
-                res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
-                self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
+            if failed:
+                res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update and not db_res[idx].ok)
+                err_msg = f"Cache refresh returned an error updating ({res_map})"
+                log.error(err_msg)
+                self.central.spinner.fail(err_msg)
             else:
-                self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.monotonic() - start, 2)} sec")
-            log.info(f"Cache Refreshed in {round(time.monotonic() - start, 2)} seconds", show=False)
+                self.central.spinner.succeed(f"Cache Refresh Completed in {elapsed}s")
 
         return db_res
 
@@ -2338,7 +2500,7 @@ class Cache:
         device_type: Union[str, List[str]] = None,
         swack: bool = False,
         conductor_only: bool = False,
-        group: str = None,
+        group: str | List[str] = None,
         all: bool = False,
         completion: bool = False,
     ) -> Union[CentralObject, List[CentralObject]]:
@@ -2353,7 +2515,7 @@ class Cache:
                 Defaults to False.
             conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
                 Does not filter non stacks, the way swack option does. Defaults to False.
-            group (str, optional): applies to get_template_identifier, Only match if template is in this group.
+            group (str, List[str], optional): applies to get_template_identifier, Only match if template is in provided group(s).
                 Defaults to None.
             all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
@@ -2661,9 +2823,7 @@ class Cache:
     def get_group_identifier(
         self,
         query_str: str,
-        ret_field: str = "name",
         retry: bool = True,
-        multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject | List[CentralObject]:
@@ -2835,10 +2995,8 @@ class Cache:
     def get_template_identifier(
         self,
         query_str: str,
-        ret_field: str = "name",
-        group: str = None,
+        group: str | List[str] = None,
         retry: bool = True,
-        multi_ok: bool = False,
         completion: bool = False,
         silent: bool = False,
     ) -> CentralObject:
@@ -2846,10 +3004,6 @@ class Cache:
         retry = False if completion else retry
         if not query_str and completion:
             return [CentralObject("template", data=t) for t in self.templates]
-
-        # TODO verify and remove
-        if multi_ok:
-            log.error("deprecated parameter multi_ok sent to get_template_identifier.")
 
         match = None
         for _ in range(0, 2 if retry else 1):
@@ -2894,24 +3048,24 @@ class Cache:
 
             if len(match) > 1:
                 if group:
-                    match = [d for d in match if d.group.lower() == group.lower()]
+                    groups = utils.listify(group)
+                    match = [d for d in match if d.group in groups]
 
             if len(match) > 1:
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
                     query_type="template",
-                    # multi_ok=multi_ok,
                 )
 
             return match[0]
 
         elif retry:
-            log.error(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather template from provided identifier {query_str}", show=True)
             raise typer.Exit(1)
         else:
             if not completion and not silent:
-                log.warning(f"Unable to gather template {ret_field} from provided identifier {query_str}", show=False)
+                log.warning(f"Unable to gather template from provided identifier {query_str}", show=False)
 
     def get_client_identifier(
         self,

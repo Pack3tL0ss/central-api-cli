@@ -80,7 +80,7 @@ def device(
             if not dev.swack_id:
                 print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
                 if yes > 1 or typer.confirm("\nRefresh cache now to check if it's populated", abort=True):
-                    cli.central.request(cli.cache.update_dev_db)
+                    cli.central.request(cli.cache.update_dev_db, dev_type="ap")
                     dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
 
             if dev.swack_id:
