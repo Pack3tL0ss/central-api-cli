@@ -58,17 +58,7 @@ RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
     "_fields"
 ]
 
-def get_cencli_devtype(dev_type: str) -> str:
-    """Convert device type returned by API to consistent cencli types
-
-    Args:
-        dev_type(str): device type provided by API response
-
-    Returns:
-        str: One of ["ap", "sw", "cx", "gw"]
-    """
-    return LIB_DEV_TYPE.get(dev_type, dev_type)
-
+CACHE_TABLES = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
 
 class CentralObject:
     def __init__(
@@ -523,7 +513,6 @@ class Cache:
         resp.output = combined
         # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
         try:
-            # resp.raw = {self.responses.dev.url.path: self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
             resp.raw = {**self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
         except AttributeError:
             if isinstance(resp, CombinedResponse):
@@ -1827,10 +1816,13 @@ class Cache:
 
         try:
             resp = CombinedResponse.flatten_resp([resp])
-            raw_data = await self.format_raw_devices_for_cache(resp)
-            devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
+            _start_time = time.perf_counter()
+            with console.status(f"Preparing {len(resp)} records from dev response data for cache update"):
+                raw_data = await self.format_raw_devices_for_cache(resp)
+                devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
 
-            _ret = [d.dict() for d in devices]
+                _ret = [d.dict() for d in devices]
+                log.info(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
         except Exception as e:
             log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")
             log.exception(e)
@@ -1838,18 +1830,42 @@ class Cache:
 
         return _ret
 
+    def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> None:
+        # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
+        if db == "dev":
+            DB = self.DevDB
+            cache_by_serial = self.devices_by_serial
+        else:
+            DB = self.InvDB
+            cache_by_serial = self.inventory_by_serial
 
+        _start_time = time.perf_counter()
+        with console.status(f"Performing {db} cache update, adding/updating {len(new_data)} records"):
+            new_by_serial = {dev["serial"]: dev for dev in new_data}
+            updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
+            DB.truncate()
+            db_res = DB.insert_multiple(list(updated_devs_by_serial.values()))
+            log.info(f"{db} cache update add/update {len(new_data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
+            if len(db_res) != len(updated_devs_by_serial):
+                log.error(f'TinyDB {db.replace("_", " ").title().replace(" ", "")}DB table update returned an error.  data included {len(updated_devs_by_serial)} but DB only returned {len(db_res)} doc_ids', show=True, caption=True,)
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
-    # TODO if we are updating inventory we only need to get those devices types
-    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, *, remove: bool = False, response: Response = None, **kwargs) -> Union[List[int], Response]:
+    async def update_dev_db(self,  data: Union[str, List[str], List[dict]] = None, *, remove: bool = False, dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None, **kwargs) -> Union[List[int], Response]:
         """Update Device Database (local cache).
+
+        If data or response is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
+        If dev_types is provided those device_types will be fetched from central and cache will be updated.
+
+        If None of data, response, and dev_types are provided all devices are fetched from Central and the database is truncated/re-populated.
 
         Args:
             data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
             response (Response, optional): Response object for a call to one of the monitoring/<dev-type> endpoints
-                raw response attribute will be cleaned and prepped for cache update (upsert).
+                raw response attribute will be cleaned and prepped for cache addition/update.
+            dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Literal["ap", "cx", "sw", "switch", "gw"]]): If provided calls will be made to update
+                the dev_db for only dev_types specified, the response object will be returned.
+            kwargs (dict, optional): All remaining kwargs are passed to central.get_all_devices.  Ignored if data or response is provided
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -1858,58 +1874,64 @@ class Cache:
             Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
                 If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
         """
-        if response and not data:
-            self.responses.dev = response
-            data = await self.format_dev_response_for_cache(response)
 
+
+        dev_type = utils.listify(dev_type)
+        data = utils.listify(data)
+
+        _start_time = time.perf_counter()
         if data:
-            data = utils.listify(data)
-            if not remove:
-                upd = [self.DevDB.upsert(dev, cond=self.Q.serial == dev.get("serial")) for dev in data]
-                upd = [item for in_list in upd for item in in_list]
-                if False in upd:
-                    log.error(f"TinyDB DevDB update returned an error.  db_resp: {upd}", show=True)
-                return upd
+                if not remove:
+                    self._add_update_devices(data)
+                else:
+                    doc_ids = []
+                    for qry in data:
+                        # allow list of dicts with device data, only interested in serial
+                        if isinstance(qry, dict):
+                            qry = qry if "data" not in qry else qry["data"]
+                            if "serial" not in qry.keys():
+                                raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                            qry = qry["serial"]
 
-            else:
-                doc_ids = []
-                for qry in data:
-                    # allow list of dicts with device data, only interested in serial
-                    if isinstance(qry, dict):
-                        qry = qry if "data" not in qry else qry["data"]
-                        if "serial" not in qry.keys():
-                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                        qry = qry["serial"]
+                        if not isinstance(qry, str):
+                            raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
+                        if not utils.isserial(qry):
+                            raise ValueError("Provided str does not appear to be a serial number.")
+                        else:
+                            doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
 
-                    if not isinstance(qry, str):
-                        raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
-                    if not utils.isserial(qry):
-                        raise ValueError("Provided str does not appear to be a serial number.")
-                    else:
-                        doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
+                    if len(doc_ids) != len(data):
+                        log.error(
+                            f"update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
+                            show=True, caption=True
+                        )
 
-                if len(doc_ids) != len(data):
-                    log.error(
-                        f"Warning update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
-                        show=True
-                    )
-
-                db_res = self.DevDB.remove(doc_ids=doc_ids)
-                if False in db_res:
-                    log.error(f"Tiny DB returned an error during DevDB update {db_res}", show=True)
+                    with console.status(f"Performing dev cache update, deleting {len(data)} records"):
+                        _ = self.DevDB.remove(doc_ids=doc_ids)
+                        log.info(f"dev cache update deleted {len(data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
         else:
-            resp: CombinedResponse = await self.central.get_all_devices(cache=True, **kwargs)
+            resp: CombinedResponse = await self.central.get_all_devices(cache=True, dev_types=dev_type, **kwargs)
             if resp.ok:
                 raw_data = await self.format_raw_devices_for_cache(resp)
-                raw_models_by_type = models.Devices(**raw_data)
-                raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                with console.status(f"preparing {len(resp)} records for cache update"):
+                    _start_time = time.perf_counter()
+                    raw_models_by_type = models.Devices(**raw_data)
+                    raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                    log.info(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
+
                 if resp.all_ok:
-                    self.DevDB.truncate()
-                    _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
-                    self.updated.append(self.central.get_all_devices)
-                    self.responses.dev = resp
+                    if not dev_type:
+                        _start_time = time.perf_counter()
+                        with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
+                            self.DevDB.truncate()
+                            _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
+                            log.info(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
+                        self.updated.append(self.central.get_all_devices)
+                        self.responses.dev = resp
+                    else:
+                        self._add_update_devices([dev.dict() for dev in raw_models])
                 else:  # partial failure at least one of the calls (call for each device type) failed.  Partial cache update
-                    _ = [self.DevDB.upsert(dev.dict(), cond=self.Q.serial == dev.serial) for dev in raw_models]
+                    self._add_update_devices([dev.dict() for dev in raw_models])
 
             return resp
 
@@ -1956,9 +1978,7 @@ class Cache:
             # provide serial or list of serials to remove
             data = utils.listify(data)
             if not remove:
-                db_res = self.InvDB.insert_multiple(data)
-                if False in db_res:
-                    log.error(f"TinyDB InvDB table update returned an error.  db_resp: {db_res}", show=True)
+                self._add_update_devices(data, "inv")
             else:
                 doc_ids = []
                 for qry in data:
@@ -1987,8 +2007,8 @@ class Cache:
                 #     )
 
                 db_res = self.InvDB.remove(doc_ids=doc_ids)
-                if False in db_res:
-                    log.error(f"Tiny DB returned an error during Inventory db update {db_res}", show=True)
+                if len(db_res) != len(doc_ids):
+                    log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
         else:
             resp = await self.central.get_device_inventory(sku_type=dev_type)
             if resp.ok:
@@ -1999,14 +2019,9 @@ class Cache:
                         self.InvDB.truncate()
                         db_res = self.InvDB.insert_multiple(resp.output)
                     else:
-                        db_res = [
-                            self.InvDB.upsert(d, self.Q.serial == d.get("serial", "--"))
-                            for d in resp.output
-                        ]
+                        self._add_update_devices(resp.output, "inv")
                     if sub is not None:  # filtered response for display, no filter prior for benefit of cache.
                         resp.output = [dev for dev in resp.output if bool(dev["services"]) is sub]
-                    if False in db_res:
-                        log.error(f"Tiny DB returned an error during InvDB update {db_res}", show=True)
 
                 # TODO change updated from  list of funcs to class with bool attributes or something
                 self.updated.append(self.central.get_device_inventory)
@@ -2386,26 +2401,36 @@ class Cache:
         license_db: bool = False,
     ) -> List[Response]:
         db_res = None
-        if True in [site_db, inv_db, dev_db, group_db, template_db, label_db, license_db]:
-            refresh = True
+        db_map = {
+            "dev_db": dev_db,
+            "inv_db": inv_db,
+            "site_db": site_db,
+            "template_db": template_db,
+            "group_db": group_db,
+            "label_db": label_db,
+            "license_db": license_db
+        }
+        update_count = list(db_map.values()).count(True)
+        refresh = refresh or bool(update_count)
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
-            _word = "Refreshing" if refresh else "Populating"
+            _word = "Refreshing" if update_count else "Populating"
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
-            start = time.monotonic()
-            db_res = asyncio.run(self._check_fresh(
-                dev_db=dev_db, inv_db=inv_db, site_db=site_db, template_db=template_db, group_db=group_db, label_db=label_db, license_db=license_db
-                )
-            )
+            start = time.perf_counter()
+            db_res = asyncio.run(self._check_fresh(**db_map))
+            elapsed = round(time.perf_counter() - start, 2)
+            passed = [r for r in db_res if r.ok]
+            failed = update_count - len(passed)
+            log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
 
-            if not all([r.ok for r in db_res]):
-                res_map = ["dev_db", "inv_db", "site_db", "template_db", "group_db", "label_db", "license_db"]
-                res_map = ", ".join([db for idx, db in enumerate(res_map[0:len(db_res)]) if not db_res[idx]])
-                self.central.spinner.fail(f"Cache Refresh Returned an error updating ({res_map})")
+            if failed:
+                res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update and not db_res[idx].ok)
+                err_msg = f"Cache refresh returned an error updating ({res_map})"
+                log.error(err_msg)
+                self.central.spinner.fail(err_msg)
             else:
-                self.central.spinner.succeed(f"Cache Refresh Completed in {round(time.monotonic() - start, 2)} sec")
-            log.info(f"Cache Refreshed in {round(time.monotonic() - start, 2)} seconds", show=False)
+                self.central.spinner.succeed(f"Cache Refresh Completed in {elapsed}s")
 
         return db_res
 
