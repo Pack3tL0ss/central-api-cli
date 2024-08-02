@@ -461,7 +461,7 @@ class Cache:
         return self.HookDataDB.get(self.Q.device_id == serial)
 
 
-    def get_devices_with_inventory(self, no_refresh=False, dev_type: constants.AllDevTypes = None) -> List[Response]:
+    def get_devices_with_inventory(self, no_refresh=False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.AllDevTypes = None) -> List[Response]:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -479,10 +479,11 @@ class Cache:
                             data from Inventory and Monitoring.
         """
         kwargs = {
-            "dev_db": self.responses.dev is None,
-            "inv_db": self.responses.inv is None
+            "dev_db": dev_db or self.responses.dev is None,
+            "inv_db": inv_db or self.responses.inv is None
         }
         if any(kwargs.values()) and not no_refresh:
+            kwargs["dev_type"] = dev_type
             res = self.check_fresh(**kwargs)
         else:
             res = [self.responses.dev or Response()]
@@ -492,6 +493,7 @@ class Cache:
         # dev_res = list(filter(lambda r: r.url.path.startswith("/monitoring"), res))
         # if dev_res:
         #     _dev_by_ser = {d["serial"]: d for d in dev_res[0].output}
+        # TODO The logic for show dev_type --inv sux
         if self.responses.dev:
             _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}
         else:
@@ -1926,10 +1928,10 @@ class Cache:
                             self.DevDB.truncate()
                             _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
                             log.info(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
-                        self.updated.append(self.central.get_all_devices)
-                        self.responses.dev = resp
                     else:
                         self._add_update_devices([dev.dict() for dev in raw_models])
+                    self.updated.append(self.central.get_all_devices)
+                    self.responses.dev = resp
                 else:  # partial failure at least one of the calls (call for each device type) failed.  Partial cache update
                     self._add_update_devices([dev.dict() for dev in raw_models])
 
@@ -2345,8 +2347,10 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
+        dev_type: constants.AllDevTypes = None
         ):
         update_funcs, db_res = [], []
+        dev_update_funcs = ["update_inv_db", "update_dev_db"]
         if inv_db:
             update_funcs += [self.update_inv_db]
         if dev_db:
@@ -2363,7 +2367,8 @@ class Cache:
             update_funcs += [self.update_license_db]
         async with self.central.aio_session:
             if update_funcs:
-                db_res += [await update_funcs[0]()]
+                kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
+                db_res += [await update_funcs[0](**kwargs)]
                 if not db_res[-1]:
                     log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
                 else:
@@ -2399,6 +2404,7 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
+        dev_type: constants.AllDevTypes = None
     ) -> List[Response]:
         db_res = None
         db_map = {
@@ -2418,7 +2424,7 @@ class Cache:
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
             start = time.perf_counter()
-            db_res = asyncio.run(self._check_fresh(**db_map))
+            db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
             elapsed = round(time.perf_counter() - start, 2)
             passed = [r for r in db_res if r.ok]
             failed = update_count - len(passed)
