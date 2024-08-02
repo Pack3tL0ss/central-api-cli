@@ -45,9 +45,7 @@ from . import constants
 from .config import Config
 config = Config(base_dir=base_dir)
 
-log_dir = config.base_dir / "logs"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / f"{__name__}.log"
+log_file = config.log_dir / f"{__name__}.log"
 
 if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in ["1", "true"]:
     config.debug = True  # for the benefit of the 2 log messages below
@@ -166,6 +164,9 @@ if "--again" in sys.argv:
     valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "--out", "-d", "--debug", "--account"]
     args = [arg for arg in sys.argv if arg in valid_options]
     sys.argv = [sys.argv[0], "show", "last", *args]
+if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
+    config.capture_raw = True
+    _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 
 central = CentralApi(config.account)
 cache = Cache(central)

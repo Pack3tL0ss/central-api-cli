@@ -13,6 +13,7 @@ import json
 import pkg_resources
 import os
 import pendulum
+import time
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -418,8 +419,12 @@ class CLICommon:
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
-            data = cleaner(data, **cleaner_kwargs)
-            data = utils.listify(data)
+            with console.status("Cleaning Output..."):
+                _start = time.perf_counter()
+                data = cleaner(data, **cleaner_kwargs)
+                data = utils.listify(data)
+                _duration = time.perf_counter() - _start
+                log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
 
         data, caption = self._sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
@@ -522,7 +527,7 @@ class CLICommon:
             caption = caption or ""
             if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
                 # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption if log.caption.count(":") < 2 else log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
+                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
@@ -552,6 +557,12 @@ class CLICommon:
 
                 if self.raw_out:
                     tablefmt = "raw"
+
+                if config.capture_raw:
+                    with console.status("Capturing raw response"):
+                        raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
+                        with config.capture_file.open("a") as f:
+                            f.write(json.dumps(raw))
 
                 # Nothing returned in response payload
                 if not r.output:
