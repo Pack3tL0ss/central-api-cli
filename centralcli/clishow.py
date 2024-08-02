@@ -73,6 +73,8 @@ class Counts:
 def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
     inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     def get_switch_counts(data) -> dict:
+        if data is None:
+            return {}
         dev_types = set([t.get("switch_type", "ERR") for t in data])
         # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
         return {
@@ -114,10 +116,18 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
 
         else:
             def url_to_key(url) -> str:
-                return url.split("/")[-1]
+                path_end = url.split("/")[-1]
+                return path_end if path_end != "mobility_controllers" else "mcs"
 
-            counts_by_type = {**{url_to_key(k): {"total": resp.raw[k]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][url_to_key(k) if url_to_key(k) != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if not k.endswith("switches")}, **get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])}
-            # counts_by_type = {**{k: {"total": resp.raw[k][0]["total"], "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[k][0][k if k != "gateways" or not config.is_cop else "mcs"])))} for k in resp.raw.keys() if k != "switches"}, **get_switch_counts(resp.raw["switches"][0]["switches"])}
+            counts_by_type = {
+                **{
+                    url_to_key(path): {
+                        "total": resp.raw[path].get("total", 0),
+                        "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[path].get(url_to_key(path), []))))
+                    } for path in resp.raw.keys() if not path.endswith("switches")
+                },
+                **get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
+            }
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         if inventory:
@@ -269,9 +279,7 @@ def show_devices(
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
-        resp = central.request(central.get_devices, dev_type, **params)
-        _ = central.request(cli.cache.update_dev_db, response=resp)
-
+        resp = central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
