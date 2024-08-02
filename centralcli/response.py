@@ -3,6 +3,7 @@
 
 import asyncio
 from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
+from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
 from . import cleaner, constants
 from typing import Union, List, Any, Dict, Tuple, Literal
@@ -468,6 +469,21 @@ class Session():
     def aio_session(self, session: ClientSession):
         self._aio_session = session
 
+    def _get_spin_text(self, spin_txt: str = None):
+        if not spin_txt:
+            return "" if not self.running_spinners else self.running_spinners[0]
+
+        try:
+            if len(self.running_spinners) > 1 and "retry" not in str(self.running_spinners) and len(set([x.split(":")[0] for x in self.running_spinners])) == 1:
+                return f'{self.running_spinners[0]},{",".join(x.split(":")[1] for x in self.running_spinners[1:])}'
+
+            return spin_txt if not self.running_spinners else self.running_spinners[0]
+        except Exception as e:
+            log.warning(f"DEV NOTE: {e.__class__.__name__} exception in combined spinner update")
+
+            return spin_txt if not self.running_spinners else self.running_spinners[0]
+
+
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
         auth = self.auth
@@ -481,9 +497,10 @@ class Session():
         spin_txt_run = f"{spin_word} Data...{run_sfx}"
         spin_txt_retry = ""
         spin_txt_fail = f"{spin_word} Data{_data_msg}"
-        self.spinner.text = spin_txt_run
+        self.spinner.text = self._get_spin_text(spin_txt_run)
         for _ in range(0, 2):
-            spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
+            # spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
+            spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -560,10 +577,13 @@ class Session():
 
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+            except ContentLengthError as e:
+                log.exception(f'[{method}:{URL(url).path}]{e}')
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
             except Exception as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
@@ -576,11 +596,11 @@ class Session():
                 elif resp.status == 500:
                     spin_txt_retry = "(retry after 500: Internal Server Error)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
-                    log.warning(f"raw 500 response:\n{resp.raw}")  # TODO remove once we've captured a raw 500
+                    # returns JSON: {'message': 'An unexpected error occurred'}
                 elif resp.status == 503:
                     spin_txt_retry = "(retry after 503: Service Unavailable)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
-                    log.warning(f"raw 503 response:\n{resp.raw}")  # TODO remove once we've captured a raw 503
+                    # returns a string: "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
                 elif resp.status == 504:
                     spin_txt_retry = "(retry after 504: Gatewat Time-out)"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
@@ -589,6 +609,13 @@ class Session():
                     spin_txt_retry = "(retry after hitting per second rate limit)"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
+                elif resp.status == 418:  # Spot to handle retries for any caught exceptions
+                    if resp.error == "ContentLengthError":
+                        spin_txt_retry = "(retry after ContentLengthError)"
+                        log.warning(f'{resp.url.path_qs} forced to retry after ContentLengthError')
+                    else:
+                        log.error(f'{resp.url.path_qs} {resp.error} Exception is not configured for retry')
+                        break
                 else:
                     break
             else:
@@ -603,7 +630,7 @@ class Session():
 
                 # This handles long running API calls where subsequent calls finish before the previous...
                 if self.running_spinners:
-                    self.spinner.text = self.running_spinners[0]
+                    self.spinner.text = self._get_spin_text()
                 else:
                     self.spinner.stop()
                 break
@@ -769,7 +796,7 @@ class Session():
                     break
 
         # No errors but the total provided by Central doesn't match the # of records
-        if not failures and "total" in r.raw and isinstance(r.output, list) and r.raw["total"] != len(r.output):
+        if not failures and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
             log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
         return r
 
@@ -1103,19 +1130,23 @@ class CombinedResponse(Response):
                     for inner in output
                 ]
 
-        resp = [*_passed, *_failed][0]
-        resp.rl = min([r.rl for r in responses])
-        resp.output = output
-        resp.raw = raw
-        resp.elapsed = round(elapsed, 2)
+        if _passed:
+            resp = _passed[-1]
+        else:
+            resp = _failed[-1]
+        # resp.rl = min([r.rl for r in responses])
+        # resp.output = output
+        # resp.raw = raw
+        # resp.elapsed = round(elapsed, 2)
+        return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
 
-        return resp
+        # return resp
 
 
     def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
         self.responses = responses
-        combined = combiner_func(responses)
-        super().__init__(combined, output=combined.output, raw=combined.raw, elapsed=combined.elapsed)
+        combined_kwargs: dict = combiner_func(responses)
+        super().__init__(**combined_kwargs)
         self.error = self.errors = {r.url.path: r.error for r in responses}
 
 
