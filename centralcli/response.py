@@ -796,8 +796,12 @@ class Session():
                     break
 
         # No errors but the total provided by Central doesn't match the # of records
-        if not failures and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
-            log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
+        try:
+            if not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
+                log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
+        except Exception:
+            ...  # r.raw could be bool for some POST endpoints
+
         return r
 
     # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
