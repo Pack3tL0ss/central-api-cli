@@ -1079,6 +1079,7 @@ class CombinedResponse(Response):
 
         elapsed = 0
         raw = {}
+        output = []
         for idx, r in enumerate(_passed):
             this_output = r.output.copy()
             this_raw = r.raw.copy()
