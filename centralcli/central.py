@@ -1139,7 +1139,7 @@ class CentralApi(Session):
 
         Args:
             sku_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
-                Defaults to all.
+                Defaults to all, Passing in None = all.
             offset (int, optional): offset or page number Defaults to 0.
             limit (int, optional): Number of devices to get Defaults to 1000.
 
@@ -1147,6 +1147,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
+        sku_type = sku_type or "all"
 
         params = {
             'sku_type': sku_type,

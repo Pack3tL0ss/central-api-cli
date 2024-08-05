@@ -388,10 +388,10 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     if typer.confirm("Proceed with AP Rename?", abort=True):
         return cli.central.batch_request(req_list)
 
-def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None) -> List[Dict] | Dict:
+def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
     data = None
     if import_file is not None:
-        data = config.get_file_data(import_file)
+        data = config.get_file_data(import_file, text_ok=text_ok)
 
     if not data:
         cli.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -1183,10 +1183,11 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     if len(serials_in) != len(cache_devs):
         log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
 
-    not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
+    not_in_inventory: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
+    inv_del_serials: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is not None]
     cache_devs: List[CentralObject] = [c for c in cache_devs if c]
-    _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
-    inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
+    # _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
+    # inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
 
     # Devices in monitoring (have a status), If only in inventory they lack status
     aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
@@ -1209,6 +1210,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
             raise DevException(f'Unexpected device type {dev.generic_type}')
 
     devs_in_monitoring = [*aps, *switches, *stacks, *gws]
+    log.debug(f"{devs_in_monitoring=}, {inv_del_serials=}")
 
     _serials = inv_del_serials if not force else serials_in
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
@@ -1449,9 +1451,9 @@ def delete(
     what: BatchDelArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False, autocompletion=lambda incomplete: [],),
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),
-    force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices)"),
+    cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),  # TODO REMOVE THIS IS FOR TESTING ONLY
+    force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
     show_example: bool = typer.Option(
         False, "--example",
         help="Show Example import file format.",
@@ -1499,7 +1501,7 @@ def delete(
         print("\n".join(_msg))
         raise typer.Exit(1)
 
-    data = config.get_file_data(import_file, text_ok=what == "labels")
+    data = _get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
     if what == "devices":
         if isinstance(data, dict) and "devices" in data:

@@ -1971,7 +1971,7 @@ class Cache:
             "ap": "all_ap",
             "aps": "all_ap"
         }
-
+        dev_type = dev_type or "all"  # if they pass in None = "all"
         dev_type = lib_to_api_dev_type.get(dev_type, dev_type)
         if config.is_cop and dev_type == "gateway":
             dev_type = "controller"
@@ -2371,6 +2371,8 @@ class Cache:
                 db_res += [await update_funcs[0](**kwargs)]
                 if not db_res[-1]:
                     log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
+                    if len(update_funcs) > 1:
+                        db_res += [Response(error=f"{f.__name__} aborted due to failure in previous cache update call ({update_funcs[0].__name__})") for f in update_funcs[1:]]
                 else:
                     if len(update_funcs) > 1:
                         db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
