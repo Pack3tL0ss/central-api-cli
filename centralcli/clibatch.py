@@ -1758,20 +1758,6 @@ def rename(
     if yes or typer.confirm("\nProceed with AP rename?", abort=True):
         resp = cli.central.batch_request(calls)
 
-    # elif lldp:
-    #     kwargs = {}
-    #     if group:
-    #         kwargs["group"] = cli.cache.get_group_identifier(group).name
-    #     if ap:
-    #         kwargs["serial"] = cli.cache.get_dev_identifier(ap, dev_type="ap").serial
-    #     if site:
-    #         kwargs["site"] = cli.cache.get_site_identifier(site).name
-    #     if model:
-    #         kwargs["model"] = model
-    #     if label:
-    #         kwargs["label"] = label
-
-    #     resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, lower=lower, space=space, **kwargs)
 
     cli.display_results(resp, tablefmt="action")
     # cache update
