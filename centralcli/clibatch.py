@@ -199,8 +199,9 @@ def _get_lldp_dict(ap_dict: dict) -> dict:
 
     return ap_dict
 
-def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
+def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> List[dict]:
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
+    space = "_" if space is None else space
     # TODO get all APs then filter down after, stash down aps for easy subsequent call
     resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
 
@@ -222,8 +223,7 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     else:
         ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}
         if not ap_dict:
-            print(":warning:  No Up APs found with default name.  Nothing to rename.")
-            raise typer.Exit(1)
+            cli.exit("No Up APs found with default name.  Nothing to rename.")
 
     fstr_to_key = {
         "h": "neighborHostName",
@@ -234,10 +234,9 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
         "s": "serial"
     }
 
-    req_list, name_list, shown_prompt = [], [], False
+    data, shown_prompt = [], False
     if not ap_dict:
-        log.error("Something went wrong, no ap_dict provided or empty", show=True)
-        raise typer.Exit(1)
+        cli.exit("Something went wrong, no ap_dict provided or empty")
 
     num_calls = len(ap_dict) * 3 if need_lldp else len(ap_dict) * 2
 
@@ -340,29 +339,29 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
                             else:  # +2 is '[' +3: should be int [1:4]
                                 fi = _get_full_int(fstr[idx + 3:])
                                 fi2 = _get_full_int(fstr[idx + 3 + len(fi) + 1:])  # +1 for expected ':'
-                                if len(_src[slice(fi.i, fi2.o)]) < fi2.o - fi.i:
+                                if len(_src[slice(fi.i, fi2.o)]) <= fi2.o - fi.i:
                                     _e1 = typer.style(
                                         f"\n{fstr} wants to take characters "
                                         f"\n{fi.o} through {fi2.o}"
                                         f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
                                         fg="red"
                                     )
-                                    if not shown_prompt and typer.confirm(
+                                    if shown_prompt or typer.confirm(
                                         f"{_e1}"
                                         f"\n\nResult will be \""
                                         f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
                                         " for this segment."
-                                        "\nOK to continue?"
+                                        "\nOK to continue?",
+                                        abort=True
                                     ):
                                         shown_prompt = True
                                         x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
                                         st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
-                                    else:
-                                        raise typer.Abort()
                     else:
                         x = f'{x}{c}'
-                req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
-                name_list += [f"  {x}"]
+                x = x if not lower else x.lower()
+                x = x.replace(" ", space)
+                data += [{"serial": ap, "hostname": x}]
                 break
             except typer.Abort:
                 fstr = _lldp_rename_get_fstr()
@@ -372,21 +371,7 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
                 if typer.confirm("Do you want to edit the format string and try again?", abort=True):
                     fstr = _lldp_rename_get_fstr()
 
-    print(f"[bright_green]Resulting AP names based on '{fstr}':")
-    if len(name_list) <= 6:
-        typer.echo("\n".join(name_list))
-    else:
-        typer.echo("\n".join(
-                [
-                    *name_list[0:3],
-                    "  ...",
-                    *name_list[-3:]
-                ]
-            )
-        )
-
-    if typer.confirm("Proceed with AP Rename?", abort=True):
-        return cli.central.batch_request(req_list)
+    return data
 
 def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
     data = None
@@ -403,6 +388,9 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
     if data and isinstance(data, dict):
         if utils.isserial(list(data.keys())[0]):
             data = [{"serial": k, **v} for k, v in data.items()]
+
+    # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
+    data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
     return data
 
@@ -1690,8 +1678,10 @@ def unsubscribe(
 @app.command()
 def rename(
     what: BatchRenameArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", exists=True, show_default=False,),  # TODO completion
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
+    lower: bool = typer.Option(False, "--lower", help="Convert LLDP rename result to all lower case.",),
+    space: str = typer.Option(None, "-S", "--space", help="Applies to automatic LLDP rename.  Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]"),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
@@ -1725,33 +1715,7 @@ def rename(
 
     if import_file:
         data = _get_import_file(import_file)
-
-        resp = None
-        if what == "aps":
-            # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
-            data = {
-                i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
-                {
-                    k if k != "name" else "hostname": v for k, v in i.items() if k in ["name", "hostname"]
-                } for i in data
-            }
-
-            calls, conf_msg = [], ["\n[bright_green]Names gathered from import[/]:"]
-            for ap in data:  # keyed by serial num
-                conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
-                calls.append(cli.central.BatchRequest(cli.central.update_ap_settings, ap, **data[ap]))
-
-            if len(conf_msg) > 6:
-                conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
-            print("\n".join(conf_msg))
-
-            # We only spot check the last serial.  If first call in a batch_request fails the process stops.
-            if ap not in cli.cache.devices_by_serial:
-                print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
-
-            if yes or typer.confirm("\nProceed with AP rename?", abort=True):
-                resp = cli.central.batch_request(calls)
-
+        conf_msg: list = ["\n[bright_green]Names gathered from import[/]:"]
     elif lldp:
         kwargs = {}
         if group:
@@ -1765,7 +1729,49 @@ def rename(
         if label:
             kwargs["label"] = label
 
-        resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, **kwargs)
+        fstr = _lldp_rename_get_fstr()
+        conf_msg: list = [f"\n[bright_green]Resulting AP names based on [/][cyan]{fstr}[/]:"]
+        data = get_lldp_names(fstr, default_only=default_only, lower=lower, space=space, **kwargs)
+
+    resp = None
+    # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
+    data = {
+        i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
+        {
+            k if k != "name" else "hostname": v for k, v in i.items() if k in ["name", "hostname"]
+        } for i in data
+    }
+
+    calls = []
+    for ap in data:  # keyed by serial num
+        conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
+        calls.append(cli.central.BatchRequest(cli.central.update_ap_settings, ap, **data[ap]))
+
+    if len(conf_msg) > 6:
+        conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
+    print("\n".join(conf_msg))
+
+    # We only spot check the last serial.  If first call in a batch_request fails the process stops.
+    if ap not in cli.cache.devices_by_serial:
+        print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
+
+    if yes or typer.confirm("\nProceed with AP rename?", abort=True):
+        resp = cli.central.batch_request(calls)
+
+    # elif lldp:
+    #     kwargs = {}
+    #     if group:
+    #         kwargs["group"] = cli.cache.get_group_identifier(group).name
+    #     if ap:
+    #         kwargs["serial"] = cli.cache.get_dev_identifier(ap, dev_type="ap").serial
+    #     if site:
+    #         kwargs["site"] = cli.cache.get_site_identifier(site).name
+    #     if model:
+    #         kwargs["model"] = model
+    #     if label:
+    #         kwargs["label"] = label
+
+    #     resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, lower=lower, space=space, **kwargs)
 
     cli.display_results(resp, tablefmt="action")
     # cache update
