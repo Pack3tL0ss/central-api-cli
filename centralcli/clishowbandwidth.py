@@ -61,7 +61,7 @@ def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime
             log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
             return cli.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
 
-    return start, end
+    return start, _end
 
 
 def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", "graph"], title: str, pager: bool = False, outfile: Path = None, cleaner: callable = cleaner.get_gw_uplinks_bandwidth,) -> None:
