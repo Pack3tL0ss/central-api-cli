@@ -679,18 +679,9 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
     # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-    if import_file is not None:
-        data = config.get_file_data(import_file)
-    elif not data:
-        cli.exit("No import file provided")
-
-    if "devices" in data:
-        data = data["devices"]
-
-    # accept yaml/json keyed by serial #
-    if data and isinstance(data, dict):
-        if utils.isserial(list(data.keys())[0]):
-            data = [{"serial": k, **v} for k, v in data.items()]
+    data = data or _get_import_file(import_file, import_type="devices")
+    if not data:
+        cli.exit("No data/import file")
 
     warn = False
     _reqd_cols = ["serial", "mac"]
@@ -755,12 +746,15 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 
         # always perform full dev_db update as we don't know the other fields.
         console = Console()
-        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
+        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.') as spin:
+            spin.stop()
             cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-        with console.status("Allowing time for devices to populate before updating dev cache."):
-            sleep(5)
-        with console.status('Performing full device cache update after device edition.'):
-            cache_res += [cli.central.request(cli.cache.update_dev_db)]
+            spin.update("Allowing time for devices to populate before updating dev cache.")
+            spin.start()
+            sleep(3)
+            spin.update('Performing full device cache update after device edition.')
+            sleep(2)
+        cache_res += [cli.central.request(cli.cache.update_dev_db)]
 
     return resp or Response(error="No Devices were added")
 
@@ -1286,7 +1280,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
                 # if archive requests all pass we summarize the result.
                 if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
                     batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
+                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
                 else:
                     show_archive_results(batch_resp[0])  # archive
                     show_archive_results(batch_resp[1])  # unarchive
@@ -2152,30 +2146,26 @@ def unarchive(
         print("\n".join(_msg))
         raise typer.Exit(1)
     else:
-        data = config.get_file_data(import_file, text_ok=True)
-        if data and isinstance(data, list):
-            if all([isinstance(x, dict) for x in data]):
-                serials = [x.get("serial") or x.get("serial_num") for x in data]
-            elif all(isinstance(x, str) for x in data):
-                serials = data if not data[0].lower().startswith("serial") else data[1:]
-        else:
-            print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
-            print("Use [cyan]cencli batch unarchive --example[/] to see expected format.")
-            raise typer.Exit(1)
+        data = _get_import_file(import_file, import_type="devices")
 
-        res = cli.central.request(cli.central.unarchive_devices, serials)
-        if res:
-            caption = res.output.get("message")
-            if res.get("succeeded_devices"):
-                title = "Devices successfully archived."
-                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-            if res.get("failed_devices"):
-                title = "These devices failed to archived."
-                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-        else:
-            cli.display_results(res, tablefmt="action")
+    if not data:
+        cli.exit("No data extracted from import file")
+    else:
+        serials = [dev["serial"] for dev in data]
+
+    res = cli.central.request(cli.central.unarchive_devices, serials)
+    if res:
+        caption = res.output.get("message")
+        if res.get("succeeded_devices"):
+            title = "Devices successfully unarchived."
+            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+        if res.get("failed_devices"):
+            title = "These devices failed to unarchived."
+            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+    else:
+        cli.display_results(res, tablefmt="action")
 
 
 @app.callback()

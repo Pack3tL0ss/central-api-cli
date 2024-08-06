@@ -416,7 +416,7 @@ def device(
                 # if archive requests all pass we summarize the result.
                 if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
                     batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
+                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
                 else:
                     show_archive_results(batch_resp[0])  # archive
                     show_archive_results(batch_resp[1])  # unarchive
