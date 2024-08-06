@@ -11,12 +11,12 @@ from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli
+    from centralcli import cli, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
+        from centralcli import cli, utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -53,17 +53,22 @@ def license(
             print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
         _msg = f"Assign [bright_green]{license}[/bright_green] to"
-        if len(serial_nums) > 1:
-            _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in serial_nums])
+        try:
+            _serial_nums = [s if utils.isserial(s) else cli.cache.get_dev_identifier(s).serial for s in serial_nums]
+        except Exception:
+            _serial_nums = serial_nums
+        if len(_serial_nums) > 1:
+            _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
             _msg = f"{_msg}:\n    {_dev_msg}"
         else:
-            dev = serial_nums[0]
+            dev = _serial_nums[0]
             _msg = f"{_msg} [cyan]{dev}[/]"
+
 
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         if not do_auto:
-            resp = cli.central.request(cli.central.assign_licenses, serial_nums, services=license.name)
+            resp = cli.central.request(cli.central.assign_licenses, _serial_nums, services=license.name)
         else:
             resp = cli.central.request(cli.central.enable_auto_subscribe, services=license.name)
 

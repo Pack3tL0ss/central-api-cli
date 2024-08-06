@@ -1073,12 +1073,14 @@ class CentralApi(Session):
         return resp
 
 
-    async def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
+    async def get_all_templates(self, groups: List[dict] | List[str ]= None, **params) -> Response:
         """Get data for all defined templates from Aruba Central
 
         Args:
-            groups (List[dict], optional): List of group dictionaries (If provided additional API
+            groups (List[dict] | List[str], optional): List of groups.  If provided additional API
                 calls to get group names for all template groups are not performed).
+                If a list of str (group names) is provided all are queried for templates
+                If a list of dicts is provided:  It should look like: [{"name": "group_name", "template group": {"Wired": True, "Wireless": False}}]
                 Defaults to None.
 
         Returns:
@@ -1090,6 +1092,8 @@ class CentralApi(Session):
                 return resp
 
             template_groups = [g["group"] for g in resp.output if True in g["template_details"].values()]
+        elif isinstance(groups, list) and all([isinstance(g, str) for g in groups]):
+                template_groups = groups
         else:
             template_groups = [g["name"] for g in groups if True in g["template group"].values()]
 
@@ -2561,6 +2565,49 @@ class CentralApi(Session):
             'radio_number': radio_number,
             'ethernet_interface_index': ethernet_interface_index,
             'network': network,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
+        }
+
+        return await self.get(url, params=params)
+
+    async def get_networks_bandwidth_usage(
+        self,
+        network: str,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """WLAN Network Bandwidth usage.
+
+        Use get_wlans to fetch list of networks.
+
+        Args:
+            network (str): Network name (ssid) to return usage for
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            from_time (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_time (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/networks/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'network': network,
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'from_timestamp': from_time,
             'to_timestamp': to_time
         }

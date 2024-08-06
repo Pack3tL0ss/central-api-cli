@@ -573,7 +573,7 @@ class Cache:
         out = []
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
-            args = [v for k, v in ctx.params.items() if v and k in ["serial", "mac", "group"]]
+            args = [item for k, v in ctx.params.items() if v for item in [k, v]]  # TODO ensure k is last item when v = incomplete
 
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
@@ -2351,16 +2351,16 @@ class Cache:
         ):
         update_funcs, db_res = [], []
         dev_update_funcs = ["update_inv_db", "update_dev_db"]
-        if inv_db:
-            update_funcs += [self.update_inv_db]
+        if group_db:
+            update_funcs += [self.update_group_db]
         if dev_db:
             update_funcs += [self.update_dev_db]
+        if inv_db:
+            update_funcs += [self.update_inv_db]
         if site_db:
             update_funcs += [self.update_site_db]
         if template_db:
             update_funcs += [self.update_template_db]
-        if group_db:
-            update_funcs += [self.update_group_db]
         if label_db:
             update_funcs += [self.update_label_db]
         if license_db:
@@ -2410,16 +2410,17 @@ class Cache:
     ) -> List[Response]:
         db_res = None
         db_map = {
+            "group_db": group_db,
             "dev_db": dev_db,
             "inv_db": inv_db,
             "site_db": site_db,
             "template_db": template_db,
-            "group_db": group_db,
             "label_db": label_db,
             "license_db": license_db
         }
         update_count = list(db_map.values()).count(True)
-        refresh = refresh or bool(update_count)
+        refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
+        update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
             _word = "Refreshing" if update_count else "Populating"
@@ -2433,7 +2434,7 @@ class Cache:
             log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
 
             if failed:
-                res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update and not db_res[idx].ok)
+                res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update or update_all and not db_res[idx].ok)
                 err_msg = f"Cache refresh returned an error updating ({res_map})"
                 log.error(err_msg)
                 self.central.spinner.fail(err_msg)

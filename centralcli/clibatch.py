@@ -199,8 +199,9 @@ def _get_lldp_dict(ap_dict: dict) -> dict:
 
     return ap_dict
 
-def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
+def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> List[dict]:
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
+    space = "_" if space is None else space
     # TODO get all APs then filter down after, stash down aps for easy subsequent call
     resp = cli.central.request(cli.central.get_devices, "aps", status="Up", **kwargs)
 
@@ -222,8 +223,7 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
     else:
         ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}
         if not ap_dict:
-            print(":warning:  No Up APs found with default name.  Nothing to rename.")
-            raise typer.Exit(1)
+            cli.exit("No Up APs found with default name.  Nothing to rename.")
 
     fstr_to_key = {
         "h": "neighborHostName",
@@ -234,10 +234,9 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
         "s": "serial"
     }
 
-    req_list, name_list, shown_prompt = [], [], False
+    data, shown_prompt = [], False
     if not ap_dict:
-        log.error("Something went wrong, no ap_dict provided or empty", show=True)
-        raise typer.Exit(1)
+        cli.exit("Something went wrong, no ap_dict provided or empty")
 
     num_calls = len(ap_dict) * 3 if need_lldp else len(ap_dict) * 2
 
@@ -340,29 +339,29 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
                             else:  # +2 is '[' +3: should be int [1:4]
                                 fi = _get_full_int(fstr[idx + 3:])
                                 fi2 = _get_full_int(fstr[idx + 3 + len(fi) + 1:])  # +1 for expected ':'
-                                if len(_src[slice(fi.i, fi2.o)]) < fi2.o - fi.i:
+                                if len(_src[slice(fi.i, fi2.o)]) <= fi2.o - fi.i:
                                     _e1 = typer.style(
                                         f"\n{fstr} wants to take characters "
                                         f"\n{fi.o} through {fi2.o}"
                                         f"\n\"from {_src}\" (slice ends at character {len(_src[slice(fi.i, fi2.o)])}).",
                                         fg="red"
                                     )
-                                    if not shown_prompt and typer.confirm(
+                                    if shown_prompt or typer.confirm(
                                         f"{_e1}"
                                         f"\n\nResult will be \""
                                         f"{typer.style(''.join(_src[slice(fi.i, fi2.o)]), fg='bright_green')}\""
                                         " for this segment."
-                                        "\nOK to continue?"
+                                        "\nOK to continue?",
+                                        abort=True
                                     ):
                                         shown_prompt = True
                                         x = f'{x}{"".join(_src[slice(fi.i, fi2.o)])}'
                                         st = idx + 3 + len(fi) + len(fi2) + 2  # +2 for : and ]
-                                    else:
-                                        raise typer.Abort()
                     else:
                         x = f'{x}{c}'
-                req_list += [cli.central.BatchRequest(cli.central.update_ap_settings, (ap, x))]
-                name_list += [f"  {x}"]
+                x = x if not lower else x.lower()
+                x = x.replace(" ", space)
+                data += [{"serial": ap, "hostname": x}]
                 break
             except typer.Abort:
                 fstr = _lldp_rename_get_fstr()
@@ -372,21 +371,7 @@ def do_lldp_rename(fstr: str, default_only: bool = False, **kwargs) -> Response:
                 if typer.confirm("Do you want to edit the format string and try again?", abort=True):
                     fstr = _lldp_rename_get_fstr()
 
-    print(f"[bright_green]Resulting AP names based on '{fstr}':")
-    if len(name_list) <= 6:
-        typer.echo("\n".join(name_list))
-    else:
-        typer.echo("\n".join(
-                [
-                    *name_list[0:3],
-                    "  ...",
-                    *name_list[-3:]
-                ]
-            )
-        )
-
-    if typer.confirm("Proceed with AP Rename?", abort=True):
-        return cli.central.batch_request(req_list)
+    return data
 
 def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
     data = None
@@ -403,6 +388,9 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
     if data and isinstance(data, dict):
         if utils.isserial(list(data.keys())[0]):
             data = [{"serial": k, **v} for k, v in data.items()]
+
+    # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
+    data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
     return data
 
@@ -679,18 +667,9 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
     # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-    if import_file is not None:
-        data = config.get_file_data(import_file)
-    elif not data:
-        cli.exit("No import file provided")
-
-    if "devices" in data:
-        data = data["devices"]
-
-    # accept yaml/json keyed by serial #
-    if data and isinstance(data, dict):
-        if utils.isserial(list(data.keys())[0]):
-            data = [{"serial": k, **v} for k, v in data.items()]
+    data = data or _get_import_file(import_file, import_type="devices")
+    if not data:
+        cli.exit("No data/import file")
 
     warn = False
     _reqd_cols = ["serial", "mac"]
@@ -755,12 +734,15 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 
         # always perform full dev_db update as we don't know the other fields.
         console = Console()
-        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.'):
+        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.') as spin:
+            spin.stop()
             cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-        with console.status("Allowing time for devices to populate before updating dev cache."):
-            sleep(5)
-        with console.status('Performing full device cache update after device edition.'):
-            cache_res += [cli.central.request(cli.cache.update_dev_db)]
+            spin.update("Allowing time for devices to populate before updating dev cache.")
+            spin.start()
+            sleep(3)
+            spin.update('Performing full device cache update after device edition.')
+            sleep(2)
+        cache_res += [cli.central.request(cli.cache.update_dev_db)]
 
     return resp or Response(error="No Devices were added")
 
@@ -1286,7 +1268,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
                 # if archive requests all pass we summarize the result.
                 if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
                     batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output = f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices"))} devices.\n  [italic]archive/unarchive flushes all subscriptions for a device.'
+                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
                 else:
                     show_archive_results(batch_resp[0])  # archive
                     show_archive_results(batch_resp[1])  # unarchive
@@ -1696,8 +1678,10 @@ def unsubscribe(
 @app.command()
 def rename(
     what: BatchRenameArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", exists=True, show_default=False,),  # TODO completion
+    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
+    lower: bool = typer.Option(False, "--lower", help="Convert LLDP rename result to all lower case.",),
+    space: str = typer.Option(None, "-S", "--space", help="Applies to automatic LLDP rename.  Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]"),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
@@ -1731,33 +1715,7 @@ def rename(
 
     if import_file:
         data = _get_import_file(import_file)
-
-        resp = None
-        if what == "aps":
-            # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
-            data = {
-                i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
-                {
-                    k if k != "name" else "hostname": v for k, v in i.items() if k in ["name", "hostname"]
-                } for i in data
-            }
-
-            calls, conf_msg = [], ["\n[bright_green]Names gathered from import[/]:"]
-            for ap in data:  # keyed by serial num
-                conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
-                calls.append(cli.central.BatchRequest(cli.central.update_ap_settings, ap, **data[ap]))
-
-            if len(conf_msg) > 6:
-                conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
-            print("\n".join(conf_msg))
-
-            # We only spot check the last serial.  If first call in a batch_request fails the process stops.
-            if ap not in cli.cache.devices_by_serial:
-                print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
-
-            if yes or typer.confirm("\nProceed with AP rename?", abort=True):
-                resp = cli.central.batch_request(calls)
-
+        conf_msg: list = ["\n[bright_green]Names gathered from import[/]:"]
     elif lldp:
         kwargs = {}
         if group:
@@ -1771,15 +1729,44 @@ def rename(
         if label:
             kwargs["label"] = label
 
-        resp = do_lldp_rename(_lldp_rename_get_fstr(), default_only=default_only, **kwargs)
+        fstr = _lldp_rename_get_fstr()
+        conf_msg: list = [f"\n[bright_green]Resulting AP names based on [/][cyan]{fstr}[/]:"]
+        data = get_lldp_names(fstr, default_only=default_only, lower=lower, space=space, **kwargs)
+
+    resp = None
+    # transform flat csv struct to Dict[str, Dict[str, str]] {"<AP serial>": {"hostname": "<desired_name>"}}
+    data = {
+        i.get("serial", i.get("serial_number", i.get("serial_num", "ERROR"))):
+        {
+            k if k != "name" else "hostname": v for k, v in i.items() if k in ["name", "hostname"]
+        } for i in data
+    }
+
+    calls = []
+    for ap in data:  # keyed by serial num
+        conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
+        calls.append(cli.central.BatchRequest(cli.central.update_ap_settings, ap, **data[ap]))
+
+    if len(conf_msg) > 6:
+        conf_msg = [*conf_msg[0:3], "...", *conf_msg[-3:]]
+    print("\n".join(conf_msg))
+
+    # We only spot check the last serial.  If first call in a batch_request fails the process stops.
+    if ap not in cli.cache.devices_by_serial:
+        print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
+
+    if yes or typer.confirm("\nProceed with AP rename?", abort=True):
+        resp = cli.central.batch_request(calls)
+
 
     cli.display_results(resp, tablefmt="action")
     # cache update
-    if import_file: # TODO have lldp return dict same as import file for reference during cache update
+    if import_file:
         for r in resp:
             if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
                 dev = cli.cache.get_dev_identifier(r.output)
                 dev.data["name"] = data[r.output]["hostname"]
+                # TODO upsert is very slow at scale, can grab cli.cache.devices_by_serial update then update_dev_db with data
                 cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
 
 
@@ -2152,30 +2139,26 @@ def unarchive(
         print("\n".join(_msg))
         raise typer.Exit(1)
     else:
-        data = config.get_file_data(import_file, text_ok=True)
-        if data and isinstance(data, list):
-            if all([isinstance(x, dict) for x in data]):
-                serials = [x.get("serial") or x.get("serial_num") for x in data]
-            elif all(isinstance(x, str) for x in data):
-                serials = data if not data[0].lower().startswith("serial") else data[1:]
-        else:
-            print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
-            print("Use [cyan]cencli batch unarchive --example[/] to see expected format.")
-            raise typer.Exit(1)
+        data = _get_import_file(import_file, import_type="devices")
 
-        res = cli.central.request(cli.central.unarchive_devices, serials)
-        if res:
-            caption = res.output.get("message")
-            if res.get("succeeded_devices"):
-                title = "Devices successfully archived."
-                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-            if res.get("failed_devices"):
-                title = "These devices failed to archived."
-                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-        else:
-            cli.display_results(res, tablefmt="action")
+    if not data:
+        cli.exit("No data extracted from import file")
+    else:
+        serials = [dev["serial"] for dev in data]
+
+    res = cli.central.request(cli.central.unarchive_devices, serials)
+    if res:
+        caption = res.output.get("message")
+        if res.get("succeeded_devices"):
+            title = "Devices successfully unarchived."
+            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+        if res.get("failed_devices"):
+            title = "These devices failed to unarchived."
+            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+    else:
+        cli.display_results(res, tablefmt="action")
 
 
 @app.callback()

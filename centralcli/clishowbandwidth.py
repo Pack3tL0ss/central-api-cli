@@ -502,6 +502,102 @@ def uplink(
     _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
 
 
+@app.command()
+def wlan(
+    network: str = typer.Argument(..., metavar="[WLAN SSID]", help="Use [cyan]cencli show wlans[/] for a list of networks", show_default=False,),
+    group: str = typer.Option(None, help="Show Bandwidth for APs in a specific group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
+    site: str = typer.Option(None, help="Show Bandwidth for APs in a specific site", metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
+    label: str = typer.Option(None, help="Show Bandwidth for APs with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
+    device: str = typer.Option(
+        None,
+        "-s", "--swarm",
+        metavar=iden_meta.dev,
+        autocompletion=cli.cache.dev_switch_ap_completion,
+        help="Show bandwidth for the swarm associated with provided AP [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]",
+        show_default=False,
+    ),
+    start: datetime = typer.Option(
+        None,
+        "-s", "--start",
+        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
+        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y"],
+        show_default=False,
+    ),
+    end: datetime = typer.Option(
+        None,
+        "-e", "--end",
+        help="End time of bandwidth details [grey42]\[default: Now][/]",
+        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y"],
+        show_default=False,
+    ),
+    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
+    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
+    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
+    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
+    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
+    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
+    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
+    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
+        False,
+        "--raw",
+        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    default: bool = typer.Option(
+        False, "-d",
+        is_flag=True,
+        help="Use default central account",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        envvar="ARUBACLI_DEBUG",
+        help="Enable Additional Debug Logging",
+        show_default=False,
+        rich_help_panel="Common Options",
+    ),
+    account: str = typer.Option(
+        "central_info",
+        envvar="ARUBACLI_ACCOUNT",
+        help="The Aruba Central Account to use (must be defined in the config)",
+        autocompletion=cli.cache.account_completion,
+        rich_help_panel="Common Options",
+    ),
+) -> None:
+    """Show bandwidth usage graph for a network/SSID
+
+    Default output is line graph showing network bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    Use [cyan]cencli show wlans <GATEWAY>[/] to get list of available networks.
+    """
+    # start and end datetime opjects are in UTC
+    title = f'Bandwidth Usage for [cyan]{network}[/]'
+    if device:
+        dev = cli.cache.get_dev_identifier(device, dev_type="ap", swack=True)
+        title = f"{title} on swarm containing {dev.name}"
+
+    kwargs = {
+        "group": None if not group else cli.cache.get_group_identifier(group).name,
+        "site": None if not site else cli.cache.get_group_identifier(site).name,
+        "label": None if not label else cli.cache.get_group_identifier(label).name,
+        "swarm_id": None if not device else dev.swack_id
+    }
+    if len([v for v in kwargs.values() if v is not None]) > 1:
+        cli.exit("You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] parameters")
+
+    start, end = _verify_time_range(start, end=end, past=past)
+
+    resp = cli.central.request(cli.central.get_networks_bandwidth_usage, network, **kwargs)
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
 @app.callback()
 def callback():
     """
