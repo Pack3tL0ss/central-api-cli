@@ -1,7 +1,7 @@
 from typer.testing import CliRunner
 
 from cli import app  # type: ignore # NoQA
-from . import test_site_file, test_data
+from . import test_site_file, test_data, test_batch_device_file
 
 runner = CliRunner()
 
@@ -19,3 +19,16 @@ def test_batch_del_sites():
     assert result.exit_code == 0
     assert "success" in result.stdout
     assert result.stdout.count("success") == len(test_data["batch"]["sites"])
+
+def test_batch_add_devices():
+    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+    assert result.exit_code == 0
+    assert "success" in result.stdout.lower()
+    assert "200" in result.stdout  # /platform/device_inventory/v1/devices
+    assert "201" in result.stdout  # /configuration/v1/preassign
+
+def test_batch_del_devices():
+    result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+    assert result.exit_code == 0
+    assert "subscriptions successfully removed" in result.stdout.lower()
+    assert "200" in result.stdout
