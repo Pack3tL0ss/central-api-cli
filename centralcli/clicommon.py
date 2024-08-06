@@ -603,7 +603,8 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        console.print(f"[{fg}]{r}[/]")
+                        console.print(r)
+                        # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
                         if caption:
@@ -657,7 +658,7 @@ class CLICommon:
             )
 
     def past_to_start(self, past: str = None,) -> pendulum.DateTime | None:
-        """Common helper to parse --past option and return
+        """Common helper to parse --past option and return pendulum.DateTime object representing start time
 
         Args:
             past (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
