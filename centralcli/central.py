@@ -1073,12 +1073,14 @@ class CentralApi(Session):
         return resp
 
 
-    async def get_all_templates(self, groups: List[dict] = None, **params) -> Response:
+    async def get_all_templates(self, groups: List[dict] | List[str ]= None, **params) -> Response:
         """Get data for all defined templates from Aruba Central
 
         Args:
-            groups (List[dict], optional): List of group dictionaries (If provided additional API
+            groups (List[dict] | List[str], optional): List of groups.  If provided additional API
                 calls to get group names for all template groups are not performed).
+                If a list of str (group names) is provided all are queried for templates
+                If a list of dicts is provided:  It should look like: [{"name": "group_name", "template group": {"Wired": True, "Wireless": False}}]
                 Defaults to None.
 
         Returns:
@@ -1090,6 +1092,8 @@ class CentralApi(Session):
                 return resp
 
             template_groups = [g["group"] for g in resp.output if True in g["template_details"].values()]
+        elif isinstance(groups, list) and all([isinstance(g, str) for g in groups]):
+                template_groups = groups
         else:
             template_groups = [g["name"] for g in groups if True in g["template group"].values()]
 
