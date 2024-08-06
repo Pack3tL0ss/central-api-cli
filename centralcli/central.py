@@ -2680,6 +2680,7 @@ class CentralApi(Session):
 
     async def get_audit_logs_events(
         self,
+        log_id: str = None,
         group_name: str = None,
         device_id: str = None,
         classification: str = None,
@@ -2687,10 +2688,12 @@ class CentralApi(Session):
         end_time: int = None,
         offset: int = 0,
         limit: int = 100,
+        count: int = None,
     ) -> Response:
         """Get all audit events for all groups.
 
         Args:
+            log_id (str, optional): The id of the audit event log to return details for. Defaults to None.
             group_name (str, optional): Filter audit events by Group Name
             device_id (str, optional): Filter audit events by Target / Device ID. Device ID for AP
                 is VC Name and Serial Number for Switches
@@ -2701,12 +2704,12 @@ class CentralApi(Session):
                 should be provided in epoch seconds
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination Defaults to 0.
-            limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
+            limit (int, optional): Maximum number of audit events to be returned Defaults to 100. Max 100.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/auditlogs/v1/events"
+        url = "/auditlogs/v1/events" if not log_id else f"/auditlogs/v1/event_details/{log_id}"
 
         params = {
             'group_name': group_name,
@@ -2715,10 +2718,10 @@ class CentralApi(Session):
             'start_time': start_time,
             'end_time': end_time,
             'offset': offset,
-            'limit': limit
+            "limit": limit if not count or limit < count else count,
         }
 
-        return await self.get(url, params=params)
+        return await self.get(url, params={} if log_id else params, count=count)
 
     async def create_site(
         self,
