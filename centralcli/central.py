@@ -2571,6 +2571,49 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def get_networks_bandwidth_usage(
+        self,
+        network: str,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        site: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """WLAN Network Bandwidth usage.
+
+        Use get_wlans to fetch list of networks.
+
+        Args:
+            network (str): Network name (ssid) to return usage for
+            group (str, optional): Filter by group name
+            swarm_id (str, optional): Filter by Swarm ID. Field supported for AP clients only
+            label (str, optional): Filter by Label name
+            site (str, optional): Filter by Site name
+            from_time (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+                in seconds. Default is current timestamp minus 3 hours
+            to_time (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+                seconds. Default is current timestamp
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/monitoring/v2/networks/bandwidth_usage"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        params = {
+            'network': network,
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time
+        }
+
+        return await self.get(url, params=params)
+
     async def get_clients_bandwidth_usage(
         self,
         group: str = None,
