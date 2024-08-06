@@ -285,7 +285,7 @@ def test_show_audit_logs_past():
     if "Empty Response" in result.stdout:
         assert "Empty" in result.stdout
     else:
-        assert "Audit Logs" in result.stdout
+        assert "audit event logs" in result.stdout.lower()
         assert "id" in result.stdout
 
 
