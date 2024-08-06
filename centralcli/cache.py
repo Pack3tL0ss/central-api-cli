@@ -3155,30 +3155,32 @@ class Cache:
                 return None
 
     # cencli completion can be removed..  Moved to get_event_identifier
-    def get_log_identifier(self, query: str) -> str:
+    def get_log_identifier(self, query: str, include_cencli: bool = False) -> str:
         if "audit_trail" in query:
             return query
         elif query == "":  # tab completion
-            return ["cencli", *[x["id"] for x in self.logs]]
+            log_ids = [x["id"] for x in self.logs]
+            return log_ids if not include_cencli else ["cencli", *log_ids]
 
         try:
-            if "cencli".startswith(query.lower()):
-                return ["cencli"]
+            if include_cencli and "cencli".startswith(query.lower()):
+                return [("cencli", "show cencli logs (from local log file)",)]
 
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:
-                log.warning(f"Unable to gather log id from short index query {query}", show=True)
-                typer.echo("Short log_id aliases are built each time 'show logs' is ran.")
-                typer.echo("  You can verify the cache by running (hidden command) 'show cache logs'")
-                typer.echo("  run 'show logs [OPTIONS]' then use the short index for details")
-                raise typer.Exit(1)
+                err_console.print(f"\nUnable to gather log id from short index query [cyan]{query}[/]")
+                err_console.print("Short log_id aliases are built each time [cyan]show logs[/] / [cyan]show audit logs[/]... is ran.")
+                err_console.print("  repeat the command without specifying the log_id to populate the cache.")
+                err_console.print("  You can verify the cache by running (hidden command) 'show cache logs'")
+                return []
             else:
                 return match[-1]["long_id"]
 
         except ValueError as e:
-            log.exception(f"Exception in get_log_identifier {e.__class__.__name__}\n{e}")
-            typer.secho(f"Exception in get_log_identifier {e.__class__.__name__}", fg="red")
-            raise typer.Exit(1)
+            err_console.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id.  {query} does not appear to be an integer.")
+            return []
+            # typer.secho(f"Exception in get_log_identifier {e.__class__.__name__}", fg="red")
+            # raise typer.Exit(1)
 
     def get_event_identifier(self, query: str) -> str:
         if query == "":  # tab completion
