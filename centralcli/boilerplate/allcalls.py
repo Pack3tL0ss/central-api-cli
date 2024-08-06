@@ -2439,7 +2439,7 @@ class AllCalls(CentralApi):
                 should be provided in epoch seconds
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination Defaults to 0.
-            limit (int, optional): Maximum number of audit events to be returned Defaults to 100.
+            limit (int, optional): Maximum number of audit events to be returned Defaults 100 Max 100.
 
         Returns:
             Response: CentralAPI Response object

@@ -737,7 +737,7 @@ class Session():
             # total is provided for some calls with the total # of records available
             # TODO no strip_none for these, may need to add if we determine a scenario needs it.
             if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
-                _total = r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
+                _total = count or r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
                 if _total > len(r.output):
                     _limit = params.get("limit", 100)
                     _offset = params.get(offset_key, 0)
@@ -797,7 +797,7 @@ class Session():
 
         # No errors but the total provided by Central doesn't match the # of records
         try:
-            if not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
+            if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
                 log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
@@ -1024,10 +1024,10 @@ class Session():
         """
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail, retry_failed=retry_failed))
 
-    async def get(self, url, params: dict = {}, headers: dict = None, **kwargs) -> Response:
+    async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response:
         f_url = url if url.startswith("http") else self.auth.central_info["base_url"] + url
         params = self.strip_none(params)
-        return await self.api_call(f_url, params=params, headers=headers, **kwargs)
+        return await self.api_call(f_url, params=params, headers=headers, count=count, **kwargs)
 
     async def post(
         self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
