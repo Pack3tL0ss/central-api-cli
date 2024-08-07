@@ -406,6 +406,10 @@ class Cache:
         return self.ClientDB.all()
 
     @property
+    def clients_by_mac(self) -> list:
+        return {c["mac"]: c for c in self.clients}
+
+    @property
     def mpsk(self) -> list:
         return self.MpskDB.all()
 
@@ -2201,7 +2205,7 @@ class Cache:
     async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
         """Update client DB
 
-        This is only updates when the user does a show clients
+        This only updates when the user does a show clients
 
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
@@ -2210,6 +2214,8 @@ class Cache:
         """
         # TODO running pytest on subsequent tests of show clients this would eval True and return None
         # if self.central.get_clients not in self.updated:
+        truncate = truncate if any([args, kwargs]) else True  # if no filters we truncate the DB
+
         client_resp = await self.central.get_clients(*args, **kwargs)
         if not client_resp.ok:
             return client_resp
@@ -2217,32 +2223,32 @@ class Cache:
             if len(client_resp) > 0:
                 client_resp.output = utils.listify(client_resp.output)
                 self.updated.append(self.central.get_clients)
-                data = [
-                    {
-                        "mac": c.get("macaddr"),
-                        "name": c.get("name", c.get("macaddr")),
-                        "ip": c.get("ip_address", ""),
-                        "type": c["client_type"],
-                        "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
-                        "connected_serial": c.get("associated_device"),
-                        "connected_name": c.get("associated_device_name"),
-                        "site": c.get("site"),
-                        "group": c.get("group_name"),
-                        "last_connected": c.get("last_connection_time")
+                with console.status(f"Preparing [cyan]{len(client_resp.output)}[/] clients for cache update") as spin:
+                    data = {c.get("macaddr", "NOMAC"):
+                        {
+                            "mac": c.get("macaddr"),
+                            "name": c.get("name", c.get("macaddr")),
+                            "ip": c.get("ip_address", ""),
+                            "type": c["client_type"],
+                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
+                            "connected_serial": c.get("associated_device"),
+                            "connected_name": c.get("associated_device_name"),
+                            "site": c.get("site"),
+                            "group": c.get("group_name"),
+                            "last_connected": c.get("last_connection_time")
+                        }
+                        for c in client_resp.output
                     }
-                    for c in client_resp.output
-                ]
-                if truncate:
+                    data = data if truncate else {**self.clients_by_mac, **data}
+
+                    spin.update(f"{'Truncate/re-populate' if truncate else 'Updating'} client cache: [cyan]{len(data)}[/] clients")
                     self.ClientDB.truncate()
-                    cache_update_res = self.ClientDB.insert_multiple(data)
+                    cache_update_res = self.ClientDB.insert_multiple(data.values())
+
+                if len(cache_update_res) < len(data):  # this is a list of one item lists but len is still OK here
+                    log.error(f"Client cache update returned {len(cache_update_res)} doc_ids, expected {len(data)}", caption=True)
                 else:
-                    Client = Query()
-                    cache_update_res = [
-                        self.ClientDB.upsert(c, Client.mac == c.get("mac", "--"))
-                        for c in data
-                    ]
-                if False in cache_update_res:
-                    log.error("Tiny DB returned an error during client db update")
+                    log.info(f"Client cache {'truncated/re-populated' if truncate else 'updated'} with {len(data)} clients")
         return client_resp
 
 
