@@ -217,7 +217,7 @@ class BandwidthInterval(str, Enum):  # 5m, 1h, 1d, 1w
     _1w = "1w"
 
 
-class BandwidthRadioOptions(str, Enum):  # 5m, 1h, 1d, 1w
+class RadioBandOptions(str, Enum):  # 5m, 1h, 1d, 1w
     _24 = "2.4"
     _5 = "5"
     _6 = "6"

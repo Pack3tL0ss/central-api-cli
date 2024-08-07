@@ -43,7 +43,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
-    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -2196,6 +2196,7 @@ def clients(
     wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
+    band: RadioBandOptions = typer.Option(None, help="Filter by Band [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
     denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev must also be supplied)[/]",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
     device: str = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by Device(s)", autocompletion=cli.cache.dev_client_completion, show_default=False,),
@@ -2285,6 +2286,14 @@ def clients(
         elif wireless:
             args = ("wireless", *args)
             title = f"{'All' if not dev else dev.name} Wireless Clients"
+            if band:
+                title = f"{title} associated with {band}Ghz radios"
+        elif band:
+            args = ("wireless", *args)
+            title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band}Ghz radios"
+
+    if band:
+        kwargs["band"] = band.value
 
     if not denylisted:
         if group:

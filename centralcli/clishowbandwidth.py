@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, BandwidthRadioOptions  # noqa
+from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, RadioBandOptions  # noqa
 from centralcli.cache import CentralObject
 from centralcli.models import Client
 
@@ -91,7 +91,7 @@ def ap(
     site: str = typer.Option(None, help="Show Bandwidth for APs in a specific site", metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for APs with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
     swarm: bool = typer.Option(False, "-s", "--swarm", help="Show Bandwidth for the swarm/cluster the provided AP belongs to [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]", show_default=False),
-    band: BandwidthRadioOptions = typer.Option(None, help="Show Bandwidth for a specific band [grey42]\[ap must be provided][/]", autocompletion=cli.cache.group_completion, show_default=False),
+    band: RadioBandOptions = typer.Option(None, help="Show Bandwidth for a specific band [grey42]\[ap must be provided][/]", autocompletion=cli.cache.group_completion, show_default=False),
     ssid: str = typer.Option(None, help="Show Bandwidth for a specifc ssid [grey42]\[ap must be provided][/]", show_default=False),
     start: datetime = typer.Option(
         None,
