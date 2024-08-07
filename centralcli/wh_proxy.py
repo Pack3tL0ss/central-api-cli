@@ -43,6 +43,46 @@ log = MyLogger(log_file, debug=config.debug, show=True, verbose=config.debugv)
 print(f"Web Hook Proxy logging to {log_file}")
 
 
+# LOGGING_CONFIG: dict[str, Any] = {
+#     "version": 1,
+#     "disable_existing_loggers": False,
+#     "formatters": {
+#         "default": {
+#             "()": "uvicorn.logging.DefaultFormatter",
+#             "fmt": "%(levelprefix)s %(message)s",
+#             "use_colors": None,
+#         },
+#         "access": {
+#             "()": "uvicorn.logging.AccessFormatter",
+#             "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',  # noqa: E501
+#         },
+#     },
+#     "handlers": {
+#         "default": {
+#             "formatter": "default",
+#             "class": "logging.handlers.RotatingFileHandler",
+#             "level": "INFO" if not DEBUG else "DEBUG",
+#             "filename": LOG_FILE.absolute(),
+#             "maxBytes": 250_000,
+#             "backupCount": 5
+#         },
+#         "access": {
+#             "formatter": "access",
+#             "class": "logging.handlers.RotatingFileHandler",
+#             "level": "INFO" if not DEBUG else "DEBUG",
+#             "filename": LOG_FILE.absolute(),
+#             "maxBytes": 250_000,
+#             "backupCount": 5
+#         },
+#     },
+#     "loggers": {
+#         "uvicorn": {"handlers": ["default"], "level": "INFO" if not DEBUG else "DEBUG", "propagate": False},
+#         "uvicorn.error": {"level": "INFO" if not DEBUG else "DEBUG"},
+#         "uvicorn.access": {"handlers": ["access"], "level": "INFO" if not DEBUG else "DEBUG", "propagate": False},
+#     },
+# }
+# update and pass as param to uvicorn.run to send logs to our file "log_config=LOGGING_CONFIG"
+
 class HookResponse(BaseModel):
     result: str
     updated: bool
