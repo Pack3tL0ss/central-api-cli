@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 import asyncio
 from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError

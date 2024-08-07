@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 import sys
-from pathlib import Path
-
 import typer
+from pathlib import Path
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:

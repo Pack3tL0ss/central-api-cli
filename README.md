@@ -27,11 +27,74 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 
 ## Installation
 
-Requires python 3.7+ and pip
+Requires python 3.8+ and pip
+> Use `python3 -V` to determine version, but pip won't allow it to install if Python is not >= 3.8
 
-`pip3 install centralcli`
+### simple
 
-> You can also install in a virtual environment (venv), but you'll lose auto-completion, unless you activate the venv.
+```shell
+# On Debian based system if pip is not a recognized command
+sudo apt install python3-pip
+
+# Install centralcli
+pip install centralcli
+
+# optional install speedups for centralcli (this pulls in additional optional dependencies, that can improve performance.)  Minimal impact in most scenarios.
+pip install centralcli[speedups]
+```
+
+### ideal
+> It's ideal to install in a virtual environment (venv) on *nix based systems.  A virtualenv is an isolated environment.  This is prefered as it avoids any potential package conflicts with any system executables that use the system-wide python.  When installing in a venv some steps have to be taken to ensure the venv is in PATH so `cencli` is a recognized command, and tab completion is retained.  The venv either needs to be activated or the venv/bin directory needs to be added to PATH for completion to work.  If this is something foriegn to you, you can install pipx which is like pip but installs packages in virtual environments and automatically takes care of the rest.
+
+**Option 1 via pipx:**
+
+> The first section below is for Debian based systems refer to [pipx documentation](https://pipx.pypa.io/stable/installation/) for instructions on other OSs.
+  ```shell
+  # install pipx (Debian)
+  sudo apt update
+  sudo apt install pipx
+  pipx ensurepath
+  sudo pipx ensurepath --global  # optional refer to pipx docs
+
+  # install central CLI
+  pipx install centralcli --include-deps
+
+  # optional install speedups for centralcli (this pulls in additional optional dependencies, that can improve performance.)  Minimal impact in most scenarios.
+  pipx install centralcli[speedups]
+  ```
+
+**Option 2 manual installation in a venv:**
+
+> The example below is for Debian based systems, where `apt` is referenced but should be easy to translate to other OSs given you have some familiarity with the package management commands (i.e. `dnf`).  On Windows python should install with pip.  The pip commands are still valid.
+  ```shell
+  # (Debian) If you don't have pip
+  sudo apt update
+  sudo apt install python3-pip
+
+  # Install virtualenv
+  python3 -m pip install virtualenv                 # Alternatively on Debian based systems: 'sudo apt install python3-virtualenv'
+
+  # create a directory to store the venv in
+  cd ~                                              # ensure you are in your home dir
+  mkdir .venvs                                      # creates hidden .venvs dir to store venv in
+  cd .venvs                                         # change to that directory
+  export DEB_PYTHON_INSTALL_LAYOUT='deb'            # Just ensures the directory structure for simpler instructions (Ubuntu 22.04 changed the dir layout of venvs without it)
+  python3 -m virtualenv centralcli --prompt cencli  # prompt is optional
+  source centralcli/bin/activate                    # activates the venv
+
+  # Install centralcli
+  pip install centralcli
+
+  # optional install speedups for centralcli (this pulls in additional optional dependencies, that can improve performance.)  Minimal impact in most scenarios.
+  pip install centralcli[speedups]
+
+  which centralcli # Should return ~/.venvs/centralcli/bin/centralcli
+
+  # for BASH shell Update .bashrc to update PATH on login (keep the single quotes)
+  echo 'export PATH="$PATH:$HOME/.venvs/centralcli/bin"' >> ~/.bashrc
+
+  # for zsh or others, do the equivalent... i.e. update .zshrc in a similar manner
+  ```
 
 ### Upgrading the CLI
 
@@ -43,10 +106,12 @@ Requires python 3.7+ and pip
 - On Windows 10 it's also available in the Windows store.
 
 ## Configuration
+:sparkles: pre-populating the config as described below is optional.  Central CLI will prompt for the information it needs on first run if no config exists.
+> It's still a good idea to look over the example config to see the optional config items.
 
 Refer to [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blob/master/config/config.yaml.example) to guide in the creation of config.yaml and place in the config directory.
 
-CentralCli will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>\\.centralcli.
+Central CLI will look in \<Users home dir\>/.config/centralcli, and \<Users home dir\>\\.centralcli.
 i.e. on Windows `c:\Users\wade\.centralcli` or on Linux `/home/wade/.config/centralcli`
 
 Once `config.yaml` is populated per [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blob/master/config/config.yaml.example), run some test commands to validate the config.
@@ -103,7 +168,7 @@ The CLI supports auto-completion.  To configure auto-completion run `cencli --in
 
 ### Caching & Friendly identifiers
 
-- Caching: The CLI caches information on all devices, sites, groups, and templates in Central.  It's a minimal amount per device, and is done to allow human friendly identifiers.  The API typically accepts serial #, site id, etc.  This function allows you to specify a device by name, IP, mac (any format), and serial.
+- Caching: The CLI caches information on all devices, sites, groups and templates along with some other items.  It's a minimal amount per device, and is done to allow human friendly identifiers.  The API typically accepts serial #, site id, etc.  This function allows you to specify a device by name, IP, mac (any format), and serial.
 
 The lookup sequence for a device:
 
@@ -111,12 +176,13 @@ The lookup sequence for a device:
   2. case insensitive match
   3. case insensitive match disregarding all hyphens and underscores (in case you type 6200f_bot and the device name is 6200F-Bot)
   4. Case insensitive Fuzzy match with implied wild-card, otherwise match any devices that start with the identifier provided. `cencli show switches 6200F` will result in a match of `6200F-Bot`.
+  5. If a typo was made, and an item is a close match, you will be prompted to confirm that's what you meant.
 
 > If there is no match found, a cache update is triggered, and the match rules are re-tried.
 
 - Caching works in a similar manner for groups, templates, and sites.  Sites can match on name and nearly any address field.  So if you only had one site in San Antonio you could specify that site with `show sites 'San Antonio'`  \<-- Note the use of quotes because there is a space in the name.
 
-- **Multiple Matches**:  It's possible to specify an identifier that returns multiple matches (if drops all the way down to the Fuzzy match/implied trailing wild-card).  If that occurs you are prompted to select the intended device from a list of the matches.
+- **Multiple Matches**:  If a provided identifier is ambiguous, meaning there are multiple matches.  You will be prompted to select the intended device from a list of the matches.
 
 ### Output Formats
 

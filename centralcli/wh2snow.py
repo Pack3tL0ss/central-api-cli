@@ -7,29 +7,26 @@ import json
 import sys
 from datetime import datetime as dt
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional
 
 import uvicorn
 from fastapi import FastAPI, Header, Request, Response, status
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from rich import print
 from starlette.requests import Request  # NoQA
-from starlette.responses import FileResponse
 import aiohttp
 import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import MyLogger, cache, utils, central, config, models, exceptions
+    from centralcli import MyLogger, cache, central, config, models, exceptions
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         import sys
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import MyLogger, cache, utils, central, config, models, exceptions  # type: ignore
+        from centralcli import MyLogger, cache, central, config, models, exceptions  # type: ignore
     else:
         print(pkg_dir.parts)
         raise e
@@ -229,8 +226,7 @@ class Hook2Snow:
             res_payload = await response.json()
             res_model = models.SnowResponse(**res_payload)
             self.created += [res_model.u_servicenow_number]
-            cache_res = await cache.update_hook_data_db(res_model.dict())  # TODO should we strip_none here?
-            # TODO verify cache_res response
+            _ = await cache.update_hook_data_db(res_model.dict())  # TODO should we strip_none here?
 
 
     async def verify_header_auth(self, data: dict, svc: str, sig: str, ts: str, del_id: str):
