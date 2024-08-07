@@ -76,9 +76,9 @@ CLUSTER_URLS = {
     "us1": "https://app1-apigw.central.arubanetworks.com",
     "us2": "https://apigw-prod2.central.arubanetworks.com",
     "us4": "https://apigw-uswest4.central.arubanetworks.com",
-    "cn1": "https://app1-apigw.central.arubanetworks.com.cn",
-
-}  # TODO need uswest5
+    "us5": "https://apigw-uswest5.central.arubanetworks.com",
+    "cn1": "https://app1-apigw.central.arubanetworks.com.cn"
+}
 
 BYPASS_FIRST_RUN_FLAGS = [
     "--install-completion",
