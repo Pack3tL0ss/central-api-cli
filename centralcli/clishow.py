@@ -9,7 +9,7 @@ import asyncio
 import sys
 import json
 import os
-from typing import List, Iterable, Literal, Dict
+from typing import List, Iterable, Literal, Dict, Any
 from pathlib import Path
 from rich import print
 from rich.console import Console
@@ -70,7 +70,7 @@ class Counts:
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
 
-def _build_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
     inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     def get_switch_counts(data) -> dict:
         if data is None:
@@ -181,6 +181,45 @@ def _build_caption(resp: Response, *, inventory: bool = False, dev_type: Generic
         caption = f"{caption}\n  [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
+
+def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = None, band: bool = None, device: CentralObject = None, verbose: bool = False,):
+    def _update_counts_by_band(caption: str, wlan_clients: List[Dict[str, Any]], end: str = "\n") -> str:
+        two_four_clients = len([c for c in wlan_clients if c.get("band", 0) == 2.4])
+        five_clients = len([c for c in wlan_clients if c.get("band", 0) == 5])
+        six_clients = len([c for c in wlan_clients if c.get("band", 0) == 6])
+
+        return f"{caption} ([bright_green]2.4Ghz[/]: [bright_red]{two_four_clients}[/], [bright_green]5Ghz[/]: [cyan]{five_clients}[/], [bright_green]6Ghz[/]: [cyan]{six_clients}[/]){end}"
+
+    if wired:
+        count_text = f"[cyan]{len(resp)}[/] Wired Clients."
+    elif wireless or band:
+        count_text = f"[cyan]{len(resp)}[/] Wireless Clients."
+        wlan_clients = resp.raw.get("clients", [])
+        count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients, end=",")
+    else:
+        _tot = len(resp)
+        wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
+        wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
+        caption_data = {}
+        if device is None:
+            for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
+                caption_data[_type] = {
+                    "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
+                }
+            count_text = f"Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/],"
+            count_text = f"{count_text} [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+
+            # Add counts by band
+            wlan_clients = wlan_raw[0]["raw_wireless_response"]["clients"]  # TODO use CombinedResponse
+            count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients)
+        else:
+            count_text = f"[bright_green]Client Count[/]: [cyan]{_tot}[/],"
+            if device.type == "ap":
+                wlan_clients = resp.raw.get("clients", [])
+                count_text = _update_counts_by_band(count_text.rstrip(","), wlan_clients=wlan_clients, end=",")
+
+    return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
+
 # TODO break this into multiple functions
 def show_devices(
     devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
@@ -262,7 +301,7 @@ def show_devices(
     elif dev_type == "all":  # cencli show all | cencli show devices
         if include_inventory:
             resp = cli.cache.get_devices_with_inventory()
-            caption = _build_caption(resp, inventory=True)
+            caption = _build_device_caption(resp, inventory=True)
             if status:
                 log.warning("[cyan]--up[/], [cyan]--down[/] filters are currently ignored when [cyan]--inv[/] is used.", caption=True)
         elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
@@ -270,11 +309,11 @@ def show_devices(
             if resp.ok and resp.output:
                 cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
                 _ = central.request(cli.cache.update_dev_db, cache_output)
-            caption = None if not resp.ok else _build_caption(resp)
+            caption = None if not resp.ok else _build_device_caption(resp)
         else:  # No filtering params, get update from cache
             if central.get_all_devices not in cli.cache.updated:
                 resp = central.request(cli.cache.update_dev_db, **params)
-                caption = _build_caption(resp, status=status)
+                caption = _build_device_caption(resp, status=status)
             else:
                 # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
@@ -284,7 +323,7 @@ def show_devices(
             _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
 
-        caption = _build_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
+        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -824,7 +863,7 @@ def inventory(
         title=title,
         sort_by=sort_by,
         reverse=reverse,
-        caption=_build_caption(resp, inventory=True),
+        caption=_build_device_caption(resp, inventory=True),
         pager=pager,
         outfile=outfile,
         cleaner=None,  # Cleaner is applied in cache update
@@ -2215,8 +2254,8 @@ def clients(
         is_flag=True,
         help="Use default central account",
         show_default=False,
-        rich_help_panel="Common Options",
     ),
+        rich_help_panel="Common Options",
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -2334,26 +2373,7 @@ def clients(
         cli.display_results(resp, exit_on_fail=True)
 
     # Build Caption Text # TODO move to caption builder
-    _count_text = ""
-    _last_mac_text = ""
-    if not client and not denylisted:
-        if wired:
-            _count_text = f"[cyan]{len(resp)}[/] Wired Clients."
-        elif wireless:
-            _count_text = f"[cyan]{len(resp)}[/] Wireless Clients."
-        else:
-            _tot = len(resp)
-            wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
-            wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
-            caption_data = {}
-            if not device:
-                for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
-                    caption_data[_type] = {
-                        "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
-                    }
-                _count_text = f"[reset]Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/], [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
-            else:
-                _count_text = f"[reset][bright_green]Client Count[/]: [cyan]{_tot}[/],"
+    caption = None if any([client, denylisted]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
@@ -2378,7 +2398,7 @@ def clients(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=f"{_count_text} Use [cyan]-v[/] for more details, [cyan]--raw[/] for unformatted response." if not verbose and not denylisted else None,
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -2495,8 +2515,8 @@ def uplinks(
     cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
-
-@app.command(short_help="Show client roaming history")
+# TODO use common time parser see clishowbandwidth
+@app.command()
 def roaming(
     client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
     start: str = typer.Option(
@@ -2506,7 +2526,7 @@ def roaming(
     end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
     past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
-    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.", hidden=True,),
+    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.",),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),

@@ -2214,7 +2214,9 @@ class Cache:
         """
         # TODO running pytest on subsequent tests of show clients this would eval True and return None
         # if self.central.get_clients not in self.updated:
-        truncate = truncate if any([args, kwargs]) else True  # if no filters we truncate the DB
+
+        # truncate = truncate if any([args, kwargs]) else True  # if no filters we truncate the DB
+        # TODO Add cleanup function for client cache to delete clients with last_connected_time > x days
 
         client_resp = await self.central.get_clients(*args, **kwargs)
         if not client_resp.ok:
