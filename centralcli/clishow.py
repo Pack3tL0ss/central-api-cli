@@ -2238,6 +2238,8 @@ def clients(
     Shows clients that have connected within the last 3 hours by default.
     """
     central = cli.central
+    if [site, group, label].count(None) < 2:
+        cli.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
 
     kwargs = {}
     dev = None
@@ -2504,7 +2506,7 @@ def roaming(
     end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
     past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
-    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache."),
+    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.", hidden=True,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
     do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
