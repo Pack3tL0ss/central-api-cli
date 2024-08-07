@@ -365,7 +365,7 @@ class Cache:
 
     @property
     def devices_by_serial(self) -> dict:
-        return {d["serial"]: d for d in self.devices}
+        return {d["serial"]: dict(d) for d in self.devices}
 
     @property
     def inventory(self) -> list:
@@ -373,7 +373,7 @@ class Cache:
 
     @property
     def inventory_by_serial(self) -> dict:
-        return {d["serial"]: d for d in self.inventory}
+        return {d["serial"]: dict(d) for d in self.inventory}
 
     @property
     def sites(self) -> list:
@@ -407,7 +407,7 @@ class Cache:
 
     @property
     def clients_by_mac(self) -> list:
-        return {c["mac"]: c for c in self.clients}
+        return {c["mac"]: dict(c) for c in self.clients}
 
     @property
     def mpsk(self) -> list:
