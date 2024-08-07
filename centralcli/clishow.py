@@ -2338,16 +2338,19 @@ def clients(
 
     if not denylisted:
         if group:
-            kwargs["group"] = cli.cache.get_group_identifier(group).name
-            title = f"{title} in group {group}"
+            _group = cli.cache.get_group_identifier(group)
+            kwargs["group"] = _group.name
+            title = f"{title} in group {_group.name}"
 
         if site:
-            kwargs["site"] = cli.cache.get_site_identifier(site).name
-            title = f"{title} in site {site}"
+            _site = cli.cache.get_site_identifier(site)
+            kwargs["site"] = _site.name
+            title = f"{title} in site {_site.name}"
 
         if label:
-            kwargs["label"] = cli.cache.get_label_identifier(label).name
-            title = f"{title} on devices with label {label}"
+            _label = cli.cache.get_label_identifier(label)
+            kwargs["label"] = _label.name
+            title = f"{title} on devices with label {_label.name}"
 
         if ssid:
             kwargs["network"] = ssid
@@ -2372,7 +2375,6 @@ def clients(
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
-    # Build Caption Text # TODO move to caption builder
     caption = None if any([client, denylisted]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
