@@ -24,7 +24,11 @@ from rich.table import Table
 from rich.text import Text
 from rich import print
 from datetime import datetime
-from uniplot import plot
+
+try:  # uniplot depends on numpy which throws an error on rpi
+    from uniplot import plot
+except ImportError:
+    plot = None
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -471,6 +475,10 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
 
 
 def bandwidth_graph(resp: Response, title: str = "Bandwidth Usage") -> None:
+    if not plot:
+        print(":warning:  Graphing in the terminal is not available for this platform (numpy C extensions need to be built manually).  Use formatting flags i.e. [cyan]--table[/] to see the timeseries data.")
+        raise typer.Exit(1)
+
     tx_data = [x["tx_data_bytes"] for x in resp.output]
     rx_data = [x["rx_data_bytes"] for x in resp.output]
 

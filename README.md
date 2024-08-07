@@ -18,7 +18,7 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
 - Multiple output formats
 - Output to file
-- Numerous import formats (csv, yaml, json, xls, etc.)
+- Numerous import formats (csv, yaml, json, etc.)
 - Multiple account support (easily switch between different central accounts `--account myotheraccount`)
 - Batch Operation based on data from input file.  i.e. Add sites in batch based on data from a csv.
 - Automatic Token refresh.  With prompt to paste in a new token if it becomes invalid.
@@ -106,7 +106,7 @@ pip install centralcli[speedups]
 - On Windows 10 it's also available in the Windows store.
 
 ## Configuration
-:sparkles: pre-populating the config as described below is optional.  Central CLI will prompt for the information it needs on first run if no config exists.
+✨ pre-populating the config as described below is optional.  Central CLI will prompt for the information it needs on first run if no config exists.
 > It's still a good idea to look over the example config to see the optional config items.
 
 Refer to [config.yaml.example](https://github.com/Pack3tL0ss/central-api-cli/blob/master/config/config.yaml.example) to guide in the creation of config.yaml and place in the config directory.

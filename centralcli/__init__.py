@@ -1,6 +1,24 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""
+A CLI app / python package for interacting with Aruba Central Cloud Management Platform.
 
+Features of Central CLI:
+  - Cross Platform Support
+  - Auto/TAB Completion
+  - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
+  - Multiple output formats + Output to file
+  - Numerous import formats (csv, yaml, json, etc.)
+  - Multiple account support (easily switch between different central accounts --account myotheraccount)
+  - Batch Operation based on data from input file. i.e. Add sites in batch based on data from a csv.
+  - Automatically rename APs in mass using portions or all of:
+    - The switch hostname the AP is connected to, switch port, AP MAC, AP model, AP serial, and the Site it's assigned to in Aruba Central
+  - Automatic Token refresh. With prompt to paste in a new token if it becomes invalid.
+
+centralcli can also be imported as a python package for use in your own scripts.
+
+Documentation: https://central-api-cli.readthedocs.io/en/latest/readme.html
+HomePage: https://github.com/Pack3tL0ss/central-api-cli
+"""
 # flake8: noqa
 
 import yaml
