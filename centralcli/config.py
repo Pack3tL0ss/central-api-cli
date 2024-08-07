@@ -207,7 +207,8 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
 
 class Config:
     def __init__(self, base_dir: Path = None):
-        self.is_completion = False  # Updated in cli.py all_commands_callback if completion
+        #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
+        self.is_completion = bool(os.environ.get("COMP_WORDS"))
         self.valid_suffix = valid_ext
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
