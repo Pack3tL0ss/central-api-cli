@@ -396,7 +396,7 @@ def output(
     elif tablefmt == "csv":
         def normalize_for_csv(value: Any) -> str:
             if isinstance(value, DateTime):
-                return str(value.epoch)
+                return str(value.original)
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
 
