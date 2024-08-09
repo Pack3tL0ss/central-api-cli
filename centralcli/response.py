@@ -426,45 +426,6 @@ class Response:
         return self.status
 
 
-# TODO determine which is used.  same is in utils, can't recall if removed all refs one should be whacked
-def get_multiline_input(prompt: str = None, print_func: callable = print,
-                        return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
-    def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
-        prompt = prompt or \
-            "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
-        print_func(prompt, **kwargs)
-        contents, line = [], ''
-        while line.strip().lower() != "exit":
-            try:
-                line = input()
-                contents.append(line)
-            except EOFError:
-                break
-
-        if line.strip().lower() == "exit":
-            print("Aborted")
-            exit()
-
-        return contents
-
-    contents = _get_multiline_sub(**kwargs)
-    if return_type:
-        if return_type == "dict":
-            for _ in range(1, 3):
-                try:
-                    contents = json.loads("\n".join(contents))
-                    break
-                except Exception as e:
-                    log.exception(f"get_multiline_input: Exception caught {e.__class__.__name__}\n{e}")
-                    typer.secho("\n !!! Input appears to be invalid.  Please re-input "
-                                "or Enter `exit` to exit !!! \n", fg="red")
-                    contents = _get_multiline_sub(**kwargs)
-        elif return_type == "str":
-            contents = "\n".join(contents)
-
-    return contents
-
-
 class Session():
     def __init__(
         self,
