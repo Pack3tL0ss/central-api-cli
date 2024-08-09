@@ -362,8 +362,8 @@ class CLICommon:
             caption: str = None,
     ) -> Tuple:
         if sort_by and all(isinstance(d, dict) for d in data):
-            if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
-                sort_by = sort_by.replace("_", " ")
+            if sort_by not in data[0] and sort_by.replace("_", " ").replace("-", " ") in data[0]:
+                sort_by = sort_by.replace("_", " ").replace("-", " ")
 
             sort_msg = None
             if not all([sort_by in d for d in data]):
@@ -378,7 +378,7 @@ class CLICommon:
                         if d[sort_by] is not None:
                             type_ = type(d[sort_by])
                             break
-                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
+                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] is not None and d[sort_by] != "-" else 0 if type_ in [int, DateTime] else "")
                 except TypeError as e:
                     sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
 
