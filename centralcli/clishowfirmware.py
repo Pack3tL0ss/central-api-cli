@@ -55,11 +55,11 @@ def device(
     """Show firmware details for device(s)
 
     Either provide one or more devices as arguments or [cyan]--dev-type[/]
+    [cyan]--dev-type[/] can be one of cx, sw, gw (not supported on APs)
+    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
 
     [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
     API endpoint treats them all the same and returns all switches.
-
-    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
     """
     if device:
         devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in device]
