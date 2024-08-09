@@ -261,14 +261,10 @@ def _list(
 
     kwargs = utils.strip_none(kwargs)
 
-    _error = ""
     if not kwargs:
-        _error += "\n[dark_orange]:warning:[/]  [bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required."
+        cli.exit("[bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required.")
     elif len(kwargs) > 1:
-        _error += "\n[dark_orange]:warning:[/]  [bright_red]Invalid combination[/] specify only [bold]one[/] of device (argument), --dev-type, [bold]OR[/] --swarm-id."
-    if _error:
-        print(_error)
-        raise typer.Exit(1)
+        cli.exit("[bright_red]Invalid combination[/] specify only [bold]one[/] of device (argument), --dev-type, [bold]OR[/] --swarm-id.")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
