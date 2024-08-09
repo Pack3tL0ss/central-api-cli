@@ -291,7 +291,7 @@ def show_tech(
 ):
     """Show Tech Support
 
-    [cyan]Returns the output of show tech.[/]
+    Returns the output of show tech.
 
     [cyan]-[/] APs include show tech-support supplemental and show tech-support memory.
     """

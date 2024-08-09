@@ -1661,7 +1661,7 @@ def lldp(
         autocompletion=cli.cache.account_completion,
     ),
 ) -> None:
-    """Show AP lldp neighbor
+    """Show lldp neighbor information
 
     Valid on APs and CX switches
 
@@ -1676,9 +1676,6 @@ def lldp(
     unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
     batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
-    # if all([res.ok for res in batch_resp]):
-    #     concat_resp = batch_resp[-1]
-    #     concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
     console = Console()
