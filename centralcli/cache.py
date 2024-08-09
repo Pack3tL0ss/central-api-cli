@@ -2438,7 +2438,7 @@ class Cache:
             db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
             elapsed = round(time.perf_counter() - start, 2)
             passed = [r for r in db_res if r.ok]
-            failed = update_count or len(db_map) - len(passed)
+            failed = (update_count or len(db_map)) - len(passed)
             log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
 
             if failed:
