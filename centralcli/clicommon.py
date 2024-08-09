@@ -29,6 +29,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
+from centralcli.clioptions import CLIOptions
 
 
 tty = utils.tty
@@ -45,6 +46,7 @@ class CLICommon:
         self.cache = cache
         self.central = central
         self.raw_out = raw_out
+        self.options = CLIOptions(cache)
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -362,14 +364,15 @@ class CLICommon:
             caption: str = None,
     ) -> Tuple:
         if sort_by and all(isinstance(d, dict) for d in data):
-            if sort_by not in data[0] and sort_by.replace("_", " ").replace("-", " ") in data[0]:
-                sort_by = sort_by.replace("_", " ").replace("-", " ")
+            possible_sort_keys = [sort_by, sort_by.replace("_", " ").replace("-", " "), f'{sort_by.replace("_", " ").replace("-", " ")} %', f'{sort_by.replace("_", " ").replace("-", " ")}%']
+            matched_key = [k for k in possible_sort_keys if k in data[0]]
+            sort_by = sort_by if not matched_key else matched_key[0]
 
             sort_msg = None
             if not all([sort_by in d for d in data]):
                 sort_msg = [
                         f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
-                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "_")}' for k in data[0].keys()))
+                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "-")}' for k in data[0].keys()))
                 ]
             else:
                 try:
@@ -546,7 +549,7 @@ class CLICommon:
                     "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
-                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output]
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
                 if any(conditions):
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
