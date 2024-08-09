@@ -335,6 +335,7 @@ _short_key = {
     "ec_str": "enabled capabilities",
     "tx_data_bytes": "TX",
     "rx_data_bytes": "RX",
+    "link_speed": "speed",
 }
 
 
@@ -1573,10 +1574,12 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         "phy_type",
         "port",
         "oper_state",
+        "operational_state",  # ap
         "admin_state",
         "status",
         "intf_state_down_reason",
         "speed",
+        "link_speed",  # ap
         "duplex_mode",
         "vlan",
         "allowed_vlan",
@@ -1597,6 +1600,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     verbosity_keys = {
         0: [
             "port_number",
+            "name", # ap
             "vlan",
             "allowed_vlan",
             "vlan_mode",
@@ -1605,6 +1609,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
             "power_consumption",
             "intf_state_down_reason",
             "speed",
+            "link_speed",  # ap
             "is_uplink",
             "phy_type",
             "type"
@@ -1623,6 +1628,14 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         ]
     elif dev_type == "gw":
         verbosity_keys[0].insert(4, "trusted")
+    elif dev_type == "ap" and data:
+        data = data[0].get("ethernets", [])
+        verbosity_keys[0].insert(2, "macaddr")
+        verbosity_keys[0].insert(10, "duplex_mode")
+        for iface in data:
+            if iface.get("status", "").lower() != "up":
+                iface["duplex_mode"] = "--"
+                iface["link_speed"] = "--"
 
     # Append any additional keys to the end
     if verbosity == 0:

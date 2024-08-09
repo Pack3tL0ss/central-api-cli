@@ -985,7 +985,7 @@ def swarms(
 # TODO define sort_by fields
 @app.command()
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
@@ -1009,13 +1009,12 @@ def interfaces(
         rich_help_panel="Common Options",
     ),
 ):
-    """Show interfaces/details
-
-    Command is valid for switches and gateways
-    """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], conductor_only=True,)
+    """Show interfaces/details"""
+    dev = cli.cache.get_dev_identifier(device, conductor_only=True,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
+    elif dev.type == "ap":
+        resp = cli.central.request(cli.central.get_dev_details, "aps", dev.serial)  # We extract the wired interface details from /monitoring/v2/aps
     else:
         iden = dev.swack_id or dev.serial
         resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=dev.swack_id is not None, aos_sw=dev.type == "sw")
