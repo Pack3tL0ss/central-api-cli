@@ -2,7 +2,6 @@ colorama
 click<=7.1.2
 pygments
 tabulate
-halo
 typer==0.10.0
 pylibyaml
 pyYAML
