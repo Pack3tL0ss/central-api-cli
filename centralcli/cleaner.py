@@ -191,20 +191,20 @@ vlan_modes = {
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
-    "last_connection_time": lambda x: DateTime(x, "timediff"),  # _time_diff_words,
+    "last_connection_time": lambda x: DateTime(x, "timediff"),
     "uptime": lambda x: DateTime(x, "durwords-short", round_to_minute=True),
     "updated_at": lambda x: DateTime(x, "mdyt"),
-    "last_modified": _convert_epoch,
+    "last_modified": lambda x: DateTime(x, "day-datetime"),
     "next_rekey": lambda x: DateTime(x, "log"),
     "connected_uptime": lambda x: DateTime(x, "durwords"),
-    "lease_start_ts": _log_timestamp,
-    "lease_end_ts": _log_timestamp,
-    "create_date": _convert_iso_to_words,
-    "acknowledged_timestamp": _log_timestamp,
-    "lease_time": _duration_words,
-    "lease_time_left": _duration_words,
+    "lease_start_ts": lambda x: DateTime(x, "log"),
+    "lease_end_ts": lambda x: DateTime(x, "log"),
+    "create_date": lambda x: DateTime(x, "date-string"),
+    "acknowledged_timestamp": lambda x: DateTime(x, "log"),
+    "lease_time": lambda x: DateTime(x, "durwords"),
+    "lease_time_left": lambda x: DateTime(x, "durwords-short"),
     "token_created": lambda x: DateTime(x, "mdyt"),
-    "ts": lambda x: DateTime(x, format="log"),  # _log_timestamp,
+    "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
     "Unknown": "?",
     "HPPC": "SW",
@@ -1224,7 +1224,7 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
-    data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order if k in d)} for d in data]
+    data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order)} for d in data]
     data = strip_no_value(data)
     return data
 
