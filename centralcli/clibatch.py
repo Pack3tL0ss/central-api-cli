@@ -896,7 +896,7 @@ def verify(
 
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+            if file_by_serial[s][file_key].replace("-", "_") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
@@ -907,8 +907,8 @@ def verify(
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["license", "group", "site"]:
-                if field in file_by_serial[s] and file_by_serial[s][field]:
+            for field in ["group", "site", file_key]:
+                if field is not None and field in file_by_serial[s] and file_by_serial[s][field]:
                     _msg += f", {field.title()} [bright_green]OK[/]"
             validation[s] += [_msg]
         else:
