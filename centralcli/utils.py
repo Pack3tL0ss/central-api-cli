@@ -16,8 +16,6 @@ import typer
 import logging
 
 import yaml
-from halo import Halo
-import threading
 from pygments import formatters, highlight, lexers
 from tabulate import tabulate
 from rich import print_json
@@ -218,57 +216,6 @@ class Utils:
 
         return data
 
-    # TODO depricated will remove.  Spinner moved to Response
-    @staticmethod
-    def spinner(spin_txt: str, function: callable, url: str = None, *args, name: str = None,
-                spinner: str = "dots", debug: bool = False, **kwargs) -> Any:
-        name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
-        if not name.startswith("spinner_"):
-            name = f"spinner_{name}"
-
-        spin = None
-        if sys.stdin.isatty():
-            # If a spinner is already running, update that spinner vs creating new
-            active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
-            if active_spinners:
-                spin = active_spinners[0]._target.__self__
-                if debug:
-                    spin.stop()
-                else:
-                    log.warning(f"A Spinner was already running '{spin.text}' updating to '{spin_txt}'")
-                    spin.text == spin_txt
-                    spin.spinner == "dots12" if spin.spinner == spinner else spinner
-            elif not debug:
-                spin = Halo(text=spin_txt, spinner=spinner)
-                spin.start()
-                threading.enumerate()[-1].name = spin._spinner_id = name
-
-        if url:
-            args = (url, *args)
-
-        r = function(*args, **kwargs)
-
-        if spin:
-            # determine pass if request successful
-            _spin_fail_msg = spin_txt
-            ok = None
-            if hasattr(r, "ok"):
-                ok = r.ok
-            if "refreshToken" in str(function):
-                ok = r is not None
-                if hasattr(r, "json"):
-                    _spin_fail_msg = f"spin_text\n   {r.json().get('error_description', spin_txt)}"
-
-            if ok is True:
-                spin.succeed()
-            elif ok is False:
-                spin.fail(_spin_fail_msg)
-            else:
-                spin.stop_and_persist()
-
-        return r
-
-    # TODO deprecated validate not used, moved to Response
     @staticmethod
     def get_multiline_input(prompt: str = None, print_func: callable = print,
                             return_type: str = "str", abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
