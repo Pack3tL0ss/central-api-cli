@@ -448,7 +448,7 @@ class CLICommon:
 
         if stash:
             config.last_command_file.write_text(
-                json.dumps({k: v if not isinstance(v, DateTime) else v.epoch for k, v in kwargs.items() if k != "config"}, cls=Encoder)
+                json.dumps({k: v if not isinstance(v, DateTime) else v.ts for k, v in kwargs.items() if k != "config"}, cls=Encoder)
             )
 
         typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
