@@ -13,8 +13,11 @@ from yarl import URL
 
 
 from centralcli import config, utils, log
+from centralcli.constants import lib_to_api
 from centralcli.exceptions import CentralCliException
-from halo import Halo
+from rich.console import Console, RenderableType
+from rich.status import Status
+from rich.style import StyleType
 
 import sys
 import typer
@@ -29,7 +32,7 @@ DEFAULT_HEADERS = {
 }
 INIT_TS = time.monotonic()
 MAX_CALLS_PER_CHUNK = 6
-
+err_console = Console(stderr=True)
 
 class BatchRequest:
     def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
@@ -126,6 +129,36 @@ class RateLimit():
 
     def __ge__(self, other) -> bool:
         return False if self.remain_day is None else bool(self.remain_day >= other)
+
+
+class Spinner(Status):
+    """A Spinner Object that adds methods to rich.status.Status object"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def fail(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":x:  {self.status}") if not text else self.console.print(f":x:  {text}")
+
+    def succeed(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":heavy_check_mark:  {self.status}") if not text else self.console.print(f":heavy_check_mark:  {text}")
+
+    def start(
+            self,
+            text: RenderableType = None,
+            *,
+            spinner: str = None,
+            spinner_style: StyleType = None,
+            speed: float = None,
+        ) -> None:
+        if any([text, spinner, spinner_style, speed]):
+            self.update(text, spinner=spinner, spinner_style=spinner_style, speed=speed)
+        if not self._live.is_started:
+            self._live.start()
+
 
 
 class Response:
@@ -448,8 +481,7 @@ class Session():
         self.req_cnt = 1
         self.requests: List[LoggedRequests] = []
         self.throttle: int = 0
-        self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
-        self.spinner._spinner_id = "spin_thread"
+        self.spinner = Spinner("Collecting Data...")
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
@@ -471,12 +503,17 @@ class Session():
         self._aio_session = session
 
     def _get_spin_text(self, spin_txt: str = None):
-        if not spin_txt:
-            return "" if not self.running_spinners else self.running_spinners[0]
+        if spin_txt:
+            if "retry" in spin_txt:
+                return spin_txt
+
+            self.running_spinners = [*self.running_spinners, spin_txt]
+        elif not self.running_spinners:
+            return "missing spin text"
 
         try:
-            if len(self.running_spinners) > 1 and "retry" not in str(self.running_spinners) and len(set([x.split(":")[0] for x in self.running_spinners])) == 1:
-                return f'{self.running_spinners[0]},{",".join(x.split(":")[1] for x in self.running_spinners[1:])}'
+            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
+                return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
 
             return spin_txt if not self.running_spinners else self.running_spinners[0]
         except Exception as e:
@@ -491,17 +528,17 @@ class Session():
         resp = None
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' [{_url.path}]'
+        end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
-        spin_txt_run = f"{spin_word} Data...{run_sfx}"
-        spin_txt_retry = ""
-        spin_txt_fail = f"{spin_word} Data{_data_msg}"
-        self.spinner.text = self._get_spin_text(spin_txt_run)
+        spin_txt_run = f"{spin_word} ({end_name}) Data...{run_sfx}"
+        spin_txt_retry = "\U0001f4a9"  # helps detect if this was not set correctly after previous failure
+        spin_txt_fail = f"{spin_word} ({end_name}) Data{_data_msg}"
+        self.spinner.update("\U0001f4a9")
         for _ in range(0, 2):
-            # spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
-            spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
+            spin_txt_run = spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -539,15 +576,9 @@ class Session():
                     f'{now:.2f} [{method}]{_url.path_qs} Try: {_try_cnt}'
                 ]
 
-                # TODO spinner steps on each other during long running requests
-                # need to check store prev msg when updating then restore it if that thread is still running
-                self.spinner.stop() # Fix spinner was not starting with below call to start until first stopping it.
-                self.spinner.start(spin_txt_run)
-                self.running_spinners += [spin_txt_run]
+                self.spinner.start(self._get_spin_text(spin_txt_run), spinner="dots")
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
-                # TODO move batch_request _batch_request, get, put, etc into Session
-                # change where client is instantiated to _request / _batch_requests pass in the client
-                # remove aio_session property call ClientSession() direct
+
                 async with self.aio_session as client:
                     resp = await client.request(
                         method=method,
@@ -591,28 +622,31 @@ class Session():
             self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
+                if self.running_spinners:
+                    self.spinner.start(self._get_spin_text(), spinner="dots")
+
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif resp.status == 500:
-                    spin_txt_retry = "(retry after 500: Internal Server Error)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
                     # returns JSON: {'message': 'An unexpected error occurred'}
                 elif resp.status == 503:
-                    spin_txt_retry = "(retry after 503: Service Unavailable)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 503: [cyan]Service Unavailable[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
                     # returns a string: "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
                 elif resp.status == 504:
-                    spin_txt_retry = "(retry after 504: Gatewat Time-out)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
                     log.warning(f"Per second rate limit hit {fail_msg.replace(f'{spin_word} Data', '')}")
-                    spin_txt_retry = "(retry after hitting per second rate limit)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
                 elif resp.status == 418:  # Spot to handle retries for any caught exceptions
                     if resp.error == "ContentLengthError":
-                        spin_txt_retry = "(retry after ContentLengthError)"
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after [cyan]ContentLengthError[/]"
                         log.warning(f'{resp.url.path_qs} forced to retry after ContentLengthError')
                     else:
                         log.error(f'{resp.url.path_qs} {resp.error} Exception is not configured for retry')
@@ -631,7 +665,7 @@ class Session():
 
                 # This handles long running API calls where subsequent calls finish before the previous...
                 if self.running_spinners:
-                    self.spinner.text = self._get_spin_text()
+                    self.spinner.update(self._get_spin_text(), spinner="dots2")
                 else:
                     self.spinner.stop()
                 break
@@ -646,7 +680,7 @@ class Session():
                 paged_output = {**paged_output, **res.output}
             else:  # FIXME paged_output += r.output was also changing contents of paged_raw dunno why
                 try:
-                    paged_output = paged_output + res.output  # This does work different than += which would turn the string into a list of chars and append
+                    paged_output = paged_output + res.output  # This does work different than += which would turn a string into a list of chars and append
                 except TypeError:
                     log.error(f"Not adding {res.output} to paged output. Call Result {res.error}")
 
@@ -748,7 +782,7 @@ class Session():
                         for i in range(len(r.output), _total, _limit)
                     ]
 
-                    batch_res = await self._batch_request(_reqs)
+                    batch_res: List[Response] = await self._batch_request(_reqs)
                     failures: List[Response] = [r for r in batch_res if not r.ok]  # A failure means both the original attempt and the retry failed.
                     successful: List[Response] = batch_res if not failures else [r for r in batch_res if r.ok]
 
@@ -760,12 +794,7 @@ class Session():
                         log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
                         log.error(f"Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
 
-                    # page_res = [
-                    #     await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
-                    #     for res in successful
-                    # ]
-                    # r.raw, r.output = page_res[-1]
-                    for res in successful:
+                    for res in successful:  # Combines responses into a sigle Response object
                         r += res
                     break
 
@@ -805,14 +834,13 @@ class Session():
 
         return r
 
-    # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
-    def _refresh_token(self, token_data: Union[dict, List[dict]] = [], silent: bool = False) -> bool:
+    def _refresh_token(self, token_data: dict | List[dict], silent: bool = False) -> bool:
         """Refresh Aruba Central API tokens.  Get new set of access/refresh token.
 
         This method performs the actual refresh API call (via pycentral).
 
         Args:
-            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+            token_data (dict | List[dict]): Dict or list of dicts, where each dict is a
                 pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
                 each pair in order.  Stops once a refresh is successful.  Defaults to [].
             silent (bool, optional): Setting to True disables spinner. Defaults to False.
@@ -824,15 +852,13 @@ class Session():
         token_data = utils.listify(token_data)
         token = None
         if not silent:
-            spin = self.spinner
-            spin.start("Attempting to Refresh Tokens")
+            self.spinner.start("Attempting to Refresh Tokens")
         for idx, t in enumerate(token_data):
             try:
                 if idx == 1:
                     if not silent:
-                        spin.fail()
-                        spin.text = spin.text + " retry"
-                        spin.start()
+                        self.spinner.fail()
+                        self.spinner.start(f"{self.spinner.status} [bright_red blink]retry[/]")
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
@@ -844,7 +870,7 @@ class Session():
                     auth.storeToken(token)
                     auth.central_info["token"] = token
                     if not silent:
-                        spin.stop()
+                        self.spinner.stop()
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
@@ -852,9 +878,9 @@ class Session():
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
             if not silent:
-                spin.succeed()
+                self.spinner.succeed()
         elif not silent:
-            spin.fail()
+            self.spinner.fail()
 
         return token is not None
 
