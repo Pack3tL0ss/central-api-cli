@@ -8,22 +8,23 @@ import pendulum
 from pathlib import Path
 
 
-TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log"]
+TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log", "date-string"]
 
 class DateTime():
     """DateTime object with a number of timestamp to string converters for various representations used by the CLI.
     """
-    def __init__(self, epoch: int | float, format: TimeFormat = "day-datetime", tz: str = "local", pad_hour: bool = False, round_to_minute: bool = False,) -> None:
+    def __init__(self, timestamp: int | float | str, format: TimeFormat = "day-datetime", tz: str = "local", pad_hour: bool = False, round_to_minute: bool = False,) -> None:
         """DateTime constructor.
 
         Args:
-            epoch (int | float): Epoch timestamp.
+            timestamp (int | float): Epoch timestamp, int representing duration in seconds or iso formatted date string.
             format (TimeFormat, optional): Format assigned to the pretty attribute. Defaults to "day-datetime".
             tz (str, optional): TimeZone of the timestamp. Defaults to "local".
             pad_hour (bool, optional): If True mdyt and log formats will zero pad the hour. Defaults to False.
             round_to_minute (bool, optional): If True durwords-short will strip the seconds and round to the nearest minute. Defaults to False.
         """
-        self.epoch = self.normalize_epoch(epoch)
+        self.original = timestamp
+        self.ts = self.normalize_epoch(timestamp)
         self.tz = tz
         self.pad_hour = pad_hour
         self.round_to_minute = round_to_minute
@@ -33,39 +34,43 @@ class DateTime():
         return self.pretty
 
     def __bool__(self):
-        return bool(self.epoch and self.epoch > 0)
+        return bool(self.ts and self.ts > 0)
 
     def __len__(self) -> int:
-        return len(self.epoch)
+        return len(self.ts)
 
     def __lt__(self, other) -> bool:
-        return True if self.epoch is None else bool(self.epoch < other)
+        return True if self.ts is None else bool(self.ts < other)
 
     def __le__(self, other) -> bool:
-        return False if self.epoch is None else bool(self.epoch <= other)
+        return False if self.ts is None else bool(self.ts <= other)
 
     def __eq__(self, other) -> bool:
-        return False if self.epoch is None else bool(self.epoch == other)
+        return False if self.ts is None else bool(self.ts == other)
 
     def __gt__(self, other) -> bool:
-        return False if self.epoch is None else bool(self.epoch > other)
+        return False if self.ts is None else bool(self.ts > other)
 
     def __ge__(self, other) -> bool:
-        return False if self.epoch is None else bool(self.epoch >= other)
+        return False if self.ts is None else bool(self.ts >= other)
 
-    def normalize_epoch(self, epoch: int | float) -> int | float:
-        """normalize timestamp/epoch to seconds
+    def normalize_epoch(self, timestamp: int | float | str) -> int | float:
+        """Normalize timestamp/epoch or iso date str to seconds.
 
         Args:
-            epoch (int | float): timestamp/epoch is seconds or milliseconds
+            timestamp (int | float | str): timestamp/epoch is seconds or milliseconds
+                or iso date string
 
         Returns:
             int | float: timestamp/epoch in seconds
         """
-        if str(epoch).isdigit() and len(str(int(epoch))) > 10:
-            epoch = epoch / 1000
+        if isinstance(timestamp, str):
+            return pendulum.parse(timestamp).timestamp()
 
-        return epoch if not str(epoch).endswith(".0") else int(epoch)
+        if str(timestamp).isdigit() and len(str(int(timestamp))) > 10:
+            timestamp = timestamp / 1000
+
+        return timestamp if not str(timestamp).endswith(".0") else int(timestamp)
 
     @property
     def day_datetime(self) -> str:
@@ -74,7 +79,7 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Thu, May 7, 2020 3:49 AM'
         """
-        return pendulum.from_timestamp(self.epoch, tz=self.tz).to_day_datetime_string()
+        return pendulum.from_timestamp(self.ts, tz=self.tz).to_day_datetime_string()
 
     @property
     def durwords(self) -> str:
@@ -83,7 +88,7 @@ class DateTime():
         Returns:
             str: Duration as string in format: '2 weeks 1 day 1 hour 21 minutes 2 seconds'
         """
-        return pendulum.duration(seconds=int(self.epoch)).in_words()
+        return pendulum.duration(seconds=int(self.ts)).in_words()
 
     @property
     def durwords_short(self) -> str:
@@ -94,10 +99,10 @@ class DateTime():
         Returns:
             str: Duration as string in format: '2w 1d 1h 21m 2s' (without seconds if round_to_minute = True)
         """
-        if not self.epoch:
+        if not self.ts:
             return ""
 
-        _words = pendulum.duration(seconds=int(self.epoch)).in_words()
+        _words = pendulum.duration(seconds=int(self.ts)).in_words()
         value_pairs = [(int(_words.split()[idx]), _words.split()[idx + 1])  for idx in range(0, len(_words.split()), 2)]
         words, minute = "", None
         for value, word in value_pairs:
@@ -120,7 +125,7 @@ class DateTime():
         Returns:
             str: The difference between now and the timestamp in the format: '47 minutes ago'.
         """
-        return "" if self.epoch is None else pendulum.from_timestamp(self.epoch, tz=self.tz).diff_for_humans()
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).diff_for_humans()
 
     @property
     def mdyt(self) -> str:
@@ -131,7 +136,7 @@ class DateTime():
         Returns:
             str: Date as string in format: 'May 7, 2020 3:49:24 AM' or 'May 7, 2020 03:49:24 AM' if pad_hour=True
         """
-        return pendulum.from_timestamp(self.epoch, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def log(self) -> str:
@@ -142,13 +147,22 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Jan 08 7:59:00 PM' or 'Jan 08 07:59:00 PM' if pad_hour=True
         """
-        if isinstance(self.epoch, str):
+        if isinstance(self.ts, str):
             try:
-                self.epoch = float(self.epoch)
+                self.ts = float(self.ts)
             except TypeError:
-                return self.epoch
+                return self.ts
 
-        return pendulum.from_timestamp(self.epoch, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+
+    @property
+    def date_string(self) -> str:
+        """Render date as human string like 'Dec 10, 2019'.
+
+        Returns:
+            str: Date as string in format: 'Dec 10, 2019'
+        """
+        return pendulum.from_timestamp(self.ts, tz=self.tz).to_formatted_date_string()
 
 
 class Encoder(JSONEncoder):
