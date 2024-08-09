@@ -38,7 +38,7 @@ class ShowFirmwareKwags(str, Enum):
 
 @app.command()
 def device(
-    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_gw_switch_completion, show_default=False,),
     dev_type: FirmwareDeviceType = typer.Option(None, help="Show firmware by device type", show_default=False,),
     do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON",),
     do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML",),
@@ -62,7 +62,7 @@ def device(
     API endpoint treats them all the same and returns all switches.
     """
     if device:
-        devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in device]
+        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch"], conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, (dev.serial if dev.type != "ap" else dev.swack_id,)) for dev in devs]
         if dev_type:
             log.warning(
