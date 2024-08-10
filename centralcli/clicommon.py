@@ -38,6 +38,7 @@ TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw"
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 console = Console(emoji=False)
 err_console = Console(emoji=False, stderr=True)
+cap_console = Console(stderr=True)
 
 
 class CLICommon:
@@ -458,9 +459,13 @@ class CLICommon:
 
         if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
             print(caption)
+        elif caption and tablefmt != "rich":
+            e_con = Console(stderr=True)
+            e_con.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
             self.write_file(outfile, outdata.file)
+
 
     def display_results(
         self,
