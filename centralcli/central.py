@@ -1688,8 +1688,8 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_dhcp_server(self, serial_num: str) -> Response:
-        """Get DHCP Server details from Gateway.
+    async def get_dhcp_pools(self, serial_num: str) -> Response:
+        """Gateway DHCP Pools details.
 
         Args:
             serial_num (str): Serial number of mobility controller to be queried
@@ -1697,8 +1697,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        gw_path = "mobility_controllers" if config.is_cop else "gateways"
-        url = f"/monitoring/v1/{gw_path}/{serial_num}/dhcp_servers"
+        url = f"/monitoring/v1/gateways/{serial_num}/dhcp_pools"
 
         return await self.get(url)
 
@@ -4852,6 +4851,7 @@ class CentralApi(Session):
     async def get_subscriptions(
         self,
         license_type: str = None,
+        device_type: Literal["ap", "gw", "switch"] = None,
         offset: int = 0,
         limit: int = 1000,  # Doesn't appear to have max, allowed 10k limit in swagger
     ) -> Response:
@@ -4859,6 +4859,7 @@ class CentralApi(Session):
 
         Args:
             license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing types as well
+            device_type (str, optional): Filter by device type ('ap', 'gw', or 'switch')
             offset (int, optional): offset or page number Defaults to 0.
             limit (int, optional): Number of subscriptions to get Defaults to 100.
 
@@ -4866,9 +4867,17 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/subscriptions"
+        if device_type:
+            device_type = constants.lib_to_api(device_type, "licensing")
+            device_type = device_type if not hasattr(device_type, "value") else device_type.value
+        if license_type:
+            if hasattr(license_type, "value"):
+                license_type = license_type.value
+            license_type = license_type.replace("-", " ").replace(" ", "_").upper()
 
         params = {
             'license_type': license_type,
+            'device_type': device_type,
             'offset': offset,
             'limit': limit
         }
