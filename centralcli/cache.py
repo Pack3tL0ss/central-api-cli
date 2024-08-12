@@ -1901,7 +1901,7 @@ class Cache:
 
                         if not isinstance(qry, str):
                             raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
-                        if not utils.isserial(qry):
+                        if not utils.is_serial(qry):
                             raise ValueError("Provided str does not appear to be a serial number.")
                         else:
                             doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
@@ -1997,7 +1997,7 @@ class Cache:
 
                     if not isinstance(qry, str):
                         raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
-                    if not utils.isserial(qry):
+                    if not utils.is_serial(qry):
                         raise ValueError("Provided str does not appear to be a serial number.")
                     else:
                         match = self.InvDB.get((self.Q.serial == qry))
@@ -3140,7 +3140,7 @@ class Cache:
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
                 if not match:
                     print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Client Cache")
-                    asyncio.run(self.update_client_db("wireless"))  # on demand update only for WLAN as kick only applies to WLAN currently
+                    asyncio.run(self.update_client_db("wireless"))  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
 
             if match:
                 match = [models.Client(**c) for c in match]
@@ -3389,7 +3389,7 @@ class CacheAttributes:
 
 class CacheDetails:
     def __init__(self, cache = Cache):
-        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devicesv2, cache_update_func=cache.update_dev_db)
+        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.update_dev_db)
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.update_site_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
