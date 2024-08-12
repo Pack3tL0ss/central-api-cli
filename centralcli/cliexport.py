@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import typer
-from typing import Annotated, Optional
 from rich import print
 from rich.console import Console
 

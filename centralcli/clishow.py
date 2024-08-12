@@ -15,7 +15,7 @@ from pathlib import Path
 from rich import print
 from rich.console import Console
 from copy import deepcopy
-from pendulum import Duration
+
 
 try:
     import psutil
