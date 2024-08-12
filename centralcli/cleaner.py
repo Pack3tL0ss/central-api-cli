@@ -123,12 +123,11 @@ def _serial_to_name(sernum: str | None) -> str | None:
         return sernum
     # TODO circular import if placed at top review import logic
     from centralcli import cache
-    if not (
-        len(sernum) in (9, 10) and all([s.isalpha() for s in sernum[0:2]]) and all([s.isupper() for s in sernum.split()])
-    ):
+
+    if not utils.is_serial(sernum):
         return sernum
 
-    match = cache.get_dev_identifier(sernum, retry=False, silent=True)
+    match = cache.get_dev_identifier(sernum, retry=False, silent=True, exit_on_fail=False)
     if not match:
         return sernum
 
@@ -200,6 +199,7 @@ _short_value = {
     "lease_start_ts": lambda x: DateTime(x, "log"),
     "lease_end_ts": lambda x: DateTime(x, "log"),
     "create_date": lambda x: DateTime(x, "date-string"),
+    "created_at": lambda x: DateTime(x, "day-datetime"),  # show portals
     "acknowledged_timestamp": lambda x: DateTime(x, "log"),
     "lease_time": lambda x: DateTime(x, "durwords"),
     "lease_time_left": lambda x: DateTime(x, "durwords-short"),
@@ -557,24 +557,20 @@ def _client_concat_associated_dev(
         "swarm_id",
     ]
 
-    # FIXME get_dev_identifier can fail if client is connected to device that is not in the cache.
-    # even with a cache update.  doing show all is fine, but update cache for whatever reason with this method
-    # is causing some kind of SSL error, which results in cache lookup failure.
-    # silent=True, retry=False, resolves.  Would need no_match OK as get_dev_identifier fails if no match.
     dev, _gw = "", ""
     if data.get("associated_device"):
-        dev = cache.get_dev_identifier(data["associated_device"])
+        dev = cache.get_dev_identifier(data["associated_device"], retry=False, exit_on_fail=False)
 
     if data.get("gateway_serial"):
-        _gw = cache.get_dev_identifier(data["gateway_serial"])
+        _gw = cache.get_dev_identifier(data["gateway_serial"], retry=False, exit_on_fail=True)
         _gateway = {
-            "name": _gw.name,
+            "name": None if not _gw else _gw.name,
             "serial": data.get("gateway_serial", ""),
         }
         if verbose:
             data["gateway"] = _unlist(strip_no_value([_gateway]))
         else:
-            data["gateway"] = _gw.name or data["gateway_serial"]
+            data["gateway"] = None if not _gw else _gw.name or data["gateway_serial"]
     _connected = {
         "name": data.get("associated_device") if not hasattr(dev, "name") else dev.name,
         "type": data.get("connected_device_type"),
@@ -582,9 +578,8 @@ def _client_concat_associated_dev(
         "mac": data.get("associated_device_mac"),
         "interface": data.get("interface_port"),
         "interface mac": data.get("interface_mac"),
-        # "group": data.get("group_name"),
-        # "site": data.get("site"),
     }
+    data["connected device"] = _unlist(strip_no_value([_connected])) if verbose else f"{_connected['name']}"
 
     # collapse radio details into sub dict
     _radio = {}
@@ -618,9 +613,6 @@ def _client_concat_associated_dev(
 
         strip_keys += ["client_category", "os_type", "manufacturer"]
 
-    # for key in strip_keys:
-    #     if key in data:
-    #         del data[key]
     data = {k: v for k, v in data.items() if k not in strip_keys}
 
     if _radio:
@@ -630,29 +622,6 @@ def _client_concat_associated_dev(
     if _fingerprint:
         data["fingerprint"] = _unlist(strip_no_value([_fingerprint]))
 
-    if verbose:
-        data["connected device"] = _unlist(strip_no_value([_connected]))
-    else:
-        # More work than is prob warranted by if the device name includes the type, and the adjacent characters are
-        # not alpha then we don't append the type.  So an ap with a name of zrm-655-ap will not have (AP) appended
-        # but zrm-655 would have it appended
-        data["connected device"] = f"{_connected['name']}"
-        add_type = False
-        if _connected['type'].lower() in _connected['name'].lower():
-            t: str = _connected['type'].lower()
-            n: str = _connected['name'].lower()
-            for idx in set([n.find(t), n.rfind(t)]):
-                _start = idx
-                _end = _start + len(t)
-                _prev = None if _start == 0 else _start - 1
-                _next = None if _end + 1 >= len(n) else _end + 1
-                if (_prev and n[_prev].isalpha()) or (_next and n[_next].isalpha()):
-                    add_type = True
-        else:
-            add_type = True
-
-        if add_type:
-            data["connected device"] = f"{data['connected device']} ({_connected['type']})"
 
     return data
 
