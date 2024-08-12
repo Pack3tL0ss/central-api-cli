@@ -151,7 +151,7 @@ class Utils:
 
 
     @staticmethod
-    def isserial(serial: Union[str, List[str]]) -> bool:
+    def is_serial(serial: Union[str, List[str]]) -> bool:
         """Validate the provided str or list of strings appears to be a serial number.
 
         Serial validation checks that the first 2 characters of the serial are letters,

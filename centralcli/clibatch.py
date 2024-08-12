@@ -386,7 +386,7 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
 
     # accept yaml/json keyed by serial #
     if data and isinstance(data, dict):
-        if utils.isserial(list(data.keys())[0]):
+        if utils.is_serial(list(data.keys())[0]):
             data = [{"serial": k, **v} for k, v in data.items()]
 
     # They can mark items as ignore or retired (True).  Those devices/items are filtered out.

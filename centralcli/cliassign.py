@@ -54,7 +54,7 @@ def license(
     else:
         _msg = f"Assign [bright_green]{license}[/bright_green] to"
         try:
-            _serial_nums = [s if utils.isserial(s) else cli.cache.get_dev_identifier(s).serial for s in serial_nums]
+            _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in serial_nums]
         except Exception:
             _serial_nums = serial_nums
         if len(_serial_nums) > 1:
