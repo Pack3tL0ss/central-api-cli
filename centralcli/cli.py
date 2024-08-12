@@ -801,7 +801,7 @@ def disable(
     if yes or typer.confirm("\nProceed?", abort=True):
         services = [s.name for s in services]
 
-        resp = cli.central.request(cli.central.enable_auto_subscribe, services=services)
+        resp = cli.central.request(cli.central.disable_auto_subscribe, services=services)
         cli.display_results(resp, tablefmt="action")
 
 
