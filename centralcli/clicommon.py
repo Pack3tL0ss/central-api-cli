@@ -13,6 +13,7 @@ import json
 import pkg_resources
 import os
 import pendulum
+from datetime import datetime
 import time
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -38,7 +39,6 @@ TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw"
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 console = Console(emoji=False)
 err_console = Console(emoji=False, stderr=True)
-cap_console = Console(stderr=True)
 
 
 class CLICommon:
@@ -419,7 +419,7 @@ class CLICommon:
         if not data:
             log.warning(f"No data passed to _display_output {typer.unstyle(render.rich_capture(title))} {typer.unstyle(render.rich_capture(caption))}")
             return
-
+        cap_console = Console(stderr=True)
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
@@ -457,11 +457,10 @@ class CLICommon:
 
         typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-        if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
+        if "Limit:" not in outdata and caption is not None and cleaner is not None and cleaner.__name__ != "parse_caas_response":
             print(caption)
         elif caption and tablefmt != "rich":
-            e_con = Console(stderr=True)
-            e_con.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
+            cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
             self.write_file(outfile, outdata.file)
@@ -472,7 +471,7 @@ class CLICommon:
         resp: Union[Response, List[Response]] = None,
         data: Union[List[dict], List[str], dict, None] = None,
         tablefmt: TableFormat = "rich",
-        title: str = None,
+        title: str | List[str] = None,
         caption: str | List[str] = None,
         pager: bool = False,
         outfile: Path = None,
@@ -499,8 +498,9 @@ class CLICommon:
                 Where "raw" is unformatted raw response and "action" is formatted for POST|PATCH etc.
                 where the result is a simple success/error.
                 clean bypasses all formatters.
-            title: (str, optional): Title of output table.
-                Only applies to "rich" tablefmt. Defaults to None.
+            title: (str | List[str], optional): Title of output table.
+                List[str] is allowed if tablefmt is not rich, list should match the # of Responses
+                Defaults to None.
             caption: (str | List[str], optional): Caption displayed at bottom of table.
                 Only applies to "rich" tablefmt. Defaults to None.
             pager (bool, optional): Page Output / or not. Defaults to True.
@@ -556,12 +556,13 @@ class CLICommon:
                 fg = "bright_green" if r else "red"
                 conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
                 if any(conditions):
-                    _url = r.url if not hasattr(r.url, "path") else r.url.path
-                    m_color = m_colors.get(r.method, "reset")
-                    print(
-                        f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
-                        f"[cyan]{_url}[/cyan]]\n [{fg}]Response[reset]:"
-                    )
+                    if isinstance(title, list) and len(title) == len(resp):
+                        print(title[idx])
+                    else:
+                        _url = r.url if not hasattr(r.url, "path") else r.url.path
+                        m_color = m_colors.get(r.method, "reset")
+                        print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
+                        print(f" [{fg}]Response[reset]:")
 
                 if self.raw_out:
                     tablefmt = "raw"
@@ -706,6 +707,38 @@ class CLICommon:
             self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
 
         return start
+
+    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
+        if end and past:
+            log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
+            end = None
+
+        if start and past:
+            log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
+
+        if past:
+            start = self.past_to_start(past=past)
+
+        if start is None:
+            return start, end
+
+        if not hasattr(start, "timezone"):
+            start = pendulum.from_timestamp(start.timestamp(), tz="UTC")
+        if end is None:
+            _end = pendulum.now(tz=start.timezone)
+        else:
+            _end = end if hasattr(end, "timezone") else pendulum.from_timestamp(end.timestamp(), tz="UTC")
+
+        delta = _end - start
+
+        if delta.days > max_days:
+            if end:
+                self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
+            else:
+                log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
+                return self.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
+
+        return start, _end
 
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
