@@ -35,22 +35,18 @@ app.add_typer(clidelfirmware.app, name="firmware")
 
 @app.command(short_help="Delete a certificate")
 def certificate(
-    name: str = typer.Argument(..., ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
+    name: str = typer.Argument(..., show_default=False,),
+    yes: bool = cli.options.yes,
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
     default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",),
 ) -> None:
-    yes = yes_ if yes_ else yes
-    confirm_1 = typer.style("Please Confirm:", fg="cyan")
-    confirm_2 = typer.style("Delete", fg="bright_red")
-    confirm_3 = typer.style(f"certificate {name}", fg="cyan")
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}"):
+    print(f"[bright_red]Delete[/] certificate [cyan]{name}[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.delete_certificate, name)
-        typer.secho(str(resp), fg="green" if resp else "red")
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Delete sites")
