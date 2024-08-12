@@ -1191,15 +1191,21 @@ def cache_(
 ):
     args = ('all',) if not args else args
     for arg in args:
+        caption = ""
         cache_out = getattr(cli.cache, arg)
+        arg = arg if not hasattr(arg, "value") else arg.value
 
         # sort devices so output matches cencli show all
-        if isinstance(arg, str) and arg == "all":
+        if  arg == "all":
             if "devices" in cache_out:
                 cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
-        elif arg.value == "devices":
-            cache_out = sorted(cache_out, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
+        all_keys = set([key for s in cache_out for key in s.keys()])
+        morphed_keys = [k for k in all_keys if k not in cache_out[0].keys()]
+        if morphed_keys:
+            caption = f"Some keys from cache were modified: original keys: [cyan]{'[/], [cyan]'.join(morphed_keys)}[/]"
+
+        caption = [f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]", caption]
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
@@ -1211,6 +1217,7 @@ def cache_(
             reverse=reverse,
             output_by_key=None,
             stash=False,
+            caption=caption,
         )
 
 
@@ -2497,13 +2504,10 @@ def alerts(
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category.", show_default=False,),
     ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
     alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
-    # start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    # end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    # past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h Default: 24 hours", show_default=False,),
     start: datetime = cli.options.start,
     end: datetime = cli.options.end,
     past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
+    sort_by: SortAlertOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2540,9 +2544,6 @@ def alerts(
             time_words = f"[cyan]Alerts past {start.diff_for_humans().removesuffix(' before')}[/]"
         else:
             time_words = f"[cyan]Alerts time-range: {start.diff_for_humans(end).removesuffix(' before')}, from {start.in_tz('local').to_datetime_string()} to {end.in_tz('local').to_datetime_string()}[/]"
-
-        # delta: Duration = end - start
-        # time_words = f"[cyan]Alerts past {delta.in_words()}[/]"
 
     kwargs = {
         "group": group,

@@ -37,11 +37,9 @@ app.add_typer(clidelfirmware.app, name="firmware")
 def certificate(
     name: str = typer.Argument(..., show_default=False,),
     yes: bool = cli.options.yes,
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     print(f"[bright_red]Delete[/] certificate [cyan]{name}[/]")
     if yes or typer.confirm("\nProceed?", abort=True):
@@ -56,57 +54,39 @@ def site(
         help="Site(s) to delete (can provide more than one).",
         autocompletion=cli.cache.site_completion,
     ),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
-    sites = [cli.cache.get_site_identifier(s) for s in sites]
+    sites: List[CentralObject] = [cli.cache.get_site_identifier(s) for s in sites]
 
-    _del_msg = [
-        f"  {typer.style(s.name, fg='reset')}" for s in sites
-    ]
+    _del_msg = [f"  {s.summary_text}" for s in sites]
     if len(_del_msg) > 7:
         _del_msg = [*_del_msg[0:3], "  ...", *_del_msg[-3:]]
     _del_msg = "\n".join(_del_msg)
-    confirm_1 = typer.style("About to", fg="cyan")
-    confirm_2 = typer.style("Delete:", fg="bright_red")
-    confirm_3 = f'{typer.style("Confirm", fg="cyan")} {typer.style("delete", fg="red")}'
-    confirm_3 = f'{confirm_3} {typer.style(f"{len(sites)} sites?", fg="cyan")}'
-    _msg = f"{confirm_1} {confirm_2}\n{_del_msg}\n{confirm_3}"
+    print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")
 
-    if yes or typer.confirm(_msg, abort=True):
+    if yes or typer.confirm("\nProceed?", abort=True):
         del_list = [s.id for s in sites]
         resp = cli.central.request(cli.central.delete_site, del_list)
         cli.display_results(resp, tablefmt="action")
-        if resp:
-            cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
-            if len(cache_del_res) != len(del_list):
-                log.warning(
-                    f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
-                    f"but we tried to delete {len(del_list)}",
-                    show=True
-                )
+        cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
+
 
 
 @app.command(help="Delete a label")
 def label(
-    label: str = typer.Argument(..., ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    label: str = typer.Argument(..., show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     label = cli.cache.get_label_identifier(label)
     _msg = "Deleting" if yes else "Delete"
     print(f"{_msg} label [cyan]{label.name}[/]")
-    if yes or typer.confirm("Proceed?"):
+    if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.delete_label, label.id)
         cli.display_results(resp, tablefmt="action")
         if resp.ok:
@@ -120,12 +100,10 @@ def group(
         help="Group to delete (can provide more than one).",
         autocompletion=cli.cache.group_completion
     ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     groups = [cli.cache.get_group_identifier(g) for g in groups]
     reqs = [cli.central.BatchRequest(cli.central.delete_group, (g.name, )) for g in groups]

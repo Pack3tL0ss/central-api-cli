@@ -71,16 +71,10 @@ def device(
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
     license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),  # type: ignore
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Add a Device to Aruba Central.
 
@@ -98,18 +92,16 @@ def device(
 
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            dev = cli.cache.get_dev_identifier(name, silent=True)
+            dev = cli.cache.get_dev_identifier(name, silent=True, exit_on_fail=False)
             if dev:  # allow user to put dev name for rare case where dev is in cache but not in inventory  # TESTME
                 kwargs["serial"] = dev.serial
                 kwargs["mac"] = dev.mac
             else:
-                print(f"[bright_red]Error[/]: {name} is invalid")
-                raise typer.Exit(1)
+                cli.exit(f"[bright_red]Error[/]: {name} is invalid")
         else:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
-    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
@@ -123,10 +115,6 @@ def device(
         _group = cli.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
-    # if "site" in kwargs and kwargs["site"]:
-    #     _site = cli.cache.get_site_identifier(kwargs["site"])
-    #     kwargs["site"] = _site.id
-    #     _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
@@ -147,12 +135,6 @@ def device(
 @app.command(short_help="Add a group", help="Add a group")
 def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
-    # group_password: str = typer.Argument(
-    #     None,
-    #     show_default=False,
-    #     help="Group password is required. You will be prompted for password if not provided.",
-    #     autocompletion=lambda incomplete: incomplete
-    # ),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
     gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: branch][/]", show_default=False,),
@@ -170,28 +152,11 @@ def group(
     gw: bool = typer.Option(None, "--gw", help="Allow gateways in group."),
     mon_only_sw: bool = typer.Option(False, "--mon-only-sw", help="Monitor Only for ArubaOS-SW"),
     mon_only_cx: bool = typer.Option(False, "--mon-only-cx", help="Monitor Only for ArubaOS-CX"),
-    # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
-    # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        callback=cli.verbose_debug_callback,
-        hidden=True,
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    # if not group_password:
-    #     group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
-
-    # else:
-    #     _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
-
     allowed_types = []
     if ap:
         allowed_types += ["ap"]
@@ -207,19 +172,13 @@ def group(
 
     # -- // Error on combinations that are not allowed by API \\ --
     if not aos10 and microbranch:
-        print(
-            f":x: [bright_red]Microbranch is only valid if group is configured as AOS10 group ({color('--aos10')})."
-        )
-        raise typer.Exit(1)
+        cli.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
     if (mon_only_sw or mon_only_cx) and wired_tg:
-        print(":x: [bright_red]Error: Monitor only is not valid for template group.")
-        raise typer.Exit(1)
+        cli.exit("[cyanMonitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
     if mon_only_sw and "sw" not in allowed_types or mon_only_cx and "cx" not in allowed_types:
-        print(":x: [bright_red]Error: Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
-        raise typer.Exit(1)
+        cli.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
-        print(":x: [bright_red]WLAN role for Gateways requires the group be configured as AOS10 via --aos10 option.")
-        raise typer.Exit(1)
+        cli.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
     if all([x is None for x in [ap, sw, cx, gw]]):
         print("[green]No Allowed devices provided. Allowing all device types.")
         print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
@@ -240,9 +199,9 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]True[/bright_green]"
     if mon_only_cx:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
-    print(f"{_msg}\n")
+    print(f"{_msg}")
 
-    if yes or typer.confirm("Proceed?"):
+    if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(
             cli.central.create_group,
             group,
@@ -254,13 +213,24 @@ def group(
             gw_role=gw_role,
             monitor_only_sw=mon_only_sw,
         )
-        cli.display_results(resp, tablefmt="action")
-        if resp:
-            asyncio.run(
-                cli.cache.update_group_db({'name': group, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
-            )
-        else:
-            raise typer.Exit(1)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        # prep data for cache  # TODO update fields once group cache is updated with cleaned keys (no camel case)
+        data={
+            'name': group,
+            'AOSVersion': 'AOS8' if not aos10 else 'AOS10',
+            "AllowedDevTypes": allowed_types,
+            "ApNetworkRole": "Standard" if not microbranch else "Microbranch",
+            "Architecture": 'Instant' if not aos10 else 'AOS10',
+            "GwNetworkRole": gw_role,
+            'template group': {
+                'Wired': wired_tg,
+                'Wireless': wlan_tg
+            }
+        }
+        cli.central.request(
+            cli.cache.update_group_db,
+            data=data
+        )
 
 
 # TODO autocompletion
@@ -287,12 +257,10 @@ def wlan(
         show_default=False,
     ),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
@@ -339,18 +307,10 @@ def site(
     country: str = typer.Argument(None, show_default=False,),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False,),
     lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     # These conversions just make the fields match what is used if done via GUI
     if state and len(state) == 2:
@@ -367,17 +327,15 @@ def site(
         "latitude": lat,
         "longitude": lon
     }
-    address_fields = {k: v for k, v in kwargs.items() if v}
+    address_fields = {k: v.rstrip(",") for k, v in kwargs.items() if v}
 
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
-        cli.display_results(resp)
-        if resp:
-            asyncio.run(cli.cache.update_site_db(resp.raw))
-        else:
-            raise typer.Exit(1)
+        cli.display_results(resp, exit_on_fail=True)
+        cli.central.request(cli.cache.update_site_db, data=resp.raw)
+
 
 
 # TODO allow more than one label and use batch_request
