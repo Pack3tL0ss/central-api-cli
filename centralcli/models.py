@@ -64,16 +64,42 @@ class Devices(BaseModel):
     gateways: Optional[List[Device]] = Field([])
 
 class Site(BaseModel):
-    name: str
-    id: int
-    address: str
-    city: str
-    state: str
-    zipcode: str    # str because zip+4 with hyphen may be possible
-    country: str
-    longitude: str  # could do float here
-    latitude: str   # could do float here
-    associated_devices: int  # field in cache actually has space "associated devices"
+    name: str = Field()
+    id: int = Field()
+    address: Optional[str] = Field(None)
+    city: Optional[str] = Field(None)
+    state: Optional[str] = Field(None)
+    zipcode: Optional[str] = Field(None)  # str because zip+4 with hyphen may be possible
+    country: Optional[str] = Field(None)
+    longitude: Optional[float] = Field(None)
+    latitude: Optional[float] = Field(None)
+    devices: Optional[int] = Field(0) # field in cache actually has space "associated devices"
+
+class _Sites(BaseModel):
+    sites: List[Site]
+
+class Sites(_Sites):
+    def __init__(self, sites: List[dict]):
+        sites = self.prep_for_cache(sites)
+        super().__init__(sites=sites)
+
+    def prep_for_cache(self, data: List[dict]):
+        strip_keys = ["site_details", "associated devices", "associated_device_count"]
+        return [
+            {
+                **{
+                    k.removeprefix("site_"): v for k, v in s.items() if k not in strip_keys
+                },
+                **s.get("site_details", {}),
+                "devices": s.get("associated_device_count", s.get("associated devices", 0))
+            } for s in data
+        ]
+
+    @property
+    def by_id(self) -> Dict[str, Dict[str, Any]]:
+        return {s.id: s.dict() for s in self.sites}
+
+
 
 class Template_Group(BaseModel):
     Wired: bool

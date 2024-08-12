@@ -380,6 +380,10 @@ class Cache:
         return self.SiteDB.all()
 
     @property
+    def sites_by_id(self) -> list:
+        return {s["id"]: s for s in self.sites}
+
+    @property
     def groups(self) -> list:
         return self.GroupDB.all()
 
@@ -2035,15 +2039,21 @@ class Cache:
             return resp
 
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
-        # cli.cache.SiteDB.search(cli.cache.Q.id == del_list[0])[0].doc_id
         if data:
             data = utils.listify(data)
             if not remove:
-                data = [{k.replace("site_", ""): v for k, v in d.items()} for d in data]
-                upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in data]
-                upd = [item for in_list in upd for item in in_list]
-                return upd
-                # return self.SiteDB.insert_multiple(data)
+                data = models.Sites(sites=data).by_id
+                combined_data = {**self.sites_by_id, **data}
+                self.SiteDB.truncate()
+                update_res = self.SiteDB.insert_multiple(combined_data.values())
+                if len(update_res) != len(combined_data):
+                    log.error(
+                        f"SiteDB Cache update failure: Attempted to Truncate/re-populate SiteDB with {len(combined_data)} sites ({len(data)} added/updated), TinyDB responded with {len(update_res)} doc_ids.",
+                        show=True,
+                        caption=True,
+                        log=True
+                    )
+                return
             else:
                 doc_ids = []
                 for qry in data:
@@ -2056,21 +2066,25 @@ class Cache:
                             raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
                         q = list(qry.keys())[0]
                         doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
-                return self.SiteDB.remove(doc_ids=doc_ids)
+                if len(data) != len(doc_ids):
+                    log.warning(f"Site DB cache update_site_db provided {len(data)} records to remove but found only {len(doc_ids)} matching sites.  Could be normal if cache was outdated.", log=True)
+                cache_res = self.SiteDB.remove(doc_ids=doc_ids)
+                if len(cache_res) != len(doc_ids):
+                    log.error(f"Site DB cache removal returned {len(cache_res)} expected {len(doc_ids)}", caption=True, log=True)
+
         else:  # update site cache
             resp = await self.central.get_all_sites()
             if resp.ok:
-                resp.output = utils.listify(resp.output) if resp.output else []
-                resp.output = [{k.replace("site_", ""): v for k, v in d.items()} for d in resp.output]
+                sites = models.Sites(sites=resp.raw["sites"])
+                resp.output = sites.dict()["sites"]
+
                 self.responses.site = resp
-                # TODO time this to see which is more efficient
-                # upd = [self.SiteDB.upsert(site, cond=self.Q.id == site.get("id")) for site in site_resp.output]
-                # upd = [item for in_list in upd for item in in_list]
                 self.updated.append(self.central.get_all_sites)
+
                 self.SiteDB.truncate()
                 update_res = self.SiteDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error(f"Tiny DB returned an error during site db update {update_res}", show=True)
+                if len(update_res) != len(resp.output):
+                    log.error(f"Site cache truncate/re-populate expected {len(resp.output)} TinyDB returned {len(update_res)} doc_ids", show=True, caption=True, log=True)
             return resp
 
     async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
