@@ -21,22 +21,17 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.clioptions import CLIOptions
 
 app = typer.Typer()
 console = Console(emoji=False)
-opts = CLIOptions()
 
 
 @app.command()
 def configs(
-    yes: Annotated[Optional[bool], typer.Option("-Y", help="Bypass confirmation prompts - Assume Yes")] = False,
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Export configs in mass.
 

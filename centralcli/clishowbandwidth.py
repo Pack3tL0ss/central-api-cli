@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
+
 import typer
 import sys
 from pathlib import Path
 from rich import print
 from datetime import datetime
-import pendulum
 from typing import Literal
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -29,39 +29,6 @@ from centralcli.models import Client
 iden_meta = IdenMetaVars()
 app = typer.Typer()
 tty = utils.tty
-
-
-def _verify_time_range(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
-    if end and past:
-        log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
-        end = None
-
-    if start and past:
-        log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
-
-    if past:
-        start = cli.past_to_start(past=past)
-
-    if start is None:
-        return start, end
-
-    if not hasattr(start, "timezone"):
-        start = pendulum.from_timestamp(start.timestamp(), tz="UTC")
-    if end is None:
-        _end = pendulum.now(tz=start.timezone)
-    else:
-        _end = end if hasattr(end, "timezone") else pendulum.from_timestamp(end.timestamp(), tz="UTC")
-
-    delta = _end - start
-
-    if delta.days > max_days:
-        if end:
-            cli.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
-        else:
-            log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
-            return cli.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
-
-    return start, _end
 
 
 def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", "graph"], title: str, pager: bool = False, outfile: Path = None, cleaner: callable = cleaner.get_gw_uplinks_bandwidth,) -> None:
@@ -87,63 +54,26 @@ def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", 
 @app.command()
 def ap(
     ap: str = typer.Argument(None, help="Show Bandwidth details for a specific AP [grey42]\[default: All APs][/]", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
-    group: str = typer.Option(None, help="Show Bandwidth for APs in a specific group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
-    site: str = typer.Option(None, help="Show Bandwidth for APs in a specific site", metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
-    label: str = typer.Option(None, help="Show Bandwidth for APs with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     swarm: bool = typer.Option(False, "-s", "--swarm", help="Show Bandwidth for the swarm/cluster the provided AP belongs to [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]", show_default=False),
     band: RadioBandOptions = typer.Option(None, help="Show Bandwidth for a specific band [grey42]\[ap must be provided][/]", autocompletion=cli.cache.group_completion, show_default=False),
     ssid: str = typer.Option(None, help="Show Bandwidth for a specifc ssid [grey42]\[ap must be provided][/]", show_default=False),
-    start: datetime = typer.Option(
-        None,
-        "-s", "--start",
-        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    end: datetime = typer.Option(
-        None,
-        "-e", "--end",
-        help="End time of bandwidth details [grey42]\[default: Now][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show AP(s) bandwidth usage graph.
 
@@ -157,7 +87,7 @@ def ap(
     group = None if not group else cli.cache.get_group_identifier(group)
     site = None if not site else cli.cache.get_site_identifier(site)
     label = None if not label else cli.cache.get_label_identifier(label)
-    start, end = _verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
 
@@ -214,56 +144,19 @@ def switch(
     switch: str = typer.Argument(..., help="Switch to show Bandwidth details for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, case_sensitive=False, show_default=False,),
     port: str = typer.Argument("All Ports", help="Show bandwidth for a specific port",),
     uplink: bool = typer.Option(False, "--uplink", help="Show Bandwidth usage for the uplink", show_default=False,),
-    start: datetime = typer.Option(
-        None,
-        "-s", "--start",
-        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    end: datetime = typer.Option(
-        None,
-        "-e", "--end",
-        help="End time of bandwidth details [grey42]\[default: Now][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show Bandwidth usage for a switch or a specific port on a switch.
 
@@ -273,10 +166,9 @@ def switch(
     The larger the time-frame the more unreadable the graph will be.
     """
     # start and end datetime opjects are in UTC
-    # raise NotImplementedError()
     dev = cli.cache.get_dev_identifier(switch, dev_type="switch")
     port = None if port == "All Ports" else port
-    start, end = _verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
 
     title = f"Bandwidth Usage [cyan]{dev.name}[/]"
@@ -302,56 +194,19 @@ def client(
     group: str = typer.Option(None, help="Show Bandwidth for clients connected to devices in a specific group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for clients connected to devices with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
     swarm_or_stack: bool = typer.Option(False, "-s", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.", show_default=False),
-    start: datetime = typer.Option(
-        None,
-        "-s", "--start",
-        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    end: datetime = typer.Option(
-        None,
-        "-e", "--end",
-        help="End time of bandwidth details [grey42]\[default: Now][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show client bandwidth usage graph.
 
@@ -365,7 +220,7 @@ def client(
     group: CentralObject | None = None if not group else cli.cache.get_group_identifier(group)
     label: CentralObject | None = None if not label else cli.cache.get_label_identifier(label)
     client: Client | None = None if not client else cli.cache.get_client_identifier(client, exit_on_fail=True)
-    start, end = _verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
     kwargs = {}
     title = "Bandwidth Usage"
@@ -425,57 +280,20 @@ def client(
 def uplink(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
     uplink_name: UplinkNames = typer.Argument("uplink101", help="[Applies to Gateway] Name of the uplink.  Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names.", show_default=True,),
-    start: datetime = typer.Option(
-        None,
-        "-s", "--start",
-        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    end: datetime = typer.Option(
-        None,
-        "-e", "--end",
-        help="End time of bandwidth details [grey42]\[default: Now][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="[Applies to Gateway] One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show bandwidth usage graph for a switch or gateway uplink
 
@@ -487,7 +305,7 @@ def uplink(
     """
     # start and end datetime opjects are in UTC
     dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"])
-    start, end = _verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
 
@@ -516,56 +334,19 @@ def wlan(
         help="Show bandwidth for the swarm associated with provided AP [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]",
         show_default=False,
     ),
-    start: datetime = typer.Option(
-        None,
-        "-s", "--start",
-        help="Start time of bandwidth details [grey42]\[default: 3 hours ago][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    end: datetime = typer.Option(
-        None,
-        "-e", "--end",
-        help="End time of bandwidth details [grey42]\[default: Now][/]",
-        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y"],
-        show_default=False,
-    ),
-    past: str = typer.Option(None, "-p", "--past", help="Collect bandwidth details for last <past>, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: 3h][/]", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(  # This is only here for help text --raw is stripped in __init__ use cli.raw_out to evaluate
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show bandwidth usage graph for a network/SSID
 
@@ -590,7 +371,7 @@ def wlan(
     if len([v for v in kwargs.values() if v is not None]) > 1:
         cli.exit("You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] parameters")
 
-    start, end = _verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
     resp = cli.central.request(cli.central.get_networks_bandwidth_usage, network, **kwargs)
 
@@ -601,7 +382,7 @@ def wlan(
 @app.callback()
 def callback():
     """
-    Show Gateway Uplink bandwidth usage
+    Show bandwidth usage
     """
     pass
 
