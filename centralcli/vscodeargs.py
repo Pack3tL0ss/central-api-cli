@@ -17,7 +17,7 @@ def vscode_arg_handler():
                     elif vsc_args.startswith("cencli "):
                         vsc_args = vsc_args.replace("cencli ", "")
                     # handle quoted args as single arg `"caas send-cmds \\'service dhcp\\' --device R3v SDBrA"`
-                    vsc_args = vsc_args.replace('"', '\\"')  # vscode double escapes ' but not "
+                    vsc_args = vsc_args.replace('"', '\\"').replace("'", '\\"')  # vscode double escapes ' but not "?? maybe not
                     # replace ~/ notation for home dir with full path
                     if " ~/" in vsc_args:
                         vsc_args = vsc_args.replace(" ~/", f" {Path.home()}/")
