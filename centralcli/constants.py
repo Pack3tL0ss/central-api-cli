@@ -94,8 +94,8 @@ class ShowInventoryArgs(str, Enum):
     ap = "ap"
     gw = "gw"
     vgw = "vgw"
-    sw = "sw"
-    cx = "cx"
+    # sw = "sw"
+    # cx = "cx"
     switch = "switch"
 
 
@@ -104,7 +104,7 @@ class SortStackOptions(str, Enum):
     _id = "id"
     mac = "mac"
     name = "name"
-    split_policy = "split_policy"
+    split_policy = "split-policy"
     status = "status"
     topology = "topology"
 
@@ -202,12 +202,12 @@ STRIP_KEYS = [
 ]
 
 
-class TimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1m", "3m"]
+class TimeRange(str, Enum):  # = Literal["3h", "1d", "1w", "1M", "3M"]
     _3h = "3h"
     _1d = "1d"
     _1w = "1w"
-    _1m = "1m"
-    _3m = "3m"
+    _1m = "1M"
+    _3m = "3M"
 
 
 class BandwidthInterval(str, Enum):  # 5m, 1h, 1d, 1w
@@ -365,7 +365,29 @@ class EnableDisableArgs(str, Enum):
 
 class DhcpArgs(str, Enum):
     clients = "clients"
-    server = "server"
+    pools = "pools"
+
+
+class SortDhcpOptions(str, Enum):
+    pool_name = "pool-name"
+    pool_size = "pool-size"
+    pvid = "pvid"
+    subnet = "subnet"
+    lease_time = "lease-time"
+    free_ip = "free-ip"
+    client_name = "client-name"
+    mac = "mac"
+    ip = "ip"
+    lease_start = "lease-start"
+    lease_end = "lease-end"
+    lease_remaining = "lease-remaining"
+    client_type = "client-type"
+
+
+class SortLabelOptions(str, Enum):
+    devices = "devices"
+    id_ = "id"
+    name = "name"
 
 
 class LicenseTypes(str, Enum):
@@ -449,6 +471,7 @@ class ArgToWhat:
         self.subscription = self.subscriptions = "subscription"
         self.portal = self.portals = "portals"
         self.certs = self.certificates = "certs"
+        self.guests = self.guest = "guests"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -535,7 +558,8 @@ APIMethodType = Literal[
     "firmware",
     "event",
     "tshoot",
-    "inventory"
+    "inventory",
+    "licensing"
 ]
 
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
@@ -609,6 +633,16 @@ class LibToAPI:
             "cx": "switch",
             "sw": "switch",
             "switch": "switch",
+            "gw": "all_controller",
+            "vgw": "vgw"
+        }
+        self.licensing_to_api = {
+            "all": None,
+            "ap": "iap",
+            "cx": "switch",
+            "sw": "switch",
+            "switch": "switch",
+            "controller": "all_controller",
             "gw": "all_controller",
             "vgw": "vgw"
         }
@@ -705,25 +739,15 @@ class ShowHookProxyArgs(str, Enum):
     port = "port"
 
 
-# TODO remove once all refs removed
-class SortOptions(str, Enum):
-    name_asc = "+name"
-    name_des = "-name"
-    mac_asc = "+mac"
-    mac_des = "-mac"
-    serial_asc = "+serial"
-    serial_des = "-serial"
-
-
 class SortWlanOptions(str, Enum):
     ssid = "ssid"
     security = "security"
     type = "type"
     clients = "clients"
     enabled = "enabled"
-    rf_band = "rf_band"
-    mac_auth = "mac_auth"
-    access_type = "access_type"
+    rf_band = "rf-band"
+    mac_auth = "mac-auth"
+    access_type = "access-type"
     group = "group"
 
 
@@ -748,24 +772,24 @@ class SortDevOptions(str, Enum):
     version = "version"
     uptime = "uptime"
     ap = "ap"
-    ap_ip = "ap_ip"
-    ap_serial = "ap_serial"
-    ap_port = "ap_port"
+    ap_ip = "ap-ip"
+    ap_serial = "ap-serial"
+    ap_port = "ap-port"
     switch = "switch"
-    switch_ip = "switch_ip"
-    switch_serial = "switch_serial"
-    switch_port = "switch_port"
-    untagged_vlan = "untagged_vlan"
-    tagged_vlans = "tagged_vlans"
+    switch_ip = "switch-ip"
+    switch_serial = "switch-serial"
+    switch_port = "switch-port"
+    untagged_vlan = "untagged-vlan"
+    tagged_vlans = "tagged-vlans"
     healthy = "healthy"
 
 
 class SortTemplateOptions(str, Enum):
-    device_type = "device_type"
+    device_type = "device-type"
     group = "group"
     model = "model"
     name = "name"
-    template_hash = "template_hash"
+    template_hash = "template-hash"
     version = "version"
 
 
@@ -796,8 +820,8 @@ class SortCertOptions(str, Enum):
     type = "type"
     expiration = "expiration"
     expired = "expired"
-    md5_checksum = "md5_checksum"
-    sha1_checksum = "sha1_checksum"
+    md5_checksum = "md5-checksum"
+    sha1_checksum = "sha1-checksum"
 
 
 class SortRouteOptions(str, Enum):
@@ -808,7 +832,7 @@ class SortRouteOptions(str, Enum):
     flags = "flags"
     metric = "metric"
     best = "best"
-    learn_time = "learn_time"
+    learn_time = "learn-time"
 
 
 class SortOverlayInterfaceOptions(str, Enum):
@@ -839,17 +863,17 @@ class SortSiteOptions(str, Enum):
     state = "state"
     zipcode = "zipcode"
     country = "country"
-    associated_devices = "associated_devices"
+    associated_devices = "associated-devices"
 
 
-class SortGroupOptions(str, Enum):
+class SortGroupOptions(str, Enum):  # TODO send group output through cleaner get rid of camel case
     name = "name"
     AOSVersion = "AOSVersion"
     AllowedDevTypes = "AllowedDevTypes"
     ApNetworkRole = "ApNetworkRole"
     Architecture = "Architecture"
     GwNetworkRole = "GwNetworkRole"
-    template_group = "template_group"
+    template_group = "template-group"
 
 
 class SortVlanOptions(str, Enum):
@@ -862,7 +886,7 @@ class SortVlanOptions(str, Enum):
     jumbo = "jumbo"
     voice = "voice"
     igmp = "igmp"
-    oper_state_reason = "oper_state_reason"
+    oper_state_reason = "oper-state-reason"
 
 
 class SortClientOptions(str, Enum):
@@ -873,10 +897,10 @@ class SortClientOptions(str, Enum):
     role = "role"
     network = "network"
     dot11 = "dot11"
-    connected_device = "connected_device"
+    connected_device = "connected-device"
     site = "site"
     group = "group"
-    last_connected = "last_connected"
+    last_connected = "last-connected"
 
 
 class SortSubscriptionOptions(str, Enum):
@@ -886,17 +910,17 @@ class SortSubscriptionOptions(str, Enum):
     type = "type"
     key = "key"
     network = "network"
-    start_date = "start_date"
-    end_date = "end_date"
+    start_date = "start-date"
+    end_date = "end-date"
 
 
 class SortOspfAreaOptions(str, Enum):
     area = "area"
-    area_type = "area_type"
-    interface_count = "interface_count"
-    spf_run_count = "spf_run_count"
-    default_cost = "default_cost"
-    summary_enable = "summary_enable"
+    area_type = "area-type"
+    interface_count = "interface-count"
+    spf_run_count = "spf-run-count"
+    default_cost = "default-cost"
+    summary_enable = "summary-enable"
 
 
 class SortOspfInterfaceOptions(str, Enum):
@@ -904,44 +928,44 @@ class SortOspfInterfaceOptions(str, Enum):
     area = "area"
     ip = "ip"
     state = "state"
-    oper_state = "oper_state"
+    oper_state = "oper-state"
     type = "type"
     cost = "cost"
     nbrs = "nbrs"
-    DR_rtr_id = "DR_rtr_id"
-    DR_IP = "DR_IP"
-    BDR_rtr_id = "BDR_rtr_id"
-    BDR_IP = "BDR_IP"
+    DR_rtr_id = "DR-rtr-id"
+    DR_IP = "DR-IP"
+    BDR_rtr_id = "BDR-rtr-id"
+    BDR_IP = "BDR-IP"
     auth = "auth"
     priority = "priority"
-    hello_interval = "hello_interval"
-    dead_interval = "dead_interval"
-    rexmt_interval = "rexmt_interval"
+    hello_interval = "hello-interval"
+    dead_interval = "dead-interval"
+    rexmt_interval = "rexmt-interval"
 
 
 class SortOspfNeighborOptions(str, Enum):
-    router_id = "router_id"
+    router_id = "router-id"
     ip = "ip"
     priority = "priority"
-    interface_name = "interface_name"
-    interface_state = "interface_state"
-    neighbor_state = "neighbor_state"
+    interface_name = "interface-name"
+    interface_state = "interface-state"
+    neighbor_state = "neighbor-state"
     area = "area"
     options = "options"
-    dead_timer = "dead_timer"
-    rexmt_timer = "rexmt_timer"
+    dead_timer = "dead-timer"
+    rexmt_timer = "rexmt-timer"
 
 
 class SortOspfDatabaseOptions(str, Enum):
     area = "area"
-    lsa_type = "lsa_type"
-    ls_id = "ls_id"
-    router_id = "router_id"
+    lsa_type = "lsa-type"
+    ls_id = "ls-id"
+    router_id = "router-id"
     age = "age"
-    seq_no = "seq_no"
+    seq_no = "seq-no"
     checksum = "checksum"
-    link_count = "link_count"
-    route_tag = "route_tag"
+    link_count = "link-count"
+    route_tag = "route-tag"
 
 
 class SortTsCmdOptions(str, Enum):
@@ -988,7 +1012,9 @@ class IdenMetaVars:
         self.template = "[TEMPLATE NAME]"
         self.group_many = "[GROUP NAME] ... (multiple allowed)"
         self.site = "[name|site id|address|city|state|zip]"
+        self.site_many = "[name|site id|address|city|state|zip] ... (multiple allowed)"
         self.label = "[LABEL]"
+        self.label_many = "[LABEL] ... (multiple allowed)"
         self.client = "[username|ip|mac]"
         self.dev_words = f"Optional Identifying Attribute: {self.dev}"
         self.generic_dev_types = "[ap|gw|switch]"
@@ -998,6 +1024,7 @@ class IdenMetaVars:
         self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
 
+iden_meta = IdenMetaVars()
 
 class LogSortBy(str, Enum):
     time = "time"
