@@ -23,7 +23,7 @@ class CLIOptions:
         self.outfile = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options")
         self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting")
         self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options")
-        self.yes = typer.Option("-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes")
+        self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes")
         self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
         self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
         self.sort_by = typer.Option(
