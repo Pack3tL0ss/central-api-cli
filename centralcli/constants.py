@@ -1023,6 +1023,7 @@ class IdenMetaVars:
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
         self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
+        self.portal = "[PORTAL_NAME]"
 
 iden_meta = IdenMetaVars()
 
