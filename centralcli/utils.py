@@ -217,12 +217,18 @@ class Utils:
         return data
 
     @staticmethod
-    def get_multiline_input(prompt: str = None, print_func: callable = print,
-                            return_type: str = "str", abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
-        def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
-            prompt = prompt or \
-                "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
-            print_func(prompt, **kwargs)
+    def get_multiline_input(
+        prompt: str = None,
+        return_type: Literal["str", "dict", "list"] = "str",
+        abort_str: str = "exit",
+        **kwargs
+    ) -> List[str] | dict | str:
+        console = Console(emoji=True)
+        exit_prompt_text = "Ctrl-Z -> Enter" if os.name == "nt" else "Ctrl-D on an empty line after content"
+        exit_prompt_text = f"Then hit {exit_prompt_text} to submit.\n Enter '{abort_str}' to abort"
+        def _get_multiline_sub(prompt: str = prompt, **kwargs):
+            prompt = f"{prompt}  {exit_prompt_text}" or f"Enter/Paste your content. {exit_prompt_text}"
+            console.print(prompt, **kwargs)
             contents, line = [], ''
             while line.strip().lower() != abort_str:
                 try:
@@ -232,12 +238,12 @@ class Utils:
                     break
 
             if line.strip().lower() == abort_str:
-                print("Aborted")
-                exit()
+                console.print("[bright_red]Aborted[/]")
+                sys.exit()
 
             return contents
 
-        contents = _get_multiline_sub(**kwargs)
+        contents = _get_multiline_sub(prompt=prompt, **kwargs)
         if return_type:
             if return_type == "dict":
                 for _ in range(1, 3):
@@ -245,10 +251,9 @@ class Utils:
                         contents = json.loads("\n".join(contents))
                         break
                     except Exception as e:
-                        log.exception(f"get_multiline_input: Exception caught {e.__class__}\n{e}")
-                        typer.secho("\n !!! Input appears to be invalid.  Please re-input "
-                                    "or Enter `exit` to exit !!! \n", fg="red")
-                        contents = _get_multiline_sub(**kwargs)
+                        log.exception(f"get_multiline_input: Exception caught {e.__class__.__name__}\n{e}")
+                        console.print("\n :warning:  Input appears to be [bright_red]invalid[/].  Please re-input or Enter [cyan]exit[/] to exit\n")
+                        contents = _get_multiline_sub(prompt=prompt, **kwargs)
             elif return_type == "str":
                 contents = "\n".join(contents)
 

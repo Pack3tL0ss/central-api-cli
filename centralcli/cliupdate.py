@@ -103,13 +103,9 @@ def template(
         "model": model or obj.model
     }
 
-    # TODO specify CTRL-Z / CTRL-D based on os
     payload = None
     if not template:
-        payload = utils.get_multiline_input(
-            "Paste in new template contents then press CTRL-D to proceed. Type 'abort' to abort",
-            print_func=typer.secho, fg="cyan", abort_str="abort"
-        )
+        payload = utils.get_multiline_input(prompt="Paste in new template contents.")
         payload = "\n".join(payload).encode()
 
     print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{obj.name}[/] in group [cyan]{kwargs['group']}[/]")
