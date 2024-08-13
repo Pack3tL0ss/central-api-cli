@@ -225,9 +225,9 @@ class Utils:
     ) -> List[str] | dict | str:
         console = Console(emoji=True)
         exit_prompt_text = "Ctrl-Z -> Enter" if os.name == "nt" else "Ctrl-D on an empty line after content"
-        exit_prompt_text = f"Then hit {exit_prompt_text} to submit.\n Enter '{abort_str}' to abort"
+        exit_prompt_text = f"Then hit {exit_prompt_text} to submit.\nEnter '{abort_str}' to abort.\n"
         def _get_multiline_sub(prompt: str = prompt, **kwargs):
-            prompt = f"{prompt}  {exit_prompt_text}" or f"Enter/Paste your content. {exit_prompt_text}"
+            prompt = f"{prompt}  {exit_prompt_text}" or f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
             console.print(prompt, **kwargs)
             contents, line = [], ''
             while line.strip().lower() != abort_str:
