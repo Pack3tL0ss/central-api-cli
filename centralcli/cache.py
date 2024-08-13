@@ -354,6 +354,31 @@ class Cache:
         for db in self._tables:
             yield db.name(), db.all()
 
+    def is_central_license(self, license: str) -> bool:
+        if not any(
+            [
+                license.startswith("enhanced_"),
+                license.startswith("standard_"),
+                license.endswith("hciaas"),
+                license.endswith("baas"),
+                "_vm_" in license,
+                license.endswith("zerto"),
+                license in {"sta", "stb", "stc", "bridge"},
+                license.startswith("private_cloud"),
+                "k8s" in license,
+                "proliant" in license,
+                license.endswith("_storage"),
+                license.endswith("edgeline"),
+                license.endswith("hci_manager"),
+                license.endswith("_sfm"),
+                license.endswith("alletra"),
+                "_sensor_" in license
+            ]
+        ):
+            return True
+        else:
+            return False
+
     @property
     def devices(self) -> list:
         return self.DevDB.all()
@@ -386,6 +411,10 @@ class Cache:
     @property
     def groups(self) -> list:
         return self.GroupDB.all()
+
+    @property
+    def groups_by_name(self) -> list:
+        return {g["name"]: dict(g) for g in self.groups}
 
     @property
     def labels(self) -> list:
@@ -826,7 +855,8 @@ class Cache:
             completion=True,
         )
         out = []
-        args = args or ctx.params.values()  # HACK as args stopped working
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
+
         if match:
             # remove items that are already on the command line
             match = [m for m in match if m.name not in args]
@@ -2154,7 +2184,8 @@ class Cache:
         resp = await self.central.get_valid_subscription_names()
         if resp.ok:
             # licenses starting with enhanced_ or standard_ are compute/storage
-            resp.output = [{"name": k} for k in resp.output.keys() if not k.startswith("standard_") and not k.startswith("enhanced_")]
+            # resp.output = [{"name": k} for k in resp.output.keys() if not k.startswith("standard_") and not k.startswith("enhanced_")]
+            resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
             self.updated.append(self.central.get_valid_subscription_names)
             self.LicenseDB.truncate()
             update_res = self.LicenseDB.insert_multiple(resp.output)
@@ -2688,9 +2719,10 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_all_devices not in self.updated:
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
-                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.DevDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -2820,9 +2852,10 @@ class Cache:
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and self.central.get_all_sites not in self.updated:
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and not completion:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
-                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.SiteDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -2895,10 +2928,11 @@ class Cache:
             # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
             # fuzzy match
             if not match and retry and self.central.get_all_groups not in self.updated:
-                print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
-                    if fuzz_confidence >= 70 and typer.confirm(f"Did you mean {fuzz_match}?"):
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.GroupDB.search(self.Q.name == fuzz_match)
                 if not match:
                     typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
@@ -2979,12 +3013,12 @@ class Cache:
             # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
             # fuzzy match
             if not match and retry and self.central.get_labels not in self.updated:
-                print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.LabelDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -3055,9 +3089,10 @@ class Cache:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_templates not in self.updated:
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
-                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.TemplateDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -3147,9 +3182,10 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_clients not in self.updated:
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.clients:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
-                    confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -3272,10 +3308,11 @@ class Cache:
 
             if not match and retry and self.central.cloudauth_get_mpsk_networks not in self.updated:
                 if FUZZ:
+                    err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                     fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.MpskDB.search(self.Q.name == fuzz_match)
                 if not match:
@@ -3358,11 +3395,12 @@ class Cache:
                 )
 
             if not match and retry and this.already_updated_func not in self.updated:
+                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"[bright_red]{query_str}[/] not found in cache.  Did you mean [green3]{fuzz_match}[/]?")
+                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
