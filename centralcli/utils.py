@@ -739,6 +739,27 @@ class Utils:
 
         return cli_cmds
 
+    @staticmethod
+    def update_dict(dict_to_update: Dict[str, List[Any]], key: str, value: Any) -> Dict[str, List[Any]]:
+        """Add key to dict or append to existing key if it already exists
+
+        TODO probably an itertools or other builtin that does this.
+
+        Args:
+            dict_to_update (Dict[str, list]): The dict to update
+            key (str): The key, will ensure value is in dict under that key, or append if already there
+            value (Any): value to be added to list
+
+        Returns:
+            Dict[str, list]: Orinal dict is returned updated with provided value
+        """
+        if key not in dict_to_update:
+            dict_to_update[key] = [value]
+        else:
+            dict_to_update[key] += [value]
+
+        return dict_to_update
+
     def get_interfaces_from_range(self, interfaces: str | List[str]) -> List[str]:
         console = Console(stderr=True)
         interfaces = self.listify(interfaces)
