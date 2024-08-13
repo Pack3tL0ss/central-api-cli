@@ -30,7 +30,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
-from centralcli.clioptions import CLIOptions
+from centralcli.clioptions import CLIOptions, CLIArgs
 
 
 tty = utils.tty
@@ -48,6 +48,7 @@ class CLICommon:
         self.central = central
         self.raw_out = raw_out
         self.options = CLIOptions(cache)
+        self.arguments = CLIArgs(cache)
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:

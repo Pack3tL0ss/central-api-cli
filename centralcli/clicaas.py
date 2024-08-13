@@ -127,34 +127,24 @@ def add_vlan(
 @app.command(short_help="import VLAN from Stored Tasks File")
 def import_vlan(
     key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
-    import_file: str = typer.Argument(None, exists=True),
-    file: Path = typer.Option(None, exists=True,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+    import_file: str = cli.arguments.import_file,
+    file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Add VLAN from stored_tasks file.
 
     This is the same as `cencli batch add-vlan key`, but command: add_vlan
     is implied only need to provide key
-
     """
     import_file = file or import_file or config.stored_tasks_file
     if import_file == config.stored_tasks_file and not key:
-        typer.echo("key is required when using the default import file")
+        cli.exit("key is required when using the default import file")
 
     data = config.get_file_data(import_file)
     if key:
-        if hasattr(data, "dict"):  # csv
-            data = data.dict  # TODO not tested in csv form
-            data = {k: data[k] for k in data if data.get("key", "") == key}
-        else:
-            data = data.get(key)
+        data = data.get(key)
 
     if data:
         args = data.get("arguments", [])
@@ -180,39 +170,28 @@ def caas_batch(
     key: str = typer.Argument(None,),
     file: Path = typer.Option(config.stored_tasks_file, exists=True,),
     command: str = typer.Option(None,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """cencli caas batch add-vlan add-vlan-99"""
     caasapi = caas.CaasAPI(central=cli.central)
     if file == config.stored_tasks_file and not key:
-        print("[bright_red]ERROR:[/] key is required when using the default import file")
-        raise typer.Exit(1)
+        cli.exit("key is required when using the default import file")
 
     data = config.get_file_data(file)
-    if hasattr(data, "dict"):  # csv
-        data = data.dict
-        data = {k: data[k] for k in data if data.get("key", "") == key}
-    else:
-        data = data.get(key)
+    data = data.get(key, data)
 
     if not data:
-        print(f"[bright_red]ERROR:[/] [cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
-        raise typer.Exit(1)
+        cli.exit(f"[cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
     else:
         args = data.get("arguments", [])
         kwargs = data.get("options", {})
         cmds = data.get("cmds", [])
 
         if not args:
-            print("[bright_red]ERROR:[/] import data requires an argument specifying the group / device")
-            raise typer.Exit(1)
+            cli.exit("import data requires an argument specifying the group / device")
 
         if command:
             command = command.replace('-', '_')
@@ -245,34 +224,6 @@ def caas_batch(
                 caas.eval_caas_response(resp)
 
 
-
-    # Determine devices to send commands to.
-    # if dev_file:
-    #     devices = [
-    #         cache.get_dev_identifier(d, dev_type="gw") for d in dev_file.read_text().splitlines()
-    #     ]
-    #     if node:
-    #         devices += [cache.get_dev_identifier(node)]
-    # elif node:
-    #     devices = [cache.get_dev_identifier(node, dev_type="gw")]
-
-    # if group:
-    #     group = cache.get_group_identifier(group)
-    #     if all:
-    #         devices = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["group"] == group.name]
-    #         action = f"all devices in {group.name} group."
-    #     elif devices:
-    #         devices = [d for d in devices if d.group == group.name]
-    #         action = "\n".join(node)
-    #     else:
-    #         devices = [group.name]
-    # elif site:
-    #     site = cache.get_site_identifier(site)
-    #     if all:
-    #         devices = [cache.CentralObject(d) for d in cache.devices if d["type"] == "gw" and d["site"] == site.name]
-    #     elif devices:
-    #         devices = [d for d in devices if d.site == site.name]
-
 @app.command()
 def send_cmds(
     kw1: constants.SendCmdArgs = typer.Argument(
@@ -303,25 +254,11 @@ def send_cmds(
         show_default=False,
     ),
     cmd_file: Path = typer.Option(None, help="Path to file containing commands (1 per line) to be sent to device", exists=True, show_default=False,),
-    # dev_file: Path = typer.Option(None, help="Path to file containing iden for devices to send commands to", exists=True),
-    # group: bool = typer.Option(None, help="Send commands to all gateways in a group", autocompletion=cli.cache.group_completion),
-    # site: bool = typer.Option(None, help="Send commands to all gateways in a site", autocompletion=cli.cache.site_completion),
     all: bool = typer.Option(False, "-A", "--all", help="Send command(s) to all gateways (device level update) when group is provided"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Send commands to gateway(s) (group or device level)
 
@@ -346,11 +283,10 @@ def send_cmds(
         dev_file = Path(nodes)
         file_data = config.get_file_data(dev_file, text_ok=True)
         if not file_data:
-            print(f"No data parsed from file {dev_file.name}.")
-            raise typer.Exit(1)
+            cli.exit(f"No data parsed from file {dev_file.name}.")
 
         if isinstance(file_data, list):
-            nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data]
+            nodes: List[CentralObject] = [cache.get_identifier(d.strip(), qry_funcs=["dev", "group", "site"], device_type="gw") for d in file_data]
         else:
             devices = file_data.get("devices", file_data.get("gateways"))
             if devices:
@@ -360,33 +296,30 @@ def send_cmds(
             elif "sites" in file_data:
                 nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
             else:
-                print(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
-                raise typer.Exit(1)
+                cli.exit(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
 
             if "cmds" in file_data or "commands" in file_data:
                 if commands:
-                    print("Providing commands on the command line and in the import file is a strange thing to do.")
-                    raise typer.Exit(1)
+                    cli.exit("Providing commands on the command line and in the import file is a strange thing to do.")
+
                 commands = file_data.get("cmds", file_data.get("commands"))
         action = f'{", ".join(n.name for n in nodes)} defined in {dev_file.name}'
     elif kw1 == "device":
         if not isinstance(nodes, str):
             print(f"nodes is of type {type(nodes)} this is unexpected.")
 
-        nodes = [cache.get_identifier(nodes, ["dev"], "gw")]
+        nodes: List[CentralObject] = [cache.get_identifier(nodes, qry_funcs=["dev"], device_type="gw")]
         action = f'{", ".join(n.name for n in nodes)}'
 
     if cmd_file:
         if commands:
-            print("Providing commands on the command line and in the import file is a strange thing to do.")
-            raise typer.Exit(1)
+            cli.exit("Providing commands on the command line and in the import file is a strange thing to do.")
         else:
             commands = [line.rstrip() for line in cmd_file.read_text().splitlines()]
 
     # TODO common command confirmation func
     if not commands:
-        print("Error No commands provided")
-        raise typer.Exit(1)
+        cli.exit("Error No commands provided")
     else:
         console.print(f"Sending the following to [cyan]{action}[/]")
         _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
@@ -403,9 +336,6 @@ def send_cmds(
         ]
         batch_res = cli.central.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
-        # caas.
-        # TODO Rich progress bar here
-
 
 @app.callback()
 def callback():

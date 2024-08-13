@@ -121,14 +121,10 @@ def group(
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
     model: str = typer.Option(None, help="Upgrade a specific switch model [grey42]\[applies to AOS-SW switches only]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Update devices by group.
 
@@ -194,12 +190,10 @@ def swarm(
         formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
         ),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     at = None if not at else int(round(datetime.timestamp(at)))
 

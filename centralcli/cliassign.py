@@ -30,21 +30,16 @@ app = typer.Typer()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
     serial_nums: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Assign Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
 
     Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
     Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
     """
-    # devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
-
     # TODO add confirmation method builder to output class
     do_auto = True if "auto" in [s.lower() for s in serial_nums] else False
     if do_auto:
@@ -64,7 +59,6 @@ def license(
             dev = _serial_nums[0]
             _msg = f"{_msg} [cyan]{dev}[/]"
 
-
     print(_msg)
     if yes or typer.confirm("\nProceed?"):
         if not do_auto:
@@ -73,23 +67,18 @@ def license(
             resp = cli.central.request(cli.central.enable_auto_subscribe, services=license.name)
 
         cli.display_results(resp, tablefmt="action")
-    # TODO cache update similar to batch unsubscribe
+        # TODO cache update similar to batch unsubscribe
 
 
 @app.command(help="Assign label to device(s)", hidden=False)
 def label(
     label: str = typer.Argument(..., help="Label to assign to device(s)", autocompletion=cli.cache.label_completion,),
     devices: List[str] = typer.Argument(..., autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
     label = cli.cache.get_label_identifier(label)
     devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 

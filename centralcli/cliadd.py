@@ -24,15 +24,15 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs, lib_to_api
+from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
 from centralcli.strings import LongHelp
 from centralcli.response import BatchRequest
+from centralcli.cache import CentralObject
 help_text = LongHelp()
 
 
 app = typer.Typer()
 color = utils.color
-iden = IdenMetaVars()
 
 class AddWlanArgs(str, Enum):
     type = "type"
@@ -342,12 +342,10 @@ def site(
 @app.command(help="Create a new label")
 def label(
     name: str = typer.Argument(..., show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     _msg = "Creating" if yes else "Create"
     print(f"{_msg} new label [cyan]{name}[/]")
@@ -361,36 +359,25 @@ def label(
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
 # This worked: cencli add certificate lejun23 securelogin.kabrew.com.all.pem -pem -svr  (no passphrase, entering passphrase caused error above)
-# TODO options should prob be --pem to be consistent with other commands
 @app.command(hidden=False)
 def certificate(
     cert_name: str = typer.Argument(..., show_default=False),
-    cert_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False,),
-    passphrase: str = typer.Option(None, help="optional passphrase"),
-    # cert_type: CertTypes = typer.Argument(...),
-    # cert_format: CertFormat = typer.Argument(None,),
-    pem: bool = typer.Option(False, "-pem", help="upload certificate in PEM format", show_default=False,),
-    der: bool = typer.Option(False, "-der", help="upload certificate in DER format", show_default=False,),
-    pkcs12: bool = typer.Option(False, "-pkcs12", help="upload certificate in pkcs12 format", show_default=False,),
-    server_cert: bool = typer.Option(False, "-svr", help="Type: Server Certificate", show_default=False,),
-    ca_cert: bool = typer.Option(False, "-ca", help="Type: CA", show_default=False,),
-    crl: bool = typer.Option(False, "-crl", help="Type: CRL", show_default=False,),
-    int_ca_cert: bool = typer.Option(False, "-int-ca", help="Type: Intermediate CA", show_default=False,),
-    ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp", help="Type: OCSP responder", show_default=False,),
-    ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer", help="Type: OCSP signer", show_default=False,),
-    ssh_pub_key: bool = typer.Option(False, "-public", help="Type: SSH Public cert", show_default=False, hidden=True,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    cert_file: Path = typer.Argument(None, help="If not provided you'll be prompted to paste in cert text", exists=True, readable=True, show_default=False,),
+    passphrase: str = typer.Option(None, help="optional passphrase", show_default=False,),
+    pem: bool = typer.Option(False, "--pem", help="upload certificate in PEM format", show_default=False,),
+    der: bool = typer.Option(False, "--der", help="upload certificate in DER format", show_default=False,),
+    pkcs12: bool = typer.Option(False, "--pkcs12", help="upload certificate in pkcs12 format", show_default=False,),
+    server_cert: bool = typer.Option(False, "--svr", help="Type: Server Certificate", show_default=False,),
+    ca_cert: bool = typer.Option(False, "--ca", help="Type: CA", show_default=False,),
+    crl: bool = typer.Option(False, "--crl", help="Type: CRL", show_default=False,),
+    int_ca_cert: bool = typer.Option(False, "--int-ca", help="Type: Intermediate CA", show_default=False,),
+    ocsp_resp_cert: bool = typer.Option(False, "--ocsp-resp", help="Type: OCSP responder", show_default=False,),
+    ocsp_signer_cert: bool = typer.Option(False, "--ocsp-signer", help="Type: OCSP signer", show_default=False,),
+    ssh_pub_key: bool = typer.Option(False, "--public", help="Type: SSH Public cert", show_default=False, hidden=True,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Upload a Certificate to Aruba Central
     """
@@ -425,9 +412,10 @@ def certificate(
     kwargs = {k: v for k, v in kwargs.items() if v}
 
     if not cert_file:
-        print("\n[bright_green]No Cert file specified[/]")
-        print("Provide certificate content encoded in base64 format.")
-        cert_file = utils.get_multiline_input(return_type="str")
+        print("[bright_green]No Cert file specified[/]")
+        if not crl:
+            print("Provide certificate content encoded in base64 format.")
+        cert_file = utils.get_multiline_input(prompt=f"[cyan]Enter/Paste in {'certificate' if not crl else 'crl'} text[/].")
         kwargs["cert_data"] = cert_file
     elif cert_file.exists():
         kwargs["cert_file"] = cert_file
@@ -449,12 +437,10 @@ def certificate(
 def webhook(
     name: str = typer.Argument(..., show_default=False,),
     urls: List[str] = typer.Argument(..., help="webhook urls", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if yes or typer.confirm("\nProceed?", abort=True):
@@ -474,12 +460,10 @@ def template(
     dev_type: DevTypes = typer.Option("sw"),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     if not template:
@@ -518,22 +502,21 @@ def template(
 # TODO config option for different random pass formats
 @app.command()
 def guest(
-    portal_id: str = typer.Argument(..., show_default=False,),
+    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
     password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
-    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]", show_default=False,),
+    phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
     email: str = typer.Option(None, help="email of guest", show_default=False,),
     notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'", show_default=False,),
     disable: bool = typer.Option(False, "--disable", is_flag=True, help="add account, but set to disabled", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Add a guest user to a configured portal"""
+    portal: CentralObject = cli.cache.get_name_id_identifier("portal", portal).id
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
@@ -548,7 +531,7 @@ def guest(
 
     # TODO Add options for expire after / valid forever
     payload = {
-        "portal_id": portal_id,
+        "portal_id": portal,
         "name": name,
         "company_name": company,
         "phone": phone,
@@ -565,10 +548,13 @@ def guest(
 
     _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
     _msg += f"  {options}\n"
-    _msg += "\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
+    if password:
+        _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_visitor, **payload)
+        password = None
+        payload = None
         cli.display_results(resp, tablefmt="action")
 
 

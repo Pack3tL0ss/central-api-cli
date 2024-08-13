@@ -218,14 +218,7 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    resp = Response()
-    from centralcli import render
-    resp.output = render.rich_capture('  Subscriptions successfully removed for devices.\n  :information:  archive/unarchive flushes all subscriptions for a device.', emoji=True)
-    tablefmt = cli.get_format(
-        do_json, do_yaml, do_csv, do_table, default="action"
-    )
-
-    cli.display_results(resp, tablefmt=tablefmt)
+    cli.cache.LicenseTypes
 
 
 @app.callback()

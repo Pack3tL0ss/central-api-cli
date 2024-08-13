@@ -70,13 +70,10 @@ def template(
     ),
     version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by version", show_default=False,),
     model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y",  help="Bypass confirmation prompts - Assume Yes"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     if group:
         group = cli.cache.get_group_identifier(group).name
@@ -125,15 +122,11 @@ def template(
 def variables(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
     var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
     dev = cli.cache.get_dev_identifier(device)
     serial = dev.serial
 
@@ -199,27 +192,11 @@ def group(
     mo_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX"),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        callback=cli.verbose_debug_callback,
-        hidden=True,
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
-    # if not group_password:
-    #     group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
-
-    # else:
-    #     _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
     group = cli.cache.get_group_identifier(group)
 
     if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mo_sw, mo_cx]):
@@ -321,14 +298,12 @@ def config_(
     # TODO collect multi-line input as option to paste in config
     cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Update group or device level config (ap or gw).
     """
@@ -386,23 +361,17 @@ def config_(
     help="Update webhook details (name/urls)"
 )
 def webhook(
-    wid: str = typer.Argument(..., help="Use show webhooks to get the wid"),
-    # TODO need completion for id_
+    wid: str = typer.Argument(..., help="Use show webhooks to get the wid"),  # TODO completion
     name: str = typer.Argument(...,),
     urls: List[str] = typer.Argument(..., help="webhook URLs"),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
     print("Updating WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.update_webhook, wid, name, urls)
-
         cli.display_results(resp, tablefmt="action")
 
 
@@ -427,19 +396,10 @@ def site(
     new_name: str = typer.Option(None, show_default=False, help="Change Site Name"),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False),
     lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        rich_help_panel="Common Options"
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """
     Update details for an existing site.
@@ -518,12 +478,10 @@ def wlan(
     vlan: str = typer.Option(None, show_default=False,),
     zone: str = typer.Option(None, show_default=False,),
     psk: str = typer.Option(None, show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Update configuration options of an existing WLAN/SSID
     """

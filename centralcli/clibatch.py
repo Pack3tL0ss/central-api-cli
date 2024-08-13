@@ -384,10 +384,15 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
     if import_type and import_type in data:
         data = data[import_type]
 
-    # accept yaml/json keyed by serial #
-    if data and isinstance(data, dict):
-        if utils.is_serial(list(data.keys())[0]):
-            data = [{"serial": k, **v} for k, v in data.items()]
+    if data:
+        if isinstance(data, dict):  # accept yaml/json keyed by serial #
+            if utils.is_serial(list(data.keys())[0]):
+                data = [{"serial": k, **v} for k, v in data.items()]
+        if isinstance(data, list) and text_ok:
+            if import_type == "devices" and all(utils.is_serial(s) for s in data):
+                data = [{"serial": s} for s in data]
+            if import_type == "labels":
+                data = [{"name": label} for label in data]
 
     # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
     data = [d for d in data if not d.get("retired", d.get("ignore"))]
@@ -751,13 +756,9 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
 def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool = False) -> List[Response]:
     if import_file is not None:
-        data = config.get_file_data(import_file)
+        data = _get_import_file(import_file, "labels", text_ok=True)
     elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
-
-    if isinstance(data, dict) and "labels" in data:
-        data = data["labels"]
+        cli.exit("No import file provided")
 
     # TODO common func for this type of multi-element confirmation, we do this a lot.
     _msg = "\n".join([f"  [cyan]{name}[/]" for name in data])
@@ -769,7 +770,7 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     if yes or typer.confirm("\nProceed?", abort=True):
         reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
         resp = cli.central.batch_request(reqs)
-        # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
+        # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
         try:
             _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
             asyncio.run(cli.cache.update_label_db(data=_data))
@@ -814,8 +815,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
             cli.display_results(resp, tablefmt="action")
 
 
-# FIXME
-@app.command(short_help="Validate a batch import")
+@app.command()
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(..., exists=True, show_default=False, autocompletion=lambda incomplete: [],),
@@ -841,8 +841,7 @@ def verify(
     The same file used to import can be used to validate.
     """
     if what != "devices":
-        print("Only devices and device assignments are supported at this time.")
-        raise typer.Exit(1)
+        cli.exit("Only devices and device assignments are supported at this time.")
 
     data = _get_import_file(import_file, import_type=what)
 
@@ -944,21 +943,12 @@ def verify(
 
 @app.command(short_help="Batch Deploy groups, sites, devices... from file", hidden=True)
 def deploy(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch Deploy from import.
 
@@ -993,22 +983,13 @@ def deploy(
 @app.command()
 def add(
     what: BatchAddArgs = typer.Argument(..., help="[cyan]macs[/] and [cyan]mpsk[/] are for cloud-auth", show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),  # HACK completion broken when trying to complete a Path
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
     ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform batch Add operations using import data from file
     """
@@ -1430,30 +1411,18 @@ def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False,
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
 @app.command(short_help="Delete devices.",)
 def delete(
-    what: BatchDelArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False, autocompletion=lambda incomplete: [],),
+    what: BatchDelArgs = cli.arguments.what,
+    import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),  # TODO REMOVE THIS IS FOR TESTING ONLY
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """[bright_green]Perform batch Delete operations using import data from file.[/]
 
@@ -1474,14 +1443,13 @@ def delete(
     # TODO common string helpers... started strings.py
     elif not import_file:
         _msg = [
-            "Usage: cencli batch delete [OPTIONS] ['devices'|'sites'|'groups'] IMPORT_FILE",
-            "Use [cyan]cencli batch delete --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE or --show-example"
+            "Usage: cencli batch delete \[OPTIONS] \[devices|sites|groups|labels] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch delete --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
 
     data = _get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
@@ -1538,25 +1506,13 @@ def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchR
 
 @app.command()
 def subscribe(
-    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch subscribe devices
 
@@ -1570,61 +1526,44 @@ def subscribe(
         return
     elif not import_file:
         _msg = [
-            "Usage: cencli batch subscribe [OPTIONS] IMPORT_FILE",
-            "Use [cyan]cencli batch subscribe --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or [cyan]--example[/] flag.",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or --show-example flag."
+            "[yellow]Usage[/]: cencli batch subscribe \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch subscribe --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
-    elif import_file:
-        devices = config.get_file_data(import_file)
-        if "devices" in devices:
-            devices = devices["devices"]
+        cli.exit("\n".join(_msg))
 
-        sub_reqs = _build_sub_requests(devices)
+    devices = _get_import_file(import_file, "devices")
+    sub_reqs = _build_sub_requests(devices)
 
-        cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
-        print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
-        if yes or typer.confirm("\nProceed?", abort=True):
-            resp = cli.central.batch_request(sub_reqs)
-
-    cli.display_results(resp, tablefmt="action")
+    cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
+    print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.batch_request(sub_reqs)
+        cli.display_results(resp, tablefmt="action")
 
 @app.command()
 def unsubscribe(
-    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
+    import_file: Path = cli.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
     dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Dissasociate the device from the Aruba Central App in Green Lake"),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch Unsubscribe devices
 
-    Can Unsubscribe devices specified in import file or all devices in the inventory that
-    have never connected to Aruba Central (-N | --never-connected)
+    Unsubscribe devices specified in import file or all devices in the inventory that
+    have never connected to Aruba Central ([cyan]-N[/]|[cyan]--never-connected[/])
 
-    Use (-D | --dis-cen) flag to also dissasociate the devices from the Aruba Central app in Green Lake.
+    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also dissasociate the devices from the Aruba Central app in Green Lake.
     """
     if show_example:
-        print(getattr(examples, "unsubscribe"))  # TODO need example should be same as add devices
+        print(getattr(examples, "unsubscribe"))
         return
     elif never_connected:
         resp = cli.cache.get_devices_with_inventory()
@@ -1643,19 +1582,15 @@ def unsubscribe(
                     resp = cli.central.batch_request(unsub_reqs)
     elif not import_file:
         _msg = [
-            "Usage: cencli batch unsubscribe [OPTIONS] IMPORT_FILE",
-            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or at least one of: [cyan]-N[/], [cyan]--never-connected[/], [cyan]--example[/] flags.",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or at least one of: -N, --never-connected, --show-example flags."
+            "Usage: cencli batch unsubscribe \[OPTIONS] [IMPORT_FILE]",
+            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     elif import_file:
-        devices = config.get_file_data(import_file)
-        if "devices" in devices:
-            devices = devices["devices"]
-
+        devices = _get_import_file(import_file, "devices")
         unsub_reqs = _build_sub_requests(devices, unsub=True)
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
@@ -1671,35 +1606,34 @@ def unsubscribe(
                 f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
                 )
 
-
     cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def rename(
-    what: BatchRenameArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),
+    what: BatchRenameArgs = cli.arguments.what,
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
-    lower: bool = typer.Option(False, "--lower", help="Convert LLDP rename result to all lower case.",),
-    space: str = typer.Option(None, "-S", "--space", help="Applies to automatic LLDP rename.  Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]"),
+    lower: bool = typer.Option(False, "--lower", help="[LLDP rename] Convert LLDP result to all lower case.",),
+    space: str = typer.Option(
+        None,
+        "-S",
+        "--space",
+        help="[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]",
+        show_default=False,
+    ),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
     group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
     site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
     if show_example:
@@ -1711,7 +1645,7 @@ def rename(
         import_file = None
 
     if not import_file and not lldp:
-        cli.exit("Missing required parameter [IMPORT_FILE|'lldp']")
+        cli.exit("Missing required parameter \[IMPORT_FILE|'lldp']")
 
     if import_file:
         data = _get_import_file(import_file)
@@ -1994,25 +1928,16 @@ def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool =
 
 @app.command()
 def move(
-    # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),
-    do_group: bool = typer.Option(False, "-G", "--group", help="process group move from import."),
-    do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
-    do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    do_group: bool = typer.Option(False, "-G", "--group", help="Only process group move from import."),
+    do_site: bool = typer.Option(False, "-S", "--site", help="Only process site move from import."),
+    do_label: bool = typer.Option(False, "-L", "--label", help="Only process label assignment from import."),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform batch Move devices to any or all of group / site / label based on import data from file.
 
@@ -2029,13 +1954,12 @@ def move(
 
     elif not import_file:
         _msg = [
-            "Usage: cencli batch move [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch move ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "[yellow]Usage[/]: cencli batch move \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch move --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     else:
         resp = batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
         cli.display_results(resp, tablefmt="action")
@@ -2043,21 +1967,13 @@ def move(
 
 @app.command()
 def archive(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch archive devices based on import data from file.
 
@@ -2069,15 +1985,14 @@ def archive(
 
     elif not import_file:
         _msg = [
-            "Usage: cencli batch archive [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch archive ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "[yellow]Usage[/]: cencli batch archive \[OPTIONS] WHAT:[devices] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch archive --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     else:
-        data = config.get_file_data(import_file, text_ok=True)
+        data = _get_import_file(import_file, "devices", text_ok=True)
         if data and isinstance(data, list):
             if all([isinstance(x, dict) for x in data]):
                 serials = [x.get("serial") or x.get("serial_num") for x in data]
@@ -2105,21 +2020,13 @@ def archive(
 
 @app.command()
 def unarchive(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch unarchive devices based on import data from file.
 
@@ -2131,15 +2038,14 @@ def unarchive(
 
     elif not import_file:
         _msg = [
-            "Usage: cencli batch unarchive [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch unarchive ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "Usage: cencli batch unarchive \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch unarchive --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     else:
-        data = _get_import_file(import_file, import_type="devices")
+        data = _get_import_file(import_file, import_type="devices", text_ok=True)
 
     if not data:
         cli.exit("No data extracted from import file")
@@ -2163,9 +2069,7 @@ def unarchive(
 
 @app.callback()
 def callback():
-    """
-    Perform batch operations
-    """
+    """Perform batch operations"""
     pass
 
 

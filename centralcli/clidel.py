@@ -128,39 +128,34 @@ def group(
 def wlan(
     group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion),
     name: str = typer.Argument(..., metavar="[WLAN NAME]", autocompletion=lambda incomplete: tuple(["<WLAN NAME>"])),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
     group = cli.cache.get_group_identifier(group)
-    confirm_1 = typer.style("Please Confirm:", fg="cyan")
-    confirm_2 = typer.style("Delete", fg="bright_red")
-    confirm_3 = typer.style(f"Group {group.name}, WLAN {name}", fg="cyan")
-    if yes or typer.confirm(f"{confirm_1} {confirm_2} {confirm_3}", abort=True):
+    print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]")
+    if yes or typer.confirm("\nProceed", abort=True):
         resp = cli.central.request(cli.central.delete_wlan, group.name, name)
         cli.display_results(resp, tablefmt="action")
 
 
 # TODO cache webhook name/id so they can be deleted by name
-@app.command(help="Delete WebHook")
+@app.command()
 def webhook(
-    id_: str = typer.Argument(...,),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    wid: str = typer.Argument(..., help="Use [cyan]cencli show webhooks[/] to get the webhook id ([bright_green]wid[/])", show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
+    """Delete Webhook
+
+    This command requires the webhook id, which is not cached.
+    Use [cyan]cencli show webhooks[/] to get the webhook id ([bright_green]wid[/]).
+    """
     if yes or typer.confirm("Delete Webhook?", abort=True):
-        resp = cli.central.request(cli.central.delete_webhook, id_)
+        resp = cli.central.request(cli.central.delete_webhook, wid)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -169,12 +164,10 @@ def template(
     template: str = typer.Argument(..., metavar=iden.template, help="The name of the template", autocompletion=cli.cache.template_completion, show_default=False,),
     group: List[str] = typer.Argument(None, metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
     _group: str = typer.Option(None, "--group", metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     # allow unnecessary keyword group "cencli delete template NAME group GROUP"
     if group:
@@ -189,13 +182,12 @@ def template(
     template = cli.cache.get_template_identifier(template, group=group)
 
     print(
-        f"{'Delete' if not yes else 'Deleting'} Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
+        f"[bright_red]{'Delete' if not yes else 'Deleting'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
     )
     if yes or typer.confirm("Proceed?", abort=True):
         resp = cli.central.request(cli.central.delete_template, template.group, template.name)
-        cli.display_results(resp, tablefmt="action")
-        if resp.ok:
-            _ = cli.central.request(cli.cache.update_template_db, remove=template)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        _ = cli.central.request(cli.cache.update_template_db, remove=template)
 
 
 # TODO return status indicating cache update success/failure
@@ -251,20 +243,10 @@ def device(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  App assignment and subscriptions remain intact."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Delete devices.
 
@@ -278,13 +260,12 @@ def device(
     [cyan]cencli unassign license <LICENSE> <DEVICES>[/] can also be used to unassign a specific license
     from a device(s), (device will remain associated with central App in GreenLake).
     """
-    # TODO common string helpers
-    # TODO update cache earlier as there are early exits... make more elegant
+    # TODO Literally copy/paste from clibatch.py (slightly modified)... maybe move some things to clishared or clicommon
+    # clibatch is more current logic.
 
     br = cli.central.BatchRequest
     console = Console(emoji=False)
 
-    # TODO Literally copy/paste from clibatch.py (slightly modified)... maybe move some things to clishared or clicommon
     cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in devices]
     not_in_inventory = [d for d, c in zip(devices, cache_devs) if c is None]
     cache_devs = [c for c in cache_devs if c]

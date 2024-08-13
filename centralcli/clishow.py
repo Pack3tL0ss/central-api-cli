@@ -1191,7 +1191,6 @@ def cache_(
 ):
     args = ('all',) if not args else args
     for arg in args:
-        caption = ""
         cache_out = getattr(cli.cache, arg)
         arg = arg if not hasattr(arg, "value") else arg.value
 
@@ -1200,12 +1199,7 @@ def cache_(
             if "devices" in cache_out:
                 cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
-        all_keys = set([key for s in cache_out for key in s.keys()])
-        morphed_keys = [k for k in all_keys if k not in cache_out[0].keys()]
-        if morphed_keys:
-            caption = f"Some keys from cache were modified: original keys: [cyan]{'[/], [cyan]'.join(morphed_keys)}[/]"
-
-        caption = [f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]", caption]
+        caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,

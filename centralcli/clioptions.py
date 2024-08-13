@@ -5,6 +5,13 @@ from centralcli.constants import iden_meta
 
 import typer
 
+
+class CLIArgs:
+    def __init__(self, cache: Cache):
+        self.cache = cache
+        self.what = typer.Argument(..., show_default=False,)
+        self.import_file = typer.Argument(None, exists=True, show_default=False,)
+
 class CLIOptions:
     def __init__(self, cache: Cache, timerange: str = "3h"):
         self.cache = cache
@@ -15,15 +22,16 @@ class CLIOptions:
         self.site_many = typer.Option(None, help="Filter by Site(s)", metavar=iden_meta.site_many, autocompletion=cache.site_completion, show_default=False,)
         self.label = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion,show_default=False,)
         self.label_many = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion,show_default=False,)
-        self.debug = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options")
-        self.do_json = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting")
-        self.do_yaml = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting")
-        self.do_csv = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting")
-        self.do_table = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting")
-        self.outfile = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options")
-        self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting")
-        self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options")
-        self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes")
+        self.debug = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
+        self.debugv: bool = typer.Option(False, "--debugv", help="Enable Verbose Debug Logging", rich_help_panel="Common Options",)
+        self.do_json = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",)
+        self.do_yaml = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",)
+        self.do_csv = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",)
+        self.do_table = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",)
+        self.outfile = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",)
+        self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
+        self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
+        self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
         self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
         self.sort_by = typer.Option(
@@ -66,6 +74,7 @@ class CLIOptions:
             show_default=False,
         )
         self.update_cache = typer.Option(False, "-U", hidden=True)
+        self.show_example = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
 
     @property
     def start(self):
