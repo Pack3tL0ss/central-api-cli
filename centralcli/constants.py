@@ -647,7 +647,7 @@ class LibToAPI:
             "vgw": "vgw"
         }
 
-    def __call__(self, dev_type: str, method: APIMethodType = None, default: str = None) -> str:
+    def __call__(self, dev_type: str | Enum, method: APIMethodType = None, default: str = None) -> str:
         if isinstance(dev_type, Enum):
             dev_type = dev_type.value
 
