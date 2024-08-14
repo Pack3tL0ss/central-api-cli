@@ -3532,28 +3532,6 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # Not used in a command yet
-    async def check_image_available(
-        self,
-        device_type: str,
-        firmware_version: str,
-    ) -> Response:
-        """Firmware Version.
-
-        Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            firmware_version (str): firmware version
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/firmware/v1/versions/{firmware_version}"
-
-        params = {
-            'device_type': device_type
-        }
-
-        return await self.get(url, params=params)
 
     async def send_command_to_swarm(
         self,
@@ -4208,6 +4186,30 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    # NEXT-MAJOR change to check_firmware_available to be consistent
+    async def check_image_available(
+        self,
+        device_type: constants.DevTypes,
+        firmware_version: str,
+    ) -> Response:
+        """Firmware Version.
+
+        Args:
+            device_type (str): Specify one of "cx", "sw", "ap", "gw"
+            firmware_version (str): firmware version
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/versions/{firmware_version}"
+        device_type = constants.lib_to_api(device_type, "firmware")
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
     async def get_default_group(self,) -> Response:
         """Get default group.
 
@@ -4687,7 +4689,7 @@ class CentralApi(Session):
 
     async def preprovision_device_to_group(
         self,
-        group_name: str,  # NEXT-MAJOR change to group for consistency
+        group_name: str,  # NEXT-MAJOR change to group for consistency.  Will need to update clicommon._checkgroup and GroupMoves object
         serial_nums: List[str] | str,  # NEXT-MAJOR change to serial for consistency (check use whatever is consistent)
         tenant_id: str = None,
     ) -> Response:
