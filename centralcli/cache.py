@@ -1951,7 +1951,7 @@ class Cache:
                         log.info(f"dev cache update deleted {len(data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
         else:
             resp: CombinedResponse = await self.central.get_all_devices(cache=True, dev_types=dev_type, **kwargs)
-            if resp.ok:
+            if isinstance(resp, CombinedResponse) and resp.ok:  # An exception or failure on first call can result in a List[Response] as
                 raw_data = await self.format_raw_devices_for_cache(resp)
                 with console.status(f"preparing {len(resp)} records for cache update"):
                     _start_time = time.perf_counter()
@@ -2732,7 +2732,7 @@ class Cache:
                         kwargs["inv_db"] = True
                     else:
                         _word = " "
-                    print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Device{_word}Cache.")
+                    err_console.print(f"Updating Device{_word}Cache.")
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
