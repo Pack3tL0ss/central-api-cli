@@ -30,6 +30,30 @@ CUST_KEYS = ["customer_id", "customer_name"]
 log = logging.getLogger()
 
 
+class ToBool:
+    def __init__(self, value: Any,):
+        self._original = value
+        self.value = self.str_to_bool(value)
+
+    def str_to_bool(self, value: str | None) -> bool | None:
+        if not isinstance(value, str):
+            return value
+        if value.lower() in ["false", "no", "0"]:
+            return False
+        elif value.lower() in ["true", "yes", "1"]:
+            return True
+
+    @property
+    def ok(self) -> bool:
+        if isinstance(self._original, bool):
+            return True
+        if not isinstance(self._original, str):
+            return False
+
+        if self._original.lower() not in ["false", "no", "0", "true", "yes", "1"]:
+            return False
+        else:
+            return True
 class Convert:
     def __init__(self, mac, fuzzy: bool = False):
         self.orig = mac
@@ -754,9 +778,9 @@ class Utils:
             Dict[str, list]: Orinal dict is returned updated with provided value
         """
         if key not in dict_to_update:
-            dict_to_update[key] = [value]
+            dict_to_update[key] = value if isinstance(value, list) else [value]
         else:
-            dict_to_update[key] += [value]
+            dict_to_update[key] += value if isinstance(value, list) else [value]
 
         return dict_to_update
 
