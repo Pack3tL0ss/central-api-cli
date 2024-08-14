@@ -192,6 +192,7 @@ def method(
 
 @app.command(hidden=True,)
 def command(
+    import_file: Path = cli.arguments.import_file,
     yes: bool = cli.options.yes,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -218,7 +219,7 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    cli.cache.LicenseTypes
+    ...
 
 
 @app.callback()
