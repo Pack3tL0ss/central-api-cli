@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import typer
 import sys
-from typing import List, Literal, Union, Tuple
+from typing import List, Literal, Union, Tuple, Dict
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -18,12 +18,12 @@ import time
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
+    from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
+        from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
     else:
         print(pkg_dir.parts)
         raise e
@@ -31,15 +31,57 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
 from centralcli.clioptions import CLIOptions, CLIArgs
+from centralcli.cache import CentralObject
 
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
-console = Console(emoji=False)
-err_console = Console(emoji=False, stderr=True)
+clean_console = Console(emoji=False)
+clean_err_console = Console(emoji=False, stderr=True)
+err_console = Console(emoji=True, stderr=True)
 
+
+class MoveData:
+    def __init__(
+            self,
+            *,
+            mv_reqs: List[BatchRequest],
+            mv_msgs: Dict[str, List[str]],
+            action_word: Literal["pre-provisioned", "moved", "removed", "assigned"],
+            move_type: Literal["group", "site", "label"],
+            retain_config: bool = False,
+            cache_devs: List[CentralObject] = None,
+        ) -> None:
+        self.cache_devs = cache_devs
+        self.reqs: List[BatchRequest] = mv_reqs or []
+        self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type)
+
+    def __bool__(self) -> bool:
+        return True if self.reqs else False
+
+    def __str__(self) -> str:
+        return "\n".join(self.msgs)
+
+    def __len__(self) -> int:
+        return len(self.reqs)
+
+    def _build_msg_list(self, mv_msgs: Dict[str, List[str]], action_word: Literal["pre-provisioned", "moved", "removed", "assigned"], move_type: Literal["group", "site", "label"], retain_config: bool = False,) -> List[str]:
+        confirm_msgs = []
+        if mv_msgs:
+            for k, v_list in mv_msgs.items():
+                dev_word = "devices" if len(v_list) > 1 else "device"
+                action_words = f"[bright_green]{action_word}[/] to" if action_word != "removed" else f"[red]{action_word}[/] from"
+                confirm_msg = f'\u2139  [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'  # \u2139 = :information:
+                if retain_config:
+                    confirm_msg = f"{confirm_msg} [italic dark_olive_green2]CX config will be preserved[/]."
+                confirm_msgs += [confirm_msg]
+                if len(v_list) > 6:
+                    v_list = [*v_list[0:3], "...", *v_list[-3:]]
+                confirm_msgs = [*confirm_msgs, *[f'  {dev}' for dev in v_list]]
+
+        return confirm_msgs
 
 class CLICommon:
     def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
@@ -163,7 +205,7 @@ class CLICommon:
                         account = config.last_account
                         msg = self.AcctMsg(account)
                         if not config.last_account_msg_shown:
-                            console.print(msg.previous_will_forget)
+                            clean_console.print(msg.previous_will_forget)
                             config.update_last_account_file(account, config.last_cmd_ts, True)
                         else:
                             emoji_console.print(msg.previous_short)
@@ -172,7 +214,7 @@ class CLICommon:
                     account = config.last_account
                     msg = self.AcctMsg(account)
                     if not config.last_account_msg_shown:
-                        console.print(msg.previous)
+                        clean_console.print(msg.previous)
                         config.update_last_account_file(account, config.last_cmd_ts, True)
                     else:
                         emoji_console.print(msg.previous_short)
@@ -180,9 +222,9 @@ class CLICommon:
         elif account in config.data:
             if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
                 msg = self.AcctMsg(account)
-                console.print(msg.envvar)
+                clean_console.print(msg.envvar)
             elif config.forget is not None and config.forget > 0:
-                console.print(self.AcctMsg(account).initial)
+                clean_console.print(self.AcctMsg(account).initial)
             # No need to print account msg if forget is set to zero
 
 
@@ -205,9 +247,9 @@ class CLICommon:
 
             if account not in ["central_info", "default"]:
                 if config.defined_accounts:
-                    console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
+                    clean_console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
                     if not _def_msg:
-                        console.print(
+                        clean_console.print(
                             f"The default account [cyan]{config.default_account}[/] is used if no account is specified via [cyan]--account[/] flag.\n"
                             "or the [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
                         )
@@ -424,7 +466,7 @@ class CLICommon:
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
-            with console.status("Cleaning Output..."):
+            with clean_console.status("Cleaning Output..."):
                 _start = time.perf_counter()
                 data = cleaner(data, **cleaner_kwargs)
                 data = utils.listify(data)
@@ -448,7 +490,7 @@ class CLICommon:
             "full_cols": full_cols,
             "fold_cols": fold_cols,
         }
-        with console.status("Rendering Output..."):
+        with clean_console.status("Rendering Output..."):
             outdata = render.output(**kwargs)
 
         if stash:
@@ -569,7 +611,7 @@ class CLICommon:
                     tablefmt = "raw"
 
                 if config.capture_raw:
-                    with console.status("Capturing raw response"):
+                    with clean_console.status("Capturing raw response"):
                         raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
                         with config.capture_file.open("a") as f:
                             f.write(json.dumps(raw))
@@ -613,13 +655,13 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        console.print(r)
+                        clean_console.print(r)
                         # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
                         if caption:
                             print(caption.replace(rl_str, ""))
-                        console.print(f"\n{rl_str}")
+                        clean_console.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
                 else:
@@ -757,6 +799,290 @@ class CLICommon:
 
         return md5.hexdigest()
 
+
+    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
+        data = None
+        if import_file is not None:
+            data = config.get_file_data(import_file, text_ok=text_ok)
+
+        if not data:
+            self.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
+
+        if import_type and import_type in data:
+            data = data[import_type]
+
+        if data:
+            if isinstance(data, dict):  # accept yaml/json keyed by serial #
+                if utils.is_serial(list(data.keys())[0]):
+                    data = [{"serial": k, **v} for k, v in data.items()]
+            if isinstance(data, list) and text_ok:
+                if import_type == "devices" and all(utils.is_serial(s) for s in data):
+                    data = [{"serial": s} for s in data]
+                if import_type == "labels":
+                    data = [{"name": label} for label in data]
+
+        # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
+        data = [d for d in data if not d.get("retired", d.get("ignore"))]
+
+        return data
+
+
+    def _check_update_dev_db(self, device: CentralObject) -> CentralObject:
+        if self.central.get_all_devices not in self.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
+            _ = self.central.request(self.cache.update_dev_db, dev_type=device.type)
+            device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
+
+        return device
+
+    class SiteMoves:
+        def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
+            self.cache_devs = cache_devs
+            self.move: MoveData = MoveData(mv_reqs=site_mv_reqs, mv_msgs=site_mv_msgs, action_word="moved", move_type="site", cache_devs=cache_devs)
+            self.remove: MoveData = MoveData(mv_reqs=site_rm_reqs, mv_msgs=site_rm_msgs, action_word="removed" , move_type="site", cache_devs=cache_devs)
+
+        def __str__(self) -> str:
+            return "\n".join([*self.remove.msgs, *self.move.msgs])
+
+        def __bool__(self) -> bool:
+            return bool(self.reqs)
+
+        def __len__(self) -> int:
+            return len(self.reqs)
+
+        @property
+        def reqs(self) -> List[BatchRequest]:
+            return [*self.remove.reqs, *self.move.reqs]
+
+    class GroupMoves:
+        def __init__(
+                self,
+                *,
+                pregroup_mv_reqs: List[BatchRequest],
+                pregroup_mv_msgs: Dict[str, list],
+                group_mv_reqs: List[BatchRequest],
+                group_mv_msgs: Dict[str, list],
+                group_mv_cx_retain_reqs: List[BatchRequest],
+                group_mv_cx_retain_msgs: Dict[str, list],
+                cache_devs: List[CentralObject],
+            ):
+            self.preprovision: MoveData = MoveData(mv_reqs=pregroup_mv_reqs, mv_msgs=pregroup_mv_msgs, action_word="pre-provisioned", move_type="group", cache_devs=cache_devs)
+            self.move: MoveData = MoveData(mv_reqs=group_mv_reqs, mv_msgs=group_mv_msgs, action_word="moved", move_type="group", cache_devs=cache_devs)
+            self.move_keep_config: MoveData = MoveData(mv_reqs=group_mv_cx_retain_reqs, mv_msgs=group_mv_cx_retain_msgs, action_word="moved", move_type="group", retain_config=True, cache_devs=cache_devs)
+
+        def __str__(self) -> str:
+            return "\n".join([*self.preprovision.msgs, *self.move.msgs, *self.move_keep_config.msgs])
+
+        def __bool__(self) -> bool:
+            return bool(self.reqs)
+
+        def __len__(self) -> int:
+            return len(self.reqs)
+
+        @property
+        def reqs(self) -> List[BatchRequest]:
+            return [*self.preprovision.reqs, *self.move.reqs, *self.move_keep_config.reqs]
+
+
+    def _check_group(self, cache_devs: List[CentralObject], import_data: dict,) -> GroupMoves:
+        pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
+        group_mv_reqs, group_mv_msgs = {}, {}
+        group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
+        _skip = False
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            has_connected = True if cache_dev.get("status") else False
+            for idx in range(0, 2):
+                to_group = mv_data.get("group")
+                retain_config = mv_data.get("retain_config")
+                if retain_config:
+                    if str(retain_config).lower() in ["false", "no", "0"]:
+                        retain_config = False
+                    elif str(retain_config).lower() in ["true", "yes", "1"]:
+                        retain_config = True
+                    else:
+                        self.exit(f'{cache_dev.help_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                if to_group:
+                    if to_group not in self.cache.group_names:
+                        to_group = self.cache.get_group_identifier(to_group)  # will force cache update
+                        to_group = to_group.name
+
+                    if to_group == cache_dev.get("group"):
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        else:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.rich_help_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
+                            _skip = True
+
+                    # Determine if device is in inventory only determines use of pre-provision group vs move to group
+                    if not has_connected:
+                        req_dict = pregroup_mv_reqs
+                        msg_dict = pregroup_mv_msgs
+                        if retain_config:
+                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.rich_help_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            err_console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                            err_console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
+                            _skip = True
+                    else:
+                        req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
+                        msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+
+            if not _skip:
+                req_dict = utils.update_dict(req_dict, key=to_group, value=cache_dev.serial)
+                msg_dict = utils.update_dict(msg_dict, key=to_group, value=cache_dev.rich_help_text)
+
+        mv_reqs, pre_reqs, mv_retain_reqs = [], [], []
+        if pregroup_mv_reqs:
+            pre_reqs = [self.central.BatchRequest(self.central.preprovision_device_to_group, group_name=k, serial_nums=v) for k, v in pregroup_mv_reqs.items()]
+        if group_mv_reqs:
+            mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]
+        if group_mv_cx_retain_reqs:
+            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_reqs.items()]
+
+        return self.GroupMoves(
+            pregroup_mv_reqs=pre_reqs,
+            pregroup_mv_msgs=pregroup_mv_msgs,
+            group_mv_reqs=mv_reqs,
+            group_mv_msgs=group_mv_msgs,
+            group_mv_cx_retain_reqs=mv_retain_reqs,
+            group_mv_cx_retain_msgs=group_mv_cx_retain_msgs,
+            cache_devs=cache_devs
+        )
+
+
+    def _check_site(self, cache_devs: List[CentralObject], import_data: dict) -> SiteMoves:
+        site_rm_reqs, site_rm_msgs = {}, {}
+        site_mv_reqs, site_mv_msgs = {}, {}
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            has_connected = True if cache_dev.get("status") else False
+            for idx in range(0, 2):
+                to_site = mv_data.get("site")
+                now_site = cache_dev.get("site")
+                if not to_site:
+                    continue
+                else:
+                    to_site = self.cache.get_site_identifier(to_site)
+                    if now_site and now_site == to_site.name:
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        elif now_site == to_site.name:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
+                    elif not has_connected:
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        else:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
+                    elif idx != 0:
+                        site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                        site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
+
+                    if now_site:
+                        now_site = self.cache.get_site_identifier(now_site)
+                        if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
+                            clean_console.print(f'{cache_dev.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                            site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                            site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
+
+        rm_reqs = []
+        if site_rm_reqs:
+            for k, v in site_rm_reqs.items():
+                site_id, dev_type = k.split("~|~")
+                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+
+        mv_reqs = []
+        if site_mv_reqs:
+            for k, v in site_mv_reqs.items():
+                site_id, dev_type = k.split("~|~")
+                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+
+        return self.SiteMoves(
+            cache_devs=cache_devs,
+            site_mv_reqs=mv_reqs,
+            site_mv_msgs=site_mv_msgs,
+            site_rm_reqs=rm_reqs,
+            site_rm_msgs=site_rm_msgs
+        )
+
+    def _check_label(self, cache_devs: List[CentralObject], import_data: dict,) -> MoveData:
+        label_ass_reqs, label_ass_msgs = {}, {}
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            to_label = mv_data.get("label", mv_data.get("labels"))
+            if to_label:
+                to_label = utils.listify(to_label)
+                for label in to_label:
+                    clabel = self.cache.get_label_identifier(to_label)
+                    if clabel.name in cache_dev.get("labels"):
+                        clean_console.print(f'{cache_dev.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
+                    else:
+                        label_ass_reqs = utils.update_dict(label_ass_reqs, key=f'{clabel.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                        label_ass_msgs = utils.update_dict(label_ass_msgs, key=clabel.name, value=cache_dev.rich_help_text)
+
+        batch_reqs = []
+        if label_ass_reqs:
+            for k, v in label_ass_reqs.items():
+                label_id, dev_type = k.split("~|~")
+                batch_reqs += [self.central.BatchRequest(self.central.assign_label_to_devices, label_id=int(label_id), device_type=dev_type, serial_nums=v)]
+
+        return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
+
+
+    def batch_move_devices(self, import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):
+        """Batch move devices based on contents of import file
+
+        Args:
+            import_file (Path): Import file
+            yes (bool, optional): Bypass confirmation prompts. Defaults to False.
+            do_group (bool, optional): Process group moves based on import. Defaults to False.
+            do_site (bool, optional): Process site moves based on import. Defaults to False.
+            do_label (bool, optional): Process label assignment based on import. Defaults to False.
+
+        Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
+
+        Raises:
+            typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
+        """
+        if all([arg is False for arg in [do_site, do_label, do_group]]):
+            do_site = do_label = do_group = True
+
+        devices = self._get_import_file(import_file, import_type="devices")
+
+        dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+        if "INVALID" in dev_idens:
+            self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
+
+        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
+
+        site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
+        if do_site:
+            site_ops = self._check_site(cache_devs=cache_devs, import_data=devices)
+            batch_reqs += site_ops.move.reqs
+            site_rm_reqs += site_ops.remove.reqs
+            confirm_msgs += [str(site_ops)]
+        if do_group:
+            group_ops = self._check_group(cache_devs=cache_devs, import_data=devices)
+            batch_reqs += group_ops.reqs
+            confirm_msgs += [str(group_ops)]
+        if do_label:
+            label_ops = self._check_label(cache_devs=cache_devs, import_data=devices)
+            batch_reqs += label_ops.reqs
+            confirm_msgs += [str(label_ops)]
+
+        _tot_req = (0 if not do_site else len(site_ops.remove)) + len(batch_reqs)
+        if not _tot_req:
+            self.exit("[italic dark_olive_green2]Nothing to do[/]", code=0)
+        if _tot_req > 1:
+            confirm_msgs += [f'\n{_tot_req} API calls will be performed.']
+
+        clean_console.print("\n".join(confirm_msgs))
+        if yes or typer.confirm("\nProceed?", abort=True):
+            site_rm_res = []
+            if site_rm_reqs:
+                site_rm_res = self.central.batch_request(site_rm_reqs)
+                if not all([r.ok for r in site_rm_res]):
+                    err_console.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                    return site_rm_res
+            batch_res = self.central.batch_request(batch_reqs)
+
+            return [*site_rm_res, *batch_res]
+            # TODO need to update cache if successful
 
 if __name__ == "__main__":
     pass
