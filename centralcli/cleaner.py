@@ -889,6 +889,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "model",
                 "ip_address",
                 "macaddr",
+                "mac",  # get_devices_with_inventory has already cleaned keys
                 "serial",
                 "group_name",
                 "site",

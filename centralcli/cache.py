@@ -543,7 +543,7 @@ class Cache:
 
         _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])  # TODO need to add clients
         combined = [
-            {**{k: v for k, v in _inv_by_ser.get(serial, {}).items() if k != "mac"}, **_dev_by_ser.get(serial, {})}
+            {**_inv_by_ser.get(serial, {}), **_dev_by_ser.get(serial, {})}
             for serial in _all_serials
 
         ]
