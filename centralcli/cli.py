@@ -8,7 +8,6 @@ from pathlib import Path
 from time import sleep
 from typing import List
 import typer
-import asyncio
 
 from rich import print
 from rich.console import Console
@@ -25,20 +24,20 @@ clean_err_console = Console(emoji=False, stderr=True)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (Response, BatchRequest, cli, cliadd, cliassign,
+    from centralcli import (BatchRequest, cli, cliadd, cliassign,
                             clibatch, clicaas, cliclone, clidel, clikick, cliset,
                             clirefresh, clirename, clishow, clitest, clitshoot,
-                            cliunassign, cliupdate, cliupgrade, cliexport,
+                            cliunassign, cliupdate, cliupgrade, cliexport, clicheck,
                             config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (Response, BatchRequest, cli, cliadd, cliassign,
+        from centralcli import (BatchRequest, cli, cliadd, cliassign,
                                 clibatch, clicaas, cliclone, clidel, clikick,
                                 cliset, clirefresh, clirename, clishow, clitest,
                                 clitshoot, cliunassign, cliupdate, cliupgrade,
-                                cliexport, config, log, utils)
+                                cliexport, clicheck, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
@@ -73,6 +72,7 @@ app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
 app.add_typer(cliexport.app, name="export", hidden=True)  # TODO remove once implemented
+app.add_typer(clicheck.app, name="check",)
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
@@ -132,12 +132,6 @@ def move(
 ) -> None:
     """Move device(s) to a defined group and/or site.
     """
-    central = cli.central
-
-    # For the benefit of the help text
-    # kw1_val = site
-    # kw2_val = group
-    # TODO reverted as breaks completion logic would need to modif dev_kwarg_completion
     group, site, = None, None
     device = device or ()
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
@@ -158,128 +152,13 @@ def move(
         err_console.print(f":warning: [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
 
     site = site or _site
-    if site:
-        _site = cli.cache.get_site_identifier(site)
 
     if not group and not site:
         cli.exit("Missing Required Argument, group and/or site is required.")
 
-    # TODO improve logic.  if they are moving to a group we can use inventory as backup
-    # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
-    # TODO need to test with a device that has been added but not connected, AND does not exist in cache yet
-    #      To ensure inventory object is being updated during refresh.  Seemed like it wasn't with batch delete
-    dev: List[CentralObject] = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in device]  # Fails here if not found
-
-    devs_by_type, devs_by_site = {}, {}
-    dev_all_names, dev_all_serials, = [], []
-    for d in dev:
-        devs_by_type = utils.update_dict(devs_by_type, d.generic_type, d)
-        dev_all_names += [f"[reset][cyan]{d.name}[/]|[cyan]{d.serial}[/]"]
-        dev_all_serials += [d.serial]
-
-        if site and d.get("site"):
-            if d.site == _site.name:  # device is already in desired site
-                if cli.central.get_all_devices not in cli.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
-                    _ = cli.central.request(cli.cache.update_dev_db, dev_type=d.type)
-                    d = cli.cache.get_dev_identifier(d.serial, dev_type=d.type)
-                    if d.site == _site.name:  # device is already in desired site
-                        clean_err_console.print(f"\u26a0  {d.rich_help_text} is already in Site: {_site.summary_text}")  # \u26a0 is :warning: we need emoji off
-                    else:
-                        devs_by_site = utils.update_dict(devs_by_site, key=f"{d.site}~|~{d.generic_type}", value=d)
-
-                # TODO above warning is displayed, but site move is still attempted
-                if not group:  # remove serial from devs_by_type if already in desired site, and site move is the only operation
-                    _ = devs_by_type[d.generic_type].pop(len(devs_by_type[d.generic_type]) - 1)
-                    if not devs_by_type[d.generic_type]:  # if type list is empty remove the type
-                        del devs_by_type[d.generic_type]
-                continue
-            else:
-                devs_by_site = utils.update_dict(devs_by_site, key=f"{d.site}~|~{d.generic_type}", value=d)
-
-
-    _msg_devs = f"{',' if len(dev_all_names) > 2 else '&'} ".join(dev_all_names)
-
-    # Build confirmation message
-    confirm_msg = f"[bright_green]Move[/] {_msg_devs}\n"
-    if group:
-        _group = CentralObject("group", {"name": "unprovisioned"}) if group.lower() == "unprovisioned" else cli.cache.get_group_identifier(group)
-        confirm_msg += f"  To Group: [cyan]{_group.name}[/]\n"
-        if cx_retain_config:
-            confirm_msg += "  [italic]Config for CX switches will be preserved during move.[/]\n"
-    if site:
-        confirm_msg += f"  To Site: [cyan]{_site.name}[/]\n"
-        if devs_by_site:
-            confirm_msg += "\n  [italic bright_red]Devices will be removed from current sites.[/]\n"
-
-    clean_err_console.print(confirm_msg)
-    confirmed = True if yes or typer.confirm("\nProceed?", abort=True) else False
-    # TODO currently will ask to confirm even if it will result in no calls (dev already in site) Need to build reqs list
-    #      Then ask for confirmation if there are reqs to perform...  Need to refactor/simplify
-
-    # TODO can probably be cleaner.  list of site_rm_reqs, list of group/site mv reqs do requests at end
-    # If devices are associated with a site currently remove them from that site first
-    # FIXME moving 3 devices from one site to another no longer works correctly (disassociated 2 then 1, (2 calls) then added 1)
-    # FIXME completion flaw  cencli move barn--ap ... given barn- -ap was the completion [barn-303p.2c30-ap, barn-518.2816-ap]
-    resp, site_rm_resp, reqs = None, None, []
-    if confirmed and _site and devs_by_site:
-        site_remove_reqs = []
-        for [site_name, dev_type], devs in zip([k.split("~|~") for k in devs_by_site.keys()], list(devs_by_site.values())):
-            site_remove_reqs += [
-                central.BatchRequest(
-                    central.remove_devices_from_site,
-                    cli.cache.get_site_identifier(site_name).id,
-                    serial_nums=[d.serial for d in devs],
-                    device_type=dev_type,
-                )
-            ]
-        site_rm_resp = central.batch_request(site_remove_reqs)
-        if not all(r.ok for r in site_rm_resp):
-            cli.display_results(site_rm_resp, tablefmt="action", exit_on_fail=True)
-
-    # run both group and site move in parallel
-    if confirmed and _group and _site:
-        reqs = [central.BatchRequest(central.move_devices_to_group, _group.name, serial_nums=dev_all_serials, cx_retain_config=cx_retain_config)]
-        site_remove_reqs = []
-        for _type in devs_by_type:
-            serials = [d.serial for d in devs_by_type[_type]]
-            reqs += [
-                central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
-            ]
-
-        resp = central.batch_request(reqs)
-
-    # only moving group via single API call
-    elif confirmed and _group:
-        resp = [
-            cli.central.request(cli.central.move_devices_to_group, _group.name, serial_nums=dev_all_serials, cx_retain_config=cx_retain_config)
-        ]
-
-    # only moving site, potentially multiple calls (for each device_type)
-    # TODO this will issue the call even if the device is found to already be in the site
-    # the cache can get out of sync because this move op does not update the cache  Need to do that and part of that
-    # problem is solved.  partial workup to avoid in scratch, but cache update should be done first
-    elif confirmed and _site:
-        reqs, site_move_devs = [], []
-        for _type in devs_by_type:
-            _this_devs = [d for d in devs_by_type[_type] if d.site != _site.name]
-            serials = [d.serial for d in _this_devs]
-            site_move_devs += _this_devs
-
-            if serials:
-                reqs += [
-                    central.BatchRequest(central.move_devices_to_site, _site.id, serial_nums=serials, device_type=_type)
-                ]
-
-        resp = [Response(url="Error", error=f"These devices are already in site {_site.name}")] if not reqs else central.batch_request(reqs)
-        if all([r.ok for r in resp]):
-            asyncio.run(cli.cache.update_dev_db(data=[{**dev.data, "site": _site.name} for dev in site_move_devs]))
-
-
-    if site_rm_resp:
-        resp = [*site_rm_resp, *resp]
-
-    cli.display_results(resp, tablefmt="action")
-    # TODO update cache when device succesfully moved
+    data = [{"serial": d, "group": group, "site": site, "retain_config": cx_retain_config} for d in device]
+    move_resp = cli.batch_move_devices(data=data, yes=yes)
+    cli.display_results(move_resp, tablefmt="action")
 
 
 @app.command()
