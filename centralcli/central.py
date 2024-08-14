@@ -4347,7 +4347,7 @@ class CentralApi(Session):
     async def assign_label_to_devices(
         self,
         label_id: int,
-        device_type: constants.GenericDevTypes,
+        device_type: constants.GenericDevTypes,  # NEXT-MAJOR make sure these are consistent
         serial_nums: Union[str, List[str]],
     ) -> Response:
         """Associate Label to a list of devices.
@@ -4687,8 +4687,8 @@ class CentralApi(Session):
 
     async def preprovision_device_to_group(
         self,
-        group_name: str,
-        serial_nums: List[str] | str,
+        group_name: str,  # NEXT-MAJOR change to group for consistency
+        serial_nums: List[str] | str,  # NEXT-MAJOR change to serial for consistency (check use whatever is consistent)
         tenant_id: str = None,
     ) -> Response:
         """Pre Provision a group to the device.
