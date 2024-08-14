@@ -1123,25 +1123,16 @@ class CombinedResponse(Response):
                     for inner in output
                 ]
 
-        if _passed:
-            resp = _passed[-1]
-        else:
-            resp = _failed[-1]
-        # resp.rl = min([r.rl for r in responses])
-        # resp.output = output
-        # resp.raw = raw
-        # resp.elapsed = round(elapsed, 2)
+        resp = _passed[-1] if _passed else _failed[-1]
+
         return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
-
-        # return resp
-
 
     def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
         self.responses = responses
         combined_kwargs: dict = combiner_func(responses)
         super().__init__(**combined_kwargs)
         self.error = self.errors = {r.url.path: r.error for r in responses}
-
+        self.rl = self._rl
 
     def __bool__(self):
         return any([r.ok for r in self.responses])
@@ -1175,4 +1166,8 @@ class CombinedResponse(Response):
     @property
     def urls(self) -> List[URL]:
         return [r.url for r in self.responses]
+
+    @property
+    def _rl(self) -> RateLimit:
+        return sorted([r for r in self.responses], key=lambda r: r.rl)[0].rl
 
