@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from typing import Literal, List, Dict, Any
 from rich.console import Console
 from rich.json import JSON
 from centralcli import log
 import tablib
 import yaml
+import json
 console = Console(emoji=False)
 
 # TODO typer now supports markup_mode="rich" Don't need the help below, can just put the markup in the docstr
@@ -24,24 +26,19 @@ console = Console(emoji=False)
 
 # TODO build csv examples for all the below, send through tablib and use .json .yaml .csv methods of tablib to generate examples for each
 # TODO These Examples run on import need to make properties of class or something to avoid running on import
+TabLibFormats = Literal['json', 'yaml', 'csv', 'tsv', 'dbf', 'html', 'jira', 'latex', 'df', 'rst', 'cli']
+
 
 class Example:
     """
     convert csv data as string into csv, json, and yaml
     """
-    def __init__(self, data: list | dict) -> None:
+    def __init__(self, data: str, data_format: TabLibFormats = "csv") -> None:
         self.data = data.strip()
-        self.ds = tablib.Dataset().load(self.data)
+        self.ds = tablib.Dataset().load(self.data, format=data_format)
         self.json = self.get_json()
         self.yaml = self.get_yaml()
         self.csv = self.get_csv()
-
-    @staticmethod
-    def _capture(text: str) -> str:
-        console.begin_capture()
-        console.print(text)
-        return console.end_capture()
-
 
     def __str__(self):
         return "\n".join(
@@ -60,11 +57,27 @@ class Example:
             ]
         )
 
+    def _handle_bools(self, data: tablib.Dataset) -> List[Dict[str, Any]]:
+        bool_strings = ["true", "false", "yes", "no"]
+        def _convert_bool(value: str) -> str | bool | int:
+            if value in bool_strings:
+                return bool(value)
+            elif value.isdigit():
+                return int(value)
+            elif value == "":
+                return None
+            else:
+                return value
+
+        return [{k: _convert_bool(v) for k, v in inner_dict.items()} for inner_dict in data.dict]
+
     def get_json(self):
-        return JSON(self.ds.json).text.markup
+        data = json.dumps(self._handle_bools(self.ds))
+        return JSON(data).text.markup
 
     def get_yaml(self):
-        return yaml.safe_dump(yaml.safe_load(self.ds.json)).rstrip()
+        return yaml.safe_dump(self._handle_bools(self.ds)).rstrip()
+        # return yaml.safe_dump(yaml.safe_load(self.ds.json)).rstrip()
 
     def get_csv(self):
         return self.ds.csv.rstrip()
@@ -97,10 +110,10 @@ CN12345680,aabb-ccdd-8899,chi-access,advanced_ap
 """
 
 data="""
-serial,mac,group,site,label
-CN12345678,aabbccddeeff,phl-access,snantx-1201,
-CN12345679,aa:bb:cc:00:11:22,phl-access,pontmi-102,label1
-CN12345680,aabb-ccdd-8899,chi-access,main,core-devs
+serial,mac,group,site,label,retain_config
+CN12345678,aabbccddeeff,phl-access,snantx-1201,,false
+CN12345679,aa:bb:cc:00:11:22,phl-access,pontmi-102,label1,false
+CN12345680,aabb-ccdd-8899,chi-access,main,core-devs,true
 """
 
 clibatch_move_devices = f"""
@@ -108,11 +121,12 @@ clibatch_move_devices = f"""
 Accepts the following keys (include as header row for csv import):
     [italic grey42]If importing yaml or json the following fields can optionally be under a 'devices' key[/italic grey42]
 
-[cyan]serial[/],[cyan]group[/],[cyan]site[/],[cyan]label[/]
-Where '[cyan]group[/]' Move device to specified group
-      '[cyan]site[/]' Move device to specified site
-            [italic]If device is currently in a different site it will be removed from that site[/]
-      '[cyan]label[/]' Assign specified label to device
+[cyan]serial[/],[cyan]group[/],[cyan]site[/],[cyan]label[/],[cyan]retain_config[/]
+Where         [cyan]group[/]: Move device to specified group
+               [cyan]site[/]: Move device to specified site
+                 [italic dark_olive_green2]If device is currently in a different site it will be removed from that site[/]
+              [cyan]label[/]: Assign specified label to device
+      [cyan]retain_config[/]: Retain devices current configuration during group move. [grey42](Applies to CX switches Only)[/]
 
 {Example(data)}
 
