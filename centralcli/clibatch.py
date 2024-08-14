@@ -1707,10 +1707,11 @@ def rename(
 
 @app.command()
 def move(
-    import_file: Path = cli.arguments.import_file,
+    import_file: List[Path] = typer.Argument(None, autocompletion=lambda incomplete: [("devices", "batch move devices")] if incomplete and "devices".startswith(incomplete.lower()) else [], show_default=False,),
     do_group: bool = typer.Option(False, "-G", "--group", help="Only process group move from import."),
     do_site: bool = typer.Option(False, "-S", "--site", help="Only process site move from import."),
     do_label: bool = typer.Option(False, "-L", "--label", help="Only process label assignment from import."),
+    cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during group move. [cyan]retain_config[/] in import_file takes precedence, this flag enables the option without it being specified in the import_file."),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1731,7 +1732,7 @@ def move(
         print(examples.move_devices)
         return
 
-    elif not import_file:
+    if not import_file:
         _msg = [
             "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
@@ -1739,8 +1740,13 @@ def move(
             "Use [cyan]cencli batch move --help[/] for help.",
         ]
         cli.exit("\n".join(_msg))
+    elif len(import_file) > 2:
+        cli.exit("Too many arguments.  Use [cyan]cencli batch move --help[/] for help.")
     else:
-        resp = cli.batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
+        import_file: Path = [f for f in import_file if not str(f).startswith("device")][0]  # allow unnecessary 'devices' sub-command
+        if not import_file.exists():
+            cli.exit(f"Invalid value for '[IMPORT_FILE]': Path '[cyan]{str(import_file)}[/]' does not exist.")
+        resp = cli.batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config)
         cli.display_results(resp, tablefmt="action")
 
 
