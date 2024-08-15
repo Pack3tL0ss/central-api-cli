@@ -117,9 +117,13 @@ class Template(BaseModel):
     template_hash: str
     version: str
 
-class Label(BaseModel):
-    name: str
 
+class Label(BaseModel):
+    id: int = Field(alias="label_id")
+    name: str = Field(alias="label_name")
+
+class Labels(BaseModel):
+    labels: List[Label]
 
 class ClientType(str, Enum):
     WIRED = "WIRED"

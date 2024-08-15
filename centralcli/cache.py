@@ -1449,6 +1449,7 @@ class Cache:
 
     def label_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -1471,7 +1472,9 @@ class Cache:
             incomplete,
             completion=True,
         )
+
         out = []
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
         if match:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name not in args:
@@ -2103,6 +2106,8 @@ class Cache:
                     log.error(f"Site DB cache removal returned {len(cache_res)} expected {len(doc_ids)}", caption=True, log=True)
 
         else:  # update site cache
+            # TODO maybe have all the update funcs check if self.responses.site is not None and use it.  Add force: bool = False if there are scenarios where we may need to trigger a 2nd cache update in same session.
+            # This will allow us to remove the conditionals in a lot of the calling funcs that check if that cache has already been updated.
             resp = await self.central.get_all_sites()
             if resp.ok:
                 sites = models.Sites(sites=resp.raw["sites"])
@@ -2163,14 +2168,13 @@ class Cache:
         else:
             resp = await self.central.get_labels()
             if resp.ok:
-                resp.output = cleaner.get_labels(resp.output)
-                resp.output = utils.listify(resp.output)
                 self.responses.label = resp
                 self.updated.append(self.central.get_labels)
+                cache_data = [m.dict() for m in models.Labels(labels=resp.output).labels]
                 self.LabelDB.truncate()
-                update_res = self.LabelDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error("Tiny DB returned an error during label db update")
+                update_res = self.LabelDB.insert_multiple(cache_data)
+                if len(update_res) < len(resp):
+                    log.error(f"LabelDB Cache Update error.  Truncate/re-populate TinyDB returned {len(update_res)} doc_ids expected {len(resp)}", show=True, log=True)
             return resp
 
     async def update_license_db(self) -> Response:
@@ -2793,6 +2797,8 @@ class Cache:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
+        elif not isinstance(query_str, str):
+            query_str = str(query_str)
 
 
         if completion and query_str == "":
@@ -2897,19 +2903,19 @@ class Cache:
                 match = self.GroupDB.search((self.Q.name == query_str))
 
             # case insensitive
-            if not match:
+            if not match or completion:
                 match = self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
             # case insensitive startswith
-            if not match:
+            if not match or completion:
                 match = self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
-            if not match:
+            if not match or completion:
                 if "_" in query_str or "-" in query_str:
                     match = self.GroupDB.search(
                         self.Q.name.test(
@@ -2918,7 +2924,7 @@ class Cache:
                     )
 
             # case insensitive startswith ignore - _
-            if not match:
+            if not match or completion:
                 match = self.GroupDB.search(
                     self.Q.name.test(
                         lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
@@ -2973,8 +2979,6 @@ class Cache:
         """Allows Case insensitive label match"""
         retry = False if completion else retry
         for _ in range(0, 2):
-            # TODO change all get_*_identifier functions to continue to look for matches when match is found when
-            #       completion is True
             # Exact match
             if query_str == "":
                 match = self.labels
@@ -2982,19 +2986,19 @@ class Cache:
                 match = self.LabelDB.search((self.Q.name == query_str))
 
             # case insensitive
-            if not match:
+            if not match or completion:
                 match = self.LabelDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
             # case insensitive startswith
-            if not match:
+            if not match or completion:
                 match = self.LabelDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
-            if not match:
+            if not match or completion:
                 if "_" in query_str or "-" in query_str:
                     match = self.LabelDB.search(
                         self.Q.name.test(
@@ -3003,7 +3007,7 @@ class Cache:
                     )
 
             # case insensitive startswith ignore - _
-            if not match:
+            if not match or completion:
                 match = self.LabelDB.search(
                     self.Q.name.test(
                         lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
@@ -3357,8 +3361,20 @@ class Cache:
         this: CacheAttributes = getattr(cache_details, cache_name)
         db_all = this.db.all()
         db = this.db
-        """Allows Case insensitive ssid match"""
+        """Fetch items from cache based on query
+
+        This is a common identifier lookup function for all stored types that only have
+        name and id as potential match fields.
+
+        returns:
+            CentralObject | List[CentralObject]: returns any matches
+        """
         retry = False if completion else retry
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+        elif not isinstance(query_str, str):
+            query_str = str(query_str)
+
         for _ in range(0, 2):
             if query_str == "":
                 match = db_all
@@ -3390,7 +3406,7 @@ class Cache:
             if not match:
                 match = db.search(
                     self.Q.id.test(
-                        lambda v: v.lower().startswith(query_str.lower())
+                        lambda v: str(v).lower().startswith(query_str.lower())
                     )
                 )
 
@@ -3445,3 +3461,4 @@ class CacheDetails:
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.update_site_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
+        self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
