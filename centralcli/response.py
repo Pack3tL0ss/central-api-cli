@@ -102,18 +102,8 @@ class RateLimit():
         else:
             return "No API call was performed."
 
-    @property
-    def near_sec(self):
-        return True if self.remain_sec <= 2 else False
-
-    @property
-    def near_day(self):
-        return True if self.remain_day <= 100 else False
-
-    @property
-    def text(self):
-        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
-        return full_text if self.call_performed else str(self)
+    def __len__(self) -> int:
+        return len(self.__str__())
 
     def __lt__(self, other) -> bool:
         return True if self.remain_day is None else bool(self.remain_day < other)
@@ -129,6 +119,19 @@ class RateLimit():
 
     def __ge__(self, other) -> bool:
         return False if self.remain_day is None else bool(self.remain_day >= other)
+
+    @property
+    def near_sec(self):
+        return True if self.remain_sec <= 2 else False
+
+    @property
+    def near_day(self):
+        return True if self.remain_day <= 100 else False
+
+    @property
+    def text(self):
+        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        return full_text if self.call_performed else str(self)
 
 
 class Spinner(Status):
