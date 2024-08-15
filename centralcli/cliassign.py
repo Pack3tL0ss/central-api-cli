@@ -7,7 +7,6 @@ from typing import List
 
 import typer
 from rich import print
-from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -22,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import iden_meta
-clean_err_console = Console(emoji=False, stderr=True)
+from centralcli.cache import CentralObject
 
 app = typer.Typer()
 
@@ -48,7 +47,7 @@ def license(
     if do_auto:
         _msg = f"Enable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
         if len(serial_nums) > 1:
-            print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+            cli.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
         _msg = f"Assign [bright_green]{license}[/bright_green] to"
         try:
@@ -62,8 +61,8 @@ def license(
             dev = _serial_nums[0]
             _msg = f"{_msg} [cyan]{dev}[/]"
 
-    print(_msg)
-    if yes or typer.confirm("\nProceed?"):
+    cli.econsole.print(_msg)
+    if cli.confirm(yes):
         if not do_auto:
             resp = cli.central.request(cli.central.assign_licenses, _serial_nums, services=license.name)
         else:
@@ -83,8 +82,8 @@ def label_(
     account: str = cli.options.account,
 ) -> None:
     "Assign label to device(s)"
-    label = cli.cache.get_label_identifier(label)
-    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    label: CentralObject = cli.cache.get_label_identifier(label)
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     _msg = f"Assign [bright_green]{label.name}[/bright_green] to"
     if len(devices) > 1:
@@ -93,7 +92,7 @@ def label_(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.rich_help_text}"
-    clean_err_console.print(_msg)
+    cli.econsole.print(_msg, emoji=False)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]
     switches = [dev for dev in devices if dev.generic_type == "switch"]
@@ -105,7 +104,7 @@ def label_(
         if devs:
             reqs += [br(cli.central.assign_label_to_devices, label.id, device_type=dev_type, serial_nums=[dev.serial for dev in devs])]
 
-    if yes or typer.confirm("\nProceed?"):
+    if cli.confirm(yes):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         # We don't cache device label assignments
