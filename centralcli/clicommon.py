@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import typer
 import sys
-from typing import List, Literal, Union, Tuple, Dict
+from typing import List, Literal, Union, Tuple, Dict, Any
 from pathlib import Path
 from rich.console import Console
 from rich import print
@@ -30,6 +30,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
+from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
 from centralcli.cache import CentralObject
 
@@ -54,9 +55,10 @@ class MoveData:
             retain_config: bool = False,
             cache_devs: List[CentralObject] = None,
         ) -> None:
+        self._move_type = move_type
         self.cache_devs = cache_devs
         self.reqs: List[BatchRequest] = mv_reqs or []
-        self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type)
+        self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type, retain_config=retain_config)
 
     def __bool__(self) -> bool:
         return True if self.reqs else False
@@ -83,6 +85,19 @@ class MoveData:
 
         return confirm_msgs
 
+    @property
+    def serials_by_move_type(self) -> Dict[str, List[str]]:
+        out = {}
+        for req in self.reqs:
+            move_type = "group" if self._move_type == "group" else f"{self._move_type}_id"
+            key = req.kwargs.get(move_type)
+            if not key and move_type == "group":
+                key = req.kwargs["group_name"]  # NEXT-MAJOR this needs to be changed to group once preprov method on central.py updated to be consistent
+
+            serials = req.kwargs["serial_nums"]
+            out = utils.update_dict(out, key=key, value=serials)
+
+        return out
 class CLICommon:
     def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
         self.account = account
@@ -655,7 +670,7 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        clean_console.print(r)
+                        clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
                         # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
@@ -800,7 +815,7 @@ class CLICommon:
         return md5.hexdigest()
 
 
-    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
+    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
             data = config.get_file_data(import_file, text_ok=text_ok)
@@ -853,6 +868,16 @@ class CLICommon:
         def reqs(self) -> List[BatchRequest]:
             return [*self.remove.reqs, *self.move.reqs]
 
+        @property
+        def serials_by_site_id(self) -> Dict[str, List[str]]:
+            out = {}
+            for req in self.move.reqs:
+                group = req.kwargs["site_id"]
+                serials = req.kwargs["serial_nums"]
+                out = utils.update_dict(out, key=group, value=serials)
+
+            return out
+
     class GroupMoves:
         def __init__(
                 self,
@@ -882,8 +907,18 @@ class CLICommon:
         def reqs(self) -> List[BatchRequest]:
             return [*self.preprovision.reqs, *self.move.reqs, *self.move_keep_config.reqs]
 
+        @property
+        def serials_by_group(self) -> Dict[str, List[str]]:
+            out = {}
+            for req in [*self.move.reqs, *self.move_keep_config.reqs]:
+                group = req.kwargs["group"]
+                serials = req.kwargs["serial_nums"]
+                out = utils.update_dict(out, key=group, value=serials)
 
-    def _check_group(self, cache_devs: List[CentralObject], import_data: dict,) -> GroupMoves:
+            return out
+
+
+    def _check_group(self, cache_devs: List[CentralObject], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
@@ -892,14 +927,16 @@ class CLICommon:
             has_connected = True if cache_dev.get("status") else False
             for idx in range(0, 2):
                 to_group = mv_data.get("group")
-                retain_config = mv_data.get("retain_config")
-                if retain_config:
-                    if str(retain_config).lower() in ["false", "no", "0"]:
-                        retain_config = False
-                    elif str(retain_config).lower() in ["true", "yes", "1"]:
-                        retain_config = True
-                    else:
-                        self.exit(f'{cache_dev.help_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                if cx_retain_force is not None:
+                    retain_config = cx_retain_force if cache_dev.type == "cx" else False
+                else:
+                    retain_config = mv_data.get("retain_config") or cx_retain_config  # key to use the 'or' here in case retain_config is in data but set to null or ''
+                    _retain_config = ToBool(retain_config)
+                    retain_config = _retain_config.value
+                    if not _retain_config.ok:
+                        self.exit(f'{cache_dev.summary_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                    if retain_config and cache_dev.type != "cx":
+                        self.exit(f'{cache_dev.summary_text} has [cyan]retain_config[/] = {retain_config}.  [cyan]retain_config[/] is only valid for [cyan]cx[/] not [red]{cache_dev.type}[/].  Aborting...')
                 if to_group:
                     if to_group not in self.cache.group_names:
                         to_group = self.cache.get_group_identifier(to_group)  # will force cache update
@@ -935,7 +972,7 @@ class CLICommon:
         if group_mv_reqs:
             mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]
         if group_mv_cx_retain_reqs:
-            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_reqs.items()]
+            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
 
         return self.GroupMoves(
             pregroup_mv_reqs=pre_reqs,
@@ -1023,16 +1060,64 @@ class CLICommon:
 
         return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
 
+    def device_move_cache_update(
+            self,
+            mv_resp: List[Response],
+            serials_by_site: Dict[str: List[str]] = None,
+            serials_by_group: Dict[str: List[str]] = None,
+        ) -> None:
+        serials = set(
+            [
+                *([s for s_list in serials_by_site.values() for s in s_list]),
+                *([g for g_list in serials_by_group.values() for g in g_list]),
+            ]
+        )
+        moves_by_type = {
+            "site": {self.cache.SiteDB.search(self.cache.Q.id == site)[0]["name"]: serials for site, serials in serials_by_site.items()},
+            "group": serials_by_group or {}
+        }
+        cache_by_serial = {k: self.cache.devices_by_serial.get(k, self.cache.inventory_by_serial[k]) for k in [*self.cache.inventory_by_serial, *self.cache.devices_by_serial] if k in serials}
+        for r, (move_type, name, serials) in zip(mv_resp, [(move_type, name, serials) for move_type, v in moves_by_type.items() for name, serials in v.items()]):
+            if move_type == "site":
+                site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
+                cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
+            if move_type == "group":  # All or none here as far as the rresponse.
+                if r.ok:
+                    cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
 
-    def batch_move_devices(self, import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):
+        self.central.request(
+            self.cache.update_dev_db,
+            data=list(cache_by_serial.values())
+        )
+
+
+
+    def batch_move_devices(
+            self,
+            import_file: Path = None,
+            *,
+            data: List[Dict[str, Any]] = None,
+            yes: bool = False,
+            do_group: bool = False,
+            do_site: bool = False,
+            do_label: bool = False,
+            cx_retain_config: bool = False,
+            cx_retain_force: bool = None,
+        ):
         """Batch move devices based on contents of import file
 
         Args:
-            import_file (Path): Import file
+            import_file (Path, optional): Import file. Defaults to None (one of import_file or data is required).
+            data: (List[Dict[str, Any]]): Data with device identifier and group, site, and/or label keys representing desired move to
+                locations for those keys.  Defaults to None (one of import_file or data is required).
             yes (bool, optional): Bypass confirmation prompts. Defaults to False.
             do_group (bool, optional): Process group moves based on import. Defaults to False.
             do_site (bool, optional): Process site moves based on import. Defaults to False.
             do_label (bool, optional): Process label assignment based on import. Defaults to False.
+            cx_retain_config (bool, optional): Keep config intact for CX switches during move. 'retain_config' in import_file/data
+                takes precedence.  This value is applied only if value is not set in the import_file/data. Defaults to False.
+            cx_retain_config (bool, optional): Keep config intact for CX switches during move regardless of 'retain_config' value
+                in import_file/data.
 
         Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
 
@@ -1042,13 +1127,21 @@ class CLICommon:
         if all([arg is False for arg in [do_site, do_label, do_group]]):
             do_site = do_label = do_group = True
 
-        devices = self._get_import_file(import_file, import_type="devices")
+        if not any([data, import_file]):
+            self.exit("import_file or data is required")
+
+        devices = data or self._get_import_file(import_file, import_type="devices")
 
         dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
         if "INVALID" in dev_idens:
             self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
+        if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries
+            filtered_count = len(dev_idens) - len(set(dev_idens))
+            dev_idens = set(dev_idens)
+            err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
 
-        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
+        # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
+        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True) for d in dev_idens]
 
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
         if do_site:
@@ -1057,7 +1150,7 @@ class CLICommon:
             site_rm_reqs += site_ops.remove.reqs
             confirm_msgs += [str(site_ops)]
         if do_group:
-            group_ops = self._check_group(cache_devs=cache_devs, import_data=devices)
+            group_ops = self._check_group(cache_devs=cache_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force)
             batch_reqs += group_ops.reqs
             confirm_msgs += [str(group_ops)]
         if do_label:
@@ -1080,9 +1173,9 @@ class CLICommon:
                     err_console.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                     return site_rm_res
             batch_res = self.central.batch_request(batch_reqs)
+            self.device_move_cache_update(batch_res, serials_by_site=site_ops.serials_by_site_id, serials_by_group=group_ops.serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
 
             return [*site_rm_res, *batch_res]
-            # TODO need to update cache if successful
 
 if __name__ == "__main__":
     pass
