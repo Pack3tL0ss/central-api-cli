@@ -1487,14 +1487,13 @@ def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchR
         devices = [{**d, "services": d["subscription"]} for d in devices]
 
     subs = set([d["services"] for d in devices if d["services"]])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
-    devices = [d for d in devices if d["services"]]  # filter any devs tghat currently do not have subscription
+    devices = [d for d in devices if d["services"]]  # filter any devs that currently do not have subscription
 
     try:
         subs = [cli.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
     except ValueError as e:
         sub_names = "\n".join(cli.cache.license_names)
-        print("[bright_red]Error[/]: " + str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
-        raise typer.Exit(1)
+        cli.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
 
     devs_by_sub = {s: [] for s in subs}
     for d in devices:
