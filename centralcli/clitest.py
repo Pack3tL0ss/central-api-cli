@@ -213,7 +213,7 @@ def command(
     ),
     update_cache = cli.options.update_cache,
 ) -> None:
-    """This is a hidden test message used for automated testing.
+    """This is a hidden test command used for automated testing.
 
     This command should not be used.
 
