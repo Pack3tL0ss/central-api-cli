@@ -21,6 +21,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+from centralcli.constants import iden_meta
+clean_err_console = Console(emoji=False, stderr=True)
+
 app = typer.Typer()
 
 
@@ -70,15 +73,16 @@ def license(
         # TODO cache update similar to batch unsubscribe
 
 
-@app.command(help="Assign label to device(s)", hidden=False)
-def label(
-    label: str = typer.Argument(..., help="Label to assign to device(s)", autocompletion=cli.cache.label_completion,),
-    devices: List[str] = typer.Argument(..., autocompletion=cli.cache.dev_completion),
+@app.command(name="label")
+def label_(
+    label: str = typer.Argument(..., metavar=iden_meta.label, help="Label to assign to device(s)", autocompletion=cli.cache.label_completion, show_default=False,),
+    devices: List[str] = cli.arguments.devices,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
+    "Assign label to device(s)"
     label = cli.cache.get_label_identifier(label)
     devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
@@ -89,7 +93,7 @@ def label(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.rich_help_text}"
-    Console(emoji=False).print(_msg)
+    clean_err_console.print(_msg)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]
     switches = [dev for dev in devices if dev.generic_type == "switch"]
@@ -104,6 +108,7 @@ def label(
     if yes or typer.confirm("\nProceed?"):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
+        # We don't cache device label assignments
 
 
 @app.callback()
