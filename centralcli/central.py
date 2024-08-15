@@ -4990,9 +4990,6 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO build aggregator to run report showing rogues/interfering/neighbors
-    # async def wids_get_all(self):
-
     async def wids_get_rogue_aps(
         self,
         group: List[str] = None,
