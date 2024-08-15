@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import asyncio
 from enum import Enum
 from pathlib import Path
 import sys
@@ -14,12 +13,12 @@ from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, cleaner
+    from centralcli import cli, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner
+        from centralcli import cli, utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -51,6 +50,8 @@ class AddGroupArgs(str, Enum):
     serial = "serial"
     group = "group"
     mac = "mac"
+
+err_console = Console(stderr=True)
 
 
 # TODO update completion with mac oui, serial prefix
@@ -338,22 +339,37 @@ def site(
 
 
 
-# TODO allow more than one label and use batch_request
-@app.command(help="Create a new label")
+# TODO label can't match any existing label names OR site names.  Add pre-check via cache / cache-update if label already exists with that name ... then error if cache_update confirms it's accurate
+@app.command()
 def label(
-    name: str = typer.Argument(..., show_default=False,),
+    labels: List[str] = typer.Argument(..., metavar=iden_meta.label_many, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    _msg = "Creating" if yes else "Create"
-    print(f"{_msg} new label [cyan]{name}[/]")
-    if yes or typer.confirm("Proceed?"):
-        resp = cli.central.request(cli.central.create_label, name)
-        cli.display_results(resp, cleaner=cleaner.get_labels)
-        if resp.ok:  # TODO pass data to cli.cache.update_label_db to update vs doing a subsequenct call
-            asyncio.run(cli.cache.update_label_db(cleaner.get_labels(resp.output)))
+    """Delete label(s)
+
+    Label can't have any devices associated with it to delete.
+    """
+    print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
+    print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
+    ...
+    for idx in range(0, 2):
+        duplicate_names = [name for name in [*[s["name"] for s in cli.cache.sites], *cli.cache.label_names] if name in labels]
+        if duplicate_names:
+            if idx == 0:
+                err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, refreshing cache to ensure data is current.")
+                cli.cache.check_fresh(site_db=True, label_db=True)
+            else:
+                cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, label/site names must be unique (sites included)")
+
+    batch_reqs = [BatchRequest(cli.central.create_label, label) for label in labels]
+    if yes or typer.confirm("\nProceed?", abort=True):
+        batch_resp = cli.central.batch_request(batch_reqs)
+        cli.display_results(batch_resp, tablefmt="action")
+        update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"]} for resp in batch_resp if resp.ok]
+        cli.central.request(cli.cache.update_label_db, data=update_data)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
