@@ -293,7 +293,7 @@ def rich_output(
             elif k in set_width_cols:
                 table.add_column(
                     k, min_width=set_width_cols[k].get('min', 0),
-                    max_width=set_width_cols[k]['max'],
+                    max_width=set_width_cols[k].get('max'),
                     justify='left',
                 )
             elif k in full_cols:
