@@ -1258,14 +1258,9 @@ def labels(
     account: str = cli.options.account,
 ) -> None:
     """Show labels/details"""
-    central = cli.central
-    if central.get_labels not in cli.cache.updated:
-        resp = asyncio.run(cli.cache.update_label_db())
-    else:
-        resp = cli.cache.responses.labels
-
+    resp = cli.central.request(cli.cache.update_label_db)
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
 
 @app.command(short_help="Show sites/details")
@@ -1291,14 +1286,13 @@ def sites(
 
     site = None if site and site.lower() == "all" else site
     if not site:
-        if central.get_all_sites not in cli.cache.updated:
-            resp = asyncio.run(cli.cache.update_site_db())
-        else:
-            resp = cli.cache.responses.site
+        resp = cli.central.request(cli.cache.update_site_db)
     else:
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
 
+    # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
+    # Country is blank when added via API and not provided.  Find public API to lookup country during add
     caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
     counts, count_caption = {}, None
     if resp.ok:
