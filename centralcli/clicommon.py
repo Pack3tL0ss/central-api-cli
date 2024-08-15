@@ -8,6 +8,7 @@ import sys
 from typing import List, Literal, Union, Tuple, Dict, Any
 from pathlib import Path
 from rich.console import Console
+from rich.prompt import Confirm
 from rich import print
 import json
 import pkg_resources
@@ -106,6 +107,12 @@ class CLICommon:
         self.raw_out = raw_out
         self.options = CLIOptions(cache)
         self.arguments = CLIArgs(cache)
+        self.econsole = Console(stderr=True)
+        self.console = Console()
+        self._confirm = Confirm(prompt="Proceed?", console=self.econsole,)
+
+    def confirm(self, yes: bool = False) -> bool:
+        return yes or self._confirm()
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
