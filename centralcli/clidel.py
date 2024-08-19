@@ -74,23 +74,27 @@ def site(
         cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
 
 
-
-@app.command(help="Delete a label")
-def label(
-    label: str = typer.Argument(..., show_default=False,),
+@app.command(name="label")
+def label_(
+    labels: List[str] = typer.Argument(..., metavar=iden.label_many, autocompletion=cli.cache.label_completion, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    label = cli.cache.get_label_identifier(label)
-    _msg = "Deleting" if yes else "Delete"
-    print(f"{_msg} label [cyan]{label.name}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
-        resp = cli.central.request(cli.central.delete_label, label.id)
-        cli.display_results(resp, tablefmt="action")
-        if resp.ok:
-            asyncio.run(cli.cache.update_label_db(label, remove=True))
+    """Delete label(s)
+
+    Label can't have any devices associated with it to delete.
+    """
+    labels = [cli.cache.get_label_identifier(label) for label in labels]
+    print(f'[red]{"Deleting" if yes else "Delete"}[/] label{"s" if len(labels) > 1 else ""}:')
+    print("\n".join([f"  [cyan]{label.name}[/]" for label in labels]))
+    batch_reqs = [BatchRequest(cli.central.delete_label, label.id) for label in labels]
+    if cli.confirm(yes):
+        batch_resp = cli.central.batch_request(batch_reqs)
+        cli.display_results(batch_resp, tablefmt="action")
+        cache_remove_data = [label for label, resp in zip(labels, batch_resp) if resp.ok]
+        cli.central.request(cli.cache.update_label_db, cache_remove_data, remove=True)
 
 
 @app.command(short_help="Delete group(s)")
