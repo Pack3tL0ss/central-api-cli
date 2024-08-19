@@ -111,8 +111,13 @@ class CLICommon:
         self.console = Console()
         self._confirm = Confirm(prompt="Proceed?", console=self.econsole,)
 
-    def confirm(self, yes: bool = False) -> bool:
-        return yes or self._confirm()
+    def confirm(self, yes: bool = False, *, abort: bool = True) -> bool:
+        result = yes or self._confirm()
+        if not result and abort:
+            self.econsole.print("[bright_red]Aborted[/]")
+            self.exit(code=0)
+
+        return result
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -522,9 +527,9 @@ class CLICommon:
 
         typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-        if "Limit:" not in outdata and caption is not None and cleaner is not None and cleaner.__name__ != "parse_caas_response":
-            print(caption)
-        elif caption and tablefmt != "rich":
+        # if "Limit:" not in outdata and caption is not None and cleaner is not None and cleaner.__name__ != "parse_caas_response":
+        #     print(caption)
+        if caption and tablefmt != "rich":
             cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
