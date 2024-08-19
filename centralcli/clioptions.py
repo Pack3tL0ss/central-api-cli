@@ -2,13 +2,14 @@
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
 
-
 import typer
 
 
 class CLIArgs:
     def __init__(self, cache: Cache):
         self.cache = cache
+        self.name = typer.Argument(..., show_default=False,)
+        self.devices = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cache.dev_completion, show_default=False,)
         self.what = typer.Argument(..., show_default=False,)
         self.import_file = typer.Argument(None, exists=True, show_default=False,)
 
