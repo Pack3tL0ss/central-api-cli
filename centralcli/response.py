@@ -456,6 +456,7 @@ class Session():
         if self._aio_session:
             if self._aio_session.closed:
                 # TODO finish refactor
+                # self._aio_session = ClientSession()  # Doing this breaks show all and no doubt others
                 return ClientSession()
             return self._aio_session
         else:
@@ -493,6 +494,8 @@ class Session():
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' [{_url.path}]'
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
+        if config.sanitize and utils.is_serial(end_name):
+            end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
@@ -1172,5 +1175,6 @@ class CombinedResponse(Response):
 
     @property
     def _rl(self) -> RateLimit:
-        return sorted([r for r in self.responses], key=lambda r: r.rl)[0].rl
+        calls = [r for r in self.responses if r.rl.ok]
+        return sorted([r for r in calls or self.responses], key=lambda r: r.rl)[0].rl
 
