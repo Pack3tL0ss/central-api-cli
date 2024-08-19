@@ -42,7 +42,7 @@ def certificate(
     account: str = cli.options.account,
 ) -> None:
     print(f"[bright_red]Delete[/] certificate [cyan]{name}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.delete_certificate, name)
         cli.display_results(resp, tablefmt="action")
 
@@ -67,7 +67,7 @@ def site(
     _del_msg = "\n".join(_del_msg)
     print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         del_list = [s.id for s in sites]
         resp = cli.central.request(cli.central.delete_site, del_list)
         cli.display_results(resp, tablefmt="action")
@@ -102,7 +102,8 @@ def group(
     groups: List[str] = typer.Argument(
         ...,
         help="Group to delete (can provide more than one).",
-        autocompletion=cli.cache.group_completion
+        autocompletion=cli.cache.group_completion,
+        show_default=False,
     ),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -120,7 +121,7 @@ def group(
     if len(reqs) > 1:
         print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         if resp:
@@ -139,7 +140,7 @@ def wlan(
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]")
-    if yes or typer.confirm("\nProceed", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.delete_wlan, group.name, name)
         cli.display_results(resp, tablefmt="action")
 
@@ -158,7 +159,8 @@ def webhook(
     This command requires the webhook id, which is not cached.
     Use [cyan]cencli show webhooks[/] to get the webhook id ([bright_green]wid[/]).
     """
-    if yes or typer.confirm("Delete Webhook?", abort=True):
+    cli.econsole.print(f"\u26a0  Delet{'e' if not yes else 'ing'} Webhook {wid}", emoji=False)
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.delete_webhook, wid)
         cli.display_results(resp, tablefmt="action")
 
@@ -188,7 +190,7 @@ def template(
     print(
         f"[bright_red]{'Delete' if not yes else 'Deleting'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
     )
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.delete_template, template.group, template.name)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
         _ = cli.central.request(cli.cache.update_template_db, remove=template)
@@ -368,7 +370,7 @@ def device(
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
     batch_resp = []
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         if not cop_inv_only:
             batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
             if arch_reqs and len(batch_resp) >= 2:
@@ -395,7 +397,7 @@ def device(
         update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
 
         cli.display_results(batch_resp, tablefmt="action")
-        raise typer.Exit(0)
+        cli.exit(code=0)
 
     elif delayed_mon_del_reqs and not cop_inv_only:
         del_resp = []
