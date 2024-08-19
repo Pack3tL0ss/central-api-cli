@@ -3508,11 +3508,13 @@ class CentralApi(Session):
 
     async def get_fw_version_list(
         self,
-        device_type: str = None,
+        device_type: str = None,  # NEXT-MAJOR convert to common lib dev_types
         swarm_id: str = None,
-        serial: str = None,
+        serial: str = None,  # NEXT-MAJOR ensure consistent (some use serial_num)
     ) -> Response:
         """List Firmware Version.
+
+        Provide one and only one of the following.
 
         Args:
             device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER/CX"
@@ -3529,6 +3531,8 @@ class CentralApi(Session):
             'swarm_id': swarm_id,
             'serial': serial
         }
+        # TODO detect and handle 'You can only specify one of device_type, swarm_id, serial parameters'
+        # one and only one should have value.  Can not be all None
 
         return await self.get(url, params=params)
 
