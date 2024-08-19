@@ -497,6 +497,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
         self.device = self.devices = self.dev = "device"
+        self.label = self.labels = "label"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"
