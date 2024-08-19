@@ -360,8 +360,7 @@ def device(
             print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
             delayed_mon_del_reqs = []
         if not mon_del_reqs:
-            print("No devices found to remove from UI... Exiting")
-            raise typer.Exit(1)
+            cli.exit("No devices found to remove from UI... Exiting")
         else:
             _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
 
