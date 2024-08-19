@@ -1243,7 +1243,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
     batch_resp = []
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes, abort=True):
         if not cop_inv_only:
             batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
             if arch_reqs and len(batch_resp) >= 2:
