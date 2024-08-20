@@ -109,12 +109,12 @@ class CLICommon:
         self.arguments = CLIArgs(cache)
         self.econsole = Console(stderr=True)
         self.console = Console()
-        self._confirm = Confirm(prompt="Proceed?", console=self.econsole,)
+        self._confirm = Confirm(prompt="\nProceed?", console=self.econsole,)
 
     def confirm(self, yes: bool = False, *, abort: bool = True) -> bool:
         result = yes or self._confirm()
         if not result and abort:
-            self.econsole.print("[bright_red]Aborted[/]")
+            self.econsole.print("[red]Aborted[/]")
             self.exit(code=0)
 
         return result
