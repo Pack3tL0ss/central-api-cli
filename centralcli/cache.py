@@ -1562,6 +1562,7 @@ class Cache:
     # TODO add support for zip code city state etc.
     def site_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -1580,15 +1581,22 @@ class Cache:
             err_console.print(":warning:  Invalid config")
             return
 
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
+
         match = self.get_site_identifier(
             incomplete.replace('"', "").replace("'", ""),
             completion=True,
         )
+
         out = []
         if match:
-            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
+                match_attrs = [a for a in [m.name, m.id, m.address, m.city, m.state, m.zipcode] if a]
+                if all([attr not in args for attr in match_attrs]):
+                    matched_attribute = [attr for attr in match_attrs if str(attr).startswith(incomplete)]
+                    # err_console.print(f"\n{match_attrs=}, {matched_attribute=}, {incomplete=}")  # DEBUG completion
+                    matched_attribute = m.name if len(matched_attribute) != 1 else matched_attribute[0]
+                    out += [tuple([matched_attribute if " " not in matched_attribute else f"'{matched_attribute}'", m.help_text])]
 
         for m in out:
             yield m
@@ -2806,14 +2814,18 @@ class Cache:
 
         match = None
         for _ in range(0, 2 if retry else 1):
-            # try exact match by name
-            match = self.SiteDB.search(
-                (self.Q.name == query_str)
-            )
+            match = []
+            # Exact match
+            if query_str == "":
+                match = self.sites
+            else:
+                match += self.SiteDB.search(
+                    (self.Q.name == query_str)
+                )
 
             # try exact match by other fields
-            if not match:
-                match = self.SiteDB.search(
+            if not match or completion:
+                match += self.SiteDB.search(
                     (self.Q.id.test(lambda v: str(v) == query_str))
                     | (self.Q.zipcode == query_str)
                     | (self.Q.address == query_str)
@@ -2823,32 +2835,32 @@ class Cache:
                 )
 
             # try case insensitive name
-            if not match:
-                match = self.SiteDB.search(
+            if not match or completion:
+                match += self.SiteDB.search(
                     (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
                 )
             # try case insensitve address match
-            if not match:
-                match = self.SiteDB.search(
+            if not match or completion:
+                match += self.SiteDB.search(
                     self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
                 )
 
             # try case insensitive name swapping _ and -
-            if not match:
+            if not match or completion:
                 if "-" in query_str:
-                    match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+                    match += self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
                 elif "_" in query_str:
-                    match = self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+                    match += self.SiteDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
 
             # try case insensitive name starts with
-            if not match:
-                match = self.SiteDB.search(
+            if not match or completion:
+                match += self.SiteDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # Last Chance try other fields case insensitive startswith provided value
-            if not match:
-                match = self.SiteDB.search(
+            if not match or completion:
+                match += self.SiteDB.search(
                     self.Q.zipcode.test(lambda v: v.startswith(query_str))
                     | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
@@ -2897,27 +2909,28 @@ class Cache:
             # TODO change all get_*_identifier functions to continue to look for matches when match is found when
             #       completion is True
             # Exact match
+            match = []
             if query_str == "":
                 match = self.groups
             else:
-                match = self.GroupDB.search((self.Q.name == query_str))
+                match += self.GroupDB.search((self.Q.name == query_str))
 
             # case insensitive
             if not match or completion:
-                match = self.GroupDB.search(
+                match += self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
             # case insensitive startswith
             if not match or completion:
-                match = self.GroupDB.search(
+                match += self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
             if not match or completion:
                 if "_" in query_str or "-" in query_str:
-                    match = self.GroupDB.search(
+                    match += self.GroupDB.search(
                         self.Q.name.test(
                             lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
                         )
@@ -2925,7 +2938,7 @@ class Cache:
 
             # case insensitive startswith ignore - _
             if not match or completion:
-                match = self.GroupDB.search(
+                match += self.GroupDB.search(
                     self.Q.name.test(
                         lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
                     )
@@ -2979,28 +2992,29 @@ class Cache:
         """Allows Case insensitive label match"""
         retry = False if completion else retry
         for _ in range(0, 2):
+            match = []
             # Exact match
             if query_str == "":
                 match = self.labels
             else:
-                match = self.LabelDB.search((self.Q.name == query_str))
+                match += self.LabelDB.search((self.Q.name == query_str))
 
             # case insensitive
             if not match or completion:
-                match = self.LabelDB.search(
+                match += self.LabelDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
             # case insensitive startswith
             if not match or completion:
-                match = self.LabelDB.search(
+                match += self.LabelDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
             if not match or completion:
                 if "_" in query_str or "-" in query_str:
-                    match = self.LabelDB.search(
+                    match += self.LabelDB.search(
                         self.Q.name.test(
                             lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
                         )
@@ -3008,7 +3022,7 @@ class Cache:
 
             # case insensitive startswith ignore - _
             if not match or completion:
-                match = self.LabelDB.search(
+                match += self.LabelDB.search(
                     self.Q.name.test(
                         lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
                     )
