@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import typer
 import sys
-import time
 import pendulum
 from pathlib import Path
 from rich import print
@@ -47,7 +46,7 @@ def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
 
 
 @app.command()
-def system_logs(
+def acp_logs(
     log_id: str = typer.Argument(
         None,
         metavar='[LOG_ID]',
@@ -62,7 +61,7 @@ def system_logs(
     ip: str = typer.Option(None, help="Filter logs by device IP address", show_default=False,),
     description: str = typer.Option(None, help="Filter logs by description (fuzzy match)", show_default=False,),
     _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)", show_default=False,),
-    count: int = typer.Option(None, "-n", help="Collect Last n logs", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
     start: datetime = cli.options(timerange="5d").start,
     end: datetime = cli.options.end,
     past: str = cli.options.past,
@@ -80,9 +79,9 @@ def system_logs(
     account: str = cli.options.account,
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
 ) -> None:
-    """Show Aruba Central audit logs
+    """Show ACP audit logs
 
-    This command shows logs associated with Aruba Central itself.
+    This command shows logs associated with Aruba Cloud Platform (ACP).
     i.e. [cyan]Device Onboarded[/]
          [cyan]Device checked in[/]
          [cyan]New API Gateway app added (token creation)[/]
@@ -92,24 +91,25 @@ def system_logs(
 
     :clock5:  Displays prior 5 days if no time options are provided.
     """
-    if log_id:
-        log_id = cli.cache.get_log_identifier(log_id)
+    title = "ACP Audit Logs"
+    if _all or count and True in list(map(bool, [start, end, past])):
+        cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+    start, end = cli.verify_time_range(start, end=end, past=past)
 
     if device:
         device = cli.cache.get_dev_identifier(device)
 
-    if _all and True in list(map(bool, [start, end, past])):
-        cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]--all[/] is used.")
-
-    start = start or int(time.time() - 432000)
-    start, end = cli.verify_time_range(start, end=end, past=past)
-    if start is not None:
-        start = None if _all else start.int_timestamp
-    if end is not None:
-        end = None if _all else end.int_timestamp
+    if _all:
+        title = f"All available {title}"
+    elif count:
+        title = f"Last {count} {title}"
+    elif [start, end].count(None) == 2:
+        start = pendulum.now(tz="UTC").subtract(days=5)
+        title = f"{title} for last 5 days"
 
     kwargs = {
-        "log_id": log_id,
+        "log_id": log_id if log_id is None else cli.cache.get_log_identifier(log_id),  # TODO show audit system-logs and show audit logs is using same DB
         "username": user,
         "start_time": start,
         "end_time": end,
@@ -132,14 +132,14 @@ def system_logs(
         cli.display_results(
             resp,
             tablefmt=tablefmt,
-            title="Audit Logs",
+            title=title,
             pager=pager,
             outfile=outfile,
             sort_by=sort_by,
             reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs if not verbose else None,
             cache_update_func=cli.cache.update_log_db if not verbose else None,
-            caption="Use [cyan]show audit system-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
+            caption="Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
         )
 
 
@@ -159,7 +159,7 @@ def logs(
     _all: bool = typer.Option(False, "-a", "--all", help="Display all available audit logs.  Overrides default of 48h", show_default=False,),
     device: str = cli.options.device,
     _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)", show_default=False,),
-    count: int = typer.Option(None, "-n", help="Collect Last n logs", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
     sort_by: LogSortBy = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -184,10 +184,6 @@ def logs(
     """
     title = "audit event logs"
     start, end = cli.verify_time_range(start, end=end, past=past)
-    if start is not None:
-        start = None if _all else start.int_timestamp
-    if end is not None:
-        end = None if _all else end.int_timestamp
 
     if all(x is None for x in [start, end]):
         start = pendulum.now(tz="UTC").subtract(days=2)
