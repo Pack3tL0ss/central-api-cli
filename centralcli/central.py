@@ -2666,8 +2666,8 @@ class CentralApi(Session):
         self,
         log_id: str = None,
         username: str = None,
-        start_time: int = None,
-        end_time: int = None,
+        start_time: int | float | datetime = None,  # NEXT-MAJOR ensure time args are consistent, we use from_time/to_time elsewhere
+        end_time: int | float | datetime = None,
         description: str = None,
         target: str = None,
         classification: str = None,
@@ -2679,6 +2679,8 @@ class CentralApi(Session):
         count: int = None,
     ) -> Response:
         """Get all audit logs.
+
+        This API returns the first 10,000 results only.
 
         Args:
             log_id (str, optional): The id of the log to return details for. Defaults to None.
@@ -2703,6 +2705,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/auditlogs/v1/logs"
+        start_time, end_time = utils.parse_time_options(start_time, end_time)
 
         params = {
             "username": username,
@@ -2730,13 +2733,15 @@ class CentralApi(Session):
         group_name: str = None,
         device_id: str = None,
         classification: str = None,
-        start_time: int = None,
-        end_time: int = None,
+        start_time: int | float | datetime = None,  # NEXT-MAJOR ensure time args are consistent, we use from_time/to_time elsewhere
+        end_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100,
         count: int = None,
     ) -> Response:
         """Get all audit events for all groups.
+
+        This API returns the first 10,000 results only.
 
         Args:
             log_id (str, optional): The id of the audit event log to return details for. Defaults to None.
@@ -2744,9 +2749,9 @@ class CentralApi(Session):
             device_id (str, optional): Filter audit events by Target / Device ID. Device ID for AP
                 is VC Name and Serial Number for Switches
             classification (str, optional): Filter audit events by classification
-            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
+            start_time (int | float | datetime, optional): Filter audit logs by Time Range. Start time of the audit
                 logs should be provided in epoch seconds
-            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
+            end_time (int | float | datetime, optional): Filter audit logs by Time Range. End time of the audit logs
                 should be provided in epoch seconds
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination Defaults to 0.
@@ -2756,6 +2761,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/auditlogs/v1/events" if not log_id else f"/auditlogs/v1/event_details/{log_id}"
+        start_time, end_time = utils.parse_time_options(start_time, end_time)
 
         params = {
             'group_name': group_name,
