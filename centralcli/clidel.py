@@ -53,6 +53,7 @@ def site(
         ...,
         help="Site(s) to delete (can provide more than one).",
         autocompletion=cli.cache.site_completion,
+        show_default=False,
     ),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
