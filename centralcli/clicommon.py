@@ -807,7 +807,7 @@ class CLICommon:
                 self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
             else:
                 log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
-                return self.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid issue with API endpoint
+                return self.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid timing issue with API endpoint
 
         return start, _end
 
