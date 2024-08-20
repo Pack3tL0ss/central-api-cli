@@ -2777,7 +2777,7 @@ class Cache:
         if match:
             # user selects which device if multiple matches returned
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str,)
+                match = self.handle_multi_match(sorted(match, key=lambda m: m.get("name", "")), query_str=query_str,)
 
             return match[0]
 
