@@ -161,18 +161,20 @@ Where '[cyan]serial[/]' The serial of the AP to be renamedd
       Fields not required for a specific batch operation are ignored.[/]
 """
 
-clibatch_delete_devices = f"""
-[italic cyan]cencli batch delete devices IMPORT_FILE[/]:
-Accepts the following keys (include as header row for csv import):
-[cyan]serial[/] ([italic]any other keys will be ignored[/])
-
-[bright_green].csv example[reset] [italic]Example shows extra [cyan]license[/] key which is ignored:
--------------- csv --------------
+data = """
 serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap
----------------------------------
+"""
+clibatch_delete_devices = f"""[italic cyan]cencli batch delete devices IMPORT_FILE[/]:
+
+Accepts the following fields (include as header row for csv import):
+    [bright_green]-[/] [cyan]serial[/] [italic](any other keys will be ignored)[/]
+
+[italic]Examples shows extra [cyan]license[/] field which is ignored:
+{Example(data)}
+
 {common_add_delete_end}
 """
 
