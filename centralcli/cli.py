@@ -184,8 +184,9 @@ def bounce(
     ports = utils.get_interfaces_from_range(ports)
 
     print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
-    print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if len(ports) > 1:
+        print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
+    if cli.confirm(yes):
         resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, (dev.serial, command, p,)) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
@@ -214,7 +215,7 @@ def remove(
     print(
         f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
     )
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         devs_by_type = {}
         for d in devices:
             if d.generic_type not in devs_by_type:
@@ -272,7 +273,7 @@ def reboot(
     if len(batch_reqs) > 1:
         print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         batch_resp = cli.central.batch_request(batch_reqs)
         cli.display_results(batch_resp, tablefmt="action")
 
@@ -296,7 +297,7 @@ def reset(
     _msg = f"{_msg} ORO connection for [cyan]{dev.rich_help_text}[/]"
     console.print(_msg)
 
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.reset_overlay_connection, dev.serial)
         cli.display_results(resp, tablefmt="action")
 
@@ -354,7 +355,7 @@ def nuke(
     _msg = "Factory Default" if not yes else "Factory Defaulting"
     _msg = f"[bright_red blink]{_msg}[/] {conf_msg}"
     console.print(_msg)
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(func, arg, 'erase_configuration')
         cli.display_results(resp, tablefmt="action")
 
@@ -442,20 +443,20 @@ def start(
     if pid:
         _abort = True if not port or port == int(config.webhook.port) else False
         print(f"Webhook proxy is currently running (process id {pid}).")
-        if yes_both or typer.confirm("Terminate existing process", abort=_abort):
+        print(f"Terminat{'e' if not yes_both else 'ing'} existing process{'?' if not yes_both else '.'}")
+        if cli.confirm(yes_both, abort=_abort):
             terminate_process(pid)
             print("[cyan]Process Terminated")
 
     # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
     config_port = 9143 if not config.webhook else config.webhook.port
     print(f"Webhook Proxy will listen on port {port or config_port}")
-    if yes or yes_both or typer.confirm("\nProceed?", abort=True):
-        console = Console()
+    if cli.confirm(yes):
         port = port or config.webhook.port
         cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
         if collect:
              cmd += ["-c"]
-        with console.status("Starting Webhook Proxy..."):
+        with cli.console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -463,7 +464,7 @@ def start(
             )
             sleep(2)
 
-        with console.status("Ensuring startup success...", spinner="dots2"):
+        with cli.console.status("Ensuring startup success...", spinner="dots2"):
             sleep(8)
 
         proc = psutil.Process(p.pid)
@@ -527,13 +528,12 @@ def stop(
     proc = _get_process_info()
     if proc:
         print(f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}")
-        if yes or typer.confirm("Terminate existing process", abort=True):
+        print(f"Terminat{'e' if not yes else 'ing'} existing process{'?' if not yes else '.'}")
+        if cli.confirm(yes):
             dead = terminate_process(proc[0])
-            print("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.")
-            raise typer.Exit(0 if dead else 1)
+            cli.exit("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.", code=0 if dead else 1)
     else:
-        print("WebHook Proxy is not running.")
-        raise typer.Exit(0)
+        cli.exit("WebHook Proxy is not running.", code=0)
 
 @app.command(short_help="Archive devices", hidden=False)
 def archive(
@@ -566,7 +566,7 @@ def archive(
 
     console = Console(emoji=False)
     console.print(_msg)
-    if yes or typer.confirm("\nProceed?"):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
         cli.display_results(resp, tablefmt="action")
 
@@ -631,7 +631,7 @@ def enable(
     print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
     print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
     print('Not just the 6300 models.')
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         services = [s.name for s in services]
 
         resp = cli.central.request(cli.central.enable_auto_subscribe, services=services)
@@ -664,7 +664,7 @@ def disable(
     print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
     print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
     print('Not just the 6300.')
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         services = [s.name for s in services]
 
         resp = cli.central.request(cli.central.disable_auto_subscribe, services=services)
