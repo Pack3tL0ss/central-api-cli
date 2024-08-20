@@ -70,7 +70,7 @@ class CLIOptions:
             None,
             "-e", "--end",
             help="End of time-range (24hr notation) [grey42]\[default: Now][/]",
-            formats=["%m/%d/%Y-%H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y", "%Y-%m-%d"],
+            formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
@@ -83,7 +83,7 @@ class CLIOptions:
             None,
             "-s", "--start",
             help=f"Start of time-range (24hr notation) [grey42]\[default: {self.timerange_to_start}][/]",
-            formats=["%m/%d/%Y-%H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y", "%Y-%m-%d"],
+            formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
