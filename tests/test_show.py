@@ -282,18 +282,18 @@ def test_show_audit_logs_past():
     result = runner.invoke(app, ["show", "audit", "logs", "--past", "5d"],)
     print(result.stdout)
     assert result.exit_code == 0
-    if "Empty Response" in result.stdout:
-        assert "Empty" in result.stdout
-    else:
+    if "Empty Response" not in result.stdout:
         assert "audit event logs" in result.stdout.lower()
         assert "id" in result.stdout
 
 
-def test_show_switch_vlans_by_name():
-    result = runner.invoke(app, ["show", "vlans", test_data["switch"]["name"], "--table"],)
+def test_show_audit_acp_logs_count():
+    result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
+    print(result.stdout)
     assert result.exit_code == 0
-    assert "name" in result.stdout
-    assert "pvid" in result.stdout
+    if "Empty Response" not in result.stdout:
+        assert "acp audit logs" in result.stdout.lower()
+        assert "id" in result.stdout
 
 
 def test_show_logs_past():
@@ -301,6 +301,13 @@ def test_show_logs_past():
     assert result.exit_code == 0
     assert "event logs" in result.stdout.lower()
     assert "description" in result.stdout
+
+
+def test_show_switch_vlans_by_name():
+    result = runner.invoke(app, ["show", "vlans", test_data["switch"]["name"], "--table"],)
+    assert result.exit_code == 0
+    assert "name" in result.stdout
+    assert "pvid" in result.stdout
 
 
 def test_show_clients():
