@@ -2474,7 +2474,7 @@ def logs(
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
-        reverse=reverse,
+        reverse=not reverse,
         set_width_cols={"event type": {"min": 5, "max": 12}},
         cleaner=cleaner.get_event_logs if not verbose else None,
         cache_update_func=cli.cache.update_event_db if not verbose else None,
