@@ -1062,7 +1062,7 @@ class Session():
         return await self.api_call(f_url, method="PATCH", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
 
-async def delete(
+    async def delete(
         self,
         url,
         params: dict = {},
