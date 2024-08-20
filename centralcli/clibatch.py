@@ -706,7 +706,6 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
                             print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
                             warn = True
 
-    msg_pfx = "" if not warn else "Warning exist "
     word = "Adding" if not warn and yes else "Add"
     confirm_devices = ['|'.join([f'{k}:{v}' for k, v in d.items()]) for d in data]
     if len(confirm_devices) > 6:
@@ -718,8 +717,12 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     print(f'{len(data)} [cyan]Devices found in {"import file" if not import_file else import_file.name}[/]')
     console.print(confirm_str)
     print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    if warn:
+        msg = ":warning:  Warnings exist"
+        msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
+        cli.econsole.print(msg)
     resp = None
-    if (not warn and yes) or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
+    if cli.confirm(yes=not warn and yes):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
