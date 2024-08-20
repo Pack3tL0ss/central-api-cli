@@ -382,14 +382,14 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
     if not data:
         cli.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
 
-    if import_type and import_type in data:
+    if isinstance(data, dict) and import_type and import_type in data:
         data = data[import_type]
 
     if data:
         if isinstance(data, dict):  # accept yaml/json keyed by serial #
             if utils.is_serial(list(data.keys())[0]):
                 data = [{"serial": k, **v} for k, v in data.items()]
-        if isinstance(data, list) and text_ok:
+        elif isinstance(data, list) and text_ok:
             if import_type == "devices" and all(utils.is_serial(s) for s in data):
                 data = [{"serial": s} for s in data]
             if import_type == "labels":
@@ -454,7 +454,7 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     print("\n[bright_green]The Following Sites will be created:[/]")
     _ = [print(s) for s in site_names]
 
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         reqs = [
             BatchRequest(central.create_site, **site.dict())
             for site in verified_sites
@@ -463,13 +463,8 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         if all([r.ok for r in resp]):
             resp[-1].output = [r.output for r in resp]
             resp = resp[-1]
-            cache_res = asyncio.run(cli.cache.update_site_db(data=resp.output))
-            if len(cache_res) != len(data):
-                log.warning(
-                    "Attempted to add entries to Site Cache after batch import.  Cache Response "
-                    f"{len(cache_res)} but we added {len(data)} sites.",
-                    show=True
-                )
+            cli.central.request(cli.cache.update_site_db, data=resp.output)
+
         return resp or Response(error="No Sites were added")
 
 # TODO REMOVE NOT USED (keeping for now in case I change my mind)
@@ -689,15 +684,12 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
         raise typer.Exit(1)
 
-    if isinstance(data, dict) and "devices" in data:
-        data = data["devices"]
-
     sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
     sub_key = None if not sub_key else sub_key[0]
     if sub_key:
         # Validate license types
         for d in data:
-            if d[sub_key]:
+            if d.get(sub_key):
                 for idx in range(2):
                     try:
                         d["license"] = cli.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
@@ -768,7 +760,7 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     print(_msg)
 
     resp = None
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
         resp = cli.central.batch_request(reqs)
         # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
@@ -1344,17 +1336,11 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 
     print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
     _ = [print(s) for s in site_names]
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = central.request(central.delete_site, del_list)
         if resp:
-            cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
-            if len(cache_del_res) != len(del_list):
-                log.warning(
-                    f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
-                    f"but we tried to delete {len(del_list)} sites.",
-                    show=True
-                )
-            return resp
+            cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
+        return resp
 
 # TODO copy/paste logic from clidel.py groups()
 def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False, del_groups: bool = None, del_labels: bool = None) -> List[Response]:
