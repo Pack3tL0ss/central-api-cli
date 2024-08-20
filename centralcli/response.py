@@ -336,6 +336,17 @@ class Response:
 
         return f"{status_code}{r}"
 
+    def __rich__(self):
+        fg = "bright_green" if self.ok else "red"
+        ret_str = self.__str__().replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:")
+        ret_str = ret_str.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]")
+
+        if self.status != 418:
+            status_code = f"  status code: {self.status}\n"
+            return ret_str.replace(status_code, f'{status_code.split(":")[0]}:[{fg}]{status_code.split(":")[-1]}[/{fg}]')
+
+        return ret_str
+
     def __setitem__(self, name: str, value: Any) -> None:
         print(f"set name {name} value {value}")
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
@@ -1051,7 +1062,7 @@ class Session():
         return await self.api_call(f_url, method="PATCH", data=payload,
                                    json_data=json_data, params=params, headers=headers, **kwargs)
 
-    async def delete(
+async def delete(
         self,
         url,
         params: dict = {},

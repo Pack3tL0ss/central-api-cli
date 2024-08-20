@@ -592,6 +592,9 @@ class CLICommon:
         if resp is not None:
             resp = utils.listify(resp)
 
+            if self.raw_out:
+                tablefmt = "raw"
+
             # update caption with rate limit
             try:
                 last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
@@ -610,7 +613,6 @@ class CLICommon:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
                     caption = f'{caption}\n{_log_caption}'
-
 
             for idx, r in enumerate(resp):
                 # Multi request url line (example below)
@@ -634,9 +636,6 @@ class CLICommon:
                         print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
                         print(f" [{fg}]Response[reset]:")
 
-                if self.raw_out:
-                    tablefmt = "raw"
-
                 if config.capture_raw:
                     with clean_console.status("Capturing raw response"):
                         raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
@@ -649,7 +648,7 @@ class CLICommon:
                     print("  :warning: Empty Response.  This may be normal.")
 
                     if log.caption:
-                        print(log.caption)
+                        print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
                 elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
@@ -682,7 +681,9 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
+                        # TODO make __rich__ renderable method in Response object with markups
+                        # clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
+                        clean_console.print(r)
                         # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
