@@ -27,18 +27,41 @@ class TemplateDevType(str, Enum):
     ArubaSwitch = "ArubaSwitch"
 
 # fields from Response.output after cleaner
-class Inventory(BaseModel):
-    type: str
+class _Inventory(BaseModel):
+    type: Optional[str] = None
     model: Optional[str]
     sku: Optional[str]
     mac: str = Field(alias="macaddr")
     serial: str
-    services: Union[List[str], str] = Field(alias="license")
+    services: Union[List[str], str] = Field(None, alias="license")
 
 switch_types = {
     "AOS-S": "sw",
     "AOS-CX": "cx"
 }
+
+class Inventory(_Inventory):
+    def __init__(
+        self,
+        serial: str,
+        type: str = None,
+        mac: str = None,
+        macaddr: str = None,
+        model: Optional[str] = None,
+        sku: Optional[str] = None,
+        services: Optional[str | List[str]] = None,
+        license: Optional[str | List[str]] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            type=type,
+            serial=serial,
+            macaddr=mac or macaddr,
+            model=model,
+            sku=sku,
+            license=services or license,
+            **kwargs,
+        )
 
 # Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE
