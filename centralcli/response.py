@@ -979,20 +979,10 @@ class Session():
             _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
                 chunk += [self.BatchRequest(asyncio.sleep, (1,))]
-            try:
-                task_names = [
-                    c.func.__name__ if c.func.__name__ == "sleep" else
-                    f'{c.args[0].removeprefix(f"{config.base_url}/").replace("/", "_")}_{c.kwargs["params"].get("offset", "")}-{int(c.kwargs["params"].get("offset", 0)) + int(c.kwargs["params"].get("limit", 0))}'
-                    for c in chunk
-                ]
-            except Exception:
-                task_names = [None for _ in range(0, len(chunk))]
 
-            tasks = [asyncio.create_task(call.func(*call.args, **call.kwargs), name=name) for call, name in zip(chunk, task_names)]
-            m_resp += await asyncio.gather(*tasks)
-            # m_resp += await asyncio.gather(
-            #     *[call.func(*call.args, **call.kwargs) for call in chunk]
-            # )
+            m_resp += await asyncio.gather(
+                *[call.func(*call.args, **call.kwargs) for call in chunk]
+            )
 
             _elapsed = time.perf_counter() - _start
             log.debug(f"chunk of {_calls_per_chunk} took {_elapsed:.2f}.")
