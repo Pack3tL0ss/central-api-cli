@@ -737,11 +737,13 @@ class CLICommon:
                 **cleaner_kwargs
             )
 
-    def past_to_start(self, past: str = None,) -> pendulum.DateTime | None:
-        """Common helper to parse --past option and return pendulum.DateTime object representing start time
+    def delta_to_start(self, delta: str = None, past: bool = True) -> pendulum.DateTime | None:
+        """Common helper to parse --past or --in option and return pendulum.DateTime object representing start time
 
         Args:
-            past (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
+            delta (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
+            past (bool, optional): by default returns time in the past (now - delta),
+                if is_past=False will return future time (now + delta). Defaults to True.
 
         Returns:
             pendulum.DateTime | None: returns DateTime object in UTC or None if past argument was None.
@@ -749,33 +751,34 @@ class CLICommon:
         Raises:
             typer.Exit: If past str has value but is invalid.
         """
-        if not past:
+        if not delta:
             return
 
-        past = past.replace(" ", "")
+        delta = delta.replace(" ", "")
         now: pendulum.DateTime = pendulum.now(tz="UTC")
+        delta_func = now.subtract if past else now.add
         try:
-            if past.endswith("d"):
-                start = now.subtract(days=int(past.rstrip("d")))
-            elif past.endswith("h"):
-                start = now.subtract(hours=int(past.rstrip("h")))
-            elif past.endswith("m"):
-                start = now.subtract(minutes=int(past.rstrip("m")))
-            elif past.endswith("M"):
-                start = now.subtract(months=int(past.rstrip("M")))
-            elif past.endswith("w"):
-                start = now.subtract(weeks=int(past.rstrip("w")))
+            if delta.endswith("d"):
+                start = delta_func(days=int(delta.rstrip("d")))
+            elif delta.endswith("h"):
+                start = delta_func(hours=int(delta.rstrip("h")))
+            elif delta.endswith("m"):
+                start = delta_func(minutes=int(delta.rstrip("m")))
+            elif delta.endswith("M"):
+                start = delta_func(months=int(delta.rstrip("M")))
+            elif delta.endswith("w"):
+                start = delta_func(weeks=int(delta.rstrip("w")))
             else:
                 self.exit(
                     '\n'.join(
                         [
-                            f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid. Specifically timeframe suffix [bright_red]{list(past)[-1]}[/] is not a recognized specifier.",
+                            f"[cyan]{'--past' if past else '--in'}[/] [bright_red]{delta}[/] Does not appear to be valid. Specifically timeframe suffix [bright_red]{list(delta)[-1]}[/] is not a recognized specifier.",
                             "Valid suffixes: [cyan]M[/]=Months, [cyan]w[/]=weeks, [cyan]d[/]=days, [cyan]h[/]=hours, [cyan]m[/]=minutes"
                         ]
                     )
                 )
         except ValueError:
-            self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
+            self.exit(f"[cyan]{'--past' if past else '--in'}[/] [bright_red]{delta}[/] Does not appear to be valid")
 
         return start
 
@@ -788,7 +791,7 @@ class CLICommon:
             log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
 
         if past:
-            start = self.past_to_start(past=past)
+            start = self.delta_to_start(delta=past)
 
         if start is None:
             return start, end
@@ -807,7 +810,7 @@ class CLICommon:
                 self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
             else:
                 log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
-                return self.past_to_start("2_159h"), end  # 89 days and 23 hours to avoid timing issue with API endpoint
+                return self.delta_to_start("2_159h"), end  # 89 days and 23 hours to avoid timing issue with API endpoint
 
         return start, _end
 
