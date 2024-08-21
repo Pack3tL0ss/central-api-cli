@@ -2487,8 +2487,8 @@ class Cache:
         refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
-        if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
-            _word = "Refreshing" if config.cache_file else "Populating"
+        if refresh or not config.cache_file_ok:
+            _word = "Refreshing" if config.cache_file_ok else "Populating"
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
             start = time.perf_counter()
@@ -3267,9 +3267,9 @@ class Cache:
             match = self.EventDB.search(self.Q.id == str(query))
             if not match:
                 log.warning(f"Unable to gather event details from short index query {query}", show=True)
-                print("Short event_id aliases are built each time [cyan]'show events'[/] is ran.")
-                print("  You can verify the cache by running (hidden command) [cyan]'show cache events'[/]")
-                print("  run [cyan]'show events [OPTIONS]'[/] then use the short index for details")
+                print("Short event_id aliases are built each time [cyan]show logs[/] is ran.")
+                print("  You can verify the cache by running (hidden command) [cyan]show cache events[/]")
+                print("  run [cyan]show logs [OPTIONS][/] then use the short index for details")
                 raise typer.Exit(1)
             else:
                 return match[-1]["details"]
@@ -3277,7 +3277,6 @@ class Cache:
         except ValueError as e:
             log.error(f"Exception in get_event_identifier {e.__class__.__name__}", show=True)
             log.exception(e)
-            # print(f"[bright_red]Exception[/] in get_event_identifier [dark_orange4]{e.__class__.__name__}[/]")
             raise typer.Exit(1)
 
     def get_mpsk_identifier(
