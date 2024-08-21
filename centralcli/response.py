@@ -806,7 +806,7 @@ class Session():
         # No errors but the total provided by Central doesn't match the # of records
         try:
             if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
-                log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
+                log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
 
