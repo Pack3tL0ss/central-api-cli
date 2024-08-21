@@ -115,12 +115,8 @@ def group(
             ]
         ],
     ),
-    at: datetime = typer.Option(
-        None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy hh:mm' or 'dd hh:mm' (implies current month) [Default: Now]",
-        show_default=False,
-        formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
-        ),
+    at: datetime = cli.options.at,
+    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
     model: str = typer.Option(None, help="Upgrade a specific switch model [grey42]\[applies to AOS-SW switches only]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
@@ -134,7 +130,9 @@ def group(
     Device type must be provided.  For AOS-SW switches you can filter to a specific model via the --model flag.
     """
     group = cli.cache.get_group_identifier(group)
-    at = None if not at else int(round(at.timestamp()))
+    at = None if not at else round(at.timestamp())
+    if in_:
+        at = cli.delta_to_start(in_, past=False).int_timestamp
 
     ver_msg = [typer.style("Upgrade", fg="cyan")]
     if dev_type:
@@ -186,19 +184,17 @@ def swarm(
         autocompletion=cli.cache.dev_ap_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
-    at: datetime = typer.Option(
-        None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy hh:mm' or 'dd hh:mm' (implies current month) [Default: Now]",
-        show_default=False,
-        formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
-        ),
+    at: datetime = cli.options.at,
+    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    at = None if not at else int(round(datetime.timestamp(at)))
+    at = None if not at else round(at.timestamp())
+    if in_:
+        at = cli.delta_to_start(in_, past=False).int_timestamp
 
     dev = cli.cache.get_dev_identifier(device, dev_type="ap")
     swarm = dev.swack_id
