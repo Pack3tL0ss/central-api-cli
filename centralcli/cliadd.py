@@ -24,10 +24,8 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
-from centralcli.strings import LongHelp
 from centralcli.response import BatchRequest
 from centralcli.cache import CentralObject
-help_text = LongHelp()
 
 
 app = typer.Typer()
@@ -288,7 +286,7 @@ def wlan(
 
 
 
-@app.command(short_help="Add a site.", help=help_text.add_site)
+@app.command()
 def site(
     site_name: str = typer.Argument(... , show_default=False,),
     address: str = typer.Argument(None, help="street address, (enclose in quotes)", show_default=False,),
@@ -313,6 +311,16 @@ def site(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
+    """Add a site.
+
+    Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
+    [italic]Google Maps "Plus Codes" are supported for address field.[/]
+
+    If address is provided assoicated geo coordinates are automatically populated.
+    If geo coordinates are provided, address is not calculated.
+
+    [italic green3]Wrap Arguments that contain spaces in quotes i.e. "5402 Champions Hill Dr"[/]
+    """
     # These conversions just make the fields match what is used if done via GUI
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)

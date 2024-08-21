@@ -26,8 +26,6 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
 from centralcli import CentralObject
-from centralcli.strings import LongHelp
-help_text = LongHelp()
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."

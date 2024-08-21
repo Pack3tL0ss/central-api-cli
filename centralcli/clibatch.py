@@ -40,11 +40,10 @@ from centralcli.constants import (
     state_abbrev_to_pretty,
 )
 from centralcli.exceptions import DevException, ImportException, MissingFieldException
-from centralcli.strings import ImportExamples, LongHelp
+from centralcli.strings import ImportExamples
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
-help_text = LongHelp()
 from centralcli.cache import CentralObject  # NoQA
 
 iden = IdenMetaVars()
