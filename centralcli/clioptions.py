@@ -76,6 +76,13 @@ class CLIOptions:
         )
         self.update_cache = typer.Option(False, "-U", hidden=True)
         self.show_example = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
+        self.at = typer.Option(
+            None,
+            help="Perform operation at specified date/time (24hr notation) [grey42]\[default: Now][/]",
+            formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M"],
+            # rich_help_panel="Time Range Options",
+            show_default=False,
+        )
 
     @property
     def start(self):
