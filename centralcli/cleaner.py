@@ -1007,8 +1007,12 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
         # "sites",
     ]
     for d in data:
+        site = d.get('sites')
+        if site:
+            site = site[0].get("name")
+        site = "" if not site else f"|S:{site}"
         d["device info"] = f"{d.get('hostname', '')}|" \
-            f"{d.get('device_serial', '')}|G:{d.get('group_name', '')}|S:{d.get('sites', [{}])[0].get('name', 'null')}"
+            f"{d.get('device_serial', '')}|G:{d.get('group_name', '')}{site}"
 
     # Stash event_details in cache indexed starting @ most recent event
     if len(data) > 1 and cache_update_func:
