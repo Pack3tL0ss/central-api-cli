@@ -3959,23 +3959,25 @@ class CentralApi(Session):
 
     async def cancel_upgrade(
         self,
-        device_type: str,
+        device_type: str = None,
         serial: str = None,
         swarm_id: str = None,
         group: str = None,
     ) -> Response:
         """Cancel scheduled firmware upgrade.
 
+        You can only specify one of device_type, swarm_id or serial parameters
+
         Args:
-            device_type (str): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
-            serial (str): Serial of device
+            device_type (str, optional): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
+            serial (str, optional): Serial of device
             swarm_id (str): Swarm ID
             group (str): Specify Group Name to cancel upgrade for devices in that group
 
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api(device_type, 'firmware')
+        device_type = None if not device_type else constants.lib_to_api(device_type, 'firmware')
         url = "/firmware/v1/upgrade/cancel"
 
         json_data = {

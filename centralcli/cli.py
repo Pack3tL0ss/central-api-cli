@@ -193,6 +193,31 @@ def bounce(
 
 
 @app.command()
+def cancel(
+    device: List[str] = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_completion),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Cancel previously initiated firmware upgrade
+    """
+    devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in device if dev.lower() != "upgrade"]
+    if not devs:
+        cli.exit("Missing require argument [red]DEVICE[/]")
+
+    print(f'Cancel [cyan]Upgrade[/] on [cyan]{utils.color([d.name for d in devs], "cyan")}[/]')
+    if cli.confirm(yes):
+        batch_resp = cli.central.batch_request(
+            [
+                BatchRequest(cli.central.cancel_upgrade, serial=dev.serial)
+                for dev in devs
+            ]
+        )
+        cli.display_results(batch_resp, tablefmt="action")
+
+
+@app.command()
 def remove(
     devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
     site: str = typer.Argument(
