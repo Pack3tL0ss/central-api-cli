@@ -2488,7 +2488,7 @@ class Cache:
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
         if refresh or not config.cache_file.is_file() or not config.cache_file.stat().st_size > 0:
-            _word = "Refreshing" if update_count else "Populating"
+            _word = "Refreshing" if config.cache_file else "Populating"
             print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
 
             start = time.perf_counter()
