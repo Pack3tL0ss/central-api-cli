@@ -423,6 +423,8 @@ class Response:
         self.raw[key] = self.raw[key] + other.raw[key]
         if "count" in self.raw and "count" in other.raw:
             self.raw["count"] += other.raw["count"]
+        if self.url.path == "/monitoring/v2/events":  # events url will change the total on subsequent pagination events could go up or down.
+            self.raw["total"] = other.raw["total"]
 
 
         if isinstance(self.output, list) and isinstance(other.output, list):
@@ -748,9 +750,9 @@ class Session():
 
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
-            # TODO no strip_none for these, may need to add if we determine a scenario needs it.
-            if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
-                _total = count or r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
+            is_events = True if url.endswith("/monitoring/v2/events") else False
+            if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total", 0)):
+                _total = count or r.raw["total"] if not is_events or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
                 if _total > len(r.output):
                     _limit = params.get("limit", 100)
                     _offset = params.get(offset_key, 0)
