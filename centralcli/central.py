@@ -1733,20 +1733,21 @@ class CentralApi(Session):
     async def get_site_details(self, site_id):
         return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
 
-    # TODO make command this shows events from devices (User ack rec from DHCP server, EAP response for client)
+    # API-FLAW total changes during subsequent pagination calls i.e. offset: 0 limit: 1000 = total 2420, offset: 1000 limit: 1000 = total 2408 or 2426 could go up or down.
+    # This is handled in Response __add__ method.
     async def get_events(
         self,
         group: str = None,
         swarm_id: str = None,
         label: str = None,
-        from_ts: int = None,
-        to_ts: int = None,
+        from_ts: int | float | datetime = None,  # NEXT-MAJOR ensure time args are consistent, we use from_time/to_time elsewhere
+        to_ts: int | float | datetime = None,
         macaddr: str = None,
         bssid: str = None,
         device_mac: str = None,
         hostname: str = None,
-        device_type: str = None,
-        sort: str = '-timestamp',
+        device_type: str = None,  # NEXT-MAJOR accept common library dev types do conversion here.  currently done in clishow.logs
+        sort: str = None,
         site: str = None,
         serial: str = None,
         level: str = None,
@@ -1756,20 +1757,21 @@ class CentralApi(Session):
         calculate_total: bool = True,
         offset: int = 0,
         limit: int = 1000,
+        count: int = None,
     ) -> Response:
-        """List Events. v2
+        """Get device events
 
-        Endpoint allows a max of 10000 records to be retrieved.  The sum of offset + limit can not
+        Endpoint allows a max of 10,000 records to be retrieved.  The sum of offset + limit can not
         exceed 10,000
 
         Args:
             group (str, optional): Filter by group name
             swarm_id (str, optional): Filter by Swarm ID
             label (str, optional): Filter by Label name
-            from_ts (int, optional): Need information from this timestamp. Timestamp is epoch
-                in seconds. Default is current timestamp minus 3 hours
-            to_ts (int, optional): Need information to this timestamp. Timestamp is epoch in
-                seconds. Default is current timestamp
+            from_ts: (int | float | datetime, optional): Start time of the event logs to retrieve.
+                Default is current timestamp minus 3 hours.
+            to_ts (int | float | datetime, optional): End time of the event logs to retrieve.
+                seconds. Default is current timestamp.
             macaddr (str, optional): Filter by client MAC address
             bssid (str, optional): Filter by bssid
             device_mac (str, optional): Filter by device_mac
@@ -1788,18 +1790,28 @@ class CentralApi(Session):
             calculate_total (bool, optional): Whether to calculate total events. Defaults to True.
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+            count: Only return <count> results.
 
         Returns:
             Response: CentralAPI Response object
         """
+        # sort needs to stay as default -timestamp for count to grab most recent events.
         url = "/monitoring/v2/events"
+        start_time, end_time = utils.parse_time_options(from_ts, to_ts)  #NEXT-MAJOR update to use common start...
+
+        if offset + limit > 10_000:
+            if offset >= 10_000:
+                log.error(f"get_events provided {offset=}, {limit=} endpoint allows max 10,000", show=True, log=True, caption=True)
+                return Response()
+            log.warning(f"get_events provided {offset=}, {limit=} adjusted limit to {10_000 - offset} to stay below max 10,000")
+            limit = 10_000 - offset
 
         params = {
             "group": group,
             "swarm_id": swarm_id,
             "label": label,
-            "from_timestamp": from_ts,
-            "to_timestamp": to_ts,
+            "from_timestamp": start_time,
+            "to_timestamp": end_time,
             'macaddr': macaddr,
             'bssid': bssid,
             'device_mac': device_mac,
@@ -1814,10 +1826,10 @@ class CentralApi(Session):
             'fields': fields,
             'calculate_total': str(calculate_total),
             "offset": offset,
-            "limit": limit,
+            "limit": limit if not count or limit < count else count,
         }
 
-        return await self.get(url, params=params)
+        return await self.get(url, params=params, count=count)
 
     async def get_all_webhooks(self) -> Response:
         """List all defined webhooks.
@@ -2685,10 +2697,8 @@ class CentralApi(Session):
         Args:
             log_id (str, optional): The id of the log to return details for. Defaults to None.
             username (str, optional): Filter audit logs by User Name
-            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
-                logs should be provided in epoch seconds
-            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
-                should be provided in epoch seconds
+            start_time (int | float | datetime, optional): Start time of the audit logs to retrieve.
+            end_time (int | float | datetime, optional): End time of the audit logs to retrieve.
             description (str, optional): Filter audit logs by Description
             target (str, optional): Filter audit logs by target (serial number).
             classification (str, optional): Filter audit logs by Classification

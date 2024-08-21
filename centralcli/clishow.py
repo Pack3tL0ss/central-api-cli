@@ -45,7 +45,8 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, LicenseTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, LicenseTypes, LogLevel,
+    lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 
@@ -2337,7 +2338,6 @@ def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
     return cencli
 
 
-# TODO update to use common time parser funcs, create common clioptions for start, end, past
 @app.command()
 def logs(
     event_id: str = typer.Argument(
@@ -2352,9 +2352,11 @@ def logs(
     group: str = cli.options.group,
     site: str = cli.options.site,
     label: str = cli.options.label,
-    start: str = typer.Option(None, "-s", "--start", help="Start time of range to collect events, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    end: str = typer.Option(None, "-e", "--end", help="End time of range to collect events, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option("30m", "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h",),
+    _all: bool = typer.Option(False, "-a", "--all", help="Display all available event logs.  Overrides default of 30m", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    start: datetime = cli.options(timerange="30m").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
     device: str = typer.Option(
         None,
         metavar=iden_meta.dev,
@@ -2362,7 +2364,9 @@ def logs(
         autocompletion=cli.cache.dev_completion,
         show_default=False,
     ),
-    client_mac: str = typer.Option(None, "--client-mac", help="Filter events by client MAC address", show_default=False,),
+    swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
+    level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
+    client: str = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
     hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
     dev_type: EventDevTypeArgs = typer.Option(
@@ -2393,46 +2397,55 @@ def logs(
 
     [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
     """
-    if cencli or (event_id and event_id == "cencli"):
+    title="Device event Logs"
+    if cencli or (event_id and "cencli".startswith(event_id.lower())):
         from centralcli import log
         log.print_file() if not tail else log.follow()
-        raise typer.Exit(0)
+        cli.exit(code=0)
 
-    # TODO move to common func for use be show logs and show audit logs
+    # TODO move to common func for use by show logs and show audit logs
     if event_id:
         event_details = cli.cache.get_event_identifier(event_id)
         cli.display_results(
             Response(output=event_details),
             tablefmt="action",
         )
-        raise typer.Exit(0)
+        cli.exit(code=0)
     else:
+        if (_all or count) and [start, end, past].count(None) != 3:
+            cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+        start, end = cli.verify_time_range(start, end=end, past=past)
+        level = level if level is None else level.name
+        dev_id = None
+        swarm_id = None
         if device:
             device = cli.cache.get_dev_identifier(device)
+            if swarm:
+                if device.type != "ap":
+                    log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
+                else:
+                    swarm_id = device.swack_id
+            else:
+                dev_id = device.serial
 
-        if start:
-            try:
-                dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
-                start = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"start appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if end:
-            try:
-                dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
-                end = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"end appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if past:
-            now = int(time.time())
-            past = past.lower().replace(" ", "")
-            if past.endswith("d"):
-                start = now - (int(past.rstrip("d")) * 86400)
-            if past.endswith("h"):
-                start = now - (int(past.rstrip("h")) * 3600)
-            if past.endswith("m"):
-                start = now - (int(past.rstrip("m")) * 60)
+        client_mac = None
+        if client:
+            if utils.Mac(client).ok:
+                client_mac = client
+            else:
+                _client = cli.cache.get_client_identifier(client)
+                client_mac = _client.mac
+
+        if _all:
+            start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves macking this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
+            title = f"All available {title}"
+            count = 10_000
+        elif count:
+            title = f"Last {count} {title}"
+        elif [start, end].count(None) == 2:
+            start = pendulum.now(tz="UTC").subtract(minutes=30)
+            title = f"{title} for last 30 minutes"
 
     api_dev_types = {
         "ap": "ACCESS POINT",
@@ -2443,22 +2456,23 @@ def logs(
 
     kwargs = {
         "group": group,
-        # "swarm_id": swarm_id,
-        "label": label,
-        "from_ts": start or int(time.time() - 1800),
+        "swarm_id": swarm_id,
+        "label": None if not label else cli.cache.get_label_identifier(label).name,
+        "from_ts": start,
         "to_ts": end,
         "macaddr": client_mac,
         "bssid": bssid,
-        # "device_mac": None if not device else device.mac,
+        # "device_mac": None if not device else device.mac,  # no point we use serial
         "hostname": hostname,
         "device_type": None if not dev_type else api_dev_types[dev_type],
-        "site": site,
-        "serial": None if not device else device.serial,
-        # "level": level,
+        "site": None if not site else cli.cache.get_site_identifier(site).name,
+        "serial": dev_id,
+        "level": level,
         "event_description": description,
         "event_type": event_type,
         # "fields": fields,
         # "calculate_total": True,  # Total defaults to True in get_events for benefit of async multi-call
+        "count": count,
     }
 
     central = cli.central
@@ -2470,7 +2484,7 @@ def logs(
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Device event Logs",
+        title=title,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,

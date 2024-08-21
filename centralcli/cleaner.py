@@ -1007,13 +1007,8 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
         # "sites",
     ]
     for d in data:
-        _dev_type = short_value('device_type', d.get('device_type', ''))
-        if _dev_type:
-            _dev_str = f"[{_dev_type[-1]}]" if _dev_type[-1] != "CLIENT" else ""
-        d["device info"] = f"{_dev_str}{d.get('hostname', '')}|" \
-            f"{d.get('device_serial', '')} Group: {d.get('group_name', '')}"
-        # for key in ["device_type", "hostname", "device_serial", "device_mac"]:
-        #     del d[key]
+        d["device info"] = f"{d.get('hostname', '')}|" \
+            f"{d.get('device_serial', '')}|G:{d.get('group_name', '')}|S:{d.get('sites', [{}])[0].get('name', 'null')}"
 
     # Stash event_details in cache indexed starting @ most recent event
     if len(data) > 1 and cache_update_func:

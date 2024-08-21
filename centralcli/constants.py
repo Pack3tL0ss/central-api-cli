@@ -304,6 +304,18 @@ class TemplateLevel1(str, Enum):
     add = "add"
 
 
+class LogLevel(str, Enum):
+    clear = "clear"
+    neutral = "neutral"
+    negative = "negative"
+    # Normal = "normal"  # API-FLAW something returns Normal most return normal
+    normal = "normal"
+    Minor = "minor"
+    positive = "positive"
+    LOG_INFO = "info"
+    LOG_WARN = "warning"
+    LOG_ERR = "error"
+
 class CacheArgs(str, Enum):
     devices = "devices"
     inventory = "inventory"
