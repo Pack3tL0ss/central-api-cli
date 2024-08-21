@@ -354,7 +354,7 @@ def nuke(
 ) -> None:
     """Reset a device to factory default, erase all configuration (Valid on ArubaOS-SW or IAP Clusters)
 
-    :warning:  For AOS8 IAP this command is only valid for entire cluster, not individual APs -s|--swarm option is required.
+    :warning:  For AOS8 IAP this command is only valid for entire cluster, not individual APs [cyan]-s[/]|[cyan]--swarm[/] option is required.
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=["ap", "switch"])
     if dev.type == "cx":
@@ -365,14 +365,14 @@ def nuke(
         func = cli.central.send_command_to_device
         arg = dev.serial
         if swarm:
-            print(f":warning:  Ignoring -s|--swarm option, as it only applies to APs not {dev.type}\n")
+            print(f":warning:  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
     else:  # AP all others will error in get_dev_identifier
         func = cli.central.send_command_to_swarm
         arg = dev.swack_id
-        if dev.version.startswith("10."):
+        if dev.is_aos10:
             cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
         elif not swarm:
-            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [green]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster")
+            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [cyan]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster")
         else:
             conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
