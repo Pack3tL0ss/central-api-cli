@@ -92,7 +92,7 @@ def acp_logs(
     :clock5:  Displays prior 5 days if no time options are provided.
     """
     title = "ACP Audit Logs"
-    if _all or count and True in list(map(bool, [start, end, past])):
+    if (_all or count) and [start, end, past].count(None) != 3:
         cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
 
     start, end = cli.verify_time_range(start, end=end, past=past)
