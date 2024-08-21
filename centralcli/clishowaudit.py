@@ -97,8 +97,15 @@ def acp_logs(
 
     start, end = cli.verify_time_range(start, end=end, past=past)
 
+    dev_id = None
     if device:
-        device = cli.cache.get_dev_identifier(device)
+        if utils.is_serial(device):
+            dev_id = device
+            title = f"{title} related to device with serial [cyan]{device}[/]"
+        else:
+            dev = cli.cache.get_dev_identifier(device)
+            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
+            title = f"{title} related to {dev.summary_text}"
 
     if _all:
         title = f"All available {title}"
@@ -114,7 +121,7 @@ def acp_logs(
         "start_time": start,
         "end_time": end,
         "description": description,
-        "target": None if not device else device.serial,
+        "target": dev_id,
         "classification": _class,
         "ip_address": ip,
         "app_id": app,
@@ -193,9 +200,14 @@ def logs(
 
     dev_id = None
     if device:
-        dev = cli.cache.get_dev_identifier(device)
-        dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
-        title = f"{title} related to {dev.summary_text}"
+        if utils.is_serial(device):
+            dev_id = device
+            title = f"{title} related to device with serial [cyan]{device}[/]"
+        else:
+            dev = cli.cache.get_dev_identifier(device)
+            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
+            title = f"{title} related to {dev.summary_text}"
+
         if group:
             log.warning(f"[cyan]--group[/] [bright_green]{group}[/] ignored as it doesn't make sense with [cyan]--device[/] [bright_green]{device}[/]", caption=True)
             group = None
