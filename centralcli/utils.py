@@ -625,6 +625,7 @@ class Utils:
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
+        sep: str = ", ",
     ) -> str:
         """Helper method to wrap text in rich formatting tags
 
@@ -634,12 +635,14 @@ class Utils:
             text (str|bool|list): The text to be formmated.  If a bool is provided
                 it is converted to string and italics applied.  If list of strings
                 is provided it is converted to str and formatted.
-            color_str (str optional): Text is formatted with this color.
+            color_str (str, optional): Text is formatted with this color.
                 Default: bright_green
-            italic (bool): Wheather to apply italic to text.
+            italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
-            bold (bool): Wheather to apply bold to text. Default None/False
-            blink (bool): Wheather to blink the text. Default None/False
+            bold (bool, optional): Wheather to apply bold to text. Default None/False
+            blink (bool, optional): Wheather to blink the text. Default None/False
+            sep (str, optional): Seperator used when list of str converted to str.
+                Defaults to ', '
         """
         if isinstance(text, bool):
             italic = True if italic is None else italic
@@ -653,7 +656,7 @@ class Utils:
             return f"[{color_str}]{text}[/{color_str}]"
         elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
             text = [f"[{color_str}]{t}[/{color_str}]" for t in text]
-            return ", ".join(text)
+            return sep.join(text)
         else:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
 
@@ -855,5 +858,8 @@ class Utils:
             to_time = round(to_time.timestamp())
         elif isinstance(to_time, float):
             to_time = round(to_time)
+
+        # if to_time and to_time <= from_time:
+        #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
 
         return from_time, to_time
