@@ -219,7 +219,7 @@ def cancel(
 
 @app.command()
 def remove(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.remove_completion),
+    devices: List[str] = cli.arguments.devices,
     site: str = typer.Argument(
         ...,
         metavar="[site <SITE>]",
@@ -234,7 +234,7 @@ def remove(
     """Remove a device from a site
     """
     devices = (d for d in devices if d != "site")
-    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    devices = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
     site = cli.cache.get_site_identifier(site)
 
     print(
@@ -255,7 +255,13 @@ def remove(
                 device_type=dev_type) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action")
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        # central will show the stack_id and all member serials in the success output.  So we strip the stack id
+        swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
+        update_data = [{**dict(cli.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
+        cli.central.request(cli.cache.update_dev_db, data=update_data)
+
+
 
 
 @app.command()
