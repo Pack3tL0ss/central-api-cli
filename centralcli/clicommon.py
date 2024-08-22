@@ -1082,6 +1082,8 @@ class CLICommon:
             serials_by_site: Dict[str: List[str]] = None,
             serials_by_group: Dict[str: List[str]] = None,
         ) -> None:
+        serials_by_site = serials_by_site or {}
+        serials_by_group = serials_by_group or {}
         serials = set(
             [
                 *([s for s_list in serials_by_site.values() for s in s_list]),
@@ -1165,10 +1167,12 @@ class CLICommon:
             batch_reqs += site_ops.move.reqs
             site_rm_reqs += site_ops.remove.reqs
             confirm_msgs += [str(site_ops)]
+        serials_by_site = None if not do_site else site_ops.serials_by_site_id
         if do_group:
             group_ops = self._check_group(cache_devs=cache_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force)
             batch_reqs += group_ops.reqs
             confirm_msgs += [str(group_ops)]
+        serials_by_group = None if not do_group else group_ops.serials_by_group
         if do_label:
             label_ops = self._check_label(cache_devs=cache_devs, import_data=devices)
             batch_reqs += label_ops.reqs
@@ -1189,7 +1193,7 @@ class CLICommon:
                     err_console.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                     return site_rm_res
             batch_res = self.central.batch_request(batch_reqs)
-            self.device_move_cache_update(batch_res, serials_by_site=site_ops.serials_by_site_id, serials_by_group=group_ops.serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
+            self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
 
             return [*site_rm_res, *batch_res]
 
