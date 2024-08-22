@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+
 from datetime import datetime
 import typer
 import sys
@@ -22,12 +24,38 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import iden_meta  # noqa
 from centralcli.cache import CentralObject
+from centralcli.objects import DateTime
 
 app = typer.Typer()
 
 
+class WidsResponse:
+    def __init__(self, wids_cat: Literal["rogue", "interfering", "suspect", "all"], response: Response, start: None | datetime = None, end: None | datetime = None,) -> None:
+        self.response = response
+        if wids_cat == "all":
+            self.caption = self.all_caption()
+        else:
+            if not end:
+                caption = "in past 3 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+            else:
+                caption = f"from {DateTime(start.timestamp(), 'mdyt')} to {DateTime(end.timestamp(), 'mdyt')}"
+                # TODO most other time-frame captions don't handle end (show alerts...)
+
+            self.caption = f"[cyan]{len(response)} {wids_cat} AP{'s' if len(response) > 1 else ''} {caption}[/]"
+
+
+    def all_caption(self) -> str:
+        caption = None
+        if self.response.raw.get("_counts"):
+            caption = f'Rogue APs: [cyan]{self.response.raw["_counts"]["rogues"]}[/cyan] '
+            caption += f'Suspected Rogue APs: [cyan]{self.response.raw["_counts"]["suspect"]}[/] '
+            caption += f'Interfering APs: [cyan]{self.response.raw["_counts"]["interfering"]}[/] '
+            caption += f'Neighbor APs: [cyan]{self.response.raw["_counts"]["neighbor"]}[/]'
+
+        return caption
+
 def get_wids_response(
-    func: str = Literal["rogue", "interfering", "suspect", "all"],
+    wids_cat: Literal["rogue", "interfering", "suspect", "all"],
     device: str = None,
     group: List[str] = None,
     site: List[str] = None,
@@ -35,7 +63,7 @@ def get_wids_response(
     start: datetime = None,
     end: datetime = None,
     past: str = None,
-) -> Response:
+) -> WidsResponse:
     if device:
         device: CentralObject = cli.cache.get_dev_identifier(dev_type="ap", swack=True)
     if group:
@@ -48,24 +76,23 @@ def get_wids_response(
     start, end = cli.verify_time_range(start=start, end=end, past=past)
 
     kwargs = {
-        "from_timestamp": None if not start else start.int_timestamp,
-        "to_timestamp": None if not end else end.int_timestamp,
+        "from_time": start,
+        "to_time": end,
         "group": group,
         "label": label,
         "site": site,
         "swarm_id": None if not device else device.swack_id
     }
 
-    if func == "all":
-        func = getattr(cli.central, f"wids_get_{func}")
+    if wids_cat == "all":
+        func = cli.central.wids_get_all
     else:
-        func = getattr(cli.central, f"wids_get_{func}_aps")
+        func = getattr(cli.central, f"wids_get_{wids_cat}_aps")
 
-    return cli.central.request(func, **kwargs)
-
-
+    return WidsResponse(wids_cat, cli.central.request(func, **kwargs), start=start, end=end)
 
 
+# Default Time-Range for all wids Endpoints is past 3 hours.
 @app.command()
 def rogues(
     device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
@@ -94,9 +121,10 @@ def rogues(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
-        resp,
+        resp.response,
         tablefmt=tablefmt,
         title="Rogues",
+        caption=resp.caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -133,9 +161,10 @@ def interfering(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
-        resp,
+        resp.response,
         tablefmt=tablefmt,
         title="Interfering APs",
+        caption=resp.caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -172,9 +201,10 @@ def neighbor(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
-        resp,
+        resp.response,
         tablefmt=tablefmt,
         title="Suspected Rogues",
+        caption=resp.caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -211,9 +241,10 @@ def suspect(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
-        resp,
+        resp.response,
         tablefmt=tablefmt,
         title="Suspected Rogues",
+        caption=resp.caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by if not sort_by else sort_by.replace("_", " "),
@@ -247,18 +278,13 @@ def all(
     """Show All WIDS Classifications"""
     resp = get_wids_response("all", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
 
-    if resp.raw.get("_counts"):
-        caption = f'Rogue APs: [cyan]{resp.raw["_counts"]["rogues"]}[/cyan] '
-        caption += f'Suspected Rogue APs: [cyan]{resp.raw["_counts"]["suspect"]}[/] '
-        caption += f'Interfering APs: [cyan]{resp.raw["_counts"]["interfering"]}[/] '
-        caption += f'Neighbor APs: [cyan]{resp.raw["_counts"]["neighbor"]}[/]'
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cli.display_results(
-        resp,
+        resp.response,
         tablefmt=tablefmt,
         title="WIDS Report (All classification types)",
-        caption=caption,
+        caption=resp.caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
