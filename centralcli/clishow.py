@@ -2549,10 +2549,9 @@ def alerts(
     )
 
 
-@app.command(short_help="Show alert/notification configuration.")
+@app.command()
 def notifications(
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
-
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -2577,7 +2576,7 @@ def notifications(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
 
-    # TODO cleaner
+    # TODO cleaner, currently raw response in yaml
     cli.display_results(
         resp,
         tablefmt=tablefmt,
