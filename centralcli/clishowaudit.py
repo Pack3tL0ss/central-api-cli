@@ -225,7 +225,7 @@ def logs(
         'count': count,
     }
 
-    resp = cli.central.request(cli.central.get_audit_logs_events, **kwargs)
+    resp = cli.central.request(cli.central.get_audit_event_logs, **kwargs)
 
     if log_id is not None:
         cli.display_results(resp, tablefmt="action")
