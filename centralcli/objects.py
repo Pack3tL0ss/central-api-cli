@@ -8,7 +8,7 @@ import pendulum
 from pathlib import Path
 
 
-TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "mdyt", "log", "date-string"]
+TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
 
 class DateTime():
     """DateTime object with a number of timestamp to string converters for various representations used by the CLI.
@@ -120,12 +120,21 @@ class DateTime():
 
     @property
     def timediff(self) -> str:
-        """Render duration words representing the difference between self.epoch and now.
+        """Render duration words representing the difference between self.ts and now.
 
         Returns:
             str: The difference between now and the timestamp in the format: '47 minutes ago'.
         """
         return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).diff_for_humans()
+
+    @property
+    def timediff_past(self) -> str:
+        """Render past words representing the difference between self.ts and now.
+
+        Returns:
+            str: The difference between now and the timestamp in the format: 'past 47 minutes'.
+        """
+        return "" if self.ts is None else f'past {self.timediff.removesuffix(" ago")}'
 
     @property
     def mdyt(self) -> str:
