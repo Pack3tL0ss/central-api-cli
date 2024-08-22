@@ -9,7 +9,6 @@ import tablib
 import yaml
 from asyncio.proactor_events import _ProactorBasePipeTransport
 from datetime import datetime, timedelta
-from enum import Enum
 from functools import wraps
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
@@ -19,7 +18,7 @@ from yarl import URL
 import aiohttp
 from pycentral.base_utils import tokenLocalStoreUtil
 
-from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
+from . import (ArubaCentralBase, MyLogger, cleaner, constants, config, log,
                models, utils)
 from .utils import Mac
 from .response import Response, Session, CombinedResponse
@@ -68,34 +67,6 @@ DEFAULT_ACCESS_RULES = {
 }
 
 START = time.monotonic()
-
-class WlanType(str, Enum):
-    employee = "employee"
-    guest = "guest"
-
-CloudAuthUploadType = constants.CloudAuthUploadType
-
-def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
-    if formatter is None:
-        formatter = lambda v: (None, v)  # noqa Multipart representation of value
-
-    if not isinstance(data, dict):
-        return {parent_key: formatter(data)}
-
-    converted = []
-
-    for key, value in data.items():
-        current_key = key if parent_key is None else f"{parent_key}[{key}]"
-        if isinstance(value, dict):
-            converted.extend(multipartify(value, current_key, formatter).items())
-        elif isinstance(value, list):
-            for ind, list_value in enumerate(value):
-                iter_key = f"{current_key}[{ind}]"
-                converted.extend(multipartify(list_value, iter_key, formatter).items())
-        else:
-            converted.append((current_key, formatter(value)))
-
-    return dict(converted)
 
 
 def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase:
@@ -2736,8 +2707,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, count=count)
 
-    # NEXT-MAJOR rename to get_audit_event_logs
-    async def get_audit_logs_events(
+    async def get_audit_event_logs(
         self,
         log_id: str = None,
         group_name: str = None,
@@ -3690,7 +3660,7 @@ class CentralApi(Session):
         wpa_passphrase: str,
         # wpa_passphrase_changed: bool = True,
         vlan: str = "",
-        type: WlanType = "employee",
+        type: constants.WlanType = "employee",
         essid: str = None,
         zone: str = "",
         captive_profile_name: str = "",
@@ -6235,7 +6205,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_fixme(
         self,
-        upload_type: CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadType,
         file: Union[Path, str],
         ssid: str = None,
     ) -> Response:
@@ -6272,7 +6242,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload(
         self,
-        upload_type: CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadType,
         file: Union[Path, str],
         ssid: str = None,
     ) -> Response:
@@ -6318,7 +6288,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_status(
         self,
-        upload_type: CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadType,
         ssid: str = None,
     ) -> Response:
         """Read upload status of last file upload.

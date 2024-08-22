@@ -364,6 +364,11 @@ class BatchDelArgs(str, Enum):
     labels = "labels"
 
 
+class WlanType(str, Enum):
+    employee = "employee"
+    guest = "guest"
+
+
 class BatchRenameArgs(str, Enum):
     # sites = "sites"
     aps = "aps"
