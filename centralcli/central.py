@@ -2673,7 +2673,6 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # API-FLAW max limit 100 enforced if you provide the limit parameter, otherwise no limit? returned 811 w/ no param provided
-    # API-FLAW does not return all logs available in UI wtf??
     async def get_audit_logs(
         self,
         log_id: str = None,
@@ -2737,6 +2736,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, count=count)
 
+    # NEXT-MAJOR rename to get_audit_event_logs
     async def get_audit_logs_events(
         self,
         log_id: str = None,
