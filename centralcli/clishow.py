@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 import typer
-import time
 import pendulum
 import asyncio
 import sys
@@ -49,6 +48,7 @@ from centralcli.constants import (
     lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
+from centralcli.objects import DateTime
 
 
 app = typer.Typer()
@@ -2241,12 +2241,9 @@ def uplinks(
 @app.command()
 def roaming(
     client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
-    start: str = typer.Option(
-        None,
-        help="Start time of range to collect roaming history, format: yyyy-mm-ddThh:mm (24 hour notation), default past 3 hours.",
-    ),
-    end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
+    start: datetime = cli.options(timerange="3h").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
     drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.",),
     sort_by: SortClientOptions = cli.options.sort_by,
@@ -2271,44 +2268,9 @@ def roaming(
 
     The -R flag can be used to force a cache refresh prior to looking up roaming history.
     """
-    central = cli.central
-    # TODO common time function this is re-used code from another func
-    time_words = ""
-    if start:
-        try:
-            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm', tz="local")
-            start = (dt.int_timestamp)
-            if not end:
-                time_words = pendulum.from_timestamp(start, tz="local").diff_for_humans()
-            else:
-                time_words = f'Roaming history from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {start} appears to be invalid.")
-            raise typer.Exit(1)
-    if end:
-        try:
-            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm', tz="local")
-            end = (dt.int_timestamp)
-            time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {end} appears to be invalid.")
-            raise typer.Exit(1)
-    if past:
-        now = int(time.time())
-        past = past.lower().replace(" ", "")
-        if past.endswith("d"):
-            start = now - (int(past.rstrip("d")) * 86400)
-        if past.endswith("h"):
-            start = now - (int(past.rstrip("h")) * 3600)
-        if past.endswith("m"):
-            start = now - (int(past.rstrip("m")) * 60)
-        time_words = f'Roaming history from [cyan]{pendulum.from_timestamp(start, tz="local").diff_for_humans()}[/cyan] till [cyan]now[/cyan].'
-
-    time_words = f"[cyan]{time_words}[reset]\n" if time_words else "[cyan]roaming history for past 24 hours.\n[reset]"
-
+    start, end = cli.verify_time_range(start, end=end, past=past)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table)
+    title = "Roaming history"
 
     if refresh or drop:
         resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
@@ -2319,9 +2281,15 @@ def roaming(
     if not mac.ok:
         client = cli.cache.get_client_identifier(client)
         mac = utils.Mac(client.mac)
+        title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
+    else:
+        title = f'{title} for {mac.cols}'
 
-    resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
-    cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
+
+    resp = cli.central.request(cli.central.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
+    caption = None if not resp else f"{len(resp)} roaming events"
+    caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
+    cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
@@ -2537,21 +2505,13 @@ def alerts(
     if severity:
         severity = severity.title() if severity != "info" else severity.upper()
 
-    time_words = "[cyan]Alerts in past 24 hours.\n[reset]"
     start, end = cli.verify_time_range(start=start, end=end, past=past)
-    start: pendulum.DateTime
-    if start:
-        end = end or pendulum.now(tz="UTC")
-        if not end:
-            time_words = f"[cyan]Alerts past {start.diff_for_humans().removesuffix(' before')}[/]"
-        else:
-            time_words = f"[cyan]Alerts time-range: {start.diff_for_humans(end).removesuffix(' before')}, from {start.in_tz('local').to_datetime_string()} to {end.in_tz('local').to_datetime_string()}[/]"
 
     kwargs = {
         "group": group,
         "label": label,
-        "from_ts": None if not start else start.int_timestamp,
-        "to_ts": None if not end else end.int_timestamp,
+        "from_time": start,
+        "to_time": end,
         "serial": None if not device else device.serial,
         "site": site,
         'severity': severity,
@@ -2563,13 +2523,15 @@ def alerts(
     central = cli.central
     resp = central.request(central.get_alerts, **kwargs)
 
-    if resp.ok:
-        if len(resp) == 0:
-            resp.output = "No Alerts"
-        else:
-            time_words = f"[reset][cyan]{len(resp)}{' active' if not ack else ' '}[reset] {time_words}"
+    caption = "in past 24 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+    caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
+    cleaner_func = cleaner.get_alerts if not verbose else None
+    if resp.ok and len(resp) == 0:
+        resp.output = render.rich_capture(f":information:  {caption}", emoji=True)
+        cleaner_func = None
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
     title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
         title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
@@ -2582,8 +2544,8 @@ def alerts(
         outfile=outfile,
         sort_by=sort_by,
         reverse=not reverse,
-        cleaner=cleaner.get_alerts if not verbose else None,
-        caption=time_words,
+        cleaner=cleaner_func,
+        caption=caption,
     )
 
 
