@@ -951,8 +951,7 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
 
 
 def get_alerts(data: List[dict],) -> List[dict]:
-    if isinstance(data, list) and "No Alerts" in data:
-        return data
+    # TODO Need cleaner to strip all state: "Close" alerts, and all associated state: "Open"
 
     field_order = [
         "timestamp",
