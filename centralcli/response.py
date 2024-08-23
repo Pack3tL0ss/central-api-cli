@@ -34,6 +34,8 @@ INIT_TS = time.monotonic()
 MAX_CALLS_PER_CHUNK = 6
 err_console = Console(stderr=True)
 
+
+# TODO args should be expanded here *args simplifies instantiation
 class BatchRequest:
     def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
         """Constructor object for for api requests.
