@@ -4318,7 +4318,7 @@ class CentralApi(Session):
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
         Will also pre-assign device to group if provided
 
-        Either mac_address and serial or device_list (which should contain a dict with mac serial) are required.
+        Either mac and serial or device_list (which should contain a dict with mac serial) are required.
 
         Args:
             mac (str, optional): MAC address of device to be added
@@ -4347,7 +4347,7 @@ class CentralApi(Session):
 
             mac = utils.Mac(mac)
             if not mac:
-                raise ValueError(f"mac_address {mac} appears to be invalid.")
+                raise ValueError(f"mac {mac} appears to be invalid.")
 
             json_data = [
                 {
@@ -4415,7 +4415,7 @@ class CentralApi(Session):
             # TODO license via list not implemented yet.
 
         else:
-            raise ValueError("mac_address and serial or device_list is required")
+            raise ValueError("mac and serial or device_list is required")
 
         # Perform API call(s) to Central API GW
         # TODO break out the add device call into it's own method.
