@@ -507,7 +507,7 @@ class Session():
         auth = self.auth
         resp = None
         _url = URL(url).with_query(params)
-        _data_msg = ' ' if not url else f' [{_url.path}]'
+        _data_msg = ' ' if not url else f' \[{_url.path}]'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
         if config.sanitize and utils.is_serial(end_name):
             end_name = "USABCD1234"
