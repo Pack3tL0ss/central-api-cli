@@ -7,7 +7,13 @@ from typing import Literal, Union
 
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
+generic_lib_dev_idens = ["ap","gw", "switch"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
+GenericDeviceTypes = Literal["ap", "gw", "switch"]  # strEnum ok for CLI completion but doesn't enable ide to complete
+DeviceTypes = Literal["ap", "cx", "sw", "gw"]
+EventDeviceTypes = Literal["ap","gw", "switch", "client"]
+ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
+ClientType = Literal["wired", "wireless", "all"]
 
 
 class AllDevTypes(str, Enum):
@@ -580,7 +586,6 @@ APIMethodType = Literal[
     "licensing"
 ]
 
-ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 
 class LibToAPI:
     """Convert consistent device types used by this library to the various types used by Central API endpoints
@@ -651,7 +656,7 @@ class LibToAPI:
             "cx": "switch",
             "sw": "switch",
             "switch": "switch",
-            "gw": "all_controller",
+            "gw": "gateway",
             "vgw": "vgw"
         }
         self.licensing_to_api = {
@@ -669,7 +674,6 @@ class LibToAPI:
         if isinstance(dev_type, Enum):
             dev_type = dev_type.value
 
-        # TODO lose the _to_api in the attributes
         if hasattr(self, f"{method}_to_api"):
             self.method_iden = method
             return getattr(self, f"{method}_to_api").get(dev_type.lower(), default or dev_type)
@@ -683,6 +687,10 @@ class LibToAPI:
     @property
     def valid_str(self) -> list:
         return ", ".join(lib_dev_idens)
+
+    @property
+    def valid_generic_str(self) -> list:
+        return ", ".join(generic_lib_dev_idens)
 
 
 lib_to_api = LibToAPI()
