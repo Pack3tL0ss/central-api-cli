@@ -413,7 +413,7 @@ def device(
             _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
             if _try == 3:
                 if not all([r.ok for r in _del_resp]):
-                    print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                    print("\n[dark_orange]:warning:[/]  Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
                 del_resp += _del_resp
             else:
                 del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
@@ -425,6 +425,8 @@ def device(
                 break
 
         batch_resp += del_resp or _del_resp
+        # TODO if switch doesn't disconnect after archive/unarchive no cache update is made, maybe delete from inventory?
+        # or try to delete device from monitoring, then delay if it fails, despite what the cache says.
 
     # On COP delete devices from GreenLake inventory (only available on CoP)
     # TODO test against a cop system
