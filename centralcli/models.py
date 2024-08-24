@@ -161,7 +161,7 @@ class Client(BaseModel):
     connected_port: str = Field(default_factory=str)
     connected_serial: str = Field(default_factory=str)
     connected_name: str = Field(default_factory=str)
-    site: str = Field(default_factory=str)
+    site: Optional[str] = Field(default_factory=str)
     group: str = Field(default_factory=str)
     last_connected: datetime = Field(default=None)
 
