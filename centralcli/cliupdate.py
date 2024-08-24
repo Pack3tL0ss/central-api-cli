@@ -161,7 +161,8 @@ def variables(
             cli.central.update_device_template_variables,
             serial,
             dev.mac,
-            var_dict=var_dict)
+            var_dict=var_dict
+        )
         cli.display_results(resp, tablefmt="action")
 
 
@@ -170,23 +171,17 @@ def variables(
     help="Update group properties.",
 )
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion),
-    # group_password: str = typer.Argument(
-    #     None,
-    #     show_default=False,
-    #     help="Group password is required. You will be prompted for password if not provided.",
-    #     autocompletion=lambda incomplete: incomplete
-    # ),
+    group: str = cli.arguments.group,
     wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(None, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None,),
+    gw_role: GatewayRole = typer.Option(None, help="Gateway Role", show_default=False,),
     aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default AOS8/IAP)", show_default=False),
     mb: bool = typer.Option(None, "--mb", help="Configure Group for MicroBranch APs (AOS10 only"),
     ap: bool = typer.Option(None, "--ap", help="Allow APs in group"),
     sw: bool = typer.Option(None, "--sw", help="Allow ArubaOS-SW switches in group."),
     cx: bool = typer.Option(None, "--cx", help="Allow ArubaOS-CX switches in group."),
     gw: bool = typer.Option(None, "--gw", help=f"Allow gateways in group.\n{' ':34}If No device types specified all are allowed."),
-    mo_sw: bool = typer.Option(None, is_flag=True, help="Monitor Only for ArubaOS-SW"),
+    mo_sw: bool = typer.Option(None, help="Monitor Only for ArubaOS-SW"),
     mo_cx: bool = typer.Option(None, help="Monitor Only for ArubaOS-CX"),
     # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
     # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
@@ -258,7 +253,7 @@ def group(
         "monitor_only_sw": mo_sw,
     }
 
-    if yes or typer.confirm("Proceed with values?"):
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.update_group_properties,
             **kwargs
@@ -286,13 +281,7 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
 
 @app.command("config")
 def config_(
-    group_dev: str = typer.Argument(
-        ...,
-        metavar="GROUP|DEVICE",
-        help="Group or device to update.",
-        autocompletion=cli.cache.group_dev_ap_gw_completion,
-        show_default=False,
-    ),
+    group_dev: str = cli.arguments.group_dev,
     # TODO collect multi-line input as option to paste in config
     cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
@@ -315,7 +304,7 @@ def config_(
     console.rule("Configuration to be sent")
     console.print("\n".join([f"[green]{line}[/green]" for line in cli_cmds]))
     console.rule()
-    console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}")
+    console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     _msg = console.end_capture()
 
     if group_dev.is_group:
@@ -341,7 +330,7 @@ def config_(
         node_iden = group_dev.name if group_dev.is_group else group_dev.serial
 
     typer.echo(_msg)
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         if use_caas:
             resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
