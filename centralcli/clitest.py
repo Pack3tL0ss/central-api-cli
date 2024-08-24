@@ -63,7 +63,7 @@ def method(
         hidden=True,
         callback=cli.verbose_debug_callback,
     ),
-    update_cache = cli.options.update_cache,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Dev testing commands to run CentralApi methods from command line.
 
