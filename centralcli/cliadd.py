@@ -52,7 +52,7 @@ class AddGroupArgs(str, Enum):
 err_console = Console(stderr=True)
 
 
-# TODO update completion with mac oui, serial prefix
+# TODO update completion with mac serial partial completion
 # TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command()
