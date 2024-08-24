@@ -13,12 +13,12 @@ from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils
+    from centralcli import cli, utils, log, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
+        from centralcli import cli, utils, log, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -50,6 +50,35 @@ class AddGroupArgs(str, Enum):
     mac = "mac"
 
 err_console = Console(stderr=True)
+
+
+def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, group: str = None, license: str | List[str] = None) -> None:
+    if license:
+        try:
+            license = utils.unlistify(license)
+            license: str = license.upper().replace("-", " "),
+        except Exception:
+            ...  # This isn't imperative given it's the inv cache.  It's not used for much.
+
+    inv_data = {
+        'type': "-",
+        'model': "-",
+        'sku': "-",
+        'mac': mac,
+        'serial': serial,
+        'services': license,
+    }
+    resp = utils.listify(resp)
+    for r in resp:
+        if r.url.path == '/platform/device_inventory/v1/devices':
+            if not r.ok:
+                return
+            try:
+                inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
+            except Exception as e:
+                log.warning(f"Unable to extract sku after inventory update ({e}), value will be omitted from inv cache.")
+
+    cli.cache.update_inv_db(data=inv_data)
 
 
 # TODO update completion with mac serial partial completion
@@ -106,10 +135,7 @@ def device(
     if not kwargs["mac"] or not kwargs["serial"]:
         cli.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
-    api_kwd = {"serial": "serial_num", "mac": "mac_address"}
-    kwargs = {api_kwd.get(k, k): v for k, v in kwargs.items() if v}
-
-    _msg = [f"Add device: [bright_green]{kwargs['serial_num']}|{kwargs['mac_address']}[/bright_green]"]
+    _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if "group" in kwargs and kwargs["group"]:
         _group = cli.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
@@ -128,7 +154,7 @@ def device(
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
-        # TODO need to update inventory cache after device add
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
 
 
 @app.command(short_help="Add a group", help="Add a group")
