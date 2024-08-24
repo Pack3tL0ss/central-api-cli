@@ -9,14 +9,18 @@ class CLIArgs:
     def __init__(self, cache: Cache):
         self.cache = cache
         self.name = typer.Argument(..., show_default=False,)
+        self.device = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cache.dev_completion)
         self.devices = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cache.dev_completion, show_default=False,)
         self.what = typer.Argument(..., show_default=False,)
+        self.group: str = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
+        self.group_dev: str = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
         self.import_file = typer.Argument(None, exists=True, show_default=False,)
 
 class CLIOptions:
-    def __init__(self, cache: Cache, timerange: str = "3h"):
+    def __init__(self, cache: Cache, timerange: str = "3h", include_mins: bool = None):
         self.cache = cache
         self.timerange: str = timerange
+        self.include_mins: bool = include_mins if include_mins is not None else True
         self.group = typer.Option(None, help="Filter by Group", metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.group_many = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
         self.site = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
@@ -33,8 +37,9 @@ class CLIOptions:
         self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
         self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
         self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
-        self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
-        self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_client_completion, show_default=False,)
+        self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
+        self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
+        self.swarm_device = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.sort_by = typer.Option(
             None,
             "--sort",
@@ -101,7 +106,7 @@ class CLIOptions:
             None,
             "-p",
             "--past",
-            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours, m=mins i.e.: 3h [grey42]\[default: {self.timerange}][/]",
+            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours{', m=mins' if self.include_mins else ''} i.e.: 3h [grey42]\[default: {self.timerange}][/]",
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
@@ -122,7 +127,9 @@ class CLIOptions:
 
         return f"{self.timerange[0:-1]} {time_word} ago"
 
-    def __call__(self, timerange: str = None):
+    def __call__(self, timerange: str = None, include_mins: bool = None):
         if timerange:
             self.timerange = timerange
+        if include_mins is not None:
+            self.include_mins = include_mins
         return self
