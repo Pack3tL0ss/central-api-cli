@@ -610,8 +610,7 @@ class Cache:
         out = []
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
-            args = [item for k, v in ctx.params.items() if v for item in [k, v]]  # TODO ensure k is last item when v = incomplete
-
+            args = [v for k, v in ctx.params.items() if v and k != "account"]  # TODO ensure k is last item when v = incomplete
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
