@@ -2,6 +2,7 @@ import logging
 import time
 from rich import print
 from . import common, log, test_data
+import pytest
 
 central = common.central
 
@@ -22,7 +23,7 @@ central = common.central
 
 log.setLevel(logging.DEBUG)
 
-
+@pytest.mark.serial
 def test_rate_limit():
     log._DEBUG = True
     b_reqs = [central.BatchRequest(central.get_switch_poe_details, test_data["rate_limit_switch"]["serial"], port=f"1/1/{p}") for p in range(1, 49)]
