@@ -20,12 +20,12 @@ except Exception:
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, cleaner, render, Response
+    from centralcli import cli, utils, cleaner, render
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner, render, Response
+        from centralcli import cli, utils, cleaner, render
     else:
         print(pkg_dir.parts)
         raise e
@@ -39,19 +39,22 @@ tty = utils.tty
 iden_meta = IdenMetaVars()
 
 
-def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = False, outfile: Path = None) -> Response:
+def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
     _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
-    resp = cli.central.request(cli.central.start_ts_session, device.serial, dev_type=_type, commands=commands)
+    resp = cli.central.request(cli.central.start_ts_session, device.serial, device_type=_type, commands=commands)
     cli.display_results(resp, tablefmt="action")
 
     if not resp:
-        return
+        if not exit:
+            return
+        else:
+            cli.exit()
 
     complete = False
     while not complete:
-        for x in range(3):
+        for _ in range(3):
             _delay = 15 if device.type == "cx" else 10
             for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
@@ -77,6 +80,8 @@ def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = Fa
             if not typer.confirm("Continue to wait/retry?"):
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
+    if exit:
+        cli.exit(code=0 if complete else 1)
 
 def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,) -> None:
     """Helper command to send troubleshooting output (user provides command) and print results
@@ -405,7 +410,7 @@ def ping(
     commands = {cmd_id: cmd_args}
     dev_type = lib_to_api(dev.type, "tshoot")
 
-    resp = cli.central.request(cli.central.start_ts_session, dev.serial, dev_type=dev_type, commands=commands)
+    resp = cli.central.request(cli.central.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
     cli.display_results(resp, tablefmt="action", exit_on_fail=True)
 
     complete = False

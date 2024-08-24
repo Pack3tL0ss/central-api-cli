@@ -640,7 +640,6 @@ class Cache:
 
     def dev_completion(
         self,
-        # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None
     ):
@@ -648,14 +647,6 @@ class Cache:
         if not config.valid:
             err_console.print(":warning:  Invalid config")
             return
-
-        # HACK click 8.x broke args being passed to completion functions.
-        # if args is not None:
-        #     if ctx is not None and ctx.command_path == "cencli delete device":
-        #         args = ctx.params["devices"]
-        #     else:
-        #         _params = [{k: v} for k, v in ctx.params.items() if isinstance(v, tuple)]
-        #         args = list(_params[0].values())[-1]
 
         dev_type = None
         if args:
@@ -822,7 +813,7 @@ class Cache:
             completion=True,
         )
         out = []
-        args = args or ctx.params.values()  # HACK as args stopped working
+        args = args or ctx.params.values()  # HACK as args stopped working / seems to be passing args typer 0.10.0 / click 7.1.2
         if match:
             # remove items that are already on the command line
             match = [m for m in match if m.name not in args]
@@ -1527,7 +1518,7 @@ class Cache:
         for c in out:  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
             yield c[0].replace(":", "-"), c[1]
 
-    def event_completion(
+    def event_log_completion(
         self,
         incomplete: str,
         args: List[str] = None,
@@ -1556,8 +1547,36 @@ class Cache:
             yield "cencli", "Show cencli logs"
         else:
             for event in self.events:
-                if event["id"].startswith(incomplete):
+                if str(event["id"]).startswith(incomplete):
                     yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
+
+    def audit_log_completion(
+        self,
+        incomplete: str,
+        args: List[str] = None,
+    ) -> Generator[Tuple[str, str], None, None] | None:
+        """Completion for audit event logs.
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Generator[Tuple[str, str], None, None]: Value and help_text for the event, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            err_console.print(":warning:  Invalid config")
+            return
+
+        if incomplete == "":
+            for m in self.logs:
+                yield m["id"]
+        else:
+            for log in self.logs:
+                if str(log["id"]).startswith(incomplete):
+                    yield log["id"]
 
     # TODO add support for zip code city state etc.
     def site_completion(
@@ -1873,7 +1892,7 @@ class Cache:
                 devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
 
                 _ret = [d.dict() for d in devices]
-                log.info(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
+                log.debug(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
         except Exception as e:
             log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")
             log.exception(e)
@@ -1968,7 +1987,7 @@ class Cache:
                     _start_time = time.perf_counter()
                     raw_models_by_type = models.Devices(**raw_data)
                     raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
-                    log.info(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
+                    log.debug(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
 
                 if resp.all_ok:
                     if not dev_type:
@@ -1976,7 +1995,7 @@ class Cache:
                         with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
                             self.DevDB.truncate()
                             _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
-                            log.info(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
+                            log.debug(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
                     else:
                         self._add_update_devices([dev.dict() for dev in raw_models])
                     self.updated.append(self.central.get_all_devices)
@@ -1988,43 +2007,27 @@ class Cache:
 
     async def update_inv_db(
             self,
-            data: Union[str, List[str]] = None,
+            data: str | List[str] = None,
             *,
             remove: bool = False,
-            dev_type: str = "all",
+            dev_type: Literal['ap', 'gw', 'switch', 'all'] = None,
             sub: bool = None
-        ) -> Union[List[int], Response]:
+        ) -> Response | None:
         """Update Inventory Database (local cache).
 
         Args:
             data (Union[str, List[str]], optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
-            dev_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
+            dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device type. None equates to 'all'.  Defaults to None.
             sub (str, optional): whether or not to filter return by subscribed / not subscribed. Defaults to None (no filter)
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
 
         Returns:
-            Union[Response, None]: returns Response object from inventory api call if no data was provided for add/remove.
+            Response | None: returns Response object from inventory api call if no data was provided for add/remove.
                 If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
         """
-        lib_to_api_dev_type = {
-            "gw": "gateway",
-            "gateway": "gateway",
-            "gateways": "gateway",
-            "sw": "switch",
-            "cx": "switch",
-            "switches": "switch",
-            "switch": "switch",
-            "ap": "all_ap",
-            "aps": "all_ap"
-        }
-        dev_type = dev_type or "all"  # if they pass in None = "all"
-        dev_type = lib_to_api_dev_type.get(dev_type, dev_type)
-        if config.is_cop and dev_type == "gateway":
-            dev_type = "controller"
-
         if data:
             # provide serial or list of serials to remove
             data = utils.listify(data)
@@ -2051,17 +2054,11 @@ class Cache:
                         else:
                             log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
 
-                # if len(doc_ids) != len(data):
-                #     log.error(
-                #         f"Warning update_inv_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
-                #         show=True
-                #     )
-
                 db_res = self.InvDB.remove(doc_ids=doc_ids)
                 if len(db_res) != len(doc_ids):
                     log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
         else:
-            resp = await self.central.get_device_inventory(sku_type=dev_type)
+            resp = await self.central.get_device_inventory(device_type=dev_type)
             if resp.ok:
                 if resp.output:
                     resp.output = utils.listify(resp.output)
@@ -2195,8 +2192,6 @@ class Cache:
         """
         resp = await self.central.get_valid_subscription_names()
         if resp.ok:
-            # licenses starting with enhanced_ or standard_ are compute/storage
-            # resp.output = [{"name": k} for k in resp.output.keys() if not k.startswith("standard_") and not k.startswith("enhanced_")]
             resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
             self.updated.append(self.central.get_valid_subscription_names)
             self.LicenseDB.truncate()
@@ -2259,13 +2254,51 @@ class Cache:
         return db_res
 
     # TODO need a reset cache flag in "show clients"
-    async def update_client_db(self, *args, truncate: bool = False, **kwargs) -> Response:
+    async def update_client_db(
+        self,
+        truncate: bool = False,
+        client_type: constants.ClientType = None,
+        group: str = None,
+        swarm_id: str = None,
+        label: str = None,
+        network: str = None,
+        site: str = None,
+        serial: str = None,
+        os_type: str = None,
+        stack_id: str = None,
+        cluster_id: str = None,
+        band: str = None,
+        mac: str = None,
+        client_status: constants.ClientStatus = "CONNECTED",
+        past: str = "3H",
+    ) -> Response:
         """Update client DB
 
-        This only updates when the user does a show clients
+        Client cache only updates when the user does a show clients
 
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
+
+        Args:
+            truncate (bool, optional): Truncate the DB and repopulate with results from API.  Defaults to False.
+            client_type (Literal['wired', 'wireless', 'all'], optional): Client type to retrieve.  Defaults to None.
+                if not provided all client types will be returned, unless a filter specific to a client type is
+                specified.  i.e. providing band will result in WLAN clients.
+            group (str, optional): Filter by Group. Defaults to None.
+            swarm_id (str, optional): Filter by swarm. Defaults to None.
+            label (str, optional): Filter by label. Defaults to None.
+            network (str, optional): Filter by WLAN SSID. Defaults to None.
+            site (str, optional): Filter by site. Defaults to None.
+            serial (str, optional): Filter by connected device serial. Defaults to None.
+            os_type (str, optional): Filter by client OS type. Defaults to None.
+            stack_id (str, optional): Filter by Stack ID. Defaults to None.
+            cluster_id (str, optional): Filter by Cluster ID. Defaults to None.
+            band (str, optional): Filter by band. Defaults to None.
+            mac (str, optional): Filter by client MAC. Defaults to None.
+            client_status (Literal["FAILED_TO_CONNECT", "CONNECTED"], optional): Return clients that are
+                connected, or clients that have failed to connect.  Defaults to CONNECTED.
+            past: (str, optional): Time-range to show client details for.  Format:
+                3H = 3 Hours, 1D = 1 Day, 1W = 1 Week, 1M = 1Month, 3M = 3Months.  Defaults to 3H
 
         Past users are always retained, unless truncate=True
         """
@@ -2274,8 +2307,22 @@ class Cache:
 
         # truncate = truncate if any([args, kwargs]) else True  # if no filters we truncate the DB
         # TODO Add cleanup function for client cache to delete clients with last_connected_time > x days
-
-        client_resp = await self.central.get_clients(*args, **kwargs)
+        client_resp: Response = await self.central.get_clients(
+            client_type=client_type,
+            group=group,
+            swarm_id=swarm_id,
+            label=label,
+            network=network,
+            site=site,
+            serial=serial,
+            os_type=os_type,
+            stack_id=stack_id,
+            cluster_id=cluster_id,
+            band=band,
+            mac=mac,
+            client_status=client_status,
+            past=past,
+        )
         if not client_resp.ok:
             return client_resp
         else:
@@ -2305,7 +2352,7 @@ class Cache:
                     cache_update_res = self.ClientDB.insert_multiple(data.values())
 
                 if len(cache_update_res) < len(data):  # this is a list of one item lists but len is still OK here
-                    log.error(f"Client cache update returned {len(cache_update_res)} doc_ids, expected {len(data)}", caption=True)
+                    log.error(f"Client cache update returned {len(cache_update_res)} doc_ids, expected {len(data)}", caption=True, log=True)
                 else:
                     log.info(f"Client cache {'truncated/re-populated' if truncate else 'updated'} with {len(data)} clients")
         return client_resp
@@ -2489,7 +2536,8 @@ class Cache:
 
         if refresh or not config.cache_file_ok:
             _word = "Refreshing" if config.cache_file_ok else "Populating"
-            print(f"[cyan]-- {_word} Identifier mapping Cache --[/cyan]", end="")
+            updating_db = "[bright_green]Full[/] Identifier mapping" if not update_count else utils.color([k for k, v in db_map.items() if v])
+            print(f"[cyan]-- {_word} {updating_db} Cache --[/cyan]", end="")
 
             start = time.perf_counter()
             db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
@@ -2602,7 +2650,7 @@ class Cache:
             qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
 
         match: List[CentralObject] = []
-        for _ in range(0, 2):
+        for idx in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()
                 if q == "dev":
@@ -2622,7 +2670,7 @@ class Cache:
                     return match[0]
 
             # No match found trigger refresh and try again.
-            if not match and not completion:
+            if idx == 0 and not match and not completion:
                 self.check_fresh(
                     dev_db=True if "dev" in qry_funcs else False,
                     site_db=True if "site" in qry_funcs else False,
@@ -2644,7 +2692,7 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.AllDevTypes | List[constants.AllDevTypes] = None,
+        dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None,
         swack: bool = False,
         conductor_only: bool = False,
         retry: bool = True,
@@ -2659,7 +2707,7 @@ class Cache:
 
         Args:
             query_str (str | Iterable[str]): The query string or list of strings to attempt to match.
-            dev_type (constants.AllDevTypes | List[constants.AllDevTypes], optional): Limit matches to specific device type. Defaults to None (all device types).
+            dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Literal["ap", "cx", "sw", "switch", "gw"]], optional): Limit matches to specific device type. Defaults to None (all device types).
             swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
                 If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
             conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
@@ -3231,38 +3279,38 @@ class Cache:
             else:
                 return None
 
-    # cencli completion can be removed..  Moved to get_event_identifier
-    def get_log_identifier(self, query: str, include_cencli: bool = False) -> str:
+    def get_audit_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
             return query
-        elif query == "":  # tab completion
-            log_ids = [x["id"] for x in self.logs]
-            return log_ids if not include_cencli else ["cencli", *log_ids]
 
         try:
-            if include_cencli and "cencli".startswith(query.lower()):
-                return [("cencli", "show cencli logs (from local log file)",)]
-
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:
                 err_console.print(f"\nUnable to gather log id from short index query [cyan]{query}[/]")
                 err_console.print("Short log_id aliases are built each time [cyan]show logs[/] / [cyan]show audit logs[/]... is ran.")
                 err_console.print("  repeat the command without specifying the log_id to populate the cache.")
                 err_console.print("  You can verify the cache by running (hidden command) 'show cache logs'")
-                return []
+                raise typer.Exit(1)
             else:
                 return match[-1]["long_id"]
 
         except ValueError as e:
-            err_console.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id.  {query} does not appear to be an integer.")
-            return []
-            # typer.secho(f"Exception in get_log_identifier {e.__class__.__name__}", fg="red")
-            # raise typer.Exit(1)
+            err_console.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
+            raise typer.Exit(1)
 
-    def get_event_identifier(self, query: str) -> str:
-        if query == "":  # tab completion
-            return [x["id"] for x in self.events]
+    def get_event_log_identifier(self, query: str) -> dict:
+        """Get event log details based on identifier.
 
+        Args:
+            query (str): The short event log id, generated anytime show logs is ran for any events
+                that have details.
+
+        Raises:
+            typer.Exit: If unable to find id, or the id is not a valid type
+
+        Returns:
+            dict: Dictionary containing event log details.
+        """
         try:
             match = self.EventDB.search(self.Q.id == str(query))
             if not match:
@@ -3276,8 +3324,8 @@ class Cache:
 
         except ValueError as e:
             log.error(f"Exception in get_event_identifier {e.__class__.__name__}", show=True)
-            log.exception(e)
             raise typer.Exit(1)
+
 
     def get_mpsk_identifier(
         self,

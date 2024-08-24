@@ -51,7 +51,7 @@ def acp_logs(
         None,
         metavar='[LOG_ID]',
         help="Show details for a specific log_id",
-        autocompletion=lambda incomplete: cli.cache.get_log_identifier(incomplete, include_cencli=False),
+        autocompletion=cli.cache.audit_log_completion,
         show_default=False,
     ),
     user: str = typer.Option(None, help="Filter logs by user", show_default=False,),
@@ -116,10 +116,10 @@ def acp_logs(
         title = f"{title} for last 5 days"
 
     kwargs = {
-        "log_id": log_id if log_id is None else cli.cache.get_log_identifier(log_id),  # TODO show audit system-logs and show audit logs is using same DB
+        "log_id": log_id if log_id is None else cli.cache.get_audit_log_identifier(log_id),  # TODO show audit system-logs and show audit logs is using same DB
         "username": user,
-        "start_time": start,
-        "end_time": end,
+        "from_time": start,
+        "to_time": end,
         "description": description,
         "target": dev_id,
         "classification": _class,
@@ -156,7 +156,7 @@ def logs(
         None,
         metavar='[LOG_ID]',
         help="Show details for a specific log (log_id from previous run of the command)",
-        autocompletion=lambda incomplete: cli.cache.get_log_identifier(incomplete, include_cencli=False),
+        autocompletion=cli.cache.audit_log_completion,
         show_default=False,
     ),
     group: str = cli.options(timerange="48h").group,
@@ -216,12 +216,12 @@ def logs(
         title = f"{title} associated with group {group.name}"
 
     kwargs = {
-        'log_id': None if not log_id else cli.cache.get_log_identifier(log_id),
+        'log_id': None if not log_id else cli.cache.get_audit_log_identifier(log_id),
         'group_name': None if not group else group.name,
         'device_id': dev_id,
         'classification': _class,
-        'start_time': start,
-        'end_time': end,
+        'from_time': start,
+        'to_time': end,
         'count': count,
     }
 

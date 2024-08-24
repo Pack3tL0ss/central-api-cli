@@ -31,9 +31,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibDevIdens
 from centralcli.objects import DateTime
-from centralcli.models import CloudAuthUploadResponse
+from centralcli.models import CloudAuthUploadResponse, Sites
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
@@ -134,7 +134,7 @@ def _serial_to_name(sernum: str | None) -> str | None:
     return match.name
 
 
-def _get_dev_name_from_mac(mac: str, dev_type: str | List[str] = None, summary_text: bool = False) -> str:
+def _get_dev_name_from_mac(mac: str, dev_type: LibDevIdens | List[LibDevIdens] = None, summary_text: bool = False) -> str:
     if mac.count(":") != 5:
         return mac
     else:
@@ -678,6 +678,8 @@ def get_clients(
             "last_connection_time"
         ]
     }
+    if all([c.get("failure_reason") for c in data]):
+        verbosity_keys[0].insert(2, "client_type")  # failed clients could be wired or wireless on some devices.
 
     _short_value["speed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
     _short_value["maxspeed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
@@ -695,7 +697,7 @@ def get_clients(
             for idx, d in enumerate(data)
         ]
 
-    if filters:  # filter by devices which is a list of serial numbers
+    if filters:  # filter by devices which is a list of serial numbers  # This should be deprecated.  show clients no longer allows multiple devices.
         _filter = "~|~".join(filters)
         data = [d for d in data if d["connected device"]["serial"].upper() in _filter.upper()]
 
@@ -1038,22 +1040,8 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
 
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
-
-    _sorted = [
-        "site_name",
-        "site_id",
-        "address",
-        "city",
-        "state",
-        "zipcode",
-        "country",
-        "longitude",
-        "latitude",
-        "associated_device_count",
-    ]  # , "tags"]
-    key_map = {"associated_device_count": "associated devices", "site_id": "id", "site_name": "name"}
-
-    return _unlist([{key_map.get(k, k): s[k] for k in _sorted} for s in data if s.get("site_name", "") != "visualrf_default"])
+    data = Sites(sites=data)
+    return data.dict()["sites"]
 
 
 def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1206,8 +1194,6 @@ def get_template_details_for_device(data: str) -> dict:
         dict: dict with summary(dict), running config(str) and
         central side config(str).
     """
-    import json
-
     summary, running_config, central_config = None, None, None
     split_line = data.split("\n")[0].rstrip()
     data_parts = [
@@ -1353,7 +1339,7 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
     return data
 
 def _inv_type(model: str, dev_type: str) -> DevTypes:
-    if dev_type == "SWITCH":
+    if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY
         aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
         return "sw" if model[0:4] in aos_sw_models else "cx"
 
@@ -1382,7 +1368,7 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
 
     data = [
         {
-            "type": _inv_type(d["model"], d.get("type", d.get("device_type", "err"))),
+            "type": _inv_type(d["model"], d.get("device_type", d.get("type", "err"))),
             **{key: val for key, val in d.items() if key != "device_type"}
         }
         for d in data
@@ -1727,11 +1713,6 @@ def get_overlay_interfaces(data: Union[List[dict], dict]) -> Union[List[dict], d
     return simple_kv_formatter(data)
 
 def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0, format: TableFormat = "rich") -> List[dict]:
-    if isinstance(data, list) and data and isinstance(data[0], str):
-        data = json.loads(data[0])
-    if isinstance(data, dict) and "wlans" in data:
-        data = data["wlans"]
-
     # TODO PlaceHolder logic, currently only support verbosity level 0
     verbosity_keys = {
         0: [

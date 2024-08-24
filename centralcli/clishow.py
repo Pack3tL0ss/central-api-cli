@@ -285,11 +285,11 @@ def show_devices(
 
         br = cli.central.BatchRequest
         devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
-        _types = [dev.type for dev in devs]
-        reqs = [br(central.get_dev_details, (lib_to_api(_type, "monitoring"), dev.serial,)) for _type, dev in zip(_types, devs)]
+        dev_types = [dev.type for dev in devs]
+        reqs = [br(central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
         batch_res = cli.central.batch_request(reqs)
 
-        if do_table and len(_types) > 1:
+        if do_table and len(dev_types) > 1:
             _output = [r.output for r in batch_res]
             common_keys = set.intersection(*map(set, _output))
             _output = [{k: d[k] for k in common_keys} for d in _output]
@@ -299,7 +299,7 @@ def show_devices(
         else:
             resp = batch_res
 
-        if "cx" in _types:
+        if "cx" in dev_types:
             caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'
     elif dev_type == "all":  # cencli show all | cencli show devices
         if include_inventory:
@@ -318,7 +318,7 @@ def show_devices(
                 resp = central.request(cli.cache.update_dev_db, **params)
                 caption = _build_device_caption(resp, status=status)
             else:
-                # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
+                # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
                 resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
         resp = central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
@@ -804,7 +804,7 @@ def subscription(
     """
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
     if what is None or what == "details":
-        resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)  # TODO might be useful to restore passing license type to subscriptions (filter option)
+        resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)
         title = "Subscription Details"
         _cleaner = cleaner.get_subscriptions
         set_width_cols = {"name": 40}
@@ -1264,6 +1264,26 @@ def labels(
     cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
 
+def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
+    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    if resp.ok:
+        for do, field in zip([count_state, count_country], ["state", "country"]):
+            if do:
+                _cnt_list = [site[field] for site in resp.output if site[field]]
+                _cnt_dict = {
+                    item: _cnt_list.count(item) for item in set(_cnt_list)
+                }
+                counts = {**counts, **_cnt_dict}
+
+            if counts:
+                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    if count_caption:
+        caption = f'[reset]{caption}, {count_caption}[reset][/]'
+
+    return caption
+
+
 @app.command(short_help="Show sites/details")
 def sites(
     site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
@@ -1288,28 +1308,15 @@ def sites(
     site = None if site and site.lower() == "all" else site
     if not site:
         resp = cli.central.request(cli.cache.update_site_db)
+        cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
         site = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
+        cleaner_func = cleaner.sites
 
     # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
     # Country is blank when added via API and not provided.  Find public API to lookup country during add
-    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
-    counts, count_caption = {}, None
-    if resp.ok:
-        for do, field in zip([count_state, count_country], ["state", "country"]):
-            if do:
-                _cnt_list = [site[field] for site in resp.output if site[field]]
-                _cnt_dict = {
-                    item: _cnt_list.count(item) for item in set(_cnt_list)
-                }
-                counts = {**counts, **_cnt_dict}
-
-            if counts:
-                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
-    if count_caption:
-        caption = f'[reset]{caption}, {count_caption}[reset][/]'
-
+    caption = _build_site_caption(resp, count_state=count_state, count_country=count_country)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     cli.display_results(
@@ -1321,10 +1328,8 @@ def sites(
         sort_by=sort_by,
         reverse=reverse,
         caption=caption,
+        cleaner=cleaner_func,
     )
-
-    if counts and tablefmt != "rich":
-        print(caption)
 
 
 @app.command()
@@ -1564,8 +1569,7 @@ def task(
 
 @app.command()
 def run(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cli.cache.dev_completion),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Applies to AOS-SW: Output in YAML format [grey42]\[default: JSON][/]", rich_help_panel="Formatting",),
+    device: str = cli.arguments.device,
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1578,22 +1582,17 @@ def run(
     APs get the last known running config from Central
     Switches and GWs request the running config from the device
     """
-
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
     if dev.type == "cx":
-        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
+        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "sw":
-        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
+        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "gw":
-        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
-    else:
-        resp = central.request(central.get_device_configuration, dev.serial)
+        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
 
+    resp = central.request(central.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
             cli_config = json.loads(resp.output)
@@ -1602,12 +1601,7 @@ def run(
         except Exception as e:
             log.exception(e)
 
-    if isinstance(resp.output, dict):
-        tablefmt = "json" if not do_yaml else "yaml"
-    else:
-        tablefmt = None
-
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
+    cli.display_results(resp, pager=pager, outfile=outfile)
 
 
 # TODO --status does not work
@@ -1840,14 +1834,31 @@ def routes(
     )
 
 
+def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]):
+    out, failed, passed = [], [], []
+    for group, res in zip(groups, responses):
+        if res.ok:
+            passed += [res]
+            for wlan in res.output:
+                out += [{'group': group, **wlan}]
+        else:
+            failed += [res]
+    if passed:
+        resp: Response = sorted(passed, key=lambda r: r.rl)[0]
+        resp.output = out
+    else:
+        resp: List[Response] = failed
+
+    return resp
+
+
 @app.command()
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
     group: str = cli.options.group,
     site: str = cli.options.site,
     label: str = cli.options.label,
-    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),  # TODO Can add option for --swarm where value is a dev iden
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
+    swarm: str = cli.options.swarm_device,
     verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
     sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
     reverse: bool = cli.options.reverse,
@@ -1864,6 +1875,9 @@ def wlans(
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show WLAN(SSID)/details
+
+    Shows summary of all WLANs in Central by default.  Each SSID is only listed once.
+    Use -v (fetch details for wlans in each group) or specify [cyan]--group[/] for more details.
     """
     central = cli.central
 
@@ -1880,11 +1894,16 @@ def wlans(
         _site: CentralObject = cli.cache.get_site_identifier(site)
         title = f"{title} in site {_site.name}"
         site = _site.name
+    if swarm:
+        _dev: CentralObject = cli.cache.get_dev_identifier(swarm, dev_type="ap")
+        title = f"{title} in swarm associated with {_dev.name}"
+        swarm = _dev.swack_id
+
 
     params = {
         "name": name,
         "group": group,
-        "swarm_id": swarm_id,
+        "swarm_id": swarm,
         "label": label,
         "site": site,
         "calculate_client_count": True,
@@ -1892,32 +1911,20 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
-        resp = central.request(central.get_full_wlan_list, group)  # TODO have get_full_wlan_list covert to list of dicts
-        caption = None  # if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"  # It's a str need JSON.loads...
+        resp = central.request(central.get_full_wlan_list, group)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
+        cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+    elif swarm:
+        resp = central.request(central.get_full_wlan_list, swarm)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
         cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
-        import json
         group_res = central.request(central.get_groups_properties)
         if group_res:
             ap_groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
             batch_req = [BatchRequest(central.get_full_wlan_list, group) for group in ap_groups]
             batch_resp = cli.central.batch_request(batch_req)
-            out, failed, passed = [], [], []
-            for group, res in zip(ap_groups, batch_resp):
-                if res.ok:
-                    passed += [res]
-                    wlan_dict = json.loads(res.output)
-                    if wlan_dict.get("wlans"):
-                        for wlan in wlan_dict['wlans']:
-                            out += [{'group': group, **wlan}]
-                else:
-                    failed += [res]
-
-            if passed:
-                resp = passed[-1]
-                resp.output = out
-            else:
-                resp = failed
+            resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
         else:
             resp = group_res
 
@@ -2015,7 +2022,7 @@ def clients(
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
-    past: TimeRange = cli.options.past,
+    past: TimeRange = cli.options("3h", include_mins=False).past,
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
@@ -2023,7 +2030,7 @@ def clients(
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
     band: RadioBandOptions = typer.Option(None, help="Filter by Band [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev must also be supplied)[/]",),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev (AP only) must also be supplied)[/]",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
     device: str = cli.options.device,
     verbose: int = cli.options.verbose,
@@ -2052,7 +2059,8 @@ def clients(
     kwargs = {}
     dev = None
     title = "All Clients"
-    args = tuple()
+    if band:
+        kwargs["band"] = band.value
     if client:
         _client = cli.cache.get_client_identifier(client, exit_on_fail=True)
         kwargs["mac"] = _client.mac
@@ -2060,7 +2068,7 @@ def clients(
         verbose = verbose or 1
     elif device:
         dev: CentralObject = cli.cache.get_dev_identifier(device)
-        args += ("wireless",) if dev.type == "ap" else ("wired",)
+        kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
         else:
@@ -2077,33 +2085,29 @@ def clients(
                     log.warning(f"[cyan]--{k}[/] [green]{v}[/] ignored.  Doesn't make sense with [cyan]--dev[/] [green]{dev.name}[/] specified.", log=False, caption=True)
             group = site = label = None
 
-
     if denylisted:
         if not dev:
-            cli.exit(":warning:  [cyan]--device[/] is required when [cyan]-D|--denylisted[/] flag is set.")
+            cli.exit("[cyan]--dev[/] :triangular_flag: is required when [cyan]-D|--denylisted[/] :triangular_flag: is set.", emoji=True)
         elif dev.type != "ap":
-            cli.exit(f"[cyan]--denylisted[/] flag is only valid for APs not {lib_to_gen_plural(dev.type)}.")
+            cli.exit(f"[cyan]-D|--denylisted[/]  :triangular_flag: is only valid for APs not {lib_to_gen_plural(dev.type)}.", emoji=True)
         else:
-            args = (dev.serial,)
+            if len(kwargs) > 2:  # client_type and serial
+                log.warning(f"Only [cyan]--dev[/] is appropriate with [cyan]-D|--denylisted[/] flag is used.  {len(kwargs) - 1} invalid flags were ignored.", caption=True)
+            kwargs = {"serial": dev.serial}
             title = f"{dev.name} Denylisted Clients"
-            if any([group, site, label]):
-                print(":warning:  [cyan]--group[/], [cyan]--site[/], [cyan]--label[/] options not valid with [cyan]-D|--denylisted[/].  [italic bold]Ignoring[/].")
 
     if not client:
         if wired:
-            args = ("wired", *args)
             title = "All Wired Clients" if not dev else f"{dev.name} Wired Clients"
+            kwargs["client_type"] = "wired"
         elif wireless:
-            args = ("wireless", *args)
             title = f"{'All' if not dev else dev.name} Wireless Clients"
+            kwargs["client_type"] = "wireless"
             if band:
                 title = f"{title} associated with {band}Ghz radios"
         elif band:
-            args = ("wireless", *args)
             title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band}Ghz radios"
-
-    if band:
-        kwargs["band"] = band.value
+            kwargs["client_type"] = "wireless"
 
     if not denylisted:
         if group:
@@ -2137,14 +2141,14 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = central.request(cli.cache.update_client_db, *args, **kwargs)
+        resp = central.request(cli.cache.update_client_db, **kwargs)
     else:
-        resp = central.request(cli.central.get_denylist_clients, *args)
+        resp = central.request(cli.central.get_denylist_clients, **kwargs)
 
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
-    caption = None if any([client, denylisted]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
+    caption = None if any([client, denylisted, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
@@ -2152,17 +2156,12 @@ def clients(
     if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
-        verbose_kwargs["verbosity"] = int(verbose)
+        verbose_kwargs["verbosity"] = verbose
         verbose_kwargs["format"] = tablefmt
 
-        # filter output on multiple devices
-        # TODO maybe restore multi-device looks like was handled in filter
-        if dev and isinstance(dev, list):
-            verbose_kwargs["filters"] = [d.serial for d in dev]
-
     if sort_by:
-        sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
-        if sort_by == "last connected":  # We invert so the most recent client is on top
+        sort_by = sort_by if sort_by != "dot11" else "802.11"
+        if sort_by.value == "last-connected":  # We invert so the most recent client is on top
             reverse = not reverse
 
     cli.display_results(
@@ -2312,7 +2311,7 @@ def logs(
         None,
         metavar='[LOG_ID|cencli]',
         help="Show details for a specific log_id or [cyan]cencli[/] to show cencli logs",
-        autocompletion=cli.cache.event_completion,
+        autocompletion=cli.cache.event_log_completion,
         show_default=False,
     ),
     cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs", callback=show_logs_cencli_callback),
@@ -2325,13 +2324,7 @@ def logs(
     start: datetime = cli.options(timerange="30m").start,
     end: datetime = cli.options.end,
     past: str = cli.options.past,
-    device: str = typer.Option(
-        None,
-        metavar=iden_meta.dev,
-        help="Filter events by device",
-        autocompletion=cli.cache.dev_completion,
-        show_default=False,
-    ),
+    device: str = cli.options.device,
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
     client: str = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
@@ -2373,7 +2366,7 @@ def logs(
 
     # TODO move to common func for use by show logs and show audit logs
     if event_id:
-        event_details = cli.cache.get_event_identifier(event_id)
+        event_details = cli.cache.get_event_log_identifier(event_id)
         cli.display_results(
             Response(output=event_details),
             tablefmt="action",
@@ -2415,24 +2408,17 @@ def logs(
             start = pendulum.now(tz="UTC").subtract(minutes=30)
             title = f"{title} for last 30 minutes"
 
-    api_dev_types = {
-        "ap": "ACCESS POINT",
-        "switch": "SWITCH",
-        "gw": "GATEWAY",
-        "client": "CLIENT"
-    }
-
     kwargs = {
         "group": group,
         "swarm_id": swarm_id,
         "label": None if not label else cli.cache.get_label_identifier(label).name,
-        "from_ts": start,
-        "to_ts": end,
-        "macaddr": client_mac,
+        "from_time": start,
+        "to_time": end,
+        "client_mac": client_mac,
         "bssid": bssid,
         # "device_mac": None if not device else device.mac,  # no point we use serial
         "hostname": hostname,
-        "device_type": None if not dev_type else api_dev_types[dev_type],
+        "device_type": dev_type,
         "site": None if not site else cli.cache.get_site_identifier(site).name,
         "serial": dev_id,
         "level": level,

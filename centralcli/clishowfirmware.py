@@ -238,7 +238,6 @@ def _list(
     """Show available firmware list for a specific device or a type of device
     """
     dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
-    _dev_type = dev_type if dev_type is None else lib_to_api(dev_type, "firmware")
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
     if dev and dev.type == "ap":
@@ -246,11 +245,10 @@ def _list(
             swarm_id = dev.swack_id
         else:
             dev_type = "ap"
-            _dev_type = "IAP"
         dev = None
 
     kwargs = {
-        "device_type": _dev_type,
+        "device_type": dev_type,
         "swarm_id": swarm_id,
         "serial": None if dev is None else dev.serial
     }
@@ -260,7 +258,7 @@ def _list(
     if not kwargs:
         cli.exit("[bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required.")
     elif len(kwargs) > 1:
-        cli.exit("[bright_red]Invalid combination[/] specify only [bold]one[/] of device (argument), --dev-type, [bold]OR[/] --swarm-id.")
+        cli.exit("[bright_red]Invalid combination[/] specify only [bold]one[/] of [bright_green]DEVICE[/] (argument), [cyan]--dev-type[/], [bold]OR[/] [cyan]--swarm-id[/].")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
@@ -271,7 +269,7 @@ def _list(
         title = f'{title.split("serial")[0]} device [cyan]{dev.name}[/]'
 
 
-    resp = cli.central.request(cli.central.get_fw_version_list, **kwargs)
+    resp = cli.central.request(cli.central.get_firmware_version_list, **kwargs)
     cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_fw_version_list, format=tablefmt)
 
 

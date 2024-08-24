@@ -251,8 +251,9 @@ def remove(
             cli.central.BatchRequest(
                 cli.central.remove_devices_from_site,
                 site.id,
-                serial_nums=serials,
-                device_type=dev_type) for dev_type, serials in devs_by_type.items()
+                serials=serials,
+                device_type=dev_type,
+            ) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)

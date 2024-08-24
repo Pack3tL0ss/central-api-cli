@@ -93,9 +93,9 @@ class MoveData:
             move_type = "group" if self._move_type == "group" else f"{self._move_type}_id"
             key = req.kwargs.get(move_type)
             if not key and move_type == "group":
-                key = req.kwargs["group_name"]  # NEXT-MAJOR this needs to be changed to group once preprov method on central.py updated to be consistent
+                key = req.kwargs["group"]
 
-            serials = req.kwargs["serial_nums"]
+            serials = req.kwargs["serials"]
             out = utils.update_dict(out, key=key, value=serials)
 
         return out
@@ -888,9 +888,9 @@ class CLICommon:
         def serials_by_site_id(self) -> Dict[str, List[str]]:
             out = {}
             for req in self.move.reqs:
-                group = req.kwargs["site_id"]
-                serials = req.kwargs["serial_nums"]
-                out = utils.update_dict(out, key=group, value=serials)
+                site_id = req.kwargs["site_id"]
+                serials = req.kwargs["serials"]
+                out = utils.update_dict(out, key=site_id, value=serials)
 
             return out
 
@@ -928,7 +928,7 @@ class CLICommon:
             out = {}
             for req in [*self.move.reqs, *self.move_keep_config.reqs]:
                 group = req.kwargs["group"]
-                serials = req.kwargs["serial_nums"]
+                serials = req.kwargs["serials"]
                 out = utils.update_dict(out, key=group, value=serials)
 
             return out
@@ -984,11 +984,11 @@ class CLICommon:
 
         mv_reqs, pre_reqs, mv_retain_reqs = [], [], []
         if pregroup_mv_reqs:
-            pre_reqs = [self.central.BatchRequest(self.central.preprovision_device_to_group, group_name=k, serial_nums=v) for k, v in pregroup_mv_reqs.items()]
+            pre_reqs = [self.central.BatchRequest(self.central.preprovision_device_to_group, group=k, serials=v) for k, v in pregroup_mv_reqs.items()]
         if group_mv_reqs:
-            mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]
+            mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v) for k, v in group_mv_reqs.items()]
         if group_mv_cx_retain_reqs:
-            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
+            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
 
         return self.GroupMoves(
             pregroup_mv_reqs=pre_reqs,
@@ -1038,13 +1038,13 @@ class CLICommon:
         if site_rm_reqs:
             for k, v in site_rm_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         mv_reqs = []
         if site_mv_reqs:
             for k, v in site_mv_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
+                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         return self.SiteMoves(
             cache_devs=cache_devs,
@@ -1072,7 +1072,7 @@ class CLICommon:
         if label_ass_reqs:
             for k, v in label_ass_reqs.items():
                 label_id, dev_type = k.split("~|~")
-                batch_reqs += [self.central.BatchRequest(self.central.assign_label_to_devices, label_id=int(label_id), device_type=dev_type, serial_nums=v)]
+                batch_reqs += [self.central.BatchRequest(self.central.assign_label_to_devices, label_id=int(label_id), serials=v, device_type=dev_type)]
 
         return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
 

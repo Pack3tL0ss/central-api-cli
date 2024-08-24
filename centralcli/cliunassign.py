@@ -100,7 +100,7 @@ def label(
     reqs = []
     for dev_type, devs in zip(["IAP", "SWITCH", "CONTROLLER"], [aps, switches, gws]):
         if devs:
-            reqs += [br(cli.central.remove_label_from_devices, label.id, device_type=dev_type, serial_nums=[dev.serial for dev in devs])]
+            reqs += [br(cli.central.remove_label_from_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
     if cli.confirm(yes):
         resp = cli.central.batch_request(reqs)

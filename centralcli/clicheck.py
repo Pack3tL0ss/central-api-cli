@@ -33,7 +33,7 @@ def firmware_available(
     account: str = cli.options.account,
 ) -> None:
     """Check if a firmware version is available for a given device type"""
-    resp = cli.central.request(cli.central.check_image_available, device_type=device_type, firmware_version=version)
+    resp = cli.central.request(cli.central.check_firmware_available, device_type=device_type, firmware_version=version)
     cli.display_results(resp, tablefmt="action")
 
 
