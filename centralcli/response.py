@@ -20,7 +20,6 @@ from rich.status import Status
 from rich.style import StyleType
 
 import sys
-import typer
 import json
 from aiohttp import ClientSession, ClientResponse
 import time
@@ -437,6 +436,19 @@ class Response:
         self.rl = min([r.rl for r in [self, other]])
 
         return self
+
+    @property
+    def table(self) -> List[Dict[str, Any]]:
+        """Returns output with only the keys that are common across all items.
+
+        Returns:
+            List[Dict[str, Any]]: resp.output with only keys common across all items.
+        """
+        if not self.output:
+            return self.output
+
+        common_keys = set.intersection(*map(set, self.output))
+        return [{k: d[k] for k in common_keys} for d in self.output]
 
     @property
     def status_code(self) -> int:
@@ -921,13 +933,15 @@ class Session():
 
             # TODO allow new client_id client_secret and accept paste from "Download Tokens"
             if True in token_only:
-                prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
-                        f"\n    customer_id: {auth.central_info['customer_id']}" \
-                        f"\n    client_id: {auth.central_info['client_id']}" \
-                        "\n\nPaste result of `Download Tokens` from Central UI."\
-                        f"\nUse {typer.style('CTRL-D', fg='magenta')} on empty line after contents to submit." \
-                        f"\n{typer.style('exit', fg='magenta')} to abort." \
-                        f"\n{typer.style('Waiting for Input...', fg='cyan', blink=True)}\n"
+                prompt = "\n".join(
+                    [
+                        "[red]:warning:  Refresh Failed[/]: please generate new tokens for:",
+                        f"    customer_id: [bright_green]{auth.central_info['customer_id']}[/]",
+                        f"    client_id: [bright_green]{auth.central_info['client_id']}[/]",
+                        "\n[grey42 italic]:information:  If you create new tokens using the same [cyan]Application Name[/], the [cyan]client_id[/]/[cyan]client_secret[/] will stay consistent.[/]\n",
+                        "Paste the text from the [cyan]View Tokens[/] -> [cyan]Download Tokens[/] popup in Central UI.",
+                    ]
+                )
 
                 token_data = utils.get_multiline_input(prompt, return_type="dict")
             else:
