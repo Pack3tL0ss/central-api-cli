@@ -26,8 +26,8 @@ color = utils.color
 
 @app.command()
 def firmware_available(
-    device_type: DevTypes = typer.Argument(...),
-    version: str = typer.Argument(...,),
+    device_type: DevTypes = typer.Argument(..., show_default=False,),
+    version: str = typer.Argument(..., show_default=False,),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
