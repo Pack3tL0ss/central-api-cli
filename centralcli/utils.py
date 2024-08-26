@@ -248,10 +248,10 @@ class Utils:
         **kwargs
     ) -> List[str] | dict | str:
         console = Console(emoji=True)
-        exit_prompt_text = "Ctrl-Z -> Enter" if os.name == "nt" else "Ctrl-D on an empty line after content"
-        exit_prompt_text = f"Then hit {exit_prompt_text} to submit.\nEnter '{abort_str}' to abort.\n"
+        exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
+        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]exit[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
         def _get_multiline_sub(prompt: str = prompt, **kwargs):
-            prompt = f"{prompt}  {exit_prompt_text}" or f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
+            prompt = f"{prompt}\n\n{exit_prompt_text}" if prompt else f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
             console.print(prompt, **kwargs)
             contents, line = [], ''
             while line.strip().lower() != abort_str:
@@ -276,7 +276,7 @@ class Utils:
                         break
                     except Exception as e:
                         log.exception(f"get_multiline_input: Exception caught {e.__class__.__name__}\n{e}")
-                        console.print("\n :warning:  Input appears to be [bright_red]invalid[/].  Please re-input or Enter [cyan]exit[/] to exit\n")
+                        console.print("\n :warning:  Input appears to be [bright_red]invalid[/].  Please re-input or type [cyan]exit[/] to exit\n")
                         contents = _get_multiline_sub(prompt=prompt, **kwargs)
             elif return_type == "str":
                 contents = "\n".join(contents)
