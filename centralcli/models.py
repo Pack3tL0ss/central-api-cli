@@ -28,12 +28,14 @@ class TemplateDevType(str, Enum):
 
 # fields from Response.output after cleaner
 class _Inventory(BaseModel):
-    type: Optional[str] = None
-    model: Optional[str]
-    sku: Optional[str]
-    mac: str = Field(alias="macaddr")
     serial: str
-    services: Union[List[str], str] = Field(None, alias="license")
+    mac: str
+    type: Optional[str] = None
+    model: Optional[str] = None
+    sku: Optional[str] = None
+    services: Optional[List[str] | str] = None
+    subscription_key: Optional[str] = None
+    subscription_expires: Optional[int] = None
 
 switch_types = {
     "AOS-S": "sw",
@@ -49,19 +51,29 @@ class Inventory(_Inventory):
         macaddr: str = None,
         model: Optional[str] = None,
         sku: Optional[str] = None,
+        aruba_part_no: Optional[str] = None,
         services: Optional[str | List[str]] = None,
         license: Optional[str | List[str]] = None,
+        device_type: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(
-            type=type,
+            type=self._inv_type(model, dev_type=type or device_type),
             serial=serial,
-            macaddr=mac or macaddr,
+            mac=mac or macaddr,
             model=model,
-            sku=sku,
-            license=services or license,
+            sku=sku or aruba_part_no,
+            services=services or license,
             **kwargs,
         )
+
+    def _inv_type(self, model: str, dev_type: str) -> DevType:
+        if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY
+            aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
+            return "sw" if model[0:4] in aos_sw_models else "cx"
+
+        return "gw" if dev_type == "GATEWAY" else dev_type.lower()
+
 
 # Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE
