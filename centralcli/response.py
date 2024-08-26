@@ -93,8 +93,10 @@ class RateLimit():
 
         self.used_day = self.total_day - self.remain_day
         self.used_sec = self.total_sec - self.remain_sec
-        self.ok = True if all([self.remain_day != 0, self.remain_sec > 0]) else False
         self.near_limit = self.near_sec or self.near_day
+
+    def __bool__(self) -> bool:
+        return self.ok
 
     def __str__(self):
         if self.call_performed:
@@ -121,15 +123,23 @@ class RateLimit():
         return False if self.remain_day is None else bool(self.remain_day >= other)
 
     @property
-    def near_sec(self):
+    def ok(self) -> bool:
+        if self.used_sec + self.remain_sec + self.total_sec == 0:
+            secs_ok = True
+        else:
+            secs_ok = True if self.remain_sec > 0 else False
+        return True if self.remain_day != 0 and secs_ok else False
+
+    @property
+    def near_sec(self) -> bool:
         return True if self.remain_sec <= 2 else False
 
     @property
-    def near_day(self):
+    def near_day(self) -> bool:
         return True if self.remain_day <= 100 else False
 
     @property
-    def text(self):
+    def text(self) -> str:
         full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
         return full_text if self.call_performed else str(self)
 
