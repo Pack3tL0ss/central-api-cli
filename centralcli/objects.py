@@ -13,7 +13,7 @@ TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "
 class DateTime():
     """DateTime object with a number of timestamp to string converters for various representations used by the CLI.
     """
-    def __init__(self, timestamp: int | float | str, format: TimeFormat = "day-datetime", tz: str = "local", pad_hour: bool = False, round_to_minute: bool = False,) -> None:
+    def __init__(self, timestamp: int | float | str, format: TimeFormat = "day-datetime", tz: str = "local", pad_hour: bool = False, round_to_minute: bool = False, format_expiration: bool = False) -> None:
         """DateTime constructor.
 
         Args:
@@ -22,16 +22,32 @@ class DateTime():
             tz (str, optional): TimeZone of the timestamp. Defaults to "local".
             pad_hour (bool, optional): If True mdyt and log formats will zero pad the hour. Defaults to False.
             round_to_minute (bool, optional): If True durwords-short will strip the seconds and round to the nearest minute. Defaults to False.
+            format_expiration (bool, optional): Applies when format is timediff. If True rich renderable will be color formatted based on # of months remaining.
+                This is used to colorize expiration dates.  Within 6 months = Orange, within 3 months = red.  Defaults to False.
         """
         self.original = timestamp
         self.ts = self.normalize_epoch(timestamp)
         self.tz = tz
         self.pad_hour = pad_hour
         self.round_to_minute = round_to_minute
+        self.format_expiration = format_expiration
         self.pretty = getattr(self, format.replace("-", "_"))
 
     def __str__(self):
+        if self.format_expiration:
+            if pendulum.from_timestamp(self.ts).subtract(months=3).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
+                return f"[red]{self.pretty}[/]"  # TODO need to sort out how to have line 180 in render.py take a rich renderable
+                # return f"\x1b[31m{self.pretty}\x1b[0m"  # Doing it this way messes up column spacing.
+            elif pendulum.from_timestamp(self.ts).subtract(months=6).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
+                return f"[dark_orange3]{self.pretty}[/]"
+                # return f"\x1b[38;5;166m{self.pretty}\x1b[0m"
         return self.pretty
+
+    def __rich__(self):
+        if not self.format_expiration:
+            return f"_rich_{self.pretty}"
+        else:
+            return f"_rich_{self.pretty}"
 
     def __bool__(self):
         return bool(self.ts and self.ts > 0)
