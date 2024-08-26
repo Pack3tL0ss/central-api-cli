@@ -1037,20 +1037,20 @@ class CentralApi(Session):
             cache: bool = False,
             dev_types: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None,
             group: str = None,
+            site: str = None,
             label: str = None,
+            serial: str = None,
+            mac: str = None,
+            model: str = None,
             stack_id: str = None,
             swarm_id: str = None,
-            serial: str = None,
-            status: str = None,
-            fields: list = None,
-            show_resource_details: bool = True,
             cluster_id: str = None,
-            model: str = None,
+            public_ip_address: str = None,
+            status: constants.DeviceStatus = None,
+            show_resource_details: bool = True,
             calculate_client_count: bool = True,
             calculate_ssid_count: bool = False,
-            mac: str = None,
-            public_ip_address: str = None,
-            site: str = None,
+            fields: list = None,
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
         ) -> CombinedResponse:
@@ -1091,9 +1091,10 @@ class CentralApi(Session):
         batch_resp = await self._batch_request(reqs)
         combined = CombinedResponse(batch_resp)
 
-        if not combined.passed:
-            return batch_resp
-        elif combined.failed:
+        # if not combined.passed:
+        #     return batch_resp
+        # elif combined.failed:
+        if combined.failed:
             for r in combined.failed:
                 log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
@@ -1327,7 +1328,7 @@ class CentralApi(Session):
         stack_id: str = None,
         swarm_id: str = None,
         serial: str = None,
-        status: str = None,
+        status: constants.DeviceStatus = None,
         fields: list = None,
         show_resource_details: bool = False,
         cluster_id: str = None,
@@ -1341,8 +1342,6 @@ class CentralApi(Session):
         offset: int = 0,
     ) -> Response:
         """Get Devices from Aruba Central API Gateway
-
-        // Used by show <"aps"|"gateways"|"switches"> //
 
         Args:
             device_type (Literal["ap", "gw", "switch"): Type of devices to get.
@@ -4707,7 +4706,7 @@ class CentralApi(Session):
             license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing types as well
             device_type (str, optional): Filter by device type ('ap', 'gw', or 'switch')
             offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of subscriptions to get Defaults to 100.
+            limit (int, optional): Number of subscriptions to get Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
