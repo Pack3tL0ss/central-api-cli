@@ -9,11 +9,10 @@ import sys
 import json
 import os
 from datetime import datetime
-from typing import List, Iterable, Literal, Dict, Any
+from typing import List, Iterable, Literal, Dict, Any, Tuple
 from pathlib import Path
 from rich import print
 from rich.console import Console
-from copy import deepcopy
 
 
 try:
@@ -44,7 +43,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, LicenseTypes, LogLevel,
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, LicenseTypes, LogLevel, DeviceStatus, DeviceTypes,
     lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
@@ -73,50 +72,63 @@ class Counts:
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
 
-def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
-    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
-    def get_switch_counts(data) -> dict:
-        if data is None:
-            return {}
-        dev_types = set([t.get("switch_type", "ERR") for t in data])
-        # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
-        return {
-            LIB_DEV_TYPE.get(_type, _type): {
-                "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
-                "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
-            }
-            for _type in dev_types
+def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[Dict[str: Dict[str: int]]] | None:
+    """parse response data to determine switch counts by switch type
+
+    Args:
+        data (List[Dict[str, Any]]): Combined resp.output data from API, with data for any or all device types.
+
+    Returns:
+        List[Dict[str: Dict[str: int]]] | None: Returns a dict with total and up keys available for each switch type.
+            i.e. {"cx": {"total": 10, "up": 9}, "sw": {"total": 3, "up": 3}}
+            Returns None, if data was None
+    """
+    if data is None:
+        return {}
+    dev_types = set([t.get("switch_type", "ERR") for t in data])
+
+    return {
+        LIB_DEV_TYPE.get(_type, _type): {
+            "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
+            "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
         }
+        for _type in dev_types
+    }
 
-    def get_counts(data: List[dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
-        _match_type = [d for d in data if d["type"] == dev_type]
-        _tot = len(_match_type)
-        _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
-        _inv = len([d for d in _match_type if not d.get("status")])
-        return Counts(_tot, _up, _inv)
+def _get_counts(data: List[dict], dev_type: DeviceTypes) -> Counts:
+    _match_type = [d for d in data if d["type"] == dev_type]
+    _tot = len(_match_type)
+    _up = len([d for d in _match_type if d.get("status") == "Up"])
+    _inv = len([d for d in _match_type if not d.get("status")])
+    return Counts(_tot, _up, _inv)
 
-    def get_counts_with_inv(data: List[dict]) -> dict:
-        """parse combined output attr of inventory and monitoring responses to determine counts by device type.
+def _get_counts_with_inv(data: List[dict]) -> dict:
+    """parse combined output attr of inventory and monitoring responses to determine counts by device type.
 
-        Args:
-            data (List[dict]): Combined resp.output for monitoring and inventory response.
+    Args:
+        data (List[dict]): Combined resp.output for monitoring and inventory response.
 
-        Returns:
-            dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
-        """
-        status_by_type = {}
-        _types = set(d["type"] for d in data)
-        for t in _types:
-            counts = get_counts(data, t)
-            status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+    Returns:
+        dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
+    """
+    status_by_type = {}
+    _types = set(d["type"] for d in data)
+    for t in _types:
+        counts = _get_counts(data, t)
+        status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
-        return status_by_type
+    return status_by_type
 
+def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
+    inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
+    up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
+    return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
 
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, verbosity: int = 0) -> str:
+    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
-            status_by_type = get_counts_with_inv(resp.output)
-
+            status_by_type = _get_counts_with_inv(resp.output)
         else:
             def url_to_key(url) -> str:
                 path_end = url.split("/")[-1]
@@ -129,17 +141,17 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
                         "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[path].get(url_to_key(path), []))))
                     } for path in resp.raw.keys() if not path.endswith("switches")
                 },
-                **get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
+                **_get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
             }
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         if inventory:
-            status_by_type = get_counts_with_inv(resp.output)
+            status_by_type = _get_counts_with_inv(resp.output)
         else:
-            counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
+            counts_by_type = _get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
-        counts = get_counts(resp.output, dev_type=dev_type)
+        counts = _get_counts(resp.output, dev_type=dev_type)
         status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
         if inventory:
             status_by_type[dev_type]["inventory_only"] = counts.inventory
@@ -148,11 +160,6 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
     if status:
         _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
     elif inventory:
-        def _get_inv_msg(data: Dict, dev_type: DevTypes) -> str:
-            inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
-            up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
-            return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
-
         _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
         _cnt_str = _cnt_str + ", ".join(
             [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
@@ -171,7 +178,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             log.exception(f"Exception occured in _build_caption\n{e}")
 
     if not inventory_only:
-        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. "
+        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. " if not verbosity else " "
         caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}"
         if not dev_type:
             caption = f"{caption} To see all columns for a given device use [cyan]cencli show <DEVICE TYPE>[/cyan]"
@@ -223,15 +230,77 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
+    if include_inventory:
+        resp = cli.cache.get_devices_with_inventory(status=status)
+        caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
+    elif not cli.cache.responses.dev:
+        resp = cli.central.request(cli.cache.update_dev_db, **params)
+        caption = None if not resp.ok else _build_device_caption(resp, status=status)
+    else:
+        # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
+        resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+
+    return resp, caption
+
+def _get_details_for_specific_devices(
+        devices: List[CentralObject],
+        dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+        include_inventory: bool = False,
+        do_table: bool = False
+    ) -> Tuple[Response | List[Response], str]:
+        caption = None
+        dev_type = None if not dev_type else lib_to_api(dev_type)  # convert show command "what" to Generic lib dev_type ap, gw, switch
+
+        # Build requests
+        br = cli.central.BatchRequest
+        devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        dev_types = [dev.type for dev in devs]
+        reqs = [br(cli.central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
+
+        # Fetch results from API
+        batch_res = cli.central.batch_request(reqs)
+
+        if do_table and len(dev_types) > 1:
+            _output = [r.output for r in batch_res]
+            resp = batch_res[-1]
+            resp.output = _output
+            resp.output = resp.table
+            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
+        else:
+            resp = batch_res
+
+        if "cx" in dev_types:
+            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
+
+        return resp, caption
+
 # TODO break this into multiple functions
 def show_devices(
-    devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
-    update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
-    do_clients: bool = True, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
-    do_yaml: bool = False, do_table: bool = False
+    devices: str | Iterable[str] = None,
+    dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+    include_inventory: bool = False,
+    verbosity: int = 0,
+    outfile: Path = None,
+    update_cache: bool = False,
+    group: str = None,
+    site: str = None,
+    label: str = None,
+    status: DeviceStatus = None,
+    state: str = None,
+    pub_ip: str = None,
+    do_clients: bool = True,
+    do_stats: bool = False,
+    do_ssids: bool = False,
+    sort_by: str = None,
+    reverse: bool = False,
+    pager: bool = False,
+    do_json: bool = False,
+    do_csv: bool = False,
+    do_yaml: bool = False,
+    do_table: bool = False
 ) -> None:
-    caption = None
-    central = cli.central
+    # include subscription implies include_inventory
     if update_cache:
         cli.central.request(cli.cache.update_dev_db)
 
@@ -255,78 +324,28 @@ def show_devices(
         "calculate_ssid_count": do_ssids,
     }
 
-    # if any of these values are set it's a filtered result so we don't update cache
-    filtering_params = [
-        "group",
-        "site",
-        "label",
-        "public_ip_address"
-    ]
-
-    cache_generic_types = {
-        "aps": "ap",
-        "gateways": "gw",
-        "mobility_controllers": "gw",
-        "switches": "switch"
-    }
-
     params = {k: v for k, v in params.items() if v is not None}
-    if not devices and dev_type is None:
-        dev_type = "all"
+    if dev_type is None:
+        dev_type = None if devices else "all"
+    elif dev_type != "all":
+        dev_type = lib_to_api(dev_type)
 
-    default_tablefmt = "rich" if not verbosity and not devices else "yaml"
+    # verbosity = verbosity if not any([devices, include_inventory, include_subscription]) else verbosity or 99
+    default_tablefmt = "rich" if not verbosity else "yaml"
 
     if devices:  # cencli show devices <device iden>
-        # Asking for details of a specific device implies verbose
-        if not verbosity:
-            verbosity = 99
-        if dev_type:
-            dev_type = cache_generic_types.get(dev_type)
-
-        br = cli.central.BatchRequest
-        devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
-        dev_types = [dev.type for dev in devs]
-        reqs = [br(central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
-        batch_res = cli.central.batch_request(reqs)
-
-        if do_table and len(dev_types) > 1:
-            _output = [r.output for r in batch_res]
-            common_keys = set.intersection(*map(set, _output))
-            _output = [{k: d[k] for k in common_keys} for d in _output]
-            resp = batch_res[-1]
-            resp.output = _output
-            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
-        else:
-            resp = batch_res
-
-        if "cx" in dev_types:
-            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'
+        verbosity = verbosity or 99  # specific device implies verbose output vertically
+        default_tablefmt = "yaml"
+        resp, caption = _get_details_for_specific_devices(devices, include_inventory=include_inventory, do_table=do_table)
     elif dev_type == "all":  # cencli show all | cencli show devices
-        if include_inventory:
-            resp = cli.cache.get_devices_with_inventory()
-            caption = _build_device_caption(resp, inventory=True)
-            if status:
-                log.warning("[cyan]--up[/], [cyan]--down[/] filters are currently ignored when [cyan]--inv[/] is used.", caption=True)
-        elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
-            resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
-            if resp.ok and resp.output:
-                cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
-                _ = central.request(cli.cache.update_dev_db, cache_output)
-            caption = None if not resp.ok else _build_device_caption(resp)
-        else:  # No filtering params, get update from cache
-            if central.get_all_devices not in cli.cache.updated:
-                resp = central.request(cli.cache.update_dev_db, **params)
-                caption = _build_device_caption(resp, status=status)
-            else:
-                # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-                resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
-        resp = central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
+        resp = cli.central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
-            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
+            _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
+            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
-        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
+        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -337,7 +356,7 @@ def show_devices(
     # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
     if include_inventory:
         output_key = "serial"
-    elif dev_type and dev_type == "switches":
+    elif dev_type and dev_type == "switch":
         output_key = "name+serial"
     else:
         output_key = "name"
@@ -354,6 +373,7 @@ def show_devices(
         output_by_key=output_key,
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
+        output_format=tablefmt,
     )
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
@@ -405,11 +425,11 @@ def all_(
         status = "Down"
     elif up:
         status = "Up"
+
     show_devices(
-        dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_table=do_table)
+        dev_type='all', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache,
+        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
 @app.command()
@@ -466,10 +486,9 @@ def devices(
         dev_type = None
 
     show_devices(
-        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
-        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=True, do_clients=True,
-        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
-    )
+        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, update_cache=update_cache,
+        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
 @app.command()
@@ -532,7 +551,7 @@ def aps(
             status = "Down" if down else "Up"
 
         show_devices(
-            aps, dev_type="aps", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
@@ -572,7 +591,7 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switches', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -613,7 +632,7 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gateways', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -656,7 +675,7 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='mobility_controllers', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        controllers, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
@@ -745,7 +764,8 @@ def inventory(
 ) -> None:
     if hasattr(dev_type, "value"):
         dev_type = dev_type.value
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+
     if dev_type == "all":
         title = "Devices in Inventory"
     elif dev_type in ["cx", "sw", "switch"]:
@@ -759,25 +779,33 @@ def inventory(
     else:
         title = "Inventory"
 
+    include_inventory = False
     if verbose:
+        include_inventory = True
+        verbose -= 1
+
+    if verbose or include_inventory:
         show_devices(
-            dev_type=dev_type, outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, outfile=outfile, include_inventory=include_inventory, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
         cli.exit(code=0)
 
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api(dev_type, "inventory"), sub=sub)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type, sub=sub)
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        sort_by=sort_by,
-        reverse=reverse,
         caption=_build_device_caption(resp, inventory=True),
         pager=pager,
         outfile=outfile,
-        cleaner=None,  # Cleaner is applied in cache update
+        sort_by=sort_by,
+        reverse=reverse,
+        set_width_cols={"services": {"min": 31}},
+        cleaner=cleaner.get_device_inventory,
+        sub=sub
     )
 
 

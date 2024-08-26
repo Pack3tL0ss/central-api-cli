@@ -206,6 +206,7 @@ _short_value = {
     "token_created": lambda x: DateTime(x, "mdyt"),
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
+    "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
     "Unknown": "?",
     "HPPC": "SW",
     "labels": _extract_names_from_id_name_dict,
@@ -225,7 +226,7 @@ _short_value = {
     "type": lambda t: t.lower(),
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
     "start_date": lambda x: DateTime(x, "mdyt"),
-    "end_date": lambda x: DateTime(x, "mdyt"),
+    "end_date": lambda x: DateTime(x, "mdyt", format_expiration=True,),
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
@@ -300,6 +301,7 @@ _short_key = {
     "license_type": "name",
     "subscription_key": "key",
     "subscription_type": "type",
+    "subscription_expires": "expires in",
     "capture_url": "url",
     "register_accept_email": "accept email",
     "register_accept_phone": "accept phone",
@@ -408,7 +410,6 @@ def short_key(key: str) -> str:
 
 
 def short_value(key: str, value: Any):
-    # _unlist(value)
     # Run any inner dicts through cleaner funcs
     if isinstance(value, dict):
         value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}
@@ -857,6 +858,9 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             'version',
             'firmware_backup_version',
             'oper_state_reason',
+            "services",
+            "subscription_key",
+            "subscription_expires",
         ]
     to_front = [i for i in to_front if i in all_keys]
     _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
@@ -865,14 +869,12 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     return data
 
 
-# TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
-def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: bool = False) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, output_format: TableFormat = None) -> Union[List[dict], dict]:
     """Clean device output from Central API (Monitoring)
 
     Args:
         data (Union[List[dict], dict]): Response data from Central API
         verbose (bool, optional): Not Used yet. Defaults to True.
-        cache (bool, optional): If output is being cleaned for entry into cache. Defaults to False.
 
     Returns:
         Union[List[dict], dict]: The cleaned data with consistent field heading, and human readable values.
@@ -880,6 +882,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
     data = utils.listify(data)
     all_keys = set([k for inner in data for k in inner.keys()])
     # common_keys = set.intersection(*map(set, data))
+    table_formats = ["csv", "rich", "tabulate"]
 
     # pre cleaned key values
     verbosity_keys = {
@@ -897,28 +900,36 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "site",
                 "firmware_version",
                 "services",
+                "subscription_key",
+                "subscription_expires",
         ]
     }
-    if "services" not in all_keys:  # indicates inventory is not part of the listing
-        verbosity_keys[0].insert(10, "uptime")
-    if "type" not in all_keys:  # indicates data is for single device type. typicall allows more space
+    if "services" not in all_keys:  # indicates inventory is part of the listing
+        verbosity_keys[0].insert(10, "uptime") # more space if inventory not in listing so provide uptime.
+    if "type" not in all_keys:  # indicates data is for single device type. typically allows more space
         verbosity_keys[0].insert(10, "cpu_utilization")
         verbosity_keys[0].insert(10, "mem_pct")
+
+    if "status" in all_keys and "subscription_key" in all_keys:  # combined device/inventory.  too much for non-verbose remove the sub keyu
+        _ = verbosity_keys[0].pop(verbosity_keys[0].index("subscription_key"))
+        if "client_count" in all_keys:
+            _ = verbosity_keys[0].pop(verbosity_keys[0].index("client_count"))
+
 
     data = sort_result_keys(data)
 
     data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)} for inner in data]
 
+    _short_key["subscription_key"] = "subscription key"
     data = simple_kv_formatter(data)
 
     # strip any cols that have no value across all rows,
-    # if verbose strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical for verbose)
-    data = strip_no_value(data, aggressive=bool(verbosity))
+    # strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical)
+    data = strip_no_value(data, aggressive=output_format not in table_formats)
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
     return data
-
 
 def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List[dict]:
     field_order = [
@@ -1348,31 +1359,24 @@ def _inv_type(model: str, dev_type: str) -> DevTypes:
 
 def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     field_order = [
-        "name",
-        "status",
-        # "device_type",
+        "serial",
+        "mac",
         "type",
         "model",
-        "aruba_part_no",
-        # "imei",
-        "ip",
-        "macaddr",
-        "serial",
-        "group",
-        "site",
-        "version",
+        "sku",
         "services",
+        "subscription_key",
+        "subscription_expires",
     ]
-    # common_keys = set.intersection(*map(set, data))
-    # combine type / device_type for verbose output, preferring type from cache
 
-    data = [
-        {
-            "type": _inv_type(d["model"], d.get("device_type", d.get("type", "err"))),
-            **{key: val for key, val in d.items() if key != "device_type"}
-        }
-        for d in data
-    ]
+    _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
+    # data = [
+    #     {
+    #         "type": _inv_type(d["model"], d.get("device_type", d.get("type", "err"))),
+    #         **{key: val for key, val in d.items() if key != "device_type"}
+    #     }
+    #     for d in data
+    # ]
     data = [
         dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
