@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import pendulum
 from pydantic import BaseModel, Field, validator
-from centralcli import utils
 
+from centralcli import utils
 
 
 class DeviceStatus(str, Enum):
