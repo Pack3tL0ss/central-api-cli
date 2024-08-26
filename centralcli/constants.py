@@ -14,6 +14,7 @@ DeviceTypes = Literal["ap", "cx", "sw", "gw"]
 EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
+DeviceStatus = Literal["up", "down"]
 
 
 class AllDevTypes(str, Enum):
@@ -595,7 +596,7 @@ class LibToAPI:
     def __init__(self):
         # default from random to CentralApi consistent value
         self.gateways = self.gateway = self.gw = "gw"
-        self.controller = self.mcd = "gw"
+        self.controller = self.mcd = self.mobility_controllers = "gw"
         self.aps = self.ap = self.iap = "ap"
         self.switches = self.switch = "switch"
         self.SW = self.sw = self.HPPC = self.HP = "sw"
