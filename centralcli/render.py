@@ -75,7 +75,7 @@ class Output:
             out = self.file
 
         out = self.sanitize_strings(out)
-        return out
+        return out if out else "\u26a0  No Data.  This may be normal."
 
     def __iter__(self):
         out = self.tty or self.file
@@ -177,7 +177,7 @@ def _do_subtables(data: List[dict], tablefmt: str = "rich") -> List[dict]:
                         inner_dict[key] = typer.style(val.title(), fg=color)
                 else:
                     if tablefmt == 'rich':
-                        inner_dict[key] = Text(str(val), style=None)
+                        inner_dict[key] = Text.from_markup(str(val), style=None, emoji=False)
                     else:
                         inner_dict[key] = str(val)
             else:
