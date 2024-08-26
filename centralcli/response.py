@@ -3,27 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
+import json
+import sys
+import time
+from typing import Any, Dict, List, Literal, Tuple, Union
+
+from aiohttp import ClientResponse, ClientSession
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
-from . import cleaner, constants
-from typing import Union, List, Any, Dict, Tuple, Literal
 from rich import print
-from yarl import URL
-
-
-from centralcli import config, utils, log
-from centralcli.constants import lib_to_api
-from centralcli.exceptions import CentralCliException
 from rich.console import Console, RenderableType
 from rich.status import Status
 from rich.style import StyleType
+from yarl import URL
 
-import sys
-import json
-from aiohttp import ClientSession, ClientResponse
-import time
+from centralcli import config, log, utils
+from centralcli.constants import lib_to_api
+from centralcli.exceptions import CentralCliException
 
+from . import cleaner, constants
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
