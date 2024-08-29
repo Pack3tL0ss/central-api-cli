@@ -2118,7 +2118,7 @@ class Cache:
                 combined = {
                     serial: {
                         **dev_data,
-                        "subscription_expires": subs_by_key[raw_devs_by_serial[serial]]["expires_in"]
+                        "subscription_expires": None if raw_devs_by_serial[serial] is None else subs_by_key[raw_devs_by_serial[serial]]["expires_in"]
                     } for serial, dev_data in _inv_by_ser.items()
                 }
             resp = [r for r in batch_resp if r.ok][-1]
