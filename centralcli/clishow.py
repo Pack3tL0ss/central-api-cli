@@ -239,7 +239,7 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         caption = None if not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-        resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+        resp, caption = cli.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
 
     return resp, caption
 
