@@ -20,6 +20,7 @@ def cleanup():
     assert result.exit_code == 0
 
 def test_update_gw_group_config(cleanup):
+    """Relies on group created in test_do.test_clone_group"""
     if not gw_group_config_file.is_file():
         msg = f"{gw_group_config_file} Needs to be populated for this test.  Run 'cencli show config <group> --gw' for an example of GW group level config."
         raise ConfigNotFoundError(msg)
@@ -34,6 +35,8 @@ def test_update_gw_group_config(cleanup):
             "-Y"
         ]
     )
+    if result.exit_code != 0:
+        print(result.stdout)
     assert result.exit_code == 0
     assert "Global Result:" in result.stdout
     assert "[OK]" in result.stdout

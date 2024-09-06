@@ -16,8 +16,6 @@ import typer
 import logging
 
 import yaml
-from halo import Halo
-import threading
 from pygments import formatters, highlight, lexers
 from tabulate import tabulate
 from rich import print_json
@@ -32,6 +30,30 @@ CUST_KEYS = ["customer_id", "customer_name"]
 log = logging.getLogger()
 
 
+class ToBool:
+    def __init__(self, value: Any,):
+        self._original = value
+        self.value = self.str_to_bool(value)
+
+    def str_to_bool(self, value: str | None) -> bool | None:
+        if not isinstance(value, str):
+            return value
+        if value.lower() in ["false", "no", "0"]:
+            return False
+        elif value.lower() in ["true", "yes", "1"]:
+            return True
+
+    @property
+    def ok(self) -> bool:
+        if isinstance(self._original, bool):
+            return True
+        if not isinstance(self._original, str):
+            return False
+
+        if self._original.lower() not in ["false", "no", "0", "true", "yes", "1"]:
+            return False
+        else:
+            return True
 class Convert:
     def __init__(self, mac, fuzzy: bool = False):
         self.orig = mac
@@ -153,7 +175,7 @@ class Utils:
 
 
     @staticmethod
-    def isserial(serial: Union[str, List[str]]) -> bool:
+    def is_serial(serial: Union[str, List[str]]) -> bool:
         """Validate the provided str or list of strings appears to be a serial number.
 
         Serial validation checks that the first 2 characters of the serial are letters,
@@ -218,64 +240,19 @@ class Utils:
 
         return data
 
-    # TODO depricated will remove.  Spinner moved to Response
     @staticmethod
-    def spinner(spin_txt: str, function: callable, url: str = None, *args, name: str = None,
-                spinner: str = "dots", debug: bool = False, **kwargs) -> Any:
-        name = name or spin_txt.replace(" ", "_").rstrip(".").lower()
-        if not name.startswith("spinner_"):
-            name = f"spinner_{name}"
-
-        spin = None
-        if sys.stdin.isatty():
-            # If a spinner is already running, update that spinner vs creating new
-            active_spinners = [t for t in threading.enumerate()[::-1] if t.name.startswith("spinner")]
-            if active_spinners:
-                spin = active_spinners[0]._target.__self__
-                if debug:
-                    spin.stop()
-                else:
-                    log.warning(f"A Spinner was already running '{spin.text}' updating to '{spin_txt}'")
-                    spin.text == spin_txt
-                    spin.spinner == "dots12" if spin.spinner == spinner else spinner
-            elif not debug:
-                spin = Halo(text=spin_txt, spinner=spinner)
-                spin.start()
-                threading.enumerate()[-1].name = spin._spinner_id = name
-
-        if url:
-            args = (url, *args)
-
-        r = function(*args, **kwargs)
-
-        if spin:
-            # determine pass if request successful
-            _spin_fail_msg = spin_txt
-            ok = None
-            if hasattr(r, "ok"):
-                ok = r.ok
-            if "refreshToken" in str(function):
-                ok = r is not None
-                if hasattr(r, "json"):
-                    _spin_fail_msg = f"spin_text\n   {r.json().get('error_description', spin_txt)}"
-
-            if ok is True:
-                spin.succeed()
-            elif ok is False:
-                spin.fail(_spin_fail_msg)
-            else:
-                spin.stop_and_persist()
-
-        return r
-
-    # TODO deprecated validate not used, moved to Response
-    @staticmethod
-    def get_multiline_input(prompt: str = None, print_func: callable = print,
-                            return_type: str = "str", abort_str: str = "exit", **kwargs) -> Union[List[str], dict, str]:
-        def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
-            prompt = prompt or \
-                "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
-            print_func(prompt, **kwargs)
+    def get_multiline_input(
+        prompt: str = None,
+        return_type: Literal["str", "dict", "list"] = "str",
+        abort_str: str = "exit",
+        **kwargs
+    ) -> List[str] | dict | str:
+        console = Console(emoji=True)
+        exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
+        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]exit[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
+        def _get_multiline_sub(prompt: str = prompt, **kwargs):
+            prompt = f"{prompt}\n\n{exit_prompt_text}" if prompt else f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
+            console.print(prompt, **kwargs)
             contents, line = [], ''
             while line.strip().lower() != abort_str:
                 try:
@@ -285,12 +262,12 @@ class Utils:
                     break
 
             if line.strip().lower() == abort_str:
-                print("Aborted")
-                exit()
+                console.print("[bright_red]Aborted[/]")
+                sys.exit()
 
             return contents
 
-        contents = _get_multiline_sub(**kwargs)
+        contents = _get_multiline_sub(prompt=prompt, **kwargs)
         if return_type:
             if return_type == "dict":
                 for _ in range(1, 3):
@@ -298,10 +275,9 @@ class Utils:
                         contents = json.loads("\n".join(contents))
                         break
                     except Exception as e:
-                        log.exception(f"get_multiline_input: Exception caught {e.__class__}\n{e}")
-                        typer.secho("\n !!! Input appears to be invalid.  Please re-input "
-                                    "or Enter `exit` to exit !!! \n", fg="red")
-                        contents = _get_multiline_sub(**kwargs)
+                        log.exception(f"get_multiline_input: Exception caught {e.__class__.__name__}\n{e}")
+                        console.print("\n :warning:  Input appears to be [bright_red]invalid[/].  Please re-input or type [cyan]exit[/] to exit\n")
+                        contents = _get_multiline_sub(prompt=prompt, **kwargs)
             elif return_type == "str":
                 contents = "\n".join(contents)
 
@@ -649,6 +625,7 @@ class Utils:
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
+        sep: str = ", ",
     ) -> str:
         """Helper method to wrap text in rich formatting tags
 
@@ -658,12 +635,14 @@ class Utils:
             text (str|bool|list): The text to be formmated.  If a bool is provided
                 it is converted to string and italics applied.  If list of strings
                 is provided it is converted to str and formatted.
-            color_str (str optional): Text is formatted with this color.
+            color_str (str, optional): Text is formatted with this color.
                 Default: bright_green
-            italic (bool): Wheather to apply italic to text.
+            italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
-            bold (bool): Wheather to apply bold to text. Default None/False
-            blink (bool): Wheather to blink the text. Default None/False
+            bold (bool, optional): Wheather to apply bold to text. Default None/False
+            blink (bool, optional): Wheather to blink the text. Default None/False
+            sep (str, optional): Seperator used when list of str converted to str.
+                Defaults to ', '
         """
         if isinstance(text, bool):
             italic = True if italic is None else italic
@@ -677,7 +656,7 @@ class Utils:
             return f"[{color_str}]{text}[/{color_str}]"
         elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
             text = [f"[{color_str}]{t}[/{color_str}]" for t in text]
-            return ", ".join(text)
+            return sep.join(text)
         else:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
 
@@ -787,6 +766,27 @@ class Utils:
 
         return cli_cmds
 
+    @staticmethod
+    def update_dict(dict_to_update: Dict[str, List[Any]], key: str, value: Any) -> Dict[str, List[Any]]:
+        """Add key to dict or append to existing key if it already exists
+
+        TODO probably an itertools or other builtin that does this.
+
+        Args:
+            dict_to_update (Dict[str, list]): The dict to update
+            key (str): The key, will ensure value is in dict under that key, or append if already there
+            value (Any): value to be added to list
+
+        Returns:
+            Dict[str, list]: Orinal dict is returned updated with provided value
+        """
+        if key not in dict_to_update:
+            dict_to_update[key] = value if isinstance(value, list) else [value]
+        else:
+            dict_to_update[key] += value if isinstance(value, list) else [value]
+
+        return dict_to_update
+
     def get_interfaces_from_range(self, interfaces: str | List[str]) -> List[str]:
         console = Console(stderr=True)
         interfaces = self.listify(interfaces)
@@ -858,5 +858,8 @@ class Utils:
             to_time = round(to_time.timestamp())
         elif isinstance(to_time, float):
             to_time = round(to_time)
+
+        # if to_time and to_time <= from_time:
+        #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
 
         return from_time, to_time

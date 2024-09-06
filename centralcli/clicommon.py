@@ -5,46 +5,119 @@ from __future__ import annotations
 
 import typer
 import sys
-from typing import List, Literal, Union, Tuple
+from typing import List, Literal, Union, Tuple, Dict, Any
 from pathlib import Path
 from rich.console import Console
+from rich.prompt import Confirm
 from rich import print
 import json
 import pkg_resources
 import os
 import pendulum
+from datetime import datetime
 import time
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
+    from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, render, cleaner as clean
+        from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
+from centralcli.utils import ToBool
+from centralcli.clioptions import CLIOptions, CLIArgs
+from centralcli.cache import CentralObject
 
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
-console = Console(emoji=False)
-err_console = Console(emoji=False, stderr=True)
+clean_console = Console(emoji=False)
+clean_err_console = Console(emoji=False, stderr=True)
+err_console = Console(emoji=True, stderr=True)
 
 
+class MoveData:
+    def __init__(
+            self,
+            *,
+            mv_reqs: List[BatchRequest],
+            mv_msgs: Dict[str, List[str]],
+            action_word: Literal["pre-provisioned", "moved", "removed", "assigned"],
+            move_type: Literal["group", "site", "label"],
+            retain_config: bool = False,
+            cache_devs: List[CentralObject] = None,
+        ) -> None:
+        self._move_type = move_type
+        self.cache_devs = cache_devs
+        self.reqs: List[BatchRequest] = mv_reqs or []
+        self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type, retain_config=retain_config)
+
+    def __bool__(self) -> bool:
+        return True if self.reqs else False
+
+    def __str__(self) -> str:
+        return "\n".join(self.msgs)
+
+    def __len__(self) -> int:
+        return len(self.reqs)
+
+    def _build_msg_list(self, mv_msgs: Dict[str, List[str]], action_word: Literal["pre-provisioned", "moved", "removed", "assigned"], move_type: Literal["group", "site", "label"], retain_config: bool = False,) -> List[str]:
+        confirm_msgs = []
+        if mv_msgs:
+            for k, v_list in mv_msgs.items():
+                dev_word = "devices" if len(v_list) > 1 else "device"
+                action_words = f"[bright_green]{action_word}[/] to" if action_word != "removed" else f"[red]{action_word}[/] from"
+                confirm_msg = f'\u2139  [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'  # \u2139 = :information:
+                if retain_config:
+                    confirm_msg = f"{confirm_msg} [italic dark_olive_green2]CX config will be preserved[/]."
+                confirm_msgs += [confirm_msg]
+                if len(v_list) > 6:
+                    v_list = [*v_list[0:3], "...", *v_list[-3:]]
+                confirm_msgs = [*confirm_msgs, *[f'  {dev}' for dev in v_list]]
+
+        return confirm_msgs
+
+    @property
+    def serials_by_move_type(self) -> Dict[str, List[str]]:
+        out = {}
+        for req in self.reqs:
+            move_type = "group" if self._move_type == "group" else f"{self._move_type}_id"
+            key = req.kwargs.get(move_type)
+            if not key and move_type == "group":
+                key = req.kwargs["group"]
+
+            serials = req.kwargs["serials"]
+            out = utils.update_dict(out, key=key, value=serials)
+
+        return out
 class CLICommon:
     def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
         self.account = account
         self.cache = cache
         self.central = central
         self.raw_out = raw_out
+        self.options = CLIOptions(cache)
+        self.arguments = CLIArgs(cache)
+        self.econsole = Console(stderr=True)
+        self.console = Console()
+        self._confirm = Confirm(prompt="\nProceed?", console=self.econsole,)
+
+    def confirm(self, yes: bool = False, *, abort: bool = True) -> bool:
+        result = yes or self._confirm()
+        if not result and abort:
+            self.econsole.print("[red]Aborted[/]")
+            self.exit(code=0)
+
+        return result
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -159,7 +232,7 @@ class CLICommon:
                         account = config.last_account
                         msg = self.AcctMsg(account)
                         if not config.last_account_msg_shown:
-                            console.print(msg.previous_will_forget)
+                            clean_console.print(msg.previous_will_forget)
                             config.update_last_account_file(account, config.last_cmd_ts, True)
                         else:
                             emoji_console.print(msg.previous_short)
@@ -168,7 +241,7 @@ class CLICommon:
                     account = config.last_account
                     msg = self.AcctMsg(account)
                     if not config.last_account_msg_shown:
-                        console.print(msg.previous)
+                        clean_console.print(msg.previous)
                         config.update_last_account_file(account, config.last_cmd_ts, True)
                     else:
                         emoji_console.print(msg.previous_short)
@@ -176,9 +249,9 @@ class CLICommon:
         elif account in config.data:
             if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
                 msg = self.AcctMsg(account)
-                console.print(msg.envvar)
+                clean_console.print(msg.envvar)
             elif config.forget is not None and config.forget > 0:
-                console.print(self.AcctMsg(account).initial)
+                clean_console.print(self.AcctMsg(account).initial)
             # No need to print account msg if forget is set to zero
 
 
@@ -201,9 +274,9 @@ class CLICommon:
 
             if account not in ["central_info", "default"]:
                 if config.defined_accounts:
-                    console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
+                    clean_console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
                     if not _def_msg:
-                        console.print(
+                        clean_console.print(
                             f"The default account [cyan]{config.default_account}[/] is used if no account is specified via [cyan]--account[/] flag.\n"
                             "or the [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
                         )
@@ -362,14 +435,15 @@ class CLICommon:
             caption: str = None,
     ) -> Tuple:
         if sort_by and all(isinstance(d, dict) for d in data):
-            if sort_by not in data[0] and sort_by.replace("_", " ") in data[0]:
-                sort_by = sort_by.replace("_", " ")
+            possible_sort_keys = [sort_by, sort_by.replace("_", " ").replace("-", " "), f'{sort_by.replace("_", " ").replace("-", " ")} %', f'{sort_by.replace("_", " ").replace("-", " ")}%']
+            matched_key = [k for k in possible_sort_keys if k in data[0]]
+            sort_by = sort_by if not matched_key else matched_key[0]
 
             sort_msg = None
             if not all([sort_by in d for d in data]):
                 sort_msg = [
                         f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
-                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "_")}' for k in data[0].keys()))
+                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "-")}' for k in data[0].keys()))
                 ]
             else:
                 try:
@@ -378,7 +452,7 @@ class CLICommon:
                         if d[sort_by] is not None:
                             type_ = type(d[sort_by])
                             break
-                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] != "-" else 0 or 0 if type_ == int else "")
+                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] is not None and d[sort_by] != "-" else 0 if type_ in [int, DateTime] else "")
                 except TypeError as e:
                     sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
 
@@ -415,11 +489,11 @@ class CLICommon:
         if not data:
             log.warning(f"No data passed to _display_output {typer.unstyle(render.rich_capture(title))} {typer.unstyle(render.rich_capture(caption))}")
             return
-
+        cap_console = Console(stderr=True)
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
-            with console.status("Cleaning Output..."):
+            with clean_console.status("Cleaning Output..."):
                 _start = time.perf_counter()
                 data = cleaner(data, **cleaner_kwargs)
                 data = utils.listify(data)
@@ -443,28 +517,31 @@ class CLICommon:
             "full_cols": full_cols,
             "fold_cols": fold_cols,
         }
-        with console.status("Rendering Output..."):
+        with clean_console.status("Rendering Output..."):
             outdata = render.output(**kwargs)
 
         if stash:
             config.last_command_file.write_text(
-                json.dumps({k: v if not isinstance(v, DateTime) else v.epoch for k, v in kwargs.items() if k != "config"}, cls=Encoder)
+                json.dumps({k: v if not isinstance(v, DateTime) else v.ts for k, v in kwargs.items() if k != "config"}, cls=Encoder)
             )
 
         typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-        if "Limit:" not in outdata and caption is not None and cleaner and cleaner.__name__ != "parse_caas_response":
-            print(caption)
+        # if "Limit:" not in outdata and caption is not None and cleaner is not None and cleaner.__name__ != "parse_caas_response":
+        #     print(caption)
+        if caption and tablefmt != "rich":
+            cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
             self.write_file(outfile, outdata.file)
+
 
     def display_results(
         self,
         resp: Union[Response, List[Response]] = None,
         data: Union[List[dict], List[str], dict, None] = None,
         tablefmt: TableFormat = "rich",
-        title: str = None,
+        title: str | List[str] = None,
         caption: str | List[str] = None,
         pager: bool = False,
         outfile: Path = None,
@@ -491,8 +568,9 @@ class CLICommon:
                 Where "raw" is unformatted raw response and "action" is formatted for POST|PATCH etc.
                 where the result is a simple success/error.
                 clean bypasses all formatters.
-            title: (str, optional): Title of output table.
-                Only applies to "rich" tablefmt. Defaults to None.
+            title: (str | List[str], optional): Title of output table.
+                List[str] is allowed if tablefmt is not rich, list should match the # of Responses
+                Defaults to None.
             caption: (str | List[str], optional): Caption displayed at bottom of table.
                 Only applies to "rich" tablefmt. Defaults to None.
             pager (bool, optional): Page Output / or not. Defaults to True.
@@ -514,6 +592,9 @@ class CLICommon:
         if resp is not None:
             resp = utils.listify(resp)
 
+            if self.raw_out:
+                tablefmt = "raw"
+
             # update caption with rate limit
             try:
                 last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
@@ -533,7 +614,6 @@ class CLICommon:
                 else:
                     caption = f'{caption}\n{_log_caption}'
 
-
             for idx, r in enumerate(resp):
                 # Multi request url line (example below)
                 # Request 1 [POST: /platform/device_inventory/v1/devices]
@@ -546,32 +626,30 @@ class CLICommon:
                     "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
-                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output]
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
                 if any(conditions):
-                    _url = r.url if not hasattr(r.url, "path") else r.url.path
-                    m_color = m_colors.get(r.method, "reset")
-                    print(
-                        f"Request {idx + 1} [[{m_color}]{r.method}[reset]: "
-                        f"[cyan]{_url}[/cyan]]\n [{fg}]Response[reset]:"
-                    )
-
-                if self.raw_out:
-                    tablefmt = "raw"
+                    if isinstance(title, list) and len(title) == len(resp):
+                        print(title[idx])
+                    else:
+                        _url = r.url if not hasattr(r.url, "path") else r.url.path
+                        m_color = m_colors.get(r.method, "reset")
+                        print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
+                        print(f" [{fg}]Response[reset]:")
 
                 if config.capture_raw:
-                    with console.status("Capturing raw response"):
+                    with clean_console.status("Capturing raw response"):
                         raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
                         with config.capture_file.open("a") as f:
                             f.write(json.dumps(raw))
 
                 # Nothing returned in response payload
-                if not r.output:
-                    print(f"  Status Code: [{fg}]{r.status}[/]")
-                    print("  :warning: Empty Response.  This may be normal.")
+                # if not r.output:
+                #     print(f"  Status Code: [{fg}]{r.status}[/]")
+                #     print("  :warning: Empty Response.  This may be normal.")
 
-                    if log.caption:
-                        print(log.caption)
-                elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
+                #     if log.caption:
+                #         print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
+                if not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
                 if not r or tablefmt in ["action", "raw", "clean"]:
@@ -603,13 +681,15 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        console.print(r)
+                        clean_console.print(r)
+                        # TODO make __rich__ renderable method in Response object with markups
+                        # clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
                         # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
                         if caption:
                             print(caption.replace(rl_str, ""))
-                        console.print(f"\n{rl_str}")
+                        clean_console.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
                 else:
@@ -657,11 +737,13 @@ class CLICommon:
                 **cleaner_kwargs
             )
 
-    def past_to_start(self, past: str = None,) -> pendulum.DateTime | None:
-        """Common helper to parse --past option and return pendulum.DateTime object representing start time
+    def delta_to_start(self, delta: str = None, past: bool = True) -> pendulum.DateTime | None:
+        """Common helper to parse --past or --in option and return pendulum.DateTime object representing start time
 
         Args:
-            past (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
+            delta (str, optional): Calculates start time from str like 3M where M=Months, w=weeks, d=days, h=hours, m=minutes. Defaults to None.
+            past (bool, optional): by default returns time in the past (now - delta),
+                if is_past=False will return future time (now + delta). Defaults to True.
 
         Returns:
             pendulum.DateTime | None: returns DateTime object in UTC or None if past argument was None.
@@ -669,35 +751,68 @@ class CLICommon:
         Raises:
             typer.Exit: If past str has value but is invalid.
         """
-        if not past:
+        if not delta:
             return
 
-        past = past.replace(" ", "")
+        delta = delta.replace(" ", "")
         now: pendulum.DateTime = pendulum.now(tz="UTC")
+        delta_func = now.subtract if past else now.add
         try:
-            if past.endswith("d"):
-                start = now.subtract(days=int(past.rstrip("d")))
-            elif past.endswith("h"):
-                start = now.subtract(hours=int(past.rstrip("h")))
-            elif past.endswith("m"):
-                start = now.subtract(minutes=int(past.rstrip("m")))
-            elif past.endswith("M"):
-                start = now.subtract(months=int(past.rstrip("M")))
-            elif past.endswith("w"):
-                start = now.subtract(weeks=int(past.rstrip("w")))
+            if delta.endswith("d"):
+                start = delta_func(days=int(delta.rstrip("d")))
+            elif delta.endswith("h"):
+                start = delta_func(hours=int(delta.rstrip("h")))
+            elif delta.endswith("m"):
+                start = delta_func(minutes=int(delta.rstrip("m")))
+            elif delta.endswith("M"):
+                start = delta_func(months=int(delta.rstrip("M")))
+            elif delta.endswith("w"):
+                start = delta_func(weeks=int(delta.rstrip("w")))
             else:
                 self.exit(
                     '\n'.join(
                         [
-                            f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid. Specifically timeframe suffix [bright_red]{list(past)[-1]}[/] is not a recognized specifier.",
+                            f"[cyan]{'--past' if past else '--in'}[/] [bright_red]{delta}[/] Does not appear to be valid. Specifically timeframe suffix [bright_red]{list(delta)[-1]}[/] is not a recognized specifier.",
                             "Valid suffixes: [cyan]M[/]=Months, [cyan]w[/]=weeks, [cyan]d[/]=days, [cyan]h[/]=hours, [cyan]m[/]=minutes"
                         ]
                     )
                 )
         except ValueError:
-            self.exit(f"[cyan]--past[/] [bright_red]{past}[/] Does not appear to be valid")
+            self.exit(f"[cyan]{'--past' if past else '--in'}[/] [bright_red]{delta}[/] Does not appear to be valid")
 
         return start
+
+    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
+        if end and past:
+            log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
+            end = None
+
+        if start and past:
+            log.warning(f"[cyan]--start[/] flag ignored, providing [cyan]--past[/] implies end is now - {past}", caption=True,)
+
+        if past:
+            start = self.delta_to_start(delta=past)
+
+        if start is None:
+            return start, end
+
+        if not hasattr(start, "timezone"):
+            start = pendulum.from_timestamp(start.timestamp(), tz="UTC")
+        if end is None:
+            _end = pendulum.now(tz=start.timezone)
+        else:
+            _end = end if hasattr(end, "timezone") else pendulum.from_timestamp(end.timestamp(), tz="UTC")
+
+        delta = _end - start
+
+        if delta.days > max_days:
+            if end:
+                self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
+            else:
+                log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
+                return self.delta_to_start("2_159h"), end  # 89 days and 23 hours to avoid timing issue with API endpoint
+
+        return start, _end
 
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
@@ -715,6 +830,372 @@ class CLICommon:
 
         return md5.hexdigest()
 
+
+    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
+        data = None
+        if import_file is not None:
+            data = config.get_file_data(import_file, text_ok=text_ok)
+
+        if not data:
+            self.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
+
+        if import_type and import_type in data:
+            data = data[import_type]
+
+        if data:
+            if isinstance(data, dict):  # accept yaml/json keyed by serial #
+                if utils.is_serial(list(data.keys())[0]):
+                    data = [{"serial": k, **v} for k, v in data.items()]
+            if isinstance(data, list) and text_ok:
+                if import_type == "devices" and all(utils.is_serial(s) for s in data):
+                    data = [{"serial": s} for s in data]
+                if import_type == "labels":
+                    data = [{"name": label} for label in data]
+
+        # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
+        data = [d for d in data if not d.get("retired", d.get("ignore"))]
+
+        return data
+
+
+    def _check_update_dev_db(self, device: CentralObject) -> CentralObject:
+        if self.central.get_all_devices not in self.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
+            _ = self.central.request(self.cache.update_dev_db, dev_type=device.type)
+            device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
+
+        return device
+
+    class SiteMoves:
+        def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
+            self.cache_devs = cache_devs
+            self.move: MoveData = MoveData(mv_reqs=site_mv_reqs, mv_msgs=site_mv_msgs, action_word="moved", move_type="site", cache_devs=cache_devs)
+            self.remove: MoveData = MoveData(mv_reqs=site_rm_reqs, mv_msgs=site_rm_msgs, action_word="removed" , move_type="site", cache_devs=cache_devs)
+
+        def __str__(self) -> str:
+            return "\n".join([*self.remove.msgs, *self.move.msgs])
+
+        def __bool__(self) -> bool:
+            return bool(self.reqs)
+
+        def __len__(self) -> int:
+            return len(self.reqs)
+
+        @property
+        def reqs(self) -> List[BatchRequest]:
+            return [*self.remove.reqs, *self.move.reqs]
+
+        @property
+        def serials_by_site_id(self) -> Dict[str, List[str]]:
+            out = {}
+            for req in self.move.reqs:
+                site_id = req.kwargs["site_id"]
+                serials = req.kwargs["serials"]
+                out = utils.update_dict(out, key=site_id, value=serials)
+
+            return out
+
+    class GroupMoves:
+        def __init__(
+                self,
+                *,
+                pregroup_mv_reqs: List[BatchRequest],
+                pregroup_mv_msgs: Dict[str, list],
+                group_mv_reqs: List[BatchRequest],
+                group_mv_msgs: Dict[str, list],
+                group_mv_cx_retain_reqs: List[BatchRequest],
+                group_mv_cx_retain_msgs: Dict[str, list],
+                cache_devs: List[CentralObject],
+            ):
+            self.preprovision: MoveData = MoveData(mv_reqs=pregroup_mv_reqs, mv_msgs=pregroup_mv_msgs, action_word="pre-provisioned", move_type="group", cache_devs=cache_devs)
+            self.move: MoveData = MoveData(mv_reqs=group_mv_reqs, mv_msgs=group_mv_msgs, action_word="moved", move_type="group", cache_devs=cache_devs)
+            self.move_keep_config: MoveData = MoveData(mv_reqs=group_mv_cx_retain_reqs, mv_msgs=group_mv_cx_retain_msgs, action_word="moved", move_type="group", retain_config=True, cache_devs=cache_devs)
+
+        def __str__(self) -> str:
+            return "\n".join([*self.preprovision.msgs, *self.move.msgs, *self.move_keep_config.msgs])
+
+        def __bool__(self) -> bool:
+            return bool(self.reqs)
+
+        def __len__(self) -> int:
+            return len(self.reqs)
+
+        @property
+        def reqs(self) -> List[BatchRequest]:
+            return [*self.preprovision.reqs, *self.move.reqs, *self.move_keep_config.reqs]
+
+        @property
+        def serials_by_group(self) -> Dict[str, List[str]]:
+            out = {}
+            for req in [*self.move.reqs, *self.move_keep_config.reqs]:
+                group = req.kwargs["group"]
+                serials = req.kwargs["serials"]
+                out = utils.update_dict(out, key=group, value=serials)
+
+            return out
+
+
+    def _check_group(self, cache_devs: List[CentralObject], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
+        pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
+        group_mv_reqs, group_mv_msgs = {}, {}
+        group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
+        _skip = False
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            has_connected = True if cache_dev.get("status") else False
+            for idx in range(0, 2):
+                to_group = mv_data.get("group")
+                if cx_retain_force is not None:
+                    retain_config = cx_retain_force if cache_dev.type == "cx" else False
+                else:
+                    retain_config = mv_data.get("retain_config") or cx_retain_config  # key to use the 'or' here in case retain_config is in data but set to null or ''
+                    _retain_config = ToBool(retain_config)
+                    retain_config = _retain_config.value
+                    if not _retain_config.ok:
+                        self.exit(f'{cache_dev.summary_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+                    if retain_config and cache_dev.type != "cx":
+                        self.exit(f'{cache_dev.summary_text} has [cyan]retain_config[/] = {retain_config}.  [cyan]retain_config[/] is only valid for [cyan]cx[/] not [red]{cache_dev.type}[/].  Aborting...')
+                if to_group:
+                    if to_group not in self.cache.group_names:
+                        to_group = self.cache.get_group_identifier(to_group)  # will force cache update
+                        to_group = to_group.name
+
+                    if to_group == cache_dev.get("group"):
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        else:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.rich_help_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
+                            _skip = True
+
+                    # Determine if device is in inventory only determines use of pre-provision group vs move to group
+                    if not has_connected:
+                        req_dict = pregroup_mv_reqs
+                        msg_dict = pregroup_mv_msgs
+                        if retain_config:
+                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.rich_help_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            err_console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                            err_console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
+                            _skip = True
+                    else:
+                        req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
+                        msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+
+            if not _skip:
+                req_dict = utils.update_dict(req_dict, key=to_group, value=cache_dev.serial)
+                msg_dict = utils.update_dict(msg_dict, key=to_group, value=cache_dev.rich_help_text)
+
+        mv_reqs, pre_reqs, mv_retain_reqs = [], [], []
+        if pregroup_mv_reqs:
+            pre_reqs = [self.central.BatchRequest(self.central.preprovision_device_to_group, group=k, serials=v) for k, v in pregroup_mv_reqs.items()]
+        if group_mv_reqs:
+            mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v) for k, v in group_mv_reqs.items()]
+        if group_mv_cx_retain_reqs:
+            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
+
+        return self.GroupMoves(
+            pregroup_mv_reqs=pre_reqs,
+            pregroup_mv_msgs=pregroup_mv_msgs,
+            group_mv_reqs=mv_reqs,
+            group_mv_msgs=group_mv_msgs,
+            group_mv_cx_retain_reqs=mv_retain_reqs,
+            group_mv_cx_retain_msgs=group_mv_cx_retain_msgs,
+            cache_devs=cache_devs
+        )
+
+
+    def _check_site(self, cache_devs: List[CentralObject], import_data: dict) -> SiteMoves:
+        site_rm_reqs, site_rm_msgs = {}, {}
+        site_mv_reqs, site_mv_msgs = {}, {}
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            has_connected = True if cache_dev.get("status") else False
+            for idx in range(0, 2):
+                to_site = mv_data.get("site")
+                now_site = cache_dev.get("site")
+                if not to_site:
+                    continue
+                else:
+                    to_site = self.cache.get_site_identifier(to_site)
+                    if now_site and now_site == to_site.name:
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        elif now_site == to_site.name:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
+                    elif not has_connected:
+                        if idx == 0:
+                            cache_dev = self._check_update_dev_db(cache_dev)
+                        else:
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
+                    elif idx != 0:
+                        site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                        site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
+
+                    if now_site:
+                        now_site = self.cache.get_site_identifier(now_site)
+                        if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
+                            clean_console.print(f'{cache_dev.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                            site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                            site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
+
+        rm_reqs = []
+        if site_rm_reqs:
+            for k, v in site_rm_reqs.items():
+                site_id, dev_type = k.split("~|~")
+                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+
+        mv_reqs = []
+        if site_mv_reqs:
+            for k, v in site_mv_reqs.items():
+                site_id, dev_type = k.split("~|~")
+                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+
+        return self.SiteMoves(
+            cache_devs=cache_devs,
+            site_mv_reqs=mv_reqs,
+            site_mv_msgs=site_mv_msgs,
+            site_rm_reqs=rm_reqs,
+            site_rm_msgs=site_rm_msgs
+        )
+
+    def _check_label(self, cache_devs: List[CentralObject], import_data: dict,) -> MoveData:
+        label_ass_reqs, label_ass_msgs = {}, {}
+        for cache_dev, mv_data in zip(cache_devs, import_data):
+            to_label = mv_data.get("label", mv_data.get("labels"))
+            if to_label:
+                to_label = utils.listify(to_label)
+                for label in to_label:
+                    clabel = self.cache.get_label_identifier(to_label)
+                    if clabel.name in cache_dev.get("labels"):
+                        clean_console.print(f'{cache_dev.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
+                    else:
+                        label_ass_reqs = utils.update_dict(label_ass_reqs, key=f'{clabel.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                        label_ass_msgs = utils.update_dict(label_ass_msgs, key=clabel.name, value=cache_dev.rich_help_text)
+
+        batch_reqs = []
+        if label_ass_reqs:
+            for k, v in label_ass_reqs.items():
+                label_id, dev_type = k.split("~|~")
+                batch_reqs += [self.central.BatchRequest(self.central.assign_label_to_devices, label_id=int(label_id), serials=v, device_type=dev_type)]
+
+        return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
+
+    def device_move_cache_update(
+            self,
+            mv_resp: List[Response],
+            serials_by_site: Dict[str: List[str]] = None,
+            serials_by_group: Dict[str: List[str]] = None,
+        ) -> None:
+        serials_by_site = serials_by_site or {}
+        serials_by_group = serials_by_group or {}
+        serials = set(
+            [
+                *([s for s_list in serials_by_site.values() for s in s_list]),
+                *([g for g_list in serials_by_group.values() for g in g_list]),
+            ]
+        )
+        moves_by_type = {
+            "site": {self.cache.SiteDB.search(self.cache.Q.id == site)[0]["name"]: serials for site, serials in serials_by_site.items()},
+            "group": serials_by_group or {}
+        }
+        cache_by_serial = {k: self.cache.devices_by_serial.get(k, self.cache.inventory_by_serial[k]) for k in [*self.cache.inventory_by_serial, *self.cache.devices_by_serial] if k in serials}
+        for r, (move_type, name, serials) in zip(mv_resp, [(move_type, name, serials) for move_type, v in moves_by_type.items() for name, serials in v.items()]):
+            if move_type == "site":
+                site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
+                cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
+            if move_type == "group":  # All or none here as far as the rresponse.
+                if r.ok:
+                    cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
+
+        self.central.request(
+            self.cache.update_dev_db,
+            data=list(cache_by_serial.values())
+        )
+
+
+
+    def batch_move_devices(
+            self,
+            import_file: Path = None,
+            *,
+            data: List[Dict[str, Any]] = None,
+            yes: bool = False,
+            do_group: bool = False,
+            do_site: bool = False,
+            do_label: bool = False,
+            cx_retain_config: bool = False,
+            cx_retain_force: bool = None,
+        ):
+        """Batch move devices based on contents of import file
+
+        Args:
+            import_file (Path, optional): Import file. Defaults to None (one of import_file or data is required).
+            data: (List[Dict[str, Any]]): Data with device identifier and group, site, and/or label keys representing desired move to
+                locations for those keys.  Defaults to None (one of import_file or data is required).
+            yes (bool, optional): Bypass confirmation prompts. Defaults to False.
+            do_group (bool, optional): Process group moves based on import. Defaults to False.
+            do_site (bool, optional): Process site moves based on import. Defaults to False.
+            do_label (bool, optional): Process label assignment based on import. Defaults to False.
+            cx_retain_config (bool, optional): Keep config intact for CX switches during move. 'retain_config' in import_file/data
+                takes precedence.  This value is applied only if value is not set in the import_file/data. Defaults to False.
+            cx_retain_config (bool, optional): Keep config intact for CX switches during move regardless of 'retain_config' value
+                in import_file/data.
+
+        Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
+
+        Raises:
+            typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
+        """
+        if all([arg is False for arg in [do_site, do_label, do_group]]):
+            do_site = do_label = do_group = True
+
+        if not any([data, import_file]):
+            self.exit("import_file or data is required")
+
+        devices = data or self._get_import_file(import_file, import_type="devices")
+
+        dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+        if "INVALID" in dev_idens:
+            self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
+        if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries
+            filtered_count = len(dev_idens) - len(set(dev_idens))
+            dev_idens = set(dev_idens)
+            err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
+
+        # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
+        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True) for d in dev_idens]
+
+        site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
+        if do_site:
+            site_ops = self._check_site(cache_devs=cache_devs, import_data=devices)
+            batch_reqs += site_ops.move.reqs
+            site_rm_reqs += site_ops.remove.reqs
+            confirm_msgs += [str(site_ops)]
+        serials_by_site = None if not do_site else site_ops.serials_by_site_id
+        if do_group:
+            group_ops = self._check_group(cache_devs=cache_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force)
+            batch_reqs += group_ops.reqs
+            confirm_msgs += [str(group_ops)]
+        serials_by_group = None if not do_group else group_ops.serials_by_group
+        if do_label:
+            label_ops = self._check_label(cache_devs=cache_devs, import_data=devices)
+            batch_reqs += label_ops.reqs
+            confirm_msgs += [str(label_ops)]
+
+        _tot_req = (0 if not do_site else len(site_ops.remove)) + len(batch_reqs)
+        if not _tot_req:
+            self.exit("[italic dark_olive_green2]Nothing to do[/]", code=0)
+        if _tot_req > 1:
+            confirm_msgs += [f'\n{_tot_req} API calls will be performed.']
+
+        clean_console.print("\n".join(confirm_msgs))
+        if yes or typer.confirm("\nProceed?", abort=True):
+            site_rm_res = []
+            if site_rm_reqs:
+                site_rm_res = self.central.batch_request(site_rm_reqs)
+                if not all([r.ok for r in site_rm_res]):
+                    err_console.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                    return site_rm_res
+            batch_res = self.central.batch_request(batch_reqs)
+            self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
+
+            return [*site_rm_res, *batch_res]
 
 if __name__ == "__main__":
     pass

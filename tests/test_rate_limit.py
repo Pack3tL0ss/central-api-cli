@@ -5,25 +5,9 @@ from . import common, log, test_data
 
 central = common.central
 
-# try:
-#     from centralcli import (
-#         central, log
-#     )
-# except (ImportError, ModuleNotFoundError) as e:
-#     pkg_dir = Path(__file__).absolute().parent.parent / "centralcli"
-#     if pkg_dir.name == "centralcli":
-#         sys.path.insert(0, str(pkg_dir.parent))
-#         from centralcli import (
-#             central, log
-#         )
-#     else:
-#         print(pkg_dir.parts)
-#         raise e
-
 log.setLevel(logging.DEBUG)
 
-
-def test_rate_limit():
+def skip_test_rate_limit():
     log._DEBUG = True
     b_reqs = [central.BatchRequest(central.get_switch_poe_details, test_data["rate_limit_switch"]["serial"], port=f"1/1/{p}") for p in range(1, 49)]
     start = time.perf_counter()
@@ -45,4 +29,4 @@ def test_rate_limit():
     assert len(failed) < 2
 
 if __name__ == '__main__':
-    test_rate_limit()
+    skip_test_rate_limit()

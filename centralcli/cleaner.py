@@ -31,9 +31,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibDevIdens
 from centralcli.objects import DateTime
-from centralcli.models import CloudAuthUploadResponse
+from centralcli.models import CloudAuthUploadResponse, Sites
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
@@ -123,19 +123,18 @@ def _serial_to_name(sernum: str | None) -> str | None:
         return sernum
     # TODO circular import if placed at top review import logic
     from centralcli import cache
-    if not (
-        len(sernum) in (9, 10) and all([s.isalpha() for s in sernum[0:2]]) and all([s.isupper() for s in sernum.split()])
-    ):
+
+    if not utils.is_serial(sernum):
         return sernum
 
-    match = cache.get_dev_identifier(sernum, retry=False, silent=True)
+    match = cache.get_dev_identifier(sernum, retry=False, silent=True, exit_on_fail=False)
     if not match:
         return sernum
 
     return match.name
 
 
-def _get_dev_name_from_mac(mac: str, dev_type: str | List[str] = None, summary_text: bool = False) -> str:
+def _get_dev_name_from_mac(mac: str, dev_type: LibDevIdens | List[LibDevIdens] = None, summary_text: bool = False) -> str:
     if mac.count(":") != 5:
         return mac
     else:
@@ -191,21 +190,23 @@ vlan_modes = {
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
-    "last_connection_time": lambda x: DateTime(x, "timediff"),  # _time_diff_words,
+    "last_connection_time": lambda x: DateTime(x, "timediff"),
     "uptime": lambda x: DateTime(x, "durwords-short", round_to_minute=True),
     "updated_at": lambda x: DateTime(x, "mdyt"),
-    "last_modified": _convert_epoch,
+    "last_modified": lambda x: DateTime(x, "day-datetime"),
     "next_rekey": lambda x: DateTime(x, "log"),
     "connected_uptime": lambda x: DateTime(x, "durwords"),
-    "lease_start_ts": _log_timestamp,
-    "lease_end_ts": _log_timestamp,
-    "create_date": _convert_iso_to_words,
-    "acknowledged_timestamp": _log_timestamp,
-    "lease_time": _duration_words,
-    "lease_time_left": _duration_words,
+    "lease_start_ts": lambda x: DateTime(x, "log"),
+    "lease_end_ts": lambda x: DateTime(x, "log"),
+    "create_date": lambda x: DateTime(x, "date-string"),
+    "created_at": lambda x: DateTime(x, "day-datetime"),  # show portals
+    "acknowledged_timestamp": lambda x: DateTime(x, "log"),
+    "lease_time": lambda x: DateTime(x, "durwords"),
+    "lease_time_left": lambda x: DateTime(x, "durwords-short"),
     "token_created": lambda x: DateTime(x, "mdyt"),
-    "ts": lambda x: DateTime(x, format="log"),  # _log_timestamp,
+    "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
+    "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
     "Unknown": "?",
     "HPPC": "SW",
     "labels": _extract_names_from_id_name_dict,
@@ -225,7 +226,7 @@ _short_value = {
     "type": lambda t: t.lower(),
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
     "start_date": lambda x: DateTime(x, "mdyt"),
-    "end_date": lambda x: DateTime(x, "mdyt"),
+    "end_date": lambda x: DateTime(x, "mdyt", format_expiration=True,),
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
@@ -248,6 +249,7 @@ _short_value = {
     "tx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
+    "device_claim_type": lambda v: None if v and v == "UNKNOWN" else v,
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -300,6 +302,7 @@ _short_key = {
     "license_type": "name",
     "subscription_key": "key",
     "subscription_type": "type",
+    "subscription_expires": "expires in",
     "capture_url": "url",
     "register_accept_email": "accept email",
     "register_accept_phone": "accept phone",
@@ -335,6 +338,11 @@ _short_key = {
     "ec_str": "enabled capabilities",
     "tx_data_bytes": "TX",
     "rx_data_bytes": "RX",
+    "link_speed": "speed",
+    "device_claim_type": "claim_type",
+    "device_model": "model",
+    "part_number": "sku",
+    "serial_number": "serial",
 }
 
 
@@ -407,7 +415,6 @@ def short_key(key: str) -> str:
 
 
 def short_value(key: str, value: Any):
-    # _unlist(value)
     # Run any inner dicts through cleaner funcs
     if isinstance(value, dict):
         value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}
@@ -457,6 +464,28 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None)
     ]
 
     return data
+
+def get_archived_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "serial_number",
+        "mac_address",
+        "device_type",
+        "device_model",
+        "part_number",
+        "resource_id",
+        "device_claim_type",
+        "extra_attributes",
+        "indent_level",
+        "tag_entities",
+    ]
+
+    # if all platform_customer_id are the same the calling func adds it to the caption.
+    plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in data]))
+    if len(plat_cust_id) > 1:
+        key_order.insert(6, "platform_customer_id")
+
+    data = simple_kv_formatter(data=data, key_order=key_order)
+    return sorted(strip_no_value(data), key=lambda x: x["serial"])
 
 def get_group_names(data: List[List[str],]) -> list:
     """Convert list of single item lists to a list of strs
@@ -556,24 +585,20 @@ def _client_concat_associated_dev(
         "swarm_id",
     ]
 
-    # FIXME get_dev_identifier can fail if client is connected to device that is not in the cache.
-    # even with a cache update.  doing show all is fine, but update cache for whatever reason with this method
-    # is causing some kind of SSL error, which results in cache lookup failure.
-    # silent=True, retry=False, resolves.  Would need no_match OK as get_dev_identifier fails if no match.
     dev, _gw = "", ""
     if data.get("associated_device"):
-        dev = cache.get_dev_identifier(data["associated_device"])
+        dev = cache.get_dev_identifier(data["associated_device"], retry=False, exit_on_fail=False)
 
     if data.get("gateway_serial"):
-        _gw = cache.get_dev_identifier(data["gateway_serial"])
+        _gw = cache.get_dev_identifier(data["gateway_serial"], retry=False, exit_on_fail=True)
         _gateway = {
-            "name": _gw.name,
+            "name": None if not _gw else _gw.name,
             "serial": data.get("gateway_serial", ""),
         }
         if verbose:
             data["gateway"] = _unlist(strip_no_value([_gateway]))
         else:
-            data["gateway"] = _gw.name or data["gateway_serial"]
+            data["gateway"] = None if not _gw else _gw.name or data["gateway_serial"]
     _connected = {
         "name": data.get("associated_device") if not hasattr(dev, "name") else dev.name,
         "type": data.get("connected_device_type"),
@@ -581,9 +606,8 @@ def _client_concat_associated_dev(
         "mac": data.get("associated_device_mac"),
         "interface": data.get("interface_port"),
         "interface mac": data.get("interface_mac"),
-        # "group": data.get("group_name"),
-        # "site": data.get("site"),
     }
+    data["connected device"] = _unlist(strip_no_value([_connected])) if verbose else f"{_connected['name']}"
 
     # collapse radio details into sub dict
     _radio = {}
@@ -617,9 +641,6 @@ def _client_concat_associated_dev(
 
         strip_keys += ["client_category", "os_type", "manufacturer"]
 
-    # for key in strip_keys:
-    #     if key in data:
-    #         del data[key]
     data = {k: v for k, v in data.items() if k not in strip_keys}
 
     if _radio:
@@ -629,29 +650,6 @@ def _client_concat_associated_dev(
     if _fingerprint:
         data["fingerprint"] = _unlist(strip_no_value([_fingerprint]))
 
-    if verbose:
-        data["connected device"] = _unlist(strip_no_value([_connected]))
-    else:
-        # More work than is prob warranted by if the device name includes the type, and the adjacent characters are
-        # not alpha then we don't append the type.  So an ap with a name of zrm-655-ap will not have (AP) appended
-        # but zrm-655 would have it appended
-        data["connected device"] = f"{_connected['name']}"
-        add_type = False
-        if _connected['type'].lower() in _connected['name'].lower():
-            t: str = _connected['type'].lower()
-            n: str = _connected['name'].lower()
-            for idx in set([n.find(t), n.rfind(t)]):
-                _start = idx
-                _end = _start + len(t)
-                _prev = None if _start == 0 else _start - 1
-                _next = None if _end + 1 >= len(n) else _end + 1
-                if (_prev and n[_prev].isalpha()) or (_next and n[_next].isalpha()):
-                    add_type = True
-        else:
-            add_type = True
-
-        if add_type:
-            data["connected device"] = f"{data['connected device']} ({_connected['type']})"
 
     return data
 
@@ -708,6 +706,8 @@ def get_clients(
             "last_connection_time"
         ]
     }
+    if all([c.get("failure_reason") for c in data]):
+        verbosity_keys[0].insert(2, "client_type")  # failed clients could be wired or wireless on some devices.
 
     _short_value["speed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
     _short_value["maxspeed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
@@ -725,7 +725,7 @@ def get_clients(
             for idx, d in enumerate(data)
         ]
 
-    if filters:  # filter by devices which is a list of serial numbers
+    if filters:  # filter by devices which is a list of serial numbers  # This should be deprecated.  show clients no longer allows multiple devices.
         _filter = "~|~".join(filters)
         data = [d for d in data if d["connected device"]["serial"].upper() in _filter.upper()]
 
@@ -885,6 +885,9 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
             'version',
             'firmware_backup_version',
             'oper_state_reason',
+            "services",
+            "subscription_key",
+            "subscription_expires",
         ]
     to_front = [i for i in to_front if i in all_keys]
     _ = [all_keys.insert(0, all_keys.pop(all_keys.index(tf))) for tf in to_front[::-1]]
@@ -893,14 +896,12 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     return data
 
 
-# TODO default verbose back to False once show device commands adapted to use --inventory so -v can be used for verbosity
-def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: bool = False) -> Union[List[dict], dict]:
+def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, output_format: TableFormat = None) -> Union[List[dict], dict]:
     """Clean device output from Central API (Monitoring)
 
     Args:
         data (Union[List[dict], dict]): Response data from Central API
         verbose (bool, optional): Not Used yet. Defaults to True.
-        cache (bool, optional): If output is being cleaned for entry into cache. Defaults to False.
 
     Returns:
         Union[List[dict], dict]: The cleaned data with consistent field heading, and human readable values.
@@ -908,6 +909,7 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
     data = utils.listify(data)
     all_keys = set([k for inner in data for k in inner.keys()])
     # common_keys = set.intersection(*map(set, data))
+    table_formats = ["csv", "rich", "tabulate"]
 
     # pre cleaned key values
     verbosity_keys = {
@@ -919,33 +921,42 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, cache: boo
                 "model",
                 "ip_address",
                 "macaddr",
+                "mac",  # get_devices_with_inventory has already cleaned keys
                 "serial",
                 "group_name",
                 "site",
                 "firmware_version",
                 "services",
+                "subscription_key",
+                "subscription_expires",
         ]
     }
-    if "services" not in all_keys:  # indicates inventory is not part of the listing
-        verbosity_keys[0].insert(10, "uptime")
-    if "type" not in all_keys:  # indicates data is for single device type. typicall allows more space
+    if "services" not in all_keys:  # indicates inventory is part of the listing
+        verbosity_keys[0].insert(10, "uptime") # more space if inventory not in listing so provide uptime.
+    if "type" not in all_keys:  # indicates data is for single device type. typically allows more space
         verbosity_keys[0].insert(10, "cpu_utilization")
         verbosity_keys[0].insert(10, "mem_pct")
+
+    if "status" in all_keys and "subscription_key" in all_keys:  # combined device/inventory.  too much for non-verbose remove the sub keyu
+        _ = verbosity_keys[0].pop(verbosity_keys[0].index("subscription_key"))
+        if "client_count" in all_keys:
+            _ = verbosity_keys[0].pop(verbosity_keys[0].index("client_count"))
+
 
     data = sort_result_keys(data)
 
     data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)} for inner in data]
 
+    _short_key["subscription_key"] = "subscription key"
     data = simple_kv_formatter(data)
 
     # strip any cols that have no value across all rows,
-    # if verbose strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical for verbose)
-    data = strip_no_value(data, aggressive=bool(verbosity))
+    # strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical)
+    data = strip_no_value(data, aggressive=output_format not in table_formats)
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
     return data
-
 
 def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List[dict]:
     field_order = [
@@ -980,8 +991,7 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
 
 
 def get_alerts(data: List[dict],) -> List[dict]:
-    if isinstance(data, list) and "No Alerts" in data:
-        return data
+    # TODO Need cleaner to strip all state: "Close" alerts, and all associated state: "Open"
 
     field_order = [
         "timestamp",
@@ -1036,13 +1046,12 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
         # "sites",
     ]
     for d in data:
-        _dev_type = short_value('device_type', d.get('device_type', ''))
-        if _dev_type:
-            _dev_str = f"[{_dev_type[-1]}]" if _dev_type[-1] != "CLIENT" else ""
-        d["device info"] = f"{_dev_str}{d.get('hostname', '')}|" \
-            f"{d.get('device_serial', '')} Group: {d.get('group_name', '')}"
-        # for key in ["device_type", "hostname", "device_serial", "device_mac"]:
-        #     del d[key]
+        site = d.get('sites')
+        if site:
+            site = site[0].get("name")
+        site = "" if not site else f"|S:{site}"
+        d["device info"] = f"{d.get('hostname', '')}|" \
+            f"{d.get('device_serial', '')}|G:{d.get('group_name', '')}{site}"
 
     # Stash event_details in cache indexed starting @ most recent event
     if len(data) > 1 and cache_update_func:
@@ -1069,22 +1078,8 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
 
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
-
-    _sorted = [
-        "site_name",
-        "site_id",
-        "address",
-        "city",
-        "state",
-        "zipcode",
-        "country",
-        "longitude",
-        "latitude",
-        "associated_device_count",
-    ]  # , "tags"]
-    key_map = {"associated_device_count": "associated devices", "site_id": "id", "site_name": "name"}
-
-    return _unlist([{key_map.get(k, k): s[k] for k in _sorted} for s in data if s.get("site_name", "") != "visualrf_default"])
+    data = Sites(sites=data)
+    return data.dict()["sites"]
 
 
 def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1223,7 +1218,7 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
-    data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order if k in d)} for d in data]
+    data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order)} for d in data]
     data = strip_no_value(data)
     return data
 
@@ -1237,8 +1232,6 @@ def get_template_details_for_device(data: str) -> dict:
         dict: dict with summary(dict), running config(str) and
         central side config(str).
     """
-    import json
-
     summary, running_config, central_config = None, None, None
     split_line = data.split("\n")[0].rstrip()
     data_parts = [
@@ -1384,7 +1377,7 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
     return data
 
 def _inv_type(model: str, dev_type: str) -> DevTypes:
-    if dev_type == "SWITCH":
+    if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY
         aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
         return "sw" if model[0:4] in aos_sw_models else "cx"
 
@@ -1393,31 +1386,24 @@ def _inv_type(model: str, dev_type: str) -> DevTypes:
 
 def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     field_order = [
-        "name",
-        "status",
-        # "device_type",
+        "serial",
+        "mac",
         "type",
         "model",
-        "aruba_part_no",
-        # "imei",
-        "ip",
-        "macaddr",
-        "serial",
-        "group",
-        "site",
-        "version",
+        "sku",
         "services",
+        "subscription_key",
+        "subscription_expires",
     ]
-    # common_keys = set.intersection(*map(set, data))
-    # combine type / device_type for verbose output, preferring type from cache
 
-    data = [
-        {
-            "type": _inv_type(d["model"], d.get("type", d.get("device_type", "err"))),
-            **{key: val for key, val in d.items() if key != "device_type"}
-        }
-        for d in data
-    ]
+    _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
+    # data = [
+    #     {
+    #         "type": _inv_type(d["model"], d.get("device_type", d.get("type", "err"))),
+    #         **{key: val for key, val in d.items() if key != "device_type"}
+    #     }
+    #     for d in data
+    # ]
     data = [
         dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
@@ -1573,10 +1559,12 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         "phy_type",
         "port",
         "oper_state",
+        "operational_state",  # ap
         "admin_state",
         "status",
         "intf_state_down_reason",
         "speed",
+        "link_speed",  # ap
         "duplex_mode",
         "vlan",
         "allowed_vlan",
@@ -1597,6 +1585,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     verbosity_keys = {
         0: [
             "port_number",
+            "name", # ap
             "vlan",
             "allowed_vlan",
             "vlan_mode",
@@ -1605,6 +1594,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
             "power_consumption",
             "intf_state_down_reason",
             "speed",
+            "link_speed",  # ap
             "is_uplink",
             "phy_type",
             "type"
@@ -1623,6 +1613,14 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         ]
     elif dev_type == "gw":
         verbosity_keys[0].insert(4, "trusted")
+    elif dev_type == "ap" and data:
+        data = data[0].get("ethernets", [])
+        verbosity_keys[0].insert(2, "macaddr")
+        verbosity_keys[0].insert(10, "duplex_mode")
+        for iface in data:
+            if iface.get("status", "").lower() != "up":
+                iface["duplex_mode"] = "--"
+                iface["link_speed"] = "--"
 
     # Append any additional keys to the end
     if verbosity == 0:
@@ -1746,11 +1744,6 @@ def get_overlay_interfaces(data: Union[List[dict], dict]) -> Union[List[dict], d
     return simple_kv_formatter(data)
 
 def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0, format: TableFormat = "rich") -> List[dict]:
-    if isinstance(data, list) and data and isinstance(data[0], str):
-        data = json.loads(data[0])
-    if isinstance(data, dict) and "wlans" in data:
-        data = data["wlans"]
-
     # TODO PlaceHolder logic, currently only support verbosity level 0
     verbosity_keys = {
         0: [

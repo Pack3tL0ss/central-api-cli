@@ -3,17 +3,17 @@
 
 from __future__ import annotations
 import typer
-import time
 import pendulum
 import asyncio
 import sys
 import json
 import os
-from typing import List, Iterable, Literal, Dict, Any
+from datetime import datetime
+from typing import List, Iterable, Literal, Dict, Any, Tuple
 from pathlib import Path
 from rich import print
 from rich.console import Console
-from copy import deepcopy
+
 
 try:
     import psutil
@@ -41,11 +41,13 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions,
-    SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs,
-    AlertTypes, SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
+    SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, DeviceStatus, DeviceTypes,
+    lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
+from centralcli.objects import DateTime
 
 
 app = typer.Typer()
@@ -70,50 +72,63 @@ class Counts:
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
 
-def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: Literal["Up", "Down"] = None) -> str:
-    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
-    def get_switch_counts(data) -> dict:
-        if data is None:
-            return {}
-        dev_types = set([t.get("switch_type", "ERR") for t in data])
-        # return {LIB_DEV_TYPE.get(_type, _type): [t for t in data if t.get("switch_type", "ERR") == _type] for _type in dev_types}
-        return {
-            LIB_DEV_TYPE.get(_type, _type): {
-                "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
-                "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
-            }
-            for _type in dev_types
+def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[Dict[str: Dict[str: int]]] | None:
+    """parse response data to determine switch counts by switch type
+
+    Args:
+        data (List[Dict[str, Any]]): Combined resp.output data from API, with data for any or all device types.
+
+    Returns:
+        List[Dict[str: Dict[str: int]]] | None: Returns a dict with total and up keys available for each switch type.
+            i.e. {"cx": {"total": 10, "up": 9}, "sw": {"total": 3, "up": 3}}
+            Returns None, if data was None
+    """
+    if data is None:
+        return {}
+    dev_types = set([t.get("switch_type", "ERR") for t in data])
+
+    return {
+        LIB_DEV_TYPE.get(_type, _type): {
+            "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
+            "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
         }
+        for _type in dev_types
+    }
 
-    def get_counts(data: List[dict], dev_type: Literal["cx", "sw", "ap", "gw"]) -> Counts:
-        _match_type = [d for d in data if d["type"] == dev_type]
-        _tot = len(_match_type)
-        _up = len([d for d in _match_type if d.get("status") and d["status"] == "Up"])
-        _inv = len([d for d in _match_type if not d.get("status")])
-        return Counts(_tot, _up, _inv)
+def _get_counts(data: List[dict], dev_type: DeviceTypes) -> Counts:
+    _match_type = [d for d in data if d["type"] == dev_type]
+    _tot = len(_match_type)
+    _up = len([d for d in _match_type if d.get("status") == "Up"])
+    _inv = len([d for d in _match_type if not d.get("status")])
+    return Counts(_tot, _up, _inv)
 
-    def get_counts_with_inv(data: List[dict]) -> dict:
-        """parse combined output attr of inventory and monitoring responses to determine counts by device type.
+def _get_counts_with_inv(data: List[dict]) -> dict:
+    """parse combined output attr of inventory and monitoring responses to determine counts by device type.
 
-        Args:
-            data (List[dict]): Combined resp.output for monitoring and inventory response.
+    Args:
+        data (List[dict]): Combined resp.output for monitoring and inventory response.
 
-        Returns:
-            dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
-        """
-        status_by_type = {}
-        _types = set(d["type"] for d in data)
-        for t in _types:
-            counts = get_counts(data, t)
-            status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+    Returns:
+        dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
+    """
+    status_by_type = {}
+    _types = set(d["type"] for d in data)
+    for t in _types:
+        counts = _get_counts(data, t)
+        status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
 
-        return status_by_type
+    return status_by_type
 
+def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
+    inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
+    up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
+    return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
 
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, verbosity: int = 0) -> str:
+    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
-            status_by_type = get_counts_with_inv(resp.output)
-
+            status_by_type = _get_counts_with_inv(resp.output)
         else:
             def url_to_key(url) -> str:
                 path_end = url.split("/")[-1]
@@ -126,17 +141,17 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
                         "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[path].get(url_to_key(path), []))))
                     } for path in resp.raw.keys() if not path.endswith("switches")
                 },
-                **get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
+                **_get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
             }
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     elif dev_type == "switch":
         if inventory:
-            status_by_type = get_counts_with_inv(resp.output)
+            status_by_type = _get_counts_with_inv(resp.output)
         else:
-            counts_by_type = get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
+            counts_by_type = _get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
             status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
     else:
-        counts = get_counts(resp.output, dev_type=dev_type)
+        counts = _get_counts(resp.output, dev_type=dev_type)
         status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
         if inventory:
             status_by_type[dev_type]["inventory_only"] = counts.inventory
@@ -145,11 +160,6 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
     if status:
         _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
     elif inventory:
-        def _get_inv_msg(data: Dict, dev_type: DevTypes) -> str:
-            inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
-            up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
-            return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
-
         _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
         _cnt_str = _cnt_str + ", ".join(
             [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
@@ -168,7 +178,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             log.exception(f"Exception occured in _build_caption\n{e}")
 
     if not inventory_only:
-        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. "
+        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. " if not verbosity else " "
         caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}"
         if not dev_type:
             caption = f"{caption} To see all columns for a given device use [cyan]cencli show <DEVICE TYPE>[/cyan]"
@@ -220,15 +230,77 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
+    if include_inventory:
+        resp = cli.cache.get_devices_with_inventory(status=status)
+        caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
+    elif not cli.cache.responses.dev:
+        resp = cli.central.request(cli.cache.update_dev_db, **params)
+        caption = None if not resp.ok else _build_device_caption(resp, status=status)
+    else:
+        # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
+        resp, caption = cli.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+
+    return resp, caption
+
+def _get_details_for_specific_devices(
+        devices: List[CentralObject],
+        dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+        include_inventory: bool = False,
+        do_table: bool = False
+    ) -> Tuple[Response | List[Response], str]:
+        caption = None
+        dev_type = None if not dev_type else lib_to_api(dev_type)  # convert show command "what" to Generic lib dev_type ap, gw, switch
+
+        # Build requests
+        br = cli.central.BatchRequest
+        devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        dev_types = [dev.type for dev in devs]
+        reqs = [br(cli.central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
+
+        # Fetch results from API
+        batch_res = cli.central.batch_request(reqs)
+
+        if do_table and len(dev_types) > 1:
+            _output = [r.output for r in batch_res]
+            resp = batch_res[-1]
+            resp.output = _output
+            resp.output = resp.table
+            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
+        else:
+            resp = batch_res
+
+        if "cx" in dev_types:
+            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
+
+        return resp, caption
+
 # TODO break this into multiple functions
 def show_devices(
-    devices: str | Iterable[str] = None, dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None, include_inventory: bool = False, verbosity: int = 0, outfile: Path = None,
-    update_cache: bool = False, group: str = None, site: str = None, label: str = None, status: str = None, state: str = None, pub_ip: str = None,
-    do_clients: bool = True, do_stats: bool = False, do_ssids: bool = False, sort_by: str = None, reverse: bool = False, pager: bool = False, do_json: bool = False, do_csv: bool = False,
-    do_yaml: bool = False, do_table: bool = False
+    devices: str | Iterable[str] = None,
+    dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+    include_inventory: bool = False,
+    verbosity: int = 0,
+    outfile: Path = None,
+    update_cache: bool = False,
+    group: str = None,
+    site: str = None,
+    label: str = None,
+    status: DeviceStatus = None,
+    state: str = None,
+    pub_ip: str = None,
+    do_clients: bool = True,
+    do_stats: bool = False,
+    do_ssids: bool = False,
+    sort_by: str = None,
+    reverse: bool = False,
+    pager: bool = False,
+    do_json: bool = False,
+    do_csv: bool = False,
+    do_yaml: bool = False,
+    do_table: bool = False
 ) -> None:
-    caption = None
-    central = cli.central
+    # include subscription implies include_inventory
     if update_cache:
         cli.central.request(cli.cache.update_dev_db)
 
@@ -252,78 +324,28 @@ def show_devices(
         "calculate_ssid_count": do_ssids,
     }
 
-    # if any of these values are set it's a filtered result so we don't update cache
-    filtering_params = [
-        "group",
-        "site",
-        "label",
-        "public_ip_address"
-    ]
-
-    cache_generic_types = {
-        "aps": "ap",
-        "gateways": "gw",
-        "mobility_controllers": "gw",
-        "switches": "switch"
-    }
-
     params = {k: v for k, v in params.items() if v is not None}
-    if not devices and dev_type is None:
-        dev_type = "all"
+    if dev_type is None:
+        dev_type = None if devices else "all"
+    elif dev_type != "all":
+        dev_type = lib_to_api(dev_type)
 
-    default_tablefmt = "rich" if not verbosity and not devices else "yaml"
+    # verbosity = verbosity if not any([devices, include_inventory, include_subscription]) else verbosity or 99
+    default_tablefmt = "rich" if not verbosity else "yaml"
 
     if devices:  # cencli show devices <device iden>
-        # Asking for details of a specific device implies verbose
-        if not verbosity:
-            verbosity = 99
-        if dev_type:
-            dev_type = cache_generic_types.get(dev_type)
-
-        br = cli.central.BatchRequest
-        devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
-        _types = [dev.type for dev in devs]
-        reqs = [br(central.get_dev_details, (lib_to_api(_type, "monitoring"), dev.serial,)) for _type, dev in zip(_types, devs)]
-        batch_res = cli.central.batch_request(reqs)
-
-        if do_table and len(_types) > 1:
-            _output = [r.output for r in batch_res]
-            common_keys = set.intersection(*map(set, _output))
-            _output = [{k: d[k] for k in common_keys} for d in _output]
-            resp = batch_res[-1]
-            resp.output = _output
-            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
-        else:
-            resp = batch_res
-
-        if "cx" in _types:
-            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'
+        verbosity = verbosity or 99  # specific device implies verbose output vertically
+        default_tablefmt = "yaml"
+        resp, caption = _get_details_for_specific_devices(devices, include_inventory=include_inventory, do_table=do_table)
     elif dev_type == "all":  # cencli show all | cencli show devices
-        if include_inventory:
-            resp = cli.cache.get_devices_with_inventory()
-            caption = _build_device_caption(resp, inventory=True)
-            if status:
-                log.warning("[cyan]--up[/], [cyan]--down[/] filters are currently ignored when [cyan]--inv[/] is used.", caption=True)
-        elif [p for p in params if p in filtering_params]:  # We clean here and pass the data back to the cache update, this allows an update with the filtered data without trucating the db
-            resp = central.request(central.get_all_devices, cache=True, **params)  # TODO send get_all_devices kwargs to update_dev_db and evaluate params there to determine if upsert or truncate is appropriate
-            if resp.ok and resp.output:
-                cache_output = cleaner.get_devices(deepcopy(resp.output), cache=True)
-                _ = central.request(cli.cache.update_dev_db, cache_output)
-            caption = None if not resp.ok else _build_device_caption(resp)
-        else:  # No filtering params, get update from cache
-            if central.get_all_devices not in cli.cache.updated:
-                resp = central.request(cli.cache.update_dev_db, **params)
-                caption = _build_device_caption(resp, status=status)
-            else:
-                # get_all_devicesv2 already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-                resp = cli.cache.responses.dev  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
-        resp = central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
+        resp = cli.central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = central.request(cli.cache.update_inv_db, dev_type=dev_type)
-            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=lib_to_api(dev_type))
+            _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
+            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
-        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=cache_generic_types.get(dev_type), status=status)
+        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -334,7 +356,7 @@ def show_devices(
     # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
     if include_inventory:
         output_key = "serial"
-    elif dev_type and dev_type == "switches":
+    elif dev_type and dev_type == "switch":
         output_key = "name+serial"
     else:
         output_key = "name"
@@ -351,6 +373,7 @@ def show_devices(
         output_by_key=output_key,
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
+        output_format=tablefmt,
     )
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
@@ -372,42 +395,29 @@ def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
 
 @app.command("all")
 def all_(
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics", hidden=False,),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", rich_help_panel="Common Options", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     """Show details for All devices
     """
@@ -415,11 +425,11 @@ def all_(
         status = "Down"
     elif up:
         status = "Up"
+
     show_devices(
-        dev_type='all', outfile=outfile, include_inventory=with_inv, verbosity=verbose, update_cache=update_cache, group=group, site=site, status=status,
-        state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
-        do_table=do_table)
+        dev_type='all', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache,
+        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
 @app.command()
@@ -434,44 +444,31 @@ def devices(
             if m[0].lower().startswith(incomplete.lower())
         ],
         help="Show details for a specific device [grey42]\[default: show details for all devices][/]",
-        # show_default=False,
+        show_default=False,
     ),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
-    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status both hidden to simplify as they can use --up or --down
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per device)"),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by [grey42 italic](Some fields only present with verbose option)[/]", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", rich_help_panel="Common Options", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     """Show details for devices
     """
@@ -489,10 +486,9 @@ def devices(
         dev_type = None
 
     show_devices(
-        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site,
-        label=label, status=status, state=state, pub_ip=pub_ip, do_stats=True, do_clients=True,
-        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
-    )
+        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, update_cache=update_cache,
+        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
 
 @app.command()
@@ -507,36 +503,22 @@ def aps(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per AP)"),
-    # do_ssids: bool = typer.Option(True, "--ssids", is_flag=True, help="Calculate SSID count (per AP)"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show all AP LLDP neighbors for a site \[requires --site]", show_default=False,),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for APs
     """
@@ -569,7 +551,7 @@ def aps(
             status = "Down" if down else "Up"
 
         show_devices(
-            aps, dev_type="aps", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
@@ -577,42 +559,29 @@ def aps(
 @app.command("switches")
 def switches_(
     switches: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for switches
     """
@@ -622,7 +591,7 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switches', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -631,42 +600,29 @@ def switches_(
 @app.command(name="gateways")
 def gateways_(
     gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per gateway)"),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     """Show details for gateways
     """
@@ -676,7 +632,7 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gateways', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -685,42 +641,29 @@ def gateways_(
 @app.command("controllers", hidden=True)
 def controllers_(
     controllers: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per switch)"),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # hidden as not tested with this type
-    verbose: int = typer.Option(
-        0,
-        "-v",
-        count=True,
-        help="Verbosity: Show more details, Accepts -vv -vvv etc. for increasing verbosity where supported",
-        show_default=False,
-    ),
-    sort_by: SortDevOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortDevOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     """Show details for controllers
 
@@ -732,7 +675,7 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='mobility_controllers', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        controllers, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
@@ -741,29 +684,25 @@ def controllers_(
 @app.command()
 def stacks(
     switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = cli.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    sort_by: SortStackOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortStackOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for switch stacks
     """
@@ -803,38 +742,30 @@ def stacks(
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
 def inventory(
-    dev_type: ShowInventoryArgs = typer.Argument("all"),
+    dev_type: ShowInventoryArgs = typer.Argument("all",),
     sub: bool = typer.Option(
         None,
-        help="Show devices with applied subscription/license, or devices with no subscription/license applied."
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "-v",
-        help="include additional details for devices that have connected to Aruba Central",
+        help="Show devices with applied subscription/license, or devices with no subscription/license applied. [grey42]\[default: show all][/]",
         show_default=False,
     ),
-    sort_by: SortInventoryOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: SortInventoryOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     if hasattr(dev_type, "value"):
         dev_type = dev_type.value
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+
     if dev_type == "all":
         title = "Devices in Inventory"
     elif dev_type in ["cx", "sw", "switch"]:
@@ -848,65 +779,63 @@ def inventory(
     else:
         title = "Inventory"
 
+    include_inventory = False
     if verbose:
+        include_inventory = True
+        verbose -= 1
+
+    if verbose or include_inventory:
         show_devices(
-            dev_type=dev_type, outfile=outfile, include_inventory=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, outfile=outfile, include_inventory=include_inventory, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
-        cli.exit("", code=0)
+        cli.exit(code=0)
 
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=lib_to_api(dev_type, "inventory"), sub=sub)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type, sub=sub)
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        sort_by=sort_by,
-        reverse=reverse,
         caption=_build_device_caption(resp, inventory=True),
         pager=pager,
         outfile=outfile,
-        cleaner=None,  # Cleaner is applied in cache update
+        sort_by=sort_by,
+        reverse=reverse,
+        set_width_cols={"services": {"min": 31}},
+        cleaner=cleaner.get_device_inventory,
+        sub=sub
     )
 
 
-# TODO --sort option for date fields sorts converted value, needs to be sorted by epoch before conversion
 # TODO break into seperate command group if we can still all show subscription without an arg to default to details
 @app.command()
 def subscription(
     what: SubscriptionArgs = typer.Argument("details"),
-    service: str = typer.Option(None, hidden=True),  # TODO this is for show subscription stats also a couple more options we could allow
-    sort_by: SortSubscriptionOptions = typer.Option(None, "--sort", show_default=False,),  # Need to adapt a bit for stats or make sub-command
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting) (vertically)",
-        show_default=False,
-    ),
+    dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
+    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
+    sort_by: SortSubscriptionOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show subscription/license details or stats
     """
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
     if what is None or what == "details":
-        resp = cli.central.request(cli.central.get_subscriptions)  # TODO might be useful to restore passing license type to subscriptions (filter option)
+        resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)
         title = "Subscription Details"
         _cleaner = cleaner.get_subscriptions
-        set_width_cols = {"name": 40}
+        set_width_cols = {"name": {"min": 39}}
     elif what == "auto":
         resp = cli.central.request(cli.central.get_auto_subscribe)
         if resp and "services" in resp.output:
@@ -923,7 +852,7 @@ def subscription(
         resp = cli.central.request(cli.cache.update_license_db)
         title = "Valid Subscription/License Names"
         _cleaner = None
-        set_width_cols = {"name": 31}
+        set_width_cols = {"name": {"min": 39}}
     else:
         raise ValueError("Error in logic evaluating what")
 
@@ -939,36 +868,29 @@ def subscription(
 
 
 # TODO need sort_by enum
-@app.command(short_help="Show Swarms (IAP Clusters)")
+@app.command()
 def swarms(
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False,),
+    group: str = cli.options.group,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False, hidden=True,),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
     up: bool = typer.Option(False, "--up", help="Filter by swarms that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
     name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
-    # do_stats: bool = typer.Option(False, "--stats", is_flag=True, help="Show device statistics"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    """
-    [cyan]Show Swarms (IAP Clusters)[/]
+    """Show Swarms (IAP Clusters)
     """
     if down:
         status = "Down"
@@ -985,37 +907,30 @@ def swarms(
 # TODO define sort_by fields
 @app.command()
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_gw_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True, rich_help_panel="Common Options"),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ):
-    """Show interfaces/details
-
-    Command is valid for switches and gateways
-    """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["gw", "switch"], conductor_only=True,)
+    """Show interfaces/details"""
+    dev = cli.cache.get_dev_identifier(device, conductor_only=True,)
     if dev.generic_type == "gw":
         resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
+    elif dev.type == "ap":
+        resp = cli.central.request(cli.central.get_dev_details, "aps", dev.serial)  # We extract the wired interface details from /monitoring/v2/aps
     else:
         iden = dev.swack_id or dev.serial
         resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=dev.swack_id is not None, aos_sw=dev.type == "sw")
@@ -1057,25 +972,19 @@ def poe(
     port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
     _port: str = typer.Option(None, "--port", show_default=False, hidden=True,),
     powered: bool = typer.Option(False, "-p", "--powered", help="Show only interfaces currently delivering power", show_default=False,),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False, rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False, rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    verbose: int = typer.Option(0, "-v", count=True, help="Verbose: Show all interface details vertically", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    verbose: int = cli.options.verbose,
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
@@ -1122,26 +1031,20 @@ def vlans(
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by VLAN status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
-    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
-    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    sort_by: SortVlanOptions = typer.Option(None, "--sort", help="Field to sort by", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order", rich_help_panel="Formatting"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in table format", rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", rich_help_panel="Common Options", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    up: bool = typer.Option(False, "--up", help="Filter by VLANs that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by VLANs that are Down", show_default=False),
+    sort_by: SortVlanOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show VLANs for device or site
 
@@ -1177,7 +1080,7 @@ def vlans(
             print("Command is only valid on gateways and switches")
             raise typer.Exit(1)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     cli.display_results(
         resp,
@@ -1201,55 +1104,42 @@ def dhcp(
         show_default=False,
     ),
     no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False),
-    reverse: bool = typer.Option(False, "-r", help="Reverse sort order", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting) (vertically)",
-        show_default=False,
-    ),
+    sort_by: SortDhcpOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
     """
     central = cli.central
     dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
-    if what == "server":
-        resp = central.request(central.get_dhcp_server, dev.serial)
+    if what == "pools":
+        resp = central.request(central.get_dhcp_pools, dev.serial)
     else:
         resp = central.request(central.get_dhcp_clients, dev.serial, reservation=not no_res)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    if verbose2:
-        print(resp.raw)
-    else:
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=f"{dev.name} DHCP {what.rstrip('s')} details",
-            pager=pager,
-            outfile=outfile,
-            sort_by=sort_by,
-            reverse=reverse,
-            cleaner=cleaner.get_dhcp,  # TODO CHANGE.. placeholder
-        )
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{dev.name} DHCP {what.rstrip('s')} details",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.get_dhcp,
+    )
 
 
 @app.command()
@@ -1261,21 +1151,17 @@ def upgrade(
         autocompletion=cli.cache.dev_completion,
         show_default=False,
     ),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     """Show firmware upgrade status (by device)
     """
@@ -1319,36 +1205,30 @@ def upgrade(
 @app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, show_default=False),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False, rich_help_panel="Common Options"),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Common Options"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ):
     args = ('all',) if not args else args
     for arg in args:
         cache_out = getattr(cli.cache, arg)
+        arg = arg if not hasattr(arg, "value") else arg.value
 
         # sort devices so output matches cencli show all
-        if isinstance(arg, str) and arg == "all":
+        if  arg == "all":
             if "devices" in cache_out:
                 cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
-        elif arg.value == "devices":
-            cache_out = sorted(cache_out, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
+        caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
         tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
         cli.display_results(
             data=cache_out,
@@ -1360,35 +1240,24 @@ def cache_(
             reverse=reverse,
             output_by_key=None,
             stash=False,
+            caption=caption,
         )
 
 
 @app.command(short_help="Show groups/details")
 def groups(
-    sort_by: SortGroupOptions = typer.Option("name", "--sort",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting", hidden=True,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    sort_by: SortGroupOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     central = cli.central
     if central.get_all_groups not in cli.cache.updated:
@@ -1402,69 +1271,28 @@ def groups(
     cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups)
 
 
-@app.command(short_help="Show labels/details")
+@app.command()
 def labels(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: SortLabelOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    central = cli.central
-    if central.get_labels not in cli.cache.updated:
-        resp = asyncio.run(cli.cache.update_label_db())
-    else:
-        resp = cli.cache.responses.labels
-
-    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml)
-    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile)
+    """Show labels/details"""
+    resp = cli.central.request(cli.cache.update_label_db)
+    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
 
-@app.command(short_help="Show sites/details")
-def sites(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
-    count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
-    count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
-    sort_by: SortSiteOptions = typer.Option("name", "--sort",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
-):
-    central = cli.central
-    sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
-
-    site = None if site and site.lower() == "all" else site
-    if not site:
-        if central.get_all_sites not in cli.cache.updated:
-            resp = asyncio.run(cli.cache.update_site_db())
-        else:
-            resp = cli.cache.responses.site
-    else:
-        site = cli.cache.get_site_identifier(site)
-        resp = central.request(central.get_site_details, site.id)
-
+def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
     caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
     counts, count_caption = {}, None
     if resp.ok:
@@ -1481,6 +1309,42 @@ def sites(
     if count_caption:
         caption = f'[reset]{caption}, {count_caption}[reset][/]'
 
+    return caption
+
+
+@app.command(short_help="Show sites/details")
+def sites(
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
+    count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
+    count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
+    sort_by: SortSiteOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+):
+    central = cli.central
+    sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
+
+    site = None if site and site.lower() == "all" else site
+    if not site:
+        resp = cli.central.request(cli.cache.update_site_db)
+        cleaner_func = None  # No need to clean cache sends through model/cleans
+    else:
+        site = cli.cache.get_site_identifier(site)
+        resp = central.request(central.get_site_details, site.id)
+        cleaner_func = cleaner.sites
+
+    # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
+    # Country is blank when added via API and not provided.  Find public API to lookup country during add
+    caption = _build_site_caption(resp, count_state=count_state, count_country=count_country)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     cli.display_results(
@@ -1492,13 +1356,11 @@ def sites(
         sort_by=sort_by,
         reverse=reverse,
         caption=caption,
+        cleaner=cleaner_func,
     )
 
-    if counts and tablefmt != "rich":
-        print(caption)
 
-
-@app.command(short_help="Show templates/details")
+@app.command()
 def templates(
     name: str = typer.Argument(
         None,
@@ -1523,25 +1385,23 @@ def templates(
     model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model", show_default=False,),
     #  variablised: str = typer.Option(False, "--with-vars",
     #                                  help="[Templates] Show Template with variable place-holders and vars."),
-    sort_by: SortTemplateOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+
+    sort_by: SortTemplateOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
+    """Show templates/details"""
     central = cli.central
+
     # Allows unnecessary keyword group "cencli show templates group WadeLab"
     if name and name.lower() == "group":
         name = None
@@ -1580,37 +1440,32 @@ def templates(
             resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by)
+    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
 @app.command(short_help="Show Variables for all or specific device")
 def variables(
-    # FIXME completion ... should include "all"
     args: str = typer.Argument(
         None,
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
-        help="Default: 'all'",
+        help="[grey42]\[default: 'all'][/]",
         autocompletion=lambda incomplete: [
             m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ] or [],
         show_default=False,
     ),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ):
     central = cli.central
 
@@ -1620,7 +1475,14 @@ def variables(
         args = ""
 
     resp = central.request(central.get_variables, () if not args else args.serial)
+    if args:
+        resp.output = resp.output.get("variables", resp.output)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+    if not args and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
+        all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
+        if not all([all_keys[0] == key_list for key_list in all_keys[1:]]):
+            tablefmt = "json"
+            log.warning("Format changed to [cyan]JSON[/].  All variable names need to be identical for all devices for csv and table output.", caption=True)
 
     cli.display_results(
         resp,
@@ -1639,29 +1501,20 @@ def lldp(
         autocompletion=cli.cache.dev_switch_ap_completion,
         show_default=False,
     ),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-    ),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
+
 ) -> None:
-    """Show AP lldp neighbor
+    """Show lldp neighbor information
 
     Valid on APs and CX switches
 
@@ -1676,9 +1529,6 @@ def lldp(
     unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
     batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
-    # if all([res.ok for res in batch_resp]):
-    #     concat_resp = batch_resp[-1]
-    #     concat_resp.output = [{"name": f'{dev.name} {neighbor.get("localPort", "")}'.rstrip(), **neighbor} for res, dev in zip(batch_resp, devs) for neighbor in res.output]
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
     console = Console()
@@ -1686,6 +1536,7 @@ def lldp(
         title = f"{dev.name} LLDP Neighbor information"
         if tablefmt not in ["table", "rich"]:
             console.print(f'[green]{"-" * 5}[/] [cyan bold]{title}[/] [green]{"-" * 5}[/]')
+
         cli.display_results(
             r,
             tablefmt=tablefmt,
@@ -1700,22 +1551,18 @@ def lldp(
 @app.command(short_help="Show certificates/details")
 def certs(
     name: str = typer.Argument(None, metavar='[certificate name|certificate hash]',),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    sort_by: SortCertOptions = typer.Option(None, "--sort"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: SortCertOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
@@ -1728,14 +1575,11 @@ def certs(
 @app.command()
 def task(
     task_id: str = typer.Argument(..., show_default=False),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show status of previously issued task/command
 
@@ -1748,46 +1592,35 @@ def task(
         resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
     cli.display_results(
-        resp, tablefmt="action", title=f"Task {task_id} status")
+        resp, tablefmt="action", title=f"Task {task_id} status", outfile=outfile)
 
 
 @app.command()
 def run(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cli.cache.dev_completion),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Applies to AOS-SW: Output in YAML format [grey42]\[default: JSON][/]", rich_help_panel="Formatting",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", show_default=False, writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    device: str = cli.arguments.device,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show running config for a device
 
     APs get the last known running config from Central
     Switches and GWs request the running config from the device
     """
-
     central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
     if dev.type == "cx":
-        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
+        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "sw":
-        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
+        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "gw":
-        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile)
-        raise typer.Exit(0)
-    else:
-        resp = central.request(central.get_device_configuration, dev.serial)
+        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
 
+    resp = central.request(central.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
             cli_config = json.loads(resp.output)
@@ -1796,12 +1629,7 @@ def run(
         except Exception as e:
             log.exception(e)
 
-    if isinstance(resp.output, dict):
-        tablefmt = "json" if not do_yaml else "yaml"
-    else:
-        tablefmt = None
-
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile)
+    cli.display_results(resp, pager=pager, outfile=outfile)
 
 
 # TODO --status does not work
@@ -1835,17 +1663,12 @@ def config_(
         hidden=True,
     ),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show Effective Group/Device Config (UI Group) or cencli config.
 
@@ -1976,14 +1799,9 @@ def config_(
 @app.command( help="Show current access token from cache")
 def token(
     no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     if not no_refresh:
         cli.central.refresh_token()
@@ -1996,32 +1814,29 @@ def token(
 
 
 # TODO clean up output ... single line output
-# TODO restrict to GWs appears to only work on GW
-@app.command(short_help="Show device routing table")
+@app.command()
 def routes(
-    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
-    sort_by: SortRouteOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
+    sort_by: SortRouteOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
+    """Show gateway routing table
+
+    :information:  This command is only valid on Gateways
+    """
     device = device[-1]  # allow unnecessary keyword "device"
     central = cli.central
-    device = cli.cache.get_dev_identifier(device)
+    device = cli.cache.get_dev_identifier(device, dev_type="gw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = central.request(central.get_device_ip_routes, device.serial)
@@ -2047,40 +1862,50 @@ def routes(
     )
 
 
+def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]):
+    out, failed, passed = [], [], []
+    for group, res in zip(groups, responses):
+        if res.ok:
+            passed += [res]
+            for wlan in res.output:
+                out += [{'group': group, **wlan}]
+        else:
+            failed += [res]
+    if passed:
+        resp: Response = sorted(passed, key=lambda r: r.rl)[0]
+        resp.output = out
+    else:
+        resp: List[Response] = failed
+
+    return resp
+
+
 @app.command()
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.label_completion, show_default=False,),
-    site: str = typer.Option(
-        None,
-        metavar="<site identifier>",
-        help="Filter by device status",
-        autocompletion=cli.cache.site_completion,
-        show_default=False,
-    ),
-    swarm_id: str = typer.Option(None, help="Filter by swarm", show_default=False,),  # TODO Can add option for --swarm where value is a dev iden
-    # do_clients: bool = typer.Option(False, "--clients", is_flag=True, help="Calculate client count (per SSID)"),
-    sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
+    swarm: str = cli.options.swarm_device,
     verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show WLAN(SSID)/details
+
+    Shows summary of all WLANs in Central by default.  Each SSID is only listed once.
+    Use -v (fetch details for wlans in each group) or specify [cyan]--group[/] for more details.
     """
     central = cli.central
 
@@ -2097,11 +1922,16 @@ def wlans(
         _site: CentralObject = cli.cache.get_site_identifier(site)
         title = f"{title} in site {_site.name}"
         site = _site.name
+    if swarm:
+        _dev: CentralObject = cli.cache.get_dev_identifier(swarm, dev_type="ap")
+        title = f"{title} in swarm associated with {_dev.name}"
+        swarm = _dev.swack_id
+
 
     params = {
         "name": name,
         "group": group,
-        "swarm_id": swarm_id,
+        "swarm_id": swarm,
         "label": label,
         "site": site,
         "calculate_client_count": True,
@@ -2109,32 +1939,20 @@ def wlans(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
-        resp = central.request(central.get_full_wlan_list, group)  # TODO have get_full_wlan_list covert to list of dicts
-        caption = None  # if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"  # It's a str need JSON.loads...
+        resp = central.request(central.get_full_wlan_list, group)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
+        cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+    elif swarm:
+        resp = central.request(central.get_full_wlan_list, swarm)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
         cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
-        import json
         group_res = central.request(central.get_groups_properties)
         if group_res:
             ap_groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
             batch_req = [BatchRequest(central.get_full_wlan_list, group) for group in ap_groups]
             batch_resp = cli.central.batch_request(batch_req)
-            out, failed, passed = [], [], []
-            for group, res in zip(ap_groups, batch_resp):
-                if res.ok:
-                    passed += [res]
-                    wlan_dict = json.loads(res.output)
-                    if wlan_dict.get("wlans"):
-                        for wlan in wlan_dict['wlans']:
-                            out += [{'group': group, **wlan}]
-                else:
-                    failed += [res]
-
-            if passed:
-                resp = passed[-1]
-                resp.output = out
-            else:
-                resp = failed
+            resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
         else:
             resp = group_res
 
@@ -2152,21 +1970,18 @@ def wlans(
 def cluster(
     group: str = typer.Argument(..., autocompletion=cli.cache.group_completion, show_default=False,),
     ssid: str = typer.Argument(..., autocompletion=cli.cache.label_completion, show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show Cluster mapped to a given group/SSID
     """
@@ -2175,28 +1990,33 @@ def cluster(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if tablefmt == "rich":
         resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
-    cli.display_results(resp, tablefmt=tablefmt, title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]", pager=pager, outfile=outfile, cleaner=cleaner.simple_kv_formatter)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.simple_kv_formatter
+    )
 
 
 @app.command()
 def vsx(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False, rich_help_panel="Common Options",),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show VSX details for a CX switch
     """
@@ -2213,6 +2033,8 @@ def vsx(
         title=f"VSX details for {device.name}",
         pager=pager,
         outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse
     )
 
 
@@ -2228,7 +2050,7 @@ def clients(
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
-    past: TimeRange = typer.Option(None, help="Collect Logs for past <past>, h=hours, d=days, w=weeks, m=months Valid Values: 3h, 1d, 1w, 1m, 3m [grey42]\[default: 3h][/]", show_default=False,),
+    past: TimeRange = cli.options("3h", include_mins=False).past,
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
@@ -2236,41 +2058,23 @@ def clients(
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
     band: RadioBandOptions = typer.Option(None, help="Filter by Band [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev must also be supplied)[/]",),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev (AP only) must also be supplied)[/]",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
-    device: str = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by Device(s)", autocompletion=cli.cache.dev_client_completion, show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
-    update_cache: bool = typer.Option(False, "-U", hidden=True,),  # Force Update of cli.cache for testing
-    sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    verbose: int = typer.Option(0, "-v", count=True, help="additional details (vertically)", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-        rich_help_panel="Common Options",
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    device: str = cli.options.device,
+    verbose: int = cli.options.verbose,
+    sort_by: SortClientOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show clients/details
 
@@ -2283,7 +2087,8 @@ def clients(
     kwargs = {}
     dev = None
     title = "All Clients"
-    args = tuple()
+    if band:
+        kwargs["band"] = band.value
     if client:
         _client = cli.cache.get_client_identifier(client, exit_on_fail=True)
         kwargs["mac"] = _client.mac
@@ -2291,7 +2096,7 @@ def clients(
         verbose = verbose or 1
     elif device:
         dev: CentralObject = cli.cache.get_dev_identifier(device)
-        args += ("wireless",) if dev.type == "ap" else ("wired",)
+        kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
         else:
@@ -2308,33 +2113,29 @@ def clients(
                     log.warning(f"[cyan]--{k}[/] [green]{v}[/] ignored.  Doesn't make sense with [cyan]--dev[/] [green]{dev.name}[/] specified.", log=False, caption=True)
             group = site = label = None
 
-
     if denylisted:
         if not dev:
-            cli.exit(":warning:  [cyan]--device[/] is required when [cyan]-D|--denylisted[/] flag is set.")
+            cli.exit("[cyan]--dev[/] :triangular_flag: is required when [cyan]-D|--denylisted[/] :triangular_flag: is set.", emoji=True)
         elif dev.type != "ap":
-            cli.exit(f"[cyan]--denylisted[/] flag is only valid for APs not {lib_to_gen_plural(dev.type)}.")
+            cli.exit(f"[cyan]-D|--denylisted[/]  :triangular_flag: is only valid for APs not {lib_to_gen_plural(dev.type)}.", emoji=True)
         else:
-            args = (dev.serial,)
+            if len(kwargs) > 2:  # client_type and serial
+                log.warning(f"Only [cyan]--dev[/] is appropriate with [cyan]-D|--denylisted[/] flag is used.  {len(kwargs) - 1} invalid flags were ignored.", caption=True)
+            kwargs = {"serial": dev.serial}
             title = f"{dev.name} Denylisted Clients"
-            if any([group, site, label]):
-                print(":warning:  [cyan]--group[/], [cyan]--site[/], [cyan]--label[/] options not valid with [cyan]-D|--denylisted[/].  [italic bold]Ignoring[/].")
 
     if not client:
         if wired:
-            args = ("wired", *args)
             title = "All Wired Clients" if not dev else f"{dev.name} Wired Clients"
+            kwargs["client_type"] = "wired"
         elif wireless:
-            args = ("wireless", *args)
             title = f"{'All' if not dev else dev.name} Wireless Clients"
+            kwargs["client_type"] = "wireless"
             if band:
                 title = f"{title} associated with {band}Ghz radios"
         elif band:
-            args = ("wireless", *args)
             title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band}Ghz radios"
-
-    if band:
-        kwargs["band"] = band.value
+            kwargs["client_type"] = "wireless"
 
     if not denylisted:
         if group:
@@ -2368,14 +2169,14 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = central.request(cli.cache.update_client_db, *args, **kwargs)
+        resp = central.request(cli.cache.update_client_db, **kwargs)
     else:
-        resp = central.request(cli.central.get_denylist_clients, *args)
+        resp = central.request(cli.central.get_denylist_clients, **kwargs)
 
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
 
-    caption = None if any([client, denylisted]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
+    caption = None if any([client, denylisted, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
@@ -2383,17 +2184,12 @@ def clients(
     if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
         verbose_kwargs["cache"] = cli.cache
-        verbose_kwargs["verbosity"] = int(verbose)
+        verbose_kwargs["verbosity"] = verbose
         verbose_kwargs["format"] = tablefmt
 
-        # filter output on multiple devices
-        # TODO maybe restore multi-device looks like was handled in filter
-        if dev and isinstance(dev, list):
-            verbose_kwargs["filters"] = [d.serial for d in dev]
-
     if sort_by:
-        sort_by = "802.11" if sort_by == "dot11" else sort_by.value.replace("_", " ")
-        if sort_by == "last connected":  # We invert so the most recent client is on top
+        sort_by = sort_by if sort_by != "dot11" else "802.11"
+        if sort_by.value == "last-connected":  # We invert so the most recent client is on top
             reverse = not reverse
 
     cli.display_results(
@@ -2412,44 +2208,20 @@ def clients(
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
-    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
-    sort_by: str = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(
-        False,
-        "---raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show Branch Gateway/VPNC Tunnel details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
@@ -2469,44 +2241,19 @@ def tunnels(
 @app.command(hidden=config.is_cop)
 def uplinks(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
-    time_range: TimeRange = typer.Argument(TimeRange._1d, case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
-    sort_by: str = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    raw: bool = typer.Option(
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show Branch Gateway/VPNC Uplink details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
@@ -2521,51 +2268,24 @@ def uplinks(
 @app.command()
 def roaming(
     client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
-    start: str = typer.Option(
-        None,
-        help="Start time of range to collect roaming history, format: yyyy-mm-ddThh:mm (24 hour notation), default past 3 hours.",
-    ),
-    end: str = typer.Option(None, help="End time of range to collect roaming history, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option(None, help="Collect roaming history for last <past>, d=days, h=hours, m=mins i.e.: 3h", show_default=False,),
+    start: datetime = cli.options(timerange="3h").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
     drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.",),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format [default]", rich_help_panel="Formatting",),
-    sort_by: SortClientOptions = typer.Option(None, "--sort", show_default=False, rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    sort_by: SortClientOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show wireless client roaming history.
 
@@ -2573,46 +2293,11 @@ def roaming(
     The cache is updated anytime a show clients ... is ran, or automatically if the client
     is not found in the cache.
 
-    The -R flag can be used to force a cache refresh prior to performing the disconnect.
+    The -R flag can be used to force a cache refresh prior to looking up roaming history.
     """
-    central = cli.central
-    # TODO common time function this is re-used code from another func
-    time_words = ""
-    if start:
-        try:
-            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm', tz="local")
-            start = (dt.int_timestamp)
-            if not end:
-                time_words = pendulum.from_timestamp(start, tz="local").diff_for_humans()
-            else:
-                time_words = f'Roaming history from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {start} appears to be invalid.")
-            raise typer.Exit(1)
-    if end:
-        try:
-            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm', tz="local")
-            end = (dt.int_timestamp)
-            time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {end} appears to be invalid.")
-            raise typer.Exit(1)
-    if past:
-        now = int(time.time())
-        past = past.lower().replace(" ", "")
-        if past.endswith("d"):
-            start = now - (int(past.rstrip("d")) * 86400)
-        if past.endswith("h"):
-            start = now - (int(past.rstrip("h")) * 3600)
-        if past.endswith("m"):
-            start = now - (int(past.rstrip("m")) * 60)
-        time_words = f'Roaming history from [cyan]{pendulum.from_timestamp(start, tz="local").diff_for_humans()}[/cyan] till [cyan]now[/cyan].'
-
-    time_words = f"[cyan]{time_words}[reset]\n" if time_words else "[cyan]roaming history for past 24 hours.\n[reset]"
-
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose2 else "json")
+    start, end = cli.verify_time_range(start, end=end, past=past)
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table)
+    title = "Roaming history"
 
     if refresh or drop:
         resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
@@ -2621,11 +2306,17 @@ def roaming(
 
     mac = utils.Mac(client)
     if not mac.ok:
-        client = cli.cache.get_client_identifier(client, exit_on_fail=True)
+        client = cli.cache.get_client_identifier(client)
         mac = utils.Mac(client.mac)
+        title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
+    else:
+        title = f'{title} for {mac.cols}'
 
-    resp = central.request(central.get_client_roaming_history, mac.cols, from_timestamp=start, to_timestamp=end)
-    cli.display_results(resp, title=f"Roaming history for {mac.cols}", tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
+
+    resp = cli.central.request(cli.central.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
+    caption = None if not resp else f"{len(resp)} roaming events"
+    caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
+    cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
@@ -2648,25 +2339,23 @@ def logs(
         None,
         metavar='[LOG_ID|cencli]',
         help="Show details for a specific log_id or [cyan]cencli[/] to show cencli logs",
-        autocompletion=cli.cache.event_completion,
+        autocompletion=cli.cache.event_log_completion,
         show_default=False,
     ),
     cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs", callback=show_logs_cencli_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True),
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.label_completion, show_default=False,),
-    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    start: str = typer.Option(None, "-s", "--start", help="Start time of range to collect events, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    end: str = typer.Option(None, "-e", "--end", help="End time of range to collect events, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option("30m", "-p", "--past", help="Collect events for last <past>, d=days, h=hours, m=mins i.e.: 3h",),
-    device: str = typer.Option(
-        None,
-        metavar=iden_meta.dev,
-        help="Filter events by device",
-        autocompletion=cli.cache.dev_completion,
-        show_default=False,
-    ),
-    client_mac: str = typer.Option(None, "--client-mac", help="Filter events by client MAC address", show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
+    _all: bool = typer.Option(False, "-a", "--all", help="Display all available event logs.  Overrides default of 30m", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    start: datetime = cli.options(timerange="30m").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    device: str = cli.options.device,
+    swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
+    level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
+    client: str = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
     hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
     dev_type: EventDevTypeArgs = typer.Option(
@@ -2678,131 +2367,110 @@ def logs(
     ),
     description: str = typer.Option(None, help="Filter events by description (fuzzy match)", show_default=False,),
     event_type: str = typer.Option(None, "--event-type", help="Filter events by type (fuzzy match)", show_default=False,),  # TODO completion enum
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: str = typer.Option(None, "--sort", show_default=False,),  # TODO create enum in constants.. Uses post formatting field headers
-    reverse: bool = typer.Option(
-        True, "-r",
-        help="Reverse Output order Default order: newest on bottom.",
-        show_default=False,
-    ),
-    # count: int = typer.Option(None, "-n", help="Collect Last n logs",),
-    verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
-    verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
+    verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
 ) -> None:
     """Show device event logs (last 30m by default) or show cencli logs.
 
     [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
     """
-    if cencli or (event_id and event_id == "cencli"):
+    title="Device event Logs"
+    if cencli or (event_id and "cencli".startswith(event_id.lower())):
         from centralcli import log
         log.print_file() if not tail else log.follow()
-        raise typer.Exit(0)
+        cli.exit(code=0)
 
-    # TODO move to common func for use be show logs and show audit logs
+    # TODO move to common func for use by show logs and show audit logs
     if event_id:
-        event_details = cli.cache.get_event_identifier(event_id)
+        event_details = cli.cache.get_event_log_identifier(event_id)
         cli.display_results(
             Response(output=event_details),
             tablefmt="action",
         )
-        raise typer.Exit(0)
+        cli.exit(code=0)
     else:
+        if (_all or count) and [start, end, past].count(None) != 3:
+            cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+        start, end = cli.verify_time_range(start, end=end, past=past)
+        level = level if level is None else level.name
+        dev_id = None
+        swarm_id = None
         if device:
             device = cli.cache.get_dev_identifier(device)
+            if swarm:
+                if device.type != "ap":
+                    log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
+                else:
+                    swarm_id = device.swack_id
+            else:
+                dev_id = device.serial
 
-        if start:
-            try:
-                dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm')
-                start = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"start appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if end:
-            try:
-                dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm')
-                end = (dt.int_timestamp)
-            except Exception:
-                typer.secho(f"end appears to be invalid {start}", fg="red")
-                raise typer.Exit(1)
-        if past:
-            now = int(time.time())
-            past = past.lower().replace(" ", "")
-            if past.endswith("d"):
-                start = now - (int(past.rstrip("d")) * 86400)
-            if past.endswith("h"):
-                start = now - (int(past.rstrip("h")) * 3600)
-            if past.endswith("m"):
-                start = now - (int(past.rstrip("m")) * 60)
+        client_mac = None
+        if client:
+            if utils.Mac(client).ok:
+                client_mac = client
+            else:
+                _client = cli.cache.get_client_identifier(client)
+                client_mac = _client.mac
 
-    api_dev_types = {
-        "ap": "ACCESS POINT",
-        "switch": "SWITCH",
-        "gw": "GATEWAY",
-        "client": "CLIENT"
-    }
+        if _all:
+            start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves macking this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
+            title = f"All available {title}"
+            count = 10_000
+        elif count:
+            title = f"Last {count} {title}"
+        elif [start, end].count(None) == 2:
+            start = pendulum.now(tz="UTC").subtract(minutes=30)
+            title = f"{title} for last 30 minutes"
 
     kwargs = {
         "group": group,
-        # "swarm_id": swarm_id,
-        "label": label,
-        "from_ts": start or int(time.time() - 1800),
-        "to_ts": end,
-        "macaddr": client_mac,
+        "swarm_id": swarm_id,
+        "label": None if not label else cli.cache.get_label_identifier(label).name,
+        "from_time": start,
+        "to_time": end,
+        "client_mac": client_mac,
         "bssid": bssid,
-        # "device_mac": None if not device else device.mac,
+        # "device_mac": None if not device else device.mac,  # no point we use serial
         "hostname": hostname,
-        "device_type": None if not dev_type else api_dev_types[dev_type],
-        "site": site,
-        "serial": None if not device else device.serial,
-        # "level": level,
+        "device_type": dev_type,
+        "site": None if not site else cli.cache.get_site_identifier(site).name,
+        "serial": dev_id,
+        "level": level,
         "event_description": description,
         "event_type": event_type,
         # "fields": fields,
         # "calculate_total": True,  # Total defaults to True in get_events for benefit of async multi-call
+        "count": count,
     }
 
     central = cli.central
     resp = central.request(central.get_events, **kwargs)
 
-    if verbose2:
-        tablefmt = "raw"
-    else:
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     _cmd_txt = "[bright_green] show logs <id>[reset]"
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Device event Logs",
+        title=title,
         pager=pager,
         outfile=outfile,
-        # TODO move sort_by underscore removal to display_results
-        sort_by=sort_by if not sort_by else sort_by.replace("_", " "),  # has_details -> 'has details'
-        reverse=reverse,
+        sort_by=sort_by,
+        reverse=not reverse,
         set_width_cols={"event type": {"min": 5, "max": 12}},
         cleaner=cleaner.get_event_logs if not verbose else None,
         cache_update_func=cli.cache.update_event_db if not verbose else None,
@@ -2810,65 +2478,39 @@ def logs(
     )
 
 
-@app.command(short_help="Show Alerts/Notifications. (last 24h default)", help="Show Alerts/Notifications (for past 24 hours by default).  Notification must be Configured.")
+@app.command()
 def alerts(
-    group: str = typer.Option(None, metavar="<Device Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    label: str = typer.Option(None, metavar="<Device Label>", help="Filter by Label", autocompletion=cli.cache.null_completion, show_default=False,),
-    site: str = typer.Option(None, metavar=iden_meta.site, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    start: str = typer.Option(None, help="Start time of range to collect alerts, format: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    end: str = typer.Option(None, help="End time of range to collect alerts, formnat: yyyy-mm-ddThh:mm (24 hour notation)", show_default=False,),
-    past: str = typer.Option(None, help="Collect alerts for last <past>, d=days, h=hours, m=mins i.e.: 3h Default: 24 hours", show_default=False,),
-    device: str = typer.Option(
-        None,
-        metavar=iden_meta.dev,
-        help="Filter alerts by device",
-        autocompletion=cli.cache.dev_completion,
-        show_default=False,
-    ),
+    group: str = cli.options(timerange="24h").group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
+    device: str = cli.options.device,
     severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category.", show_default=False,),
     ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
     alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    sort_by: SortAlertOptions = typer.Option("time", "--sort", rich_help_panel="Formatting",),
-    reverse: bool = typer.Option(
-        False, "-r",
-        help="Reverse Output order",
-        show_default=False,
-        rich_help_panel="Formatting",
-    ),
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    sort_by: SortAlertOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
-    verbose2: bool = typer.Option(False, "-vv", help="Show raw unformatted response from Central API Gateway"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cli.cache for testing
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-        rich_help_panel="Common Options",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
 ) -> None:
+    """Show Alerts/Notifications (for past 24 hours by default).
+
+    :information:  Notification must be Configured.
+    """
     if device:
-        device = cli.cache.get_dev_identifier(device)
+        device: CentralObject = cli.cache.get_dev_identifier(device)
 
     if alert_type:
         alert_type = "user_management" if alert_type == "user" else alert_type
@@ -2877,46 +2519,13 @@ def alerts(
     if severity:
         severity = severity.title() if severity != "info" else severity.upper()
 
-    time_words = ""
-    if start:
-        try:
-            dt = pendulum.from_format(start, 'YYYY-MM-DDTHH:mm', tz="local")
-            start = (dt.int_timestamp)
-            if not end:
-                time_words = pendulum.from_timestamp(start, tz="local").diff_for_humans()
-            else:
-                time_words = f'Alerts from {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --start should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {start} appears to be invalid.")
-            raise typer.Exit(1)
-    if end:
-        try:
-            dt = pendulum.from_format(end, 'YYYY-MM-DDTHH:mm', tz="local")
-            end = (dt.int_timestamp)
-            time_words = f'{time_words} to {pendulum.from_timestamp(dt.int_timestamp, tz="local").format("MMM DD h:mm:ss A")}'
-        except Exception:
-            print("[bright_red]Error:[/bright_red] Value for --end should be in format YYYY-MM-DDTHH:mm (That's a literal 'T')[reset]")
-            print(f"  Value: {end} appears to be invalid.")
-            raise typer.Exit(1)
-    if past:
-        now = int(time.time())
-        past = past.lower().replace(" ", "")
-        if past.endswith("d"):
-            start = now - (int(past.rstrip("d")) * 86400)
-        if past.endswith("h"):
-            start = now - (int(past.rstrip("h")) * 3600)
-        if past.endswith("m"):
-            start = now - (int(past.rstrip("m")) * 60)
-        time_words = f'Alerts from [cyan]{pendulum.from_timestamp(start, tz="local").diff_for_humans()}[/cyan] till [cyan]now[/cyan].'
-
-    time_words = f"[cyan]{time_words}[reset]\n" if time_words else "[cyan]Alerts in past 24 hours.\n[reset]"
+    start, end = cli.verify_time_range(start=start, end=end, past=past)
 
     kwargs = {
         "group": group,
         "label": label,
-        "from_ts": start,
-        "to_ts": end,
+        "from_time": start,
+        "to_time": end,
         "serial": None if not device else device.serial,
         "site": site,
         'severity': severity,
@@ -2928,13 +2537,15 @@ def alerts(
     central = cli.central
     resp = central.request(central.get_alerts, **kwargs)
 
-    if resp.ok:
-        if len(resp) == 0:
-            resp.output = "No Alerts"
-        else:
-            time_words = f"[reset][cyan]{len(resp)}{' active' if not ack else ' '}[reset] {time_words}"
+    caption = "in past 24 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+    caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
+    cleaner_func = cleaner.get_alerts if not verbose else None
+    if resp.ok and len(resp) == 0:
+        resp.output = render.rich_capture(f":information:  {caption}", emoji=True)
+        cleaner_func = None
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
     title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
         title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
@@ -2946,47 +2557,28 @@ def alerts(
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
-        reverse=reverse,
-        cleaner=cleaner.get_alerts if not verbose else None,
-        caption=time_words,
+        reverse=not reverse,
+        cleaner=cleaner_func,
+        caption=caption,
     )
 
 
-@app.command(short_help="Show alert/notification configuration.")
+@app.command()
 def notifications(
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: str = typer.Option("category", "--sort",),
-    reverse: bool = typer.Option(
-        False, "-r",
-        help="Reverse Output order Default order: newest on bottom.",
-        show_default=False
-    ),
-    # verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
-    verbose2: bool = typer.Option(False, "-vv", help="Show unformatted response from Central API Gateway"),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+    update_cache = cli.options.update_cache,
 ) -> None:
     """Show alert/notification configuration.
 
@@ -2998,6 +2590,7 @@ def notifications(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
 
+    # TODO cleaner, currently raw response in yaml
     cli.display_results(
         resp,
         tablefmt=tablefmt,
@@ -3006,46 +2599,26 @@ def notifications(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        # TODO lacks cleaner cleaner=
     )
 
 
 @app.command(short_help="Re-display output from Last command.", help="Re-display output from Last command.  (No API Calls)")
 def last(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON"),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML"),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format"),
-    sort_by: str = typer.Option(None, "--sort",),
-    reverse: bool = typer.Option(
-        False, "-r",
-        help="Reverse Output order",
-        show_default=False
-    ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     if not config.last_command_file.exists():
-        print("[red]Unable to find cache for last command.")
-        raise typer.Exit(1)
+        cli.exit("Unable to find cache for last command.")
 
     kwargs = config.last_command_file.read_text()
     import json
@@ -3055,7 +2628,7 @@ def last(
     kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
     if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
         kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
-                        f"{cleaner._convert_epoch(int(config.last_command_file.stat().st_mtime))}"
+                        f"{cleaner._convert_epoch(int(config.last_command_file.stat().st_mtime))}"  # Update to use DateTime
     data = kwargs["outdata"]
     del kwargs["outdata"]
 
@@ -3066,40 +2639,18 @@ def last(
 
 @app.command(help="Show configured webhooks")
 def webhooks(
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", rich_help_panel="Formatting",),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", rich_help_panel="Formatting",),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", rich_help_panel="Formatting",),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format", rich_help_panel="Formatting",),
-    sort_by: SortWebHookOptions = typer.Option(None, "--sort", rich_help_panel="Formatting", show_default=False,),
-    reverse: bool = typer.Option(
-        False, "-r",
-        help="Reverse Output order Default order: newest on bottom.",
-        rich_help_panel="Formatting",
-        show_default=False
-    ),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, rich_help_panel="Common Options", show_default=False,),
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        rich_help_panel="Common Options",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-        rich_help_panel="Common Options",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    sort_by: SortWebHookOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     if sort_by is not None:
         sort_by = sort_by.name
@@ -3133,19 +2684,14 @@ def hook_proxy_what_callback(ctx: typer.Context, what: ShowHookProxyArgs):
     return "pid" if what is None else what.value
 
 
-@app.command(short_help="Show WebHook Proxy details/logs", hidden=not hook_enabled)
+@app.command(help="Show WebHook Proxy details/logs", hidden=not hook_enabled)
 def hook_proxy(
     what: ShowHookProxyArgs = typer.Argument(None, callback=hook_proxy_what_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show hook-proxy logs)", is_eager=True),
     brief: bool = typer.Option(False, "-b", help="Brief output for 'pid' and 'port'"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     def _get_process_details() -> tuple:
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
@@ -3164,33 +2710,37 @@ def hook_proxy(
     else:
         proc = _get_process_details()
         if not proc:
-            print("WebHook Proxy is not running.")
-            raise typer.Exit(1)
+            cli.exit("WebHook Proxy is not running.")
 
         br = proc[1] if what == "port" else proc[0]
         _out = f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}" if not brief else br
-        print(_out)
-        raise typer.Exit(0)
+        cli.exit(_out, code=0)
 
 
 @app.command()
 def archived(
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: SortArchivedOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show archived devices"""
     resp = cli.central.request(cli.central.get_archived_devices)
-    cli.display_results(resp, tablefmt="yaml")
+    if resp.raw and "devices" in resp.raw:
+        plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
+        caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
+
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    cli.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
 
 
 # TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
@@ -3210,39 +2760,31 @@ def portals(
         show_default = False,
         writable=True,
     ),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by", show_default=False,),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=True),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
     path = Path.cwd()
-    if portal and len(portal) > 2:
-        cli.exit("Too many Arguments")
-    elif len(portal) > 1:
-        if not logo:
+    if portal:
+        if len(portal) > 2:
             cli.exit("Too many Arguments")
-        path = Path(portal[-1])
-        if not path.is_dir() and not path.parent.is_dir():
-            cli.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
-
-    portal = portal[0] if portal else portal
+        elif len(portal) > 1:
+            if not logo:
+                cli.exit("Too many Arguments")
+            path = Path(portal[-1])
+            if not path.is_dir() and not path.parent.is_dir():
+                cli.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
+        portal = portal[0]
 
     if portal is None:
         resp: Response = cli.central.request(cli.cache.update_portal_db)
@@ -3258,46 +2800,33 @@ def portals(
     cli.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
 
 
-# TODO add sort_by completion
+# TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal_id: str = typer.Argument(..., ),
-    sort_by: str = typer.Option(None, "--sort", help="Field to sort by"),
-    reverse: bool = typer.Option(False, "-r", is_flag=True, help="Sort in descending order"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", hidden=True),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", hidden=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV"),
-    do_table: bool = typer.Option(False, "--table", help="Output in table format",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    portal: str = typer.Argument(..., help="portal name", show_default=False,),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    """Show Guests configured for a Portal
-
-    You need to use `cencli show portals` to get the portal id
-    friendly name and completion for portals coming soon
-    """
-    resp = cli.central.request(cli.central.get_visitors, portal_id, )
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    """Show Guests configured for a Portal"""
+    portal = cli.cache.get_name_id_identifier("portal", portal)
+    resp = cli.central.request(cli.central.get_visitors, portal.id, )
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 
 @app.command()
 def version(
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
+    debug: bool = cli.options.debug,
 ) -> None:
     """Show current cencli version, and latest available version.
     """

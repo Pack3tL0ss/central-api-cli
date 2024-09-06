@@ -1,43 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import List
+
 import typer
 from rich import print
 
-
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils
+    from centralcli import cli, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
+        from centralcli import cli, log
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.cache import CentralObject
-from centralcli.constants import IdenMetaVars
-iden = IdenMetaVars()
+from centralcli.constants import iden_meta
 
 app = typer.Typer()
 
 
 @app.command()
 def license(
-    license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),
-    devices: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
+    devices: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=f"{iden_meta.dev_many} or 'auto'", autocompletion=cli.cache.dev_completion, show_default=False),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
     """
@@ -45,31 +41,14 @@ def license(
     if do_auto:
         _msg = f"Disable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
         if len(devices) > 1:
-            print(f'[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
-        print(_msg)
-        if yes or typer.confirm("\nProceed?"):
+            print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+        cli.econsole.print(_msg)
+        if cli.confirm(yes):
             resp = cli.central.request(cli.central.disable_auto_subscribe, services=license.name)
             cli.display_results(resp, tablefmt="action")
             return
 
-    try:
-        devices: CentralObject = [cli.cache.get_dev_identifier(dev) for dev in devices]
-    except typer.Exit:  # allows un-assignment of devices that never checked into Central
-        print("[bright_green]Checking full Inventory[/]")
-        inv = cli.central.request(cli.central.get_device_inventory)
-        serials_in_inventory = [i.get("serial", "ERROR") for i in inv.output]
-        class Device:
-            def __init__(self, serial):
-                self.serial = serial
-                self.summary_text = f"Device with serial {serial}"
-        dev_out = []
-        for dev in devices:
-            if dev.upper() not in serials_in_inventory:
-                print(f"{dev} not found in inventory.")
-                raise typer.Exit(1)
-            else:
-                dev_out += [Device(dev)]
-        devices = dev_out
+    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
 
     _msg = f"Unassign [bright_green]{license}[/bright_green] from"
     if len(devices) > 1:
@@ -78,27 +57,29 @@ def license(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.summary_text}"
-    print(_msg)
+    cli.econsole.print(_msg)
 
-    if yes or typer.confirm("\nProceed?"):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license.name)
-        cli.display_results(resp, tablefmt="action")
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits if call failed to avoid cache update
+        inv_devs = [{**d, "services": None} for d in devices]
+        cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
+        if len(inv_devs) != len(cache_resp):
+            log.warning(
+                f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
+                )
 
 
-@app.command(help="Unassign label from device(s)", hidden=False)
+@app.command()
 def label(
-    label: str = typer.Argument(..., help="Label to remove from device(s)", autocompletion=cli.cache.label_completion,),
-    devices: List[str] = typer.Argument(..., autocompletion=cli.cache.dev_completion),
-    yes: bool = typer.Option(False, "-Y", help="Bypass confirmation prompts - Assume Yes"),
-    yes_: bool = typer.Option(False, "-y", hidden=True),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    label: str = typer.Argument(..., help="Label to remove from device(s)", autocompletion=cli.cache.label_completion, show_default=False,),
+    devices: List[str] = cli.arguments.devices,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    yes = yes_ if yes_ else yes
+    """Unassign label from device(s)"""
     label = cli.cache.get_label_identifier(label)
     devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
@@ -109,7 +90,7 @@ def label(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.rich_help_text}"
-    print(_msg)
+    cli.econsole.print(_msg)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]
     switches = [dev for dev in devices if dev.generic_type == "switch"]
@@ -119,11 +100,12 @@ def label(
     reqs = []
     for dev_type, devs in zip(["IAP", "SWITCH", "CONTROLLER"], [aps, switches, gws]):
         if devs:
-            reqs += [br(cli.central.remove_label_from_devices, label.id, device_type=dev_type, serial_nums=[dev.serial for dev in devs])]
+            reqs += [br(cli.central.remove_label_from_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
-    if yes or typer.confirm("\nProceed?"):
+    if cli.confirm(yes):
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
+        # we don't cache device/label associations (monitoring/.../aps doesn't provide it)
 
 
 @app.callback()

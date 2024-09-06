@@ -20,9 +20,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural, IdenMetaVars # noqa
+from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural, iden_meta # noqa
+from centralcli.objects import DateTime
 
-iden = IdenMetaVars()
 app = typer.Typer()
 
 # TODO reboot flag Applicable only on MAS, aruba switches and controller since IAP reboots automatically after firmware download.
@@ -34,7 +34,7 @@ app = typer.Typer()
 def device(
     device: str = typer.Argument(
         ...,
-        metavar=iden.dev,
+        metavar=iden_meta.dev,
         autocompletion=cli.cache.dev_completion,
         show_default=False,
     ),
@@ -49,12 +49,8 @@ def device(
             ]
         ],
     ),
-    at: datetime = typer.Option(
-        None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy_hh:mm' or 'dd_hh:mm' (implies current month) [grey42]\[default: Now][/]",
-        show_default=False,
-        formats=["%m/%d/%Y_%H:%M", "%d_%H:%M"],
-        ),
+    at: datetime = cli.options.at,
+    in_: str = typer.Option(None, "--in", help="Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](APs will reboot regardless)[/]"),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -68,14 +64,21 @@ def device(
     dev = cli.cache.get_dev_identifier(device, conductor_only=True)
     if dev.generic_type == "ap":
         reboot = True
-    at = None if not at else int(round(at.timestamp()))
+    at = None if not at else round(at.timestamp())
+    if in_:
+        at = cli.delta_to_start(in_, past=False).int_timestamp
+
 
     ver_msg = "Recommended version" if not version else version
     ver_msg = f'Upgrade [cyan]{dev.name}[/] to [green3]{ver_msg}[/]'
+    if at:
+        dt = DateTime(at)
+        ver_msg = f'{ver_msg} [italic]at {dt}[/]'
+
     ver_msg = f"{ver_msg} and reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
     print(ver_msg)
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
             if not dev.swack_id:
                 print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
@@ -96,7 +99,7 @@ def device(
 def group(
     group: str = typer.Argument(
         ...,
-        metavar=iden.group,
+        metavar=iden_meta.group,
         help="Upgrade devices by group",
         autocompletion=cli.cache.group_completion,
         show_default=False,
@@ -112,37 +115,30 @@ def group(
             ]
         ],
     ),
-    at: datetime = typer.Option(
-        None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy hh:mm' or 'dd hh:mm' (implies current month) [Default: Now]",
-        show_default=False,
-        formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
-        ),
+    at: datetime = cli.options.at,
+    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
     model: str = typer.Option(None, help="Upgrade a specific switch model [grey42]\[applies to AOS-SW switches only]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    update_cache: bool = typer.Option(False, "-U", hidden=True,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",  show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Update devices by group.
 
     Device type must be provided.  For AOS-SW switches you can filter to a specific model via the --model flag.
     """
     group = cli.cache.get_group_identifier(group)
-    at = None if not at else int(round(at.timestamp()))
+    at = None if not at else round(at.timestamp())
+    if in_:
+        at = cli.delta_to_start(in_, past=False).int_timestamp
 
     ver_msg = [typer.style("Upgrade", fg="cyan")]
     if dev_type:
         if dev_type == "ap":
             reboot = True
         ver_msg += [lib_to_gen_plural(dev_type)]
-        dev_type = lib_to_api(dev_type, "firmware")
 
     if model:
         if "sw" not in group.AllowedDevTypes:
@@ -182,26 +178,22 @@ def group(
 def swarm(
     device: str = typer.Argument(
         ...,
-        metavar=iden.dev,
+        metavar=iden_meta.dev,
         help="Upgrade will be performed on the cluster the AP belongs to.",
         autocompletion=cli.cache.dev_ap_completion,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
-    at: datetime = typer.Option(
-        None,
-        help="When to schedule upgrade. format: 'mm/dd/yyyy hh:mm' or 'dd hh:mm' (implies current month) [Default: Now]",
-        show_default=False,
-        formats=["%m/%d/%Y %H:%M", "%d %H:%M"],
-        ),
+    at: datetime = cli.options.at,
+    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    at = None if not at else int(round(datetime.timestamp(at)))
+    at = None if not at else round(at.timestamp())
+    if in_:
+        at = cli.delta_to_start(in_, past=False).int_timestamp
 
     dev = cli.cache.get_dev_identifier(device, dev_type="ap")
     swarm = dev.swack_id

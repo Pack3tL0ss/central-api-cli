@@ -2,28 +2,28 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
+
 import base64
 import json
 import time
-import tablib
-import yaml
 from asyncio.proactor_events import _ProactorBasePipeTransport
-from datetime import datetime, timedelta
-from enum import Enum
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
-from yarl import URL
+from typing import Dict, List, Literal
 
 # from aiohttp import ClientSession
 import aiohttp
+import tablib
+import yaml
 from pycentral.base_utils import tokenLocalStoreUtil
+from yarl import URL
 
-from . import (ArubaCentralBase, MyLogger, cleaner, config, constants, log,
-               models, utils)
-from .utils import Mac
-from .response import Response, Session, CombinedResponse
+from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, models, utils
 from .exceptions import CentralCliException
+from .response import CombinedResponse, Response, Session
+from .utils import Mac
+
 # buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
 
 
@@ -68,34 +68,6 @@ DEFAULT_ACCESS_RULES = {
 }
 
 START = time.monotonic()
-
-class WlanType(str, Enum):
-    employee = "employee"
-    guest = "guest"
-
-CloudAuthUploadType = constants.CloudAuthUploadType
-
-def multipartify(data, parent_key=None, formatter: callable = None) -> dict:
-    if formatter is None:
-        formatter = lambda v: (None, v)  # noqa Multipart representation of value
-
-    if not isinstance(data, dict):
-        return {parent_key: formatter(data)}
-
-    converted = []
-
-    for key, value in data.items():
-        current_key = key if parent_key is None else f"{parent_key}[{key}]"
-        if isinstance(value, dict):
-            converted.extend(multipartify(value, current_key, formatter).items())
-        elif isinstance(value, list):
-            for ind, list_value in enumerate(value):
-                iter_key = f"{current_key}[{ind}]"
-                converted.extend(multipartify(list_value, iter_key, formatter).items())
-        else:
-            converted.append((current_key, formatter(value)))
-
-    return dict(converted)
 
 
 def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase:
@@ -170,7 +142,7 @@ class CentralApi(Session):
         return form
 
     @staticmethod
-    def strip_none(_dict: Union[dict, None]) -> Union[dict, None]:
+    def strip_none(_dict: dict | None) -> dict | None:
         """strip all keys from a dict where value is NoneType"""
         if not isinstance(_dict, dict):
             return _dict
@@ -237,10 +209,9 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    # TODO not a fan of *args see if we can define all params
     async def get_clients(
         self,
-        *args: Tuple[str],
+        client_type: constants.ClientType = None,
         group: str = None,
         swarm_id: str = None,
         label: str = None,
@@ -260,6 +231,9 @@ class CentralApi(Session):
         """Get Clients details.
 
         Args:
+            client_type (Literal['wired', 'wireless', 'all'], optional): Client type to retrieve.  Defaults to None.
+                if not provided all client types will be returned, unless a filter specific to a client type is
+                specified.  i.e. providing band will result in WLAN clients.
             group (str, optional): Filter by Group. Defaults to None.
             swarm_id (str, optional): Filter by swarm. Defaults to None.
             label (str, optional): Filter by label. Defaults to None.
@@ -283,7 +257,6 @@ class CentralApi(Session):
         """
         params = {
             "group": group,
-            "swarm_id": swarm_id,
             "label": label,
             "site": site,
             "serial": serial,
@@ -293,52 +266,49 @@ class CentralApi(Session):
             "offset": offset,
             "limit": limit,
         }
-        wlan_only_params = {"network": network, "os_type": os_type, "band": band}
-        wired_only_params = {"stack_id": stack_id}
+        wlan_only_params = {
+            "network": network,
+            "os_type": os_type,
+            "band": band,
+            "swarm_id": swarm_id,
+        }
+        wired_only_params = {
+            "stack_id": stack_id,
+        }
         all_params = {**params, **wlan_only_params, **wired_only_params}
         wired_params = {**params, **wired_only_params}
         wlan_params = {**params, **wlan_only_params}
-        if True in [network, os_type, band] and "wireless" not in args:
-            args = ("wireless", *args)
-        if stack_id and "wired" not in args:
-            args = ("wired", *args)
 
-        if mac or ("mac" in args and args.index("mac") < len(args)):
-            if mac:
-                _mac = utils.Mac(
-                    mac,
-                    fuzzy=True,
-                )
-            else:
-                _mac = utils.Mac(
-                    args[args.index("mac") + 1],
-                    fuzzy=True,
-                )
+        if True in wlan_only_params.values():
+            if client_type and client_type != "wireless":
+                raise ValueError(f"Invalid combination of filters.  WLAN only filter provided which conflicts with client type {client_type}")
+            client_type = "wireless"
+        if True in wired_only_params.values():
+            if client_type and client_type != "wired":
+                raise ValueError(f"Invalid combination of filters.  WIRED only filter provided which conflicts with client type {client_type}")
+            client_type = "wired"
+
+        if mac:
+            _mac = utils.Mac(
+                mac,
+                fuzzy=True,
+            )
+
             if _mac.ok:
                 mac = _mac
             else:
                 return Response(error="INVALID MAC", output=f"The Provided MAC {_mac} Appears to be invalid.")
 
-        if not args or "all" in args:
-            if mac:
-                return await self.get_client_details(mac,)
-            else:
-                return await self.get_all_clients(**all_params,)
-        elif "wired" in args:
-            if mac:
-                return await self.get_client_details(mac, dev_type="wired",)
-            else:
-                return await self.get_wired_clients(**wired_params,)
-        elif "wireless" in args:
-            if mac:
-                return await self.get_client_details(mac, dev_type="wireless",)
-            else:
-                return await self.get_wireless_clients(**wlan_params,)
-        else:
-            return Response(
-                error="INVALID ARGUMENT",
-                output=f"{args} appears to be invalid",
-            )
+        if mac:
+            return await self.get_client_details(mac,)
+
+        if client_type == "wireless":
+            return await self.get_wireless_clients(**wlan_params,)
+
+        if client_type == "wired":
+            return await self.get_wired_clients(**wired_params,)
+
+        return await self.get_all_clients(**all_params,)
 
     async def get_all_clients(
         self,
@@ -358,8 +328,6 @@ class CentralApi(Session):
         limit: int = 1000,
     ) -> Response:
         """Get All clients
-
-        // Used indirectly by show clients //
 
         Args:
             group (str, optional): Return clients connected to devices in a given group. Defaults to None.
@@ -553,11 +521,8 @@ class CentralApi(Session):
     async def get_client_details(
         self,
         mac: Mac,
-        dev_type: str = None,
-        # sort_by: str = None,
-        **kwargs
     ) -> Response:
-        """Get Wired/Wireless Client Details.
+        """Get Client Details.
 
         Args:
             mac (utils.Mac): MAC address of the Wireless Client to be queried
@@ -566,64 +531,41 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # API-FLAW This logic is here because Central has both methods, but given a wlan client mac
-        # central will return the client details even when using the wired url
-
-        # Mac match logic is jacked in central
-        # given a client with a MAC of ac:37:43:4a:8e:fa
-        #
-        # Make MAC invalid (changed last octet):
-        #   ac:37:43:4a:8e:ff No Match
-        #   ac37434a8eff No Match
-        #   ac:37:43:4a:8e-ff  Returns MATCH
-        #   ac:37:43:4a:8eff  Returns MATCH
-        #   ac:37:43:4a:8eff  Returns MATCH
-        #   ac37434a8e:ff  Returns MATCH
-        #   ac-37-43-4a-8e-ff Return MATCH
-        #   ac37.434a.8eff Returns MATCH
-        if not dev_type:
-            for _dev_type in ["wireless", "wired"]:
-                url = f"/monitoring/v1/clients/{_dev_type}/{mac.url}"
-                resp = await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
-                if resp:
-                    # resp.output = [{**{"client_type": _dev_type.upper()}, **d} for d in resp.output]
-                    break
-
-            return resp
-        else:
-            url = f"/monitoring/v1/clients/{dev_type}/{mac.url}"
-            return await self.get(url,)  # callback=cleaner.get_clients, **kwargs)
+        mac = mac if hasattr(mac, "url") else utils.Mac(mac, fuzzy=True,)
+        url = f"/monitoring/v2/clients/{mac.url}"
+        return await self.get(url)
 
     async def get_client_roaming_history(
         self,
-        macaddr: str,
+        mac: str,
         calculate_total: bool = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
         """Wireless Client Mobility Trail.
 
         Args:
-            macaddr (str): MAC address of the Wireless Client to be queried
+            mac (str): MAC address of the Wireless Client to be queried
             calculate_total (bool, optional): Whether to calculate total transitions
-            from_timestamp (int, optional): Need information from this timestamp. Timestamp is epoch
-                in seconds. Default is current timestamp minus 3 hours
-            to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
-                seconds. Default is current timestamp
+            from_time (int | float | datetime, optional): Collect roaming history from this starting point.
+                Default is now minus 3 hours.
+            to_time (int | float | datetime, optional): End of time-range to collect roaming history for.
+                Default is now.
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 1000, max is 1000.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/clients/wireless/{macaddr}/mobility_trail"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+        url = f"/monitoring/v1/clients/wireless/{mac}/mobility_trail"
 
         params = {
             'calculate_total': calculate_total,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -669,11 +611,11 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_template_details_for_device(self, device_serial: str, details: bool = False) -> Response:
+    async def get_template_details_for_device(self, serial: str, details: bool = False) -> Response:
         """Get configuration details for a device (only for template groups).
 
         Args:
-            device_serial (str): Serial number of the device.
+            serial (str): Serial number of the device.
             details (bool, optional): Usually pass false to get only the summary of a device's
                 configuration status.
                 Pass true only if detailed response of a device's configuration status is required.
@@ -683,26 +625,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        # API-NOTE returns form-data (a big str)
-        #  A cleaner has been created that parses the resp into dict
-        #  with summary(dict) and running/central_side configs (str)
-        # Need cleaner to parse and convert to dict
-        # --fd3longalphanumericstring63
-        # Content-Disposition: form-data; name="Summary"
-        # Content-Type: application/json
-
-        # {
-        #     "Device_serial": "redacted",
-        #     "Device_type": "ArubaSwitch",
-        #     "Group": "WadeLab",
-        #     "Configuration_error_status": false,
-        #     "Override_status": false,
-        #     "Template_name": "2930F-8",
-        #     "Template_hash": "46a-redacted-0d",
-        #     "Template_error_status": false
-        # }
-        # --fd3longalphanumericstring63
-        url = f"/configuration/v1/devices/{device_serial}/config_details"
+        url = f"/configuration/v1/devices/{serial}/config_details"
         headers = {"Accept": "multipart/form-data"}
         params = {"details": str(details)}
         return await self.get(url, params=params, headers=headers)
@@ -711,22 +634,49 @@ class CentralApi(Session):
         self,
         group: str,
         name: str = None,
-        device_type: Literal["ap", "sw", "cx", "gw"] = None,
+        device_type: constants.DeviceTypes = None,
         version: str = None,
         model: str = None,
+        query: str = None,
+        offset: int = 0,
+        limit: int = 20,
     ) -> Response:
+        """Get all templates in group.
+
+        Args:
+            group (str): Name of the group for which the templates are being queried.
+            template (str, optional): Filter on provided name as template.
+            device_type (Literal['ap', 'gw', 'cx', 'sw'], optional): Filter on device_type.  Valid Values: ap|gw|cx|sw.
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: ALL, 2920, J9727A etc.
+            query (str, optional): Search for template OR version OR model, query will be ignored if any of
+                filter parameters are provided.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of template records to be returned. Max 20. Defaults to
+                20.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/groups/{group}/templates"
         if device_type:
             device_type = constants.lib_to_api(device_type, "template")
 
         params = {
-            "offset": 0,
-            "limit": 20,  # 20 is the max
-            "template": name,
-            "device_type": device_type,  # valid = IAP, ArubaSwitch, MobilityController, CX
-            "version": version,
-            "model": model,
+            'template': name,
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'q': query,
+            'offset': offset,
+            'limit': limit  # max 20
         }
-        url = f"/configuration/v1/groups/{group}/templates"
+
         return await self.get(url, params=params)
 
     # FIXME # TODO # What the Absolute F?!  not able to send template as formdata properly with aiohttp
@@ -735,8 +685,8 @@ class CentralApi(Session):
         self,
         name: str,
         group: str,
-        template: Union[Path, str, bytes],
-        device_type: constants.DevTypes ="ap",
+        template: Path | str | bytes,
+        device_type: constants.DeviceTypes ="ap",
         version: str = "ALL",
         model: str = "ALL",
     ) -> Response:
@@ -745,7 +695,7 @@ class CentralApi(Session):
         Args:
             name (str): Name of template.
             group (str): Name of the group for which the template is to be created.
-            template (Union[Path, str, bytes]): Template File or encoded template content.
+            template (Path | str | bytes): Template File or encoded template content.
                 For sw (AOS-Switch) device_type, the template text should include the following
                 commands to maintain connection with central.
                 1. aruba-central enable.
@@ -762,10 +712,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
-        # formdata = aiohttp.FormData()
         if isinstance(template, bytes):
-            # formdata.add_field("template", {"template": template}, filename="template.txt")
-            # files = aiohttp.FormData([("template", ("template.txt", template),)])
             files = {'template': ('template.txt', template)}
         else:
             template = template if isinstance(template, Path) else Path(str(template))
@@ -773,31 +720,7 @@ class CentralApi(Session):
                 raise FileNotFoundError
 
             files = {'template': ('template.txt', template.read_bytes())}
-            # files = aiohttp.FormData([("template", ("template.txt", template.read_bytes()),)])
-            # formdata.add_field("template", template.read_bytes(), filename="template.txt")
-            # formdata.add_field("template", template.read_bytes())
 
-            # formdata.add_field(
-            #     "template",
-            #     template.read_text(),
-            #     filename="template.txt",
-            #     content_type="multipart/form-data"
-            # )
-
-        # wr = formdata()
-        # data = f'--{wr.boundary}\r\nContent-Disposition: form-data; name="template";filename="template.txt"{wr._parts[0][0]._value.decode()}\r\n--{wr.boundary}'.encode("utf-8")
-
-        # -- Working form from wh2snow
-        # # Create a FormData object
-        # _form = aiohttp.FormData()
-
-        # # Add some data to the form
-        # _form.add_field('grant_type', 'refresh_token')
-        # _form.add_field('client_id', config.snow.client_id)
-        # _form.add_field('client_secret', config.snow.client_secret)
-        # _form.add_field('refresh_token', tok.refresh)
-        # async with aiohttp.ClientSession() as session:
-        #     response = await session.post(str(config.snow.refresh_url), data=_form)
         device_type = device_type if not hasattr(device_type, "value") else device_type.value
         device_type = constants.lib_to_api(device_type, "template")
 
@@ -807,26 +730,6 @@ class CentralApi(Session):
             'version': version,
             'model': model
         }
-        # WTF Missing formdata parameter 'template'
-        # return await self.post(url, params=params, payload=formdata,)  #
-
-
-        # No difference vs the above
-        # headers = {
-        #     "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
-        #     'Accept': 'application/json',
-        #     "Content-Type": "multipart/form-data"
-        # }
-        # async with aiohttp.ClientSession(self.auth.central_info["base_url"]) as session:
-        #     resp = await session.post(url, params=params, data=formdata, headers=headers, ssl=True)
-        #     try:
-        #         output = await resp.content.read()
-        #         output = output.decode()
-        #         output = json.loads(output)
-        #     except Exception as e:
-        #         output = None
-        #         print(e)
-        # return Response(resp, output=output)
 
         # HACK This works but prefer to get aiohttp sorted for consistency
         import requests
@@ -853,8 +756,8 @@ class CentralApi(Session):
         group: str,
         name: str,
         payload: str = None,
-        template: Union[Path, str, bytes] = None,
-        device_type: constants.DevTypes ="ap",
+        template: Path | str | bytes = None,
+        device_type: constants.DeviceTypes ="ap",
         version: str = "ALL",
         model: str = "ALL",
     ) -> Response:
@@ -870,7 +773,7 @@ class CentralApi(Session):
             model (str, optional): Model property of template.
                 For 'ArubaSwitch' device_type, part number (J number) can be used for the model.
                 Example: 2920, J9727A etc.  Defaults to "ALL".
-            template (Union[Path, str], optional): Template text.
+            template (Path | str | bytes, optional): Template text.
                 For 'ArubaSwitch' device_type, the template text should include the following
                 commands to maintain connection with central.
                 1. aruba-central enable.
@@ -927,34 +830,6 @@ class CentralApi(Session):
             else:
                 break
         return resp
-
-        # return await self.patch(url, params=params, payload=files)
-
-    # Tested and works but not used.  This calls pycentral method directly, but it has an error in base.py command re url concat
-    # and it doesn't catch all exceptions so possible to get exception when eval resp our Response object is better IMHO
-    async def _update_existing_template(
-        self,
-        group: str,
-        name: str,
-        template: Path = None,
-        payload: str = None,
-        device_type: str = None,
-        version: str = None,
-        model: str = None,
-    ) -> Response:
-        from pycentral.configuration import Templates
-
-        templates = Templates()
-        kwargs = {
-            "group_name": group,
-            "template_name": name,
-            "device_type": device_type,
-            "version": version,
-            "model": model,
-            "template_filename": str(template),
-        }
-
-        return templates.update_template(self.auth, **kwargs)
 
     async def get_group_names(self) -> Response:
         """Get a listing of all group names defined in Aruba Central
@@ -1126,24 +1001,18 @@ class CentralApi(Session):
 
         return responses[-1]
 
-    async def get_sku_types(self):  # FAILED - "Could not verify access level for the URL."
-        url = "/platform/orders/v1/skus"
-        params = {"sku_type": "all"}
-        return await self.get(url, params=params)
-
-    # TODO total is returned with first request can batch remaining requests with limit/offset adjusted
     # API-FLAW limit doesn't appear to have an upper limit, but took forever to return 5,000 records
     async def get_device_inventory(
         self,
-        sku_type: str = "all",
+        device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
         offset: int = 0,
         limit: int = 1000,
     ) -> Response:
         """Get devices from device inventory.
 
         Args:
-            sku_type (str, optional): all/iap/switch/controller/gateway/vgw/cap/boc/all_ap/all_controller/others
-                Defaults to all, Passing in None = all.
+            device_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
+                Defaults to None = 'all' device types.
             offset (int, optional): offset or page number Defaults to 0.
             limit (int, optional): Number of devices to get Defaults to 1000.
 
@@ -1151,19 +1020,40 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices"
-        sku_type = sku_type or "all"
+        device_type = "all" if not device_type else constants.lib_to_api(device_type, "inventory")
+        if config.is_cop and device_type == "gateway":
+            device_type = "controller"
 
         params = {
-            'sku_type': sku_type,
+            'sku_type': device_type,
             'offset': offset,
             'limit': limit
         }
 
         return await self.get(url, params=params)
 
-    # TODO cleanup the way raw is combined, see show wids all.
-    # TODO add full kwargs and type-hints
-    async def get_all_devices(self, cache: bool = False, calculate_client_count: bool = True, show_resource_details: bool = True, dev_types: constants.LibDevIdens | List[constants.LibDevIdens] = None, **kwargs) -> CombinedResponse:
+    async def get_all_devices(
+            self,
+            cache: bool = False,
+            dev_types: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None,
+            group: str = None,
+            site: str = None,
+            label: str = None,
+            serial: str = None,
+            mac: str = None,
+            model: str = None,
+            stack_id: str = None,
+            swarm_id: str = None,
+            cluster_id: str = None,
+            public_ip_address: str = None,
+            status: constants.DeviceStatus = None,
+            show_resource_details: bool = True,
+            calculate_client_count: bool = True,
+            calculate_ssid_count: bool = False,
+            fields: list = None,
+            offset: int = 0,
+            limit: int = 1000,  # max allowed 1000
+        ) -> CombinedResponse:
         """Get all devices from Aruba Central
 
         Returns:
@@ -1176,16 +1066,35 @@ class CentralApi(Session):
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
         reqs = [
             self.BatchRequest(
-                self.get_devices, dev_type, calculate_client_count=calculate_client_count, show_resource_details=show_resource_details if not cache or dev_type != "switches" else True, **kwargs
+                self.get_devices,
+                dev_type,
+                calculate_client_count=calculate_client_count,
+                show_resource_details=show_resource_details if not cache or dev_type != "switches" else True,
+                group=group,
+                label=label,
+                stack_id=stack_id,
+                swarm_id=swarm_id,
+                serial=serial,
+                status=status,
+                fields=fields,
+                cluster_id=cluster_id,
+                model=model,
+                calculate_ssid_count=calculate_ssid_count,
+                mac=mac,
+                public_ip_address=public_ip_address,
+                site=site,
+                offset=offset,
+                limit=limit,
             )
             for dev_type in dev_types
         ]
         batch_resp = await self._batch_request(reqs)
         combined = CombinedResponse(batch_resp)
 
-        if not combined.passed:
-            return batch_resp
-        elif combined.failed:
+        # if not combined.passed:
+        #     return batch_resp
+        # elif combined.failed:
+        if combined.failed:
             for r in combined.failed:
                 log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
@@ -1260,75 +1169,75 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_dev_by_type(
-            self,
-            dev_type: str,
-        ) -> Response:  # VERIFIED
-        url = "/platform/device_inventory/v1/devices"
-        # iap, switch, gateway|boc
-        if dev_type.lower() in ["aps", "ap"]:
-            dev_type = "all_ap"
-        params = {"sku_type": dev_type}
-        return await self.get(url, params=params)
-
-    async def get_variablised_template(self, serialnum: str) -> Response:
+    async def get_variablised_template(self, serial: str) -> Response:
         """Get variablised template for an Aruba Switch.
 
         Args:
-            serialnum (str): Serial number of the device.
+            serial (str): Serial number of the device.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/devices/{serialnum}/variablised_template"
+        url = f"/configuration/v1/devices/{serial}/variablised_template"
 
         return await self.get(url)
 
-    async def get_variables(self, serialnum: str = None) -> Response:
-        if serialnum and serialnum != "all":
-            url = f"/configuration/v1/devices/{serialnum}/template_variables"
+    async def get_variables(
+            self,
+            serial: str = None,
+            offset: int = 0,
+            limit: int = 20,
+        ) -> Response:
+        """Get template variables for a device or all devices
+
+        Args:
+            serial (str): Serial number of the device, If None provided all templates for all devices
+                will be fetched.  Defaults to None.
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 20.
+
+        offset and limit are ignored if serial is provided.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if serial and serial != "all":
+            url = f"/configuration/v1/devices/{serial}/template_variables"
             params = {}
         else:
             url = "/configuration/v1/devices/template_variables"
-            params = {"limit": 20, "offset": 0}
+            params = {"offset": offset, "limit": limit}
+
         return await self.get(url, params=params)
 
-    # async def update_variables(self, serialnum: str, **var_dict: dict) -> bool:
-    #     url = f"/configuration/v1/devices/{serialnum}/template_variables"
-    #     var_dict = json.dumps(var_dict)
-    #     return await self.patch(url, payload=var_dict)
 
     # TODO figure out how to make this work, need file like object
     async def update_device_template_variables(
         self,
-        device_serial: str,
-        device_mac: str,
-        # total: int,
-        # _sys_serial: str,
-        # _sys_lan_mac: str,
+        serial: str,
+        mac: str,
         var_dict: dict,
     ) -> Response:
         """Update template variables for a device.
 
         Args:
-            device_serial (str): Serial number of the device.
-            total (int): total
-            _sys_serial (str): _sys_serial
-            _sys_lan_mac (str): _sys_lan_mac
+            serial (str): Serial number of the device.
+            mac (str): MAC address of the device.
             var_dict (dict): dict with variables to be updated
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/devices/{device_serial}/template_variables"
+        url = f"/configuration/v1/devices/{serial}/template_variables"
         # headers = {"Content-Type": "multipart/form-data"}
 
         json_data = {
             'total': len(var_dict) + 2,
             "variables": {
                 **{
-                    '_sys_serial': device_serial,
-                    '_sys_lan_mac': device_mac,
+                    '_sys_serial': serial,
+                    '_sys_lan_mac': mac,
                 },
                 **var_dict
             }
@@ -1343,7 +1252,7 @@ class CentralApi(Session):
     # "Fetching configuration in progress for Mobility Controller SERIAL/MAC"
     # subsequent calls for the same gw return 500 internal server error.
     # FIXME
-    async def get_device_configuration(self, device_serial: str) -> Response:
+    async def get_device_configuration(self, serial: str) -> Response:
         """Get last known running configuration for a device.
 
         // Used by show run <DEVICE-IDEN> //
@@ -1354,7 +1263,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/devices/{device_serial}/configuration"
+        url = f"/configuration/v1/devices/{serial}/configuration"
         headers = {"Accept": "multipart/form-data"}
 
         return await self.get(url, headers=headers)
@@ -1366,7 +1275,7 @@ class CentralApi(Session):
         label: str = None,
         site: str = None,
         serial: str = None,
-        macaddr: str = None,
+        mac: str = None,
         cluster_id: str = None,
         calculate_total: bool = None,
         sort: str = None,
@@ -1381,7 +1290,7 @@ class CentralApi(Session):
             label (str, optional): Filter by Label name
             site (str, optional): Filter by Site name
             serial (str, optional): Filter by AP serial number
-            macaddr (str, optional): Filter by AP MAC address
+            mac (str, optional): Filter by AP MAC address
             cluster_id (str, optional): Filter by Mobility Controller serial number
             calculate_total (bool, optional): Whether to calculate total APs
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
@@ -1400,7 +1309,7 @@ class CentralApi(Session):
             "swarm_id": swarm_id,
             "label": label,
             "site": site,
-            'macaddr': macaddr,
+            'macaddr': mac,
             'cluster_id': cluster_id,
             'calculate_total': calculate_total,
             'sort': sort,
@@ -1412,33 +1321,30 @@ class CentralApi(Session):
 
     async def get_devices(
         self,
-        dev_type: Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"],
+        device_type: constants.GenericDeviceTypes,
+        *,
         group: str = None,
         label: str = None,
         stack_id: str = None,
         swarm_id: str = None,
         serial: str = None,
-        status: str = None,
+        status: constants.DeviceStatus = None,
         fields: list = None,
         show_resource_details: bool = False,
         cluster_id: str = None,
         model: str = None,
         calculate_client_count: bool = True,
         calculate_ssid_count: bool = False,
-        macaddr: str = None,
+        mac: str = None,
         public_ip_address: str = None,
         site: str = None,
         limit: int = 1000,  # max allowed 1000
         offset: int = 0,
-        # sort: str = None,
     ) -> Response:
         """Get Devices from Aruba Central API Gateway
 
-        // Used by show <"aps"|"gateways"|"switches"> //
-
         Args:
-            dev_type (Literal["switches", "aps", "gateways", "ap", "gw", "sw", "cx", "switch"): Type of devices to get.
-                Note: "switch", "cx", "sw" all = "switches".  Return details for all switch types.
+            device_type (Literal["ap", "gw", "switch"): Type of devices to get.
             group (str, optional): Filter on specific group. Defaults to None.
             label (str, optional): Filter by label. Defaults to None.
             stack_id (str, optional): Return switch with specific stack_id. Defaults to None.
@@ -1451,7 +1357,7 @@ class CentralApi(Session):
             model (str, optional): Filter by device model. Defaults to None.
             calculate_client_count (bool, optional): Calculate client count for each device. Defaults to False.
             calculate_ssid_count (bool, optional): Calculate SSID count for each AP. Defaults to False.
-            macaddr (str, optional): Return device with specific MAC (fuzzy match). Defaults to None.
+            mac (str, optional): Return device with specific MAC (fuzzy match). Defaults to None.
             public_ip_address (str, optional): Filter devices by Public IP. Defaults to None.
             site (str, optional): Filter by site. Defaults to None.
             offset (int, optional): Pagination offset Defaults to 0.
@@ -1463,15 +1369,15 @@ class CentralApi(Session):
         Raises:
             ValueError: Raised if dev_type is not valid.
         """
-        if dev_type not in ["switches", "aps", "gateways"]:
-            dev_type = constants.lib_to_api(dev_type, "monitoring")
-            if dev_type not in ["switches", "aps", "gateways"]:
-                raise ValueError(f"dev_type must be one of ap, gw, cx, sw, switch, aps, gateways, switches not {dev_type}")
+        if device_type not in ["switches", "aps", "gateways"]:
+            device_type = constants.lib_to_api(device_type, "monitoring")
+            if device_type not in ["switches", "aps", "gateways"]:
+                raise ValueError(f"dev_type must be one of ap, gw, switch not {device_type}")
 
         dev_params = {
             "aps": {
                 'serial': serial,
-                'macaddr': macaddr,
+                'macaddr': mac,
                 "swarm_id": swarm_id,
                 'model': model,
                 'cluster_id': cluster_id,
@@ -1487,7 +1393,7 @@ class CentralApi(Session):
                 'public_ip_address': public_ip_address,
             },
             "gateways": {
-                'macaddr': macaddr,
+                'macaddr': mac,
                 'model': model,
                 'fields': fields,
             }
@@ -1504,12 +1410,12 @@ class CentralApi(Session):
             "calculate_total": "true"  # So we know if we have multile calls that can be ran async
         }
 
-        url = f"/monitoring/v1/{dev_type}"
-        if dev_type == "aps":
+        url = f"/monitoring/v1/{device_type}"
+        if device_type == "aps":
             url = url.replace("v1", "v2")
-        elif dev_type == "gateways" and config.is_cop:
+        elif device_type == "gateways" and config.is_cop:
             url = url.replace("v1/gateways", "v2/mobility_controllers")
-        params = {**common_params, **dev_params[dev_type]}
+        params = {**common_params, **dev_params[device_type]}
 
         return await self.get(url, params=params)
 
@@ -1560,22 +1466,24 @@ class CentralApi(Session):
 
     async def get_dev_details(
         self,
-        dev_type: Literal["switches", "aps", "gateways"],
+        device_type: constants.GenericDeviceTypes,
         serial: str
     ) -> Response:
         """Return Details for a given device
 
-        // Used by show device[s] <device iden> //
-
         Args:
-            dev_type (str): Device Type
-                Valid Values: "gateways", "aps", "switches"
+            device_type (Literal["ap", "gw", "switch"): Type of devices to get
             serial (str): Serial number of Device
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/monitoring/v1/{dev_type}/{serial}"
+        device_type = constants.lib_to_api(device_type, "monitoring")
+        if device_type not in ["switches", "aps", "gateways"]:
+            raise ValueError(f"dev_type must be one of ap, gw, switch not {device_type}")
+
+        url = f"/monitoring/v1/{device_type}/{serial}"
+
         return await self.get(url)
 
     async def get_wlans(
@@ -1637,30 +1545,35 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    # TODO Under test 3/7/2024
     async def get_full_wlan_list(
         self,
-        group_name_or_guid_or_serial_number: str,
+        scope: str,
     ) -> Response:
         """Get WLAN list/details by (UI) group.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
-                or serial number of 10x AP.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
+            scope (str): Provide one of group name, swarm id, or serial number.
+                Example: Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}"
+        url = f"/configuration/full_wlan/{scope}"
 
-        return await self.get(url)
+        # this endpoint returns a JSON string
+        resp = await self.get(url)
+        if isinstance(resp.output, str):
+            resp.output = json.loads(resp.output)
+        if isinstance(resp.output, dict) and "wlans" in resp.output:
+            resp.output = resp.output["wlans"]
+
+        return resp
 
     # API-FLAW This method returns next to nothing for reserved IPs.
     # Would be more ideal if it returned client_name pool pvid etc as it does with non resserved IPs
     async def get_dhcp_clients(
         self,
-        serial_num: str,
+        serial: str,
         reservation: bool = True,
         offset: int = 0,
         limit: int = 100
@@ -1668,7 +1581,7 @@ class CentralApi(Session):
         """Get DHCP Client information from Gateway.
 
         Args:
-            serial_num (str): Serial number of mobility controller to be queried
+            serial (str): Serial number of mobility controller to be queried
             reservation (bool, optional): Flag to turn on/off listing DHCP reservations(if any).
                 Defaults to True
             offset (int, optional): Pagination offset Defaults to 0.
@@ -1678,7 +1591,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         gw_path = "mobility_controllers" if config.is_cop else "gateways"
-        url = f"/monitoring/v1/{gw_path}/{serial_num}/dhcp_clients"
+        url = f"/monitoring/v1/{gw_path}/{serial}/dhcp_clients"
 
         params = {
             'reservation': str(reservation),
@@ -1688,66 +1601,83 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_dhcp_server(self, serial_num: str) -> Response:
-        """Get DHCP Server details from Gateway.
+    async def get_dhcp_pools(self, serial: str) -> Response:
+        """Gateway DHCP Pools details.
 
         Args:
-            serial_num (str): Serial number of mobility controller to be queried
+            serial (str): Serial number of mobility controller to be queried
 
         Returns:
             Response: CentralAPI Response object
         """
-        gw_path = "mobility_controllers" if config.is_cop else "gateways"
-        url = f"/monitoring/v1/{gw_path}/{serial_num}/dhcp_servers"
+        url = f"/monitoring/v1/gateways/{serial}/dhcp_pools"
 
         return await self.get(url)
 
-    async def get_group_for_dev_by_serial(self, serial_num):
-        return await self.get(f"/configuration/v1/devices/{serial_num}/group")
-
-    async def get_vlan_info_by_gw(self, serial_num):
-        return await self.get(f"/monitoring/v1/mobility_controllers/{serial_num}/vlan")
-
-    async def get_uplink_info_by_gw(self, serial_num, timerange: str = "3H"):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks"
-        params = {"timerange": timerange}
-        return await self.get(url, params)
-
-    async def get_uplink_tunnel_stats_by_gw(self, serial_num):
-        url = f"/monitoring/v1/mobility_controllers/{serial_num}/uplinks/tunnel_stats"
-        return await self.get(url)
-
-    # TODO move cleaner
     async def get_all_sites(
         self,
         calculate_total: bool = False,
+        sort: str = None,
         offset: int = 0,
-        limit: int = 1000
+        limit: int = 100,
     ) -> Response:
+        """List Sites.
+
+        Args:
+            calculate_total (bool, optional): Whether to calculate total Site Labels
+            sort (str, optional): Sort parameter may be one of +site_name, -site_name. Default is
+                +site_name
+            offset (int, optional): Pagination offset Defaults to 0.
+            limit (int, optional): Pagination limit. Max is 1000 Defaults to 1000 (max).
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/central/v2/sites"
+
         params = {
-            "calculate_total": str(calculate_total),
-            "offset": offset,
-            "limit": limit
+            'calculate_total': str(calculate_total),
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
-        return await self.get("/central/v2/sites", params=params, callback=cleaner.sites)
 
-    async def get_site_details(self, site_id):
-        return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
+        return await self.get(url, params=params)
 
-    # TODO make command this shows events from devices (User ack rec from DHCP server, EAP response for client)
+    # async def get_site_details(self, site_id):
+    #     return await self.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
+
+    async def get_site_details(
+        self,
+        site_id: int,
+    ) -> Response:
+        """Site details.
+
+        Args:
+            site_id (int): Site ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/central/v2/sites/{site_id}"
+
+        return await self.get(url)
+
+    # API-FLAW total changes during subsequent pagination calls i.e. offset: 0 limit: 1000 = total 2420, offset: 1000 limit: 1000 = total 2408 or 2426 could go up or down.
+    # This is handled in Response __add__ method.
     async def get_events(
         self,
         group: str = None,
         swarm_id: str = None,
         label: str = None,
-        from_ts: int = None,
-        to_ts: int = None,
-        macaddr: str = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+        client_mac: str = None,
         bssid: str = None,
         device_mac: str = None,
         hostname: str = None,
-        device_type: str = None,
-        sort: str = '-timestamp',
+        device_type: constants.EventDeviceTypes = None,
+        sort: str = None,
         site: str = None,
         serial: str = None,
         level: str = None,
@@ -1757,26 +1687,27 @@ class CentralApi(Session):
         calculate_total: bool = True,
         offset: int = 0,
         limit: int = 1000,
+        count: int = None,
     ) -> Response:
-        """List Events. v2
+        """Get device events
 
-        Endpoint allows a max of 10000 records to be retrieved.  The sum of offset + limit can not
+        Endpoint allows a max of 10,000 records to be retrieved.  The sum of offset + limit can not
         exceed 10,000
 
         Args:
             group (str, optional): Filter by group name
             swarm_id (str, optional): Filter by Swarm ID
             label (str, optional): Filter by Label name
-            from_ts (int, optional): Need information from this timestamp. Timestamp is epoch
-                in seconds. Default is current timestamp minus 3 hours
-            to_ts (int, optional): Need information to this timestamp. Timestamp is epoch in
-                seconds. Default is current timestamp
-            macaddr (str, optional): Filter by client MAC address
+            from_time: (int | float | datetime, optional): Start time of the event logs to retrieve.
+                Default is current timestamp minus 3 hours.
+            to_time (int | float | datetime, optional): End time of the event logs to retrieve.
+                seconds. Default is current timestamp.
+            client_mac (str, optional): Filter by client MAC address
             bssid (str, optional): Filter by bssid
             device_mac (str, optional): Filter by device_mac
             hostname (str, optional): Filter by hostname
             device_type (str, optional): Filter by device type.
-                Valid Values: ACCESS POINT, SWITCH, GATEWAY, CLIENT
+                Valid Values: ap, gw, switch, client
             sort (str, optional): Sort by desc/asc using -timestamp/+timestamp. Default is
                 '-timestamp'  Valid Values: -timestamp, +timestamp
             site (str, optional): Filter by site name
@@ -1789,23 +1720,33 @@ class CentralApi(Session):
             calculate_total (bool, optional): Whether to calculate total events. Defaults to True.
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+            count: Only return <count> results.
 
         Returns:
             Response: CentralAPI Response object
         """
+        # sort needs to stay as default -timestamp for count to grab most recent events.
         url = "/monitoring/v2/events"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
+
+        if offset + limit > 10_000:
+            if offset >= 10_000:
+                log.error(f"get_events provided {offset=}, {limit=} endpoint allows max 10,000", show=True, log=True, caption=True)
+                return Response()
+            log.warning(f"get_events provided {offset=}, {limit=} adjusted limit to {10_000 - offset} to stay below max 10,000")
+            limit = 10_000 - offset
 
         params = {
             "group": group,
             "swarm_id": swarm_id,
             "label": label,
-            "from_timestamp": from_ts,
-            "to_timestamp": to_ts,
-            'macaddr': macaddr,
+            "from_timestamp": from_time,
+            "to_timestamp": to_time,
+            'macaddr': client_mac,
             'bssid': bssid,
             'device_mac': device_mac,
             'hostname': hostname,
-            'device_type': device_type,
+            'device_type':  None if not device_type else constants.lib_to_api(device_type, "event"),
             'sort': sort,
             'site': site,
             'serial': serial,
@@ -1815,10 +1756,10 @@ class CentralApi(Session):
             'fields': fields,
             'calculate_total': str(calculate_total),
             "offset": offset,
-            "limit": limit,
+            "limit": limit if not count or limit < count else count,
         }
 
-        return await self.get(url, params=params)
+        return await self.get(url, params=params, count=count)
 
     async def get_all_webhooks(self) -> Response:
         """List all defined webhooks.
@@ -1982,7 +1923,7 @@ class CentralApi(Session):
         """Generic commands for device.
 
         Supported Commands (str):
-            - reboot: supported by IAP/Controllers/MAS Switches/Aruba Switches
+            - reboot: supported by AP/gateways/MAS Switches/Aruba Switches
             - blink_led_on: Use this command to enable the LED display, supported by IAP/Aruba Switches
             - blink_led_off: Use this command to enable the LED display, supported by IAP/Aruba Switches
             - blink_led: Use this command to blink LED display, Supported on Aruba Switches
@@ -2013,12 +1954,13 @@ class CentralApi(Session):
 
     async def kick_users(
         self,
-        serial_num: str = None,
+        serial: str = None,
+        *,
         kick_all: bool = False,
         mac: str = None,
         ssid: str = None,
     ) -> Response:
-        url = f"/device_management/v1/device/{serial_num}/action/disconnect_user"
+        url = f"/device_management/v1/device/{serial}/action/disconnect_user"
         if kick_all:
             payload = {"disconnect_user_all": True}
         elif mac:
@@ -2131,13 +2073,12 @@ class CentralApi(Session):
 
     async def get_ts_commands(
         self,
-        device_type: Literal['iap', 'mas', 'switch', 'controller', 'cx'],
+        device_type: constants.DeviceTypes,
     ) -> Response:
         """List Troubleshooting Commands.
 
         Args:
-            device_type (str): Specify one of "IAP" for swarm, "MAS" for MAS switches, "SWITCH" for
-                aruba switches,"CX" for CX switches, "CONTROLLER" for controllers respectively.
+            device_type (Literal['ap', 'cx', 'sw', 'gw']): Device Type.
 
         Returns:
             Response: CentralAPI Response object
@@ -2145,7 +2086,7 @@ class CentralApi(Session):
         url = "/troubleshooting/v1/commands"
 
         params = {
-            'device_type': device_type
+            'device_type': constants.lib_to_api(device_type, "tshoot")
         }
 
         return await self.get(url, params=params)
@@ -2154,16 +2095,15 @@ class CentralApi(Session):
     async def start_ts_session(
         self,
         serial: str,
-        dev_type: str,
-        commands: Union[int, list, dict],
+        device_type: constants.DeviceTypes,
+        commands: int | List[int, dict] | dict,
     ) -> Response:
         """Start Troubleshooting Session.
 
         Args:
             serial (str): Serial of device
-            dev_type (str): Specify one of "IAP/SWITCH/CX/MAS/CONTROLLER" for  IAPs, Aruba
-                switches, CX Switches, MAS switches and controllers respectively.
-            commands (int, List[int | dict], dict): a single command_id, or a List of command_ids (For commands with no arguments)
+            device_type (Literal['ap', 'cx', 'sw', 'gw']): Device Type.
+            commands (int | List[int, dict] | dict): a single command_id, or a List of command_ids (For commands with no arguments)
                 OR a dict {command_id: {argument1_name: argument1_value, argument2_name: argument2_value}}
 
         Returns:
@@ -2185,7 +2125,7 @@ class CentralApi(Session):
                 ]
 
         json_data = {
-            'device_type': dev_type,
+            'device_type': constants.lib_to_api(device_type, "tshoot"),
             'commands': cmds
         }
 
@@ -2273,16 +2213,16 @@ class CentralApi(Session):
 
         return await self.get(url)
 
-    async def get_ap_lldp_neighbor(self, device_serial: str) -> Response:
+    async def get_ap_lldp_neighbor(self, serial: str) -> Response:
         """Get neighbor details reported by AP via LLDP.
 
         Args:
-            device_serial (str): Device serial number.
+            serial (str): Device serial number.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/topology_external_api/apNeighbors/{device_serial}"
+        url = f"/topology_external_api/apNeighbors/{serial}"
 
         return await self.get(url)
 
@@ -2341,18 +2281,18 @@ class CentralApi(Session):
     async def do_multi_group_snapshot(
         self,
         backup_name: str,
-        include_groups: Union[list, List[str]] = None,
-        exclude_groups: Union[list, List[str]] = None,
+        include_groups: List[str] = None,
+        exclude_groups: List[str] = None,
         do_not_delete: bool = False,
     ) -> Response:
-        """ "Create new configuration backup for multiple groups."
+        """Create new configuration backup for multiple groups.
 
         Either include_groups or exclude_groups should be provided, but not both.
 
         Args:
             backup_name (str): Name of Backup
-            include_groups (Union[list, List[str]], optional): Groups to include in Backup. Defaults to None.
-            exclude_groups (Union[list, List[str]], optional): Groups to Exclude in Backup. Defaults to None.
+            include_groups (List[str], optional): Groups to include in Backup. Defaults to None.
+            exclude_groups (List[str], optional): Groups to Exclude in Backup. Defaults to None.
             do_not_delete (bool, optional): Flag to represent if the snapshot can be deleted automatically
                 by system when creating new snapshot or not. Defaults to False.
 
@@ -2445,9 +2385,9 @@ class CentralApi(Session):
             serial (str): Gateway serial
             uplink_id (str, optional): Filter by uplink ID.
             interval (str, optional): Filter by interval (5minutes or 1hour or 1day or 1week).
-            from (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
+            from_time (int | float | datetime, optional): Need information from this timestamp. Timestamp is epoch
                 in seconds. Default is current timestamp minus 3 hours
-            to (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
+            to_time (int | float | datetime, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
 
         Returns:
@@ -2662,13 +2602,12 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # API-FLAW max limit 100 enforced if you provide the limit parameter, otherwise no limit? returned 811 w/ no param provided
-    # API-FLAW does not return all logs available in UI wtf??
     async def get_audit_logs(
         self,
         log_id: str = None,
         username: str = None,
-        start_time: int = None,
-        end_time: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         description: str = None,
         target: str = None,
         classification: str = None,
@@ -2681,13 +2620,13 @@ class CentralApi(Session):
     ) -> Response:
         """Get all audit logs.
 
+        This API returns the first 10,000 results only.
+
         Args:
             log_id (str, optional): The id of the log to return details for. Defaults to None.
             username (str, optional): Filter audit logs by User Name
-            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
-                logs should be provided in epoch seconds
-            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
-                should be provided in epoch seconds
+            from_time (int | float | datetime, optional): Start time of the audit logs to retrieve.
+            to_time (int | float | datetime, optional): End time of the audit logs to retrieve.
             description (str, optional): Filter audit logs by Description
             target (str, optional): Filter audit logs by target (serial number).
             classification (str, optional): Filter audit logs by Classification
@@ -2704,11 +2643,12 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/platform/auditlogs/v1/logs"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
 
         params = {
             "username": username,
-            "start_time": start_time,
-            "end_time": end_time,
+            "start_time": from_time,
+            "end_time": to_time,
             "description": description,
             "target": target,
             "classification": classification,
@@ -2725,19 +2665,21 @@ class CentralApi(Session):
 
         return await self.get(url, params=params, count=count)
 
-    async def get_audit_logs_events(
+    async def get_audit_event_logs(
         self,
         log_id: str = None,
         group_name: str = None,
         device_id: str = None,
         classification: str = None,
-        start_time: int = None,
-        end_time: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100,
         count: int = None,
     ) -> Response:
         """Get all audit events for all groups.
+
+        This API returns the first 10,000 results only.
 
         Args:
             log_id (str, optional): The id of the audit event log to return details for. Defaults to None.
@@ -2745,10 +2687,9 @@ class CentralApi(Session):
             device_id (str, optional): Filter audit events by Target / Device ID. Device ID for AP
                 is VC Name and Serial Number for Switches
             classification (str, optional): Filter audit events by classification
-            start_time (int, optional): Filter audit logs by Time Range. Start time of the audit
-                logs should be provided in epoch seconds
-            end_time (int, optional): Filter audit logs by Time Range. End time of the audit logs
-                should be provided in epoch seconds
+            from_time (int | float | datetime, optional): Start of Time Range to filter audit logs by.
+            to_time (int | float | datetime, optional): End of Time Range to filter audit logs by.
+                Defaults to now.
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination Defaults to 0.
             limit (int, optional): Maximum number of audit events to be returned Defaults to 100. Max 100.
@@ -2757,13 +2698,14 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/auditlogs/v1/events" if not log_id else f"/auditlogs/v1/event_details/{log_id}"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
 
         params = {
             'group_name': group_name,
             'device_id': device_id,
             'classification': classification,
-            'start_time': start_time,
-            'end_time': end_time,
+            'start_time': from_time,
+            'end_time': to_time,
             'offset': offset,
             "limit": limit if not count or limit < count else count,
         }
@@ -2780,7 +2722,7 @@ class CentralApi(Session):
         zipcode: str = None,
         latitude: int = None,
         longitude: int = None,
-        site_list: List[Dict[str, Union[str, dict]]] = None,
+        site_list: List[Dict[str, str | dict]] = None,
     ) -> Response:
         """Create Site
 
@@ -2797,7 +2739,7 @@ class CentralApi(Session):
             zipcode (str, optional): Zipcode. Defaults to None.
             latitude (int, optional): Latitude (in the range of -90 and 90). Defaults to None.
             longitude (int, optional): Longitude (in the range of -100 and 180). Defaults to None.
-            site_list (List[Dict[str, Union[str, dict]]], optional): A list of sites to be created. Defaults to None.
+            site_list (List[Dict[str, str | dict]], optional): A list of sites to be created. Defaults to None.
 
         Returns:
             Response: CentralAPI Response object
@@ -2825,17 +2767,9 @@ class CentralApi(Session):
                     ]
                 )
                 return [resp, *ret]
-                # resp_list = cleaner._unlist(
-                #     [await asyncio.gather(self.post(url, json_data=_json, callback=cleaner._unlist)) for _json in site_list[1:]]
-                # )
-                # # TODO make multi response packing function
-                # resp.output = utils.listify(resp.output)
-                # resp.output += [r.output for r in resp_list]
-                # return resp
         else:
-            return await self.post(url, json_data=json_data, callback=cleaner._unlist)
+            return await self.post(url, json_data=json_data, callback=cleaner._unlist)  # TODO remove callback
 
-    # TODO add cli
     async def update_site(
         self,
         site_id: int,
@@ -2853,8 +2787,6 @@ class CentralApi(Session):
         Provide geo-loc or address details, not both.
         Can provide both in subsequent calls, but apigw does not
         allow both in same call.
-
-        // Used by cencli update site [name|id|address] OR --lat <lat> --lon <lon> //
 
         Args:
             site_id (int): Site ID
@@ -2893,7 +2825,7 @@ class CentralApi(Session):
     # if not all are provided
     async def update_ap_system_config(
         self,
-        group_swarmid: str,
+        scope: str,
         dns_server: str = None,
         ntp_server: List[str] = None,
         username: str = None,
@@ -2904,8 +2836,8 @@ class CentralApi(Session):
         All params are required by Aruba Central
 
         Args:
-            group_swarmid (str): Group name of the group or guid of the swarm. Example:Group_1
-                or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            scope (str): Group name of the group or swarm_id.
+                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
             dns_server (str): DNS server IPs or domain name
             ntp_server (List[str]): List of ntp server,
                 Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
@@ -2916,7 +2848,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/system_config/{group_swarmid}"
+        url = f"/configuration/v1/system_config/{scope}"
 
         json_data = utils.strip_none(
             {
@@ -2932,7 +2864,7 @@ class CentralApi(Session):
     async def create_group(
         self,
         group: str,
-        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = ["ap", "gw", "cx", "sw"],
+        allowed_types: constants.AllDevTypes | List[constants.AllDevTypes] = ["ap", "gw", "cx", "sw"],
         wired_tg: bool = False,
         wlan_tg: bool = False,
         aos10: bool = False,
@@ -2942,8 +2874,6 @@ class CentralApi(Session):
         monitor_only_cx: bool = False,
     ) -> Response:
         """Create new group with specified properties. v3
-
-        // Used by add group batch add group //
 
         Args:
             group (str): Group Name
@@ -3076,7 +3006,7 @@ class CentralApi(Session):
     async def update_group_properties(
         self,
         group: str,
-        allowed_types: Union[constants.AllDevTypes, List[constants.AllDevTypes]] = None,
+        allowed_types: constants.AllDevTypes | List[constants.AllDevTypes] = None,
         wired_tg: bool = None,
         wlan_tg: bool = None,
         aos10: bool = None,
@@ -3172,9 +3102,6 @@ class CentralApi(Session):
             elif "cx" in allowed_types:
                 allowed_switch_types += ["AOS_CX"]
 
-        # print("[DEBUG] ---- Current Properties of group")
-        # utils.json_print(cur_group_props)
-        # print("[DEBUG] ----")
         # TODO copy paste from create group ... common func to build payload
         gw_role_dict = {
             "branch": "BranchGateway",
@@ -3222,14 +3149,6 @@ class CentralApi(Session):
                       f"[reset]Current Allowed Devices: {color(combined_allowed)}",
                 rl_str=resp.rl,
             )
-        # if "Gateways" in combined_allowed or "AccessPoints" in combined_allowed:
-        #     if aos10 is not None:
-        #         return Response(
-        #             error=f"{color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
-        #                   f"\n{color(group)} can be cloned with option to upgrade during clone.",
-        #             rl_str=resp.rl,
-        #         )
-        # if wired_tg and monitor_only_sw or monitor_only_cx:
         if wired_tg and monitor_only_sw:
             return Response(
                 error="Invalid combination, Monitor Only is not valid for Template Group",
@@ -3267,25 +3186,13 @@ class CentralApi(Session):
             }
         json_data = grp_attrs
 
-        # json_data = {"group": group}
-        # if grp_attrs:
-        #     json_data["group_attributes"] = grp_attrs
-
-
-
-        # if len(json_data) == 1:
-        #     raise ValueError("No Changes Detected")
-        # else:
         if config.debugv:
             print(f"[DEBUG] ---- Sending the following to {url}")
             utils.json_print(json_data)
             print("[DEBUG] ----")
 
         return await self.patch(url, json_data=json_data)
-        # # FIXME remove debug prints
-        # print(url)
-        # from rich import print_json
-        # print_json(data=json_data)
+
 
     async def update_group_name(self, group: str, new_group: str) -> Response:
         """Update group name for the given group.
@@ -3324,18 +3231,16 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    async def get_ap_settings(self, serial_number: str) -> Response:
+    async def get_ap_settings(self, serial: str) -> Response:
         """Get an existing ap settings.
 
-        // Used indirectly (update_ap_settings) by batch rename AP //
-
         Args:
-            serial_number (str): AP serial number.
+            serial (str): AP serial number.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v2/ap_settings/{serial_number}"
+        url = f"/configuration/v2/ap_settings/{serial}"
 
         return await self.get(url)
 
@@ -3346,7 +3251,7 @@ class CentralApi(Session):
     # API doesn't appear to take radio-n-disable, tried it.
     async def update_ap_settings(
         self,
-        serial_number: str,
+        serial: str,
         hostname: str = None,
         ip_address: str = None,
         zonename: str = None,
@@ -3360,10 +3265,8 @@ class CentralApi(Session):
     ) -> Response:
         """Update an existing ap settings.
 
-        // Used by batch rename aps and rename ap //
-
         Args:
-            serial_number (str: AP Serial Number
+            serial (str): AP Serial Number
             hostname (str, optional): hostname
             ip_address (str, optional): ip_address Default (DHCP)
             zonename (str, optional): zonename. Default "" (No Zone)
@@ -3378,7 +3281,7 @@ class CentralApi(Session):
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v2/ap_settings/{serial_number}"
+        url = f"/configuration/v2/ap_settings/{serial}"
 
         _json_data = {
             'hostname': hostname,
@@ -3393,14 +3296,14 @@ class CentralApi(Session):
             'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
-            resp = await self._request(self.get_ap_settings, serial_number)
+            resp = await self._request(self.get_ap_settings, serial)
             if not resp:
-                log.error(f"Unable to update AP settings for AP {serial_number}, API call to fetch current settings failed (all settings are required).")
+                log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
                 return resp
 
             json_data = self.strip_none(_json_data)
             if {k: v for k, v in resp.output.items() if k in json_data.keys()} == json_data:
-                return Response(url=url, ok=True, output=f"{resp.output.get('hostname', '')}|{serial_number} Nothing to Update provided AP settings match current AP settings", error="OK",)
+                return Response(url=url, ok=True, output=f"{resp.output.get('hostname', '')}|{serial} Nothing to Update provided AP settings match current AP settings", error="OK",)
 
             json_data = {**resp.output, **json_data}
 
@@ -3507,16 +3410,18 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def get_fw_version_list(
+    async def get_firmware_version_list(
         self,
-        device_type: str = None,
+        device_type: constants.DeviceTypes = None,
         swarm_id: str = None,
         serial: str = None,
     ) -> Response:
         """List Firmware Version.
 
+        Provide one and only one of the following.
+
         Args:
-            device_type (str, optional): Specify one of "IAP/MAS/HP/CONTROLLER/CX"
+            device_type (str, optional): Specify one of ap, gw, sw, cx
             swarm_id (str, optional): Swarm ID
             serial (str, optional): Serial of device
 
@@ -3525,36 +3430,17 @@ class CentralApi(Session):
         """
         url = "/firmware/v1/versions"
 
+        if [device_type, swarm_id, serial].count(None) != 2:
+            raise ValueError("You must specify one and one of device_type, swarm_id, serial parameters")
+
         params = {
-            'device_type': device_type,
+            'device_type': None if device_type is None else constants.lib_to_api(device_type, "firmware"),
             'swarm_id': swarm_id,
             'serial': serial
         }
 
         return await self.get(url, params=params)
 
-    # Not used in a command yet
-    async def check_image_available(
-        self,
-        device_type: str,
-        firmware_version: str,
-    ) -> Response:
-        """Firmware Version.
-
-        Args:
-            device_type (str): Specify one of "IAP/MAS/HP/CONTROLLER"
-            firmware_version (str): firmware version
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/firmware/v1/versions/{firmware_version}"
-
-        params = {
-            'device_type': device_type
-        }
-
-        return await self.get(url, params=params)
 
     async def send_command_to_swarm(
         self,
@@ -3633,7 +3519,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    async def delete_site(self, site_id: Union[int, List[int]]) -> Response:
+    async def delete_site(self, site_id: int | List[int]) -> Response:
         """Delete Site.
 
         Args:
@@ -3693,7 +3579,7 @@ class CentralApi(Session):
         wpa_passphrase: str,
         # wpa_passphrase_changed: bool = True,
         vlan: str = "",
-        type: WlanType = "employee",
+        type: constants.WlanType = "employee",
         essid: str = None,
         zone: str = "",
         captive_profile_name: str = "",
@@ -3817,65 +3703,10 @@ class CentralApi(Session):
 
         return await self.patch(url, json_data=json_data)
 
-    async def configuration_update_wlan_v2(
-            self, group_name_or_guid: str, wlan_name: str,
-            essid: str, type: str, hide_ssid: bool, vlan: str,
-            zone: str, wpa_passphrase: str,
-            wpa_passphrase_changed: bool, is_locked: bool,
-            captive_profile_name: str, bandwidth_limit_up: str,
-            bandwidth_limit_down: str,
-            bandwidth_limit_peruser_up: str,
-            bandwidth_limit_peruser_down: str, access_rules: list
-        ) -> Response:
-        """Update an existing WLAN.
-
-        Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            wlan_name (str): Name of WLAN selected.                              Example:wlan_1.
-            essid (str): essid
-            type (str): type  Valid Values: employee, guest
-            hide_ssid (bool): hide_ssid
-            vlan (str): vlan
-            zone (str): zone
-            wpa_passphrase (str): wpa_passphrase
-            wpa_passphrase_changed (bool): wpa_passphrase_changed
-            is_locked (bool): is_locked
-            captive_profile_name (str): captive_profile_name
-            bandwidth_limit_up (str): bandwidth_limit_up
-            bandwidth_limit_down (str): bandwidth_limit_down
-            bandwidth_limit_peruser_up (str): bandwidth_limit_peruser_up
-            bandwidth_limit_peruser_down (str): bandwidth_limit_peruser_down
-            access_rules (list): access_rules
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/configuration/v2/wlan/{group_name_or_guid}/{wlan_name}"
-
-        json_data = {
-            'essid': essid,
-            'type': type,
-            'hide_ssid': hide_ssid,
-            'vlan': vlan,
-            'zone': zone,
-            'wpa_passphrase': wpa_passphrase,
-            'wpa_passphrase_changed': wpa_passphrase_changed,
-            'is_locked': is_locked,
-            'captive_profile_name': captive_profile_name,
-            'bandwidth_limit_up': bandwidth_limit_up,
-            'bandwidth_limit_down': bandwidth_limit_down,
-            'bandwidth_limit_peruser_up': bandwidth_limit_peruser_up,
-            'bandwidth_limit_peruser_down': bandwidth_limit_peruser_down,
-            'access_rules': access_rules
-        }
-
-        return await self.put(url, json_data=json_data)
-
     async def move_devices_to_group(
         self,
         group: str,
-        serial_nums: Union[str, List[str]],
+        serials: str | List[str],
         *,
         cx_retain_config: bool = True,  # TODO can we send this attribute even if it's not CX, will it ignore or error
     ) -> Response:
@@ -3883,7 +3714,7 @@ class CentralApi(Session):
 
         Args:
             group (str): Group Name to move device to.
-            serials (List[str]): Serial numbers of devices to be added to group.
+            serials (str | List[str]): Serial numbers of devices to be added to group.
 
         Returns:
             Response: CentralAPI Response object
@@ -3898,11 +3729,11 @@ class CentralApi(Session):
         # error_code: 0001
         # service_name: Configuration
         url = "/configuration/v1/devices/move"
-        serial_nums = utils.listify(serial_nums)
+        serials = utils.listify(serials)
 
         json_data = {
             'group': group,
-            'serials': serial_nums
+            'serials': serials
         }
 
         if cx_retain_config:
@@ -3918,19 +3749,16 @@ class CentralApi(Session):
 
         return resp
 
-    # TODO changte to use consistent dev tpe ap gw cx sw
-    # convert to the stuff apigw wants inside method
     # API-FLAW no API to upgrade cluster
     # https://internal-ui.central.arubanetworks.com/firmware/controller/clusters/upgrade is what the UI calls when you upgrade via UI
     # payload: {"reboot":true,"firmware_version":"10.5.0.0-beta_87046","devices":[],"clusters":[72],"when":0,"timezone":"+00:00","partition":"primary"}
-    # device_type CX is not valid
     async def upgrade_firmware(
         self,
         scheduled_at: int = None,
         swarm_id: str = None,
         serial: str = None,
         group: str = None,
-        device_type: Literal["IAP", "MAS", "HP", "CONTROLLER"] = None,
+        device_type: constants.DeviceTypes = None,
         firmware_version: str = None,
         model: str = None,
         reboot: bool = False,
@@ -3946,7 +3774,7 @@ class CentralApi(Session):
             swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
             serial (str, optional): Upgrade a specific device by serial. Defaults to None.
             group (str, optional): Upgrade devices belonging to group. Defaults to None.
-            device_type (str["IAP"|"MAS"|"HP"|"CONTROLLER"]): Type of device to upgrade. Defaults to None.
+            device_type (Literal["ap", "gw", "cx", "sw"]): Type of device to upgrade. Defaults to None.
             firmware_version (str, optional): Version to upgrade to. Defaults to None(recommended version).
             model (str, optional): To initiate upgrade at group level for specific model family. Applicable
                 only for Aruba switches. Defaults to None.
@@ -3962,7 +3790,7 @@ class CentralApi(Session):
             'swarm_id': swarm_id,
             'serial': serial,
             'group': group,
-            'device_type': device_type,
+            'device_type': None if not device_type else constants.lib_to_api(device_type, "firmware"),
             'firmware_version': firmware_version,
             'reboot': reboot,
             'model': model
@@ -3972,23 +3800,25 @@ class CentralApi(Session):
 
     async def cancel_upgrade(
         self,
-        device_type: str,
+        device_type: constants.DeviceTypes = None,
         serial: str = None,
         swarm_id: str = None,
         group: str = None,
     ) -> Response:
         """Cancel scheduled firmware upgrade.
 
+        You can only specify one of device_type, swarm_id or serial parameters
+
         Args:
-            device_type (str): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
-            serial (str): Serial of device
+            device_type (Literal['ap', 'gw', 'cx', 'sw'], optional): Specify one of "cx|sw|ap|gw  (sw = aos-sw)"
+            serial (str, optional): Serial of device
             swarm_id (str): Swarm ID
             group (str): Specify Group Name to cancel upgrade for devices in that group
 
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api(device_type, 'firmware')
+        device_type = None if not device_type else constants.lib_to_api(device_type, 'firmware')
         url = "/firmware/v1/upgrade/cancel"
 
         json_data = {
@@ -4023,9 +3853,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    DevType = Literal["IAP", "HP", "CONTROLLER"]
-
-    async def get_firmware_compliance(self, device_type: constants.DevTypes, group: str = None) -> Response:
+    async def get_firmware_compliance(self, device_type: constants.DeviceTypes, group: str = None) -> Response:
         """Get Firmware Compliance Version.
 
         // Used by show firmware compliance [ap|gw|sw|cx] [group-name] //
@@ -4048,7 +3876,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def delete_firmware_compliance(self, device_type: constants.DevTypes, group: str = None) -> Response:
+    async def delete_firmware_compliance(self, device_type: constants.DeviceTypes, group: str = None) -> Response:
         """Clear Firmware Compliance Version.
 
         // Used by delete firmware compliance [ap|gw|sw|cx] [group] //
@@ -4072,7 +3900,7 @@ class CentralApi(Session):
 
     async def set_firmware_compliance(
         self,
-        device_type: constants.DevTypes,
+        device_type: constants.DeviceTypes,
         group: str,
         version: str,
         compliance_scheduled_at: int,
@@ -4135,7 +3963,7 @@ class CentralApi(Session):
         offset: int = 0,
         limit: int = 500,
     ) -> Response:
-        """List Firmware Details by type for switches or gateways.
+        """List Firmware Details by type for switches or gateways (Not valid for APs).
 
         Args:
             device_type (str): Specify one of "mas|sw|cx|gw"
@@ -4151,10 +3979,6 @@ class CentralApi(Session):
         """
         url = "/firmware/v1/devices"
         device_type = constants.lib_to_api(device_type, "firmware")
-        if not device_type:
-            raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
-            )
 
         params = {
             'device_type': device_type,
@@ -4209,6 +4033,29 @@ class CentralApi(Session):
 
         return await self.get(url)
 
+    async def check_firmware_available(
+        self,
+        device_type: constants.DeviceTypes,
+        firmware_version: str,
+    ) -> Response:
+        """Firmware Version.
+
+        Args:
+            device_type (str): Specify one of "cx", "sw", "ap", "gw"
+            firmware_version (str): firmware version
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/firmware/v1/versions/{firmware_version}"
+        device_type = constants.lib_to_api(device_type, "firmware")
+
+        params = {
+            'device_type': device_type
+        }
+
+        return await self.get(url, params=params)
+
     async def get_default_group(self,) -> Response:
         """Get default group.
 
@@ -4222,16 +4069,15 @@ class CentralApi(Session):
     async def move_devices_to_site(
         self,
         site_id: int,
-        serial_nums: Union[str, List[str]],
-        device_type: Literal["ap", "cx", "sw", "switch", "gw"],
+        serials: str | List[str],
+        device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Associate list of devices to a site.
 
         Args:
             site_id (int): Site ID
-            device_type (str): Device type. Valid Values: ap, cx, sw, switch, gw
-                cx and sw are the same as the more generic switch.
-            serial_nums (List[str]): List of device serial numbers of the devices to which the site
+            device_type (str): Device type. Valid Values: ap, gw switch
+            serials (str | List[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
@@ -4245,11 +4091,11 @@ class CentralApi(Session):
             )
 
         url = "/central/v2/sites/associations"
-        serial_nums = utils.listify(serial_nums)
+        serials = utils.listify(serials)
 
         json_data = {
             'site_id': site_id,
-            'device_ids': serial_nums,
+            'device_ids': serials,
             'device_type': device_type
         }
 
@@ -4258,38 +4104,36 @@ class CentralApi(Session):
     async def remove_devices_from_site(
         self,
         site_id: int,
-        serial_nums: List[str],
-        device_type: Literal["ap", "cx", "sw", "switch", "gw"],
+        serials: List[str],
+        device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Remove a list of devices from a site.
 
         Args:
             site_id (int): Site ID
-            device_type (str): Device type. Valid Values: ap, cx, sw, switch, gw
-                cx and sw are the same as the more generic switch.
-            serial_nums (List[str]): List of device serial numbers of the devices to which the site
+            serials (str | List[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+            device_type (Literal['ap', 'gw', 'switch']): Device type. Valid Values: ap, gw, switch.
 
         Returns:
             Response: CentralAPI Response object
         """
         device_type = constants.lib_to_api(device_type, "site")
-        if not device_type:
+        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
             raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
             )
 
         url = "/central/v2/sites/associations"
-        serial_nums = utils.listify(serial_nums)
+        serials = utils.listify(serials)
 
         json_data = {
             'site_id': site_id,
-            'device_ids': serial_nums,
+            'device_ids': serials,
             'device_type': device_type
         }
 
-        # API-FLAW: This method returns 200 when failures occur.
-        return await self.delete(url, json_data=json_data)
+        return await self.delete(url, json_data=json_data)  # API-FLAW: This method returns 200 when failures occur.
 
     async def create_label(
         self,
@@ -4328,7 +4172,7 @@ class CentralApi(Session):
             calculate_total (bool, optional): Whether to calculate total Labels
             reverse (bool, optional): List labels in reverse alphabetical order. Defaults to False
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 100.
+            limit (int, optional): Pagination limit. Max is 1000. Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
@@ -4348,63 +4192,72 @@ class CentralApi(Session):
     async def assign_label_to_devices(
         self,
         label_id: int,
-        device_type: constants.GenericDevTypes,
-        serial_nums: Union[str, List[str]],
+        serials: str | List[str],
+        device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Associate Label to a list of devices.
 
         Args:
             label_id (int): Label ID
-            device_type (str): Device type. Valid Values: ap, gw, switch
-            serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
+            serials (str | List[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+            device_type (str): Device type. Valid Values: ap, gw, switch
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = "/central/v2/labels/associations"
-        serial_nums = utils.listify(serial_nums)
         device_type = constants.lib_to_api(device_type, "site")
+        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
+            raise ValueError(
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
+            )
+
+        url = "/central/v2/labels/associations"
+        serials = utils.listify(serials)
 
         json_data = {
             'label_id': label_id,
             'device_type': device_type,
-            'device_ids': serial_nums
+            'device_ids': serials
         }
 
         return await self.post(url, json_data=json_data)
 
-    # TODO make format of this and other label methods match site methods
     async def remove_label_from_devices(
         self,
         label_id: int,
-        device_type: str,
-        serial_nums: List[str],
+        serials: str | List[str],
+        device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """unassign a label from a list of devices.
 
         Args:
             label_id (int): Label ID
-            device_type (str): Device type. One of ap, gw, switch
-            serial_nums (str | List[str]): List of device serial numbers of the devices to which the label
+            serials (str | List[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
+            device_type (Literal['ap', 'gw', 'switch']): Device type. Valid Values: ap, gw, switch.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v2/labels/associations"
-        serial_nums = utils.listify(serial_nums)
+
         device_type = constants.lib_to_api(device_type, "site")
+        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
+            raise ValueError(
+                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
+            )
+
+        serials = utils.listify(serials)
 
         json_data = {
             'label_id': label_id,
             'device_type': device_type,
-            'device_ids': serial_nums
+            'device_ids': serials
         }
 
         return await self.delete(url, json_data=json_data)
 
-    # API-FLAW returns empty payload / response on success 200
     async def delete_label(
         self,
         label_id: int,
@@ -4419,11 +4272,11 @@ class CentralApi(Session):
         """
         url = f"/central/v1/labels/{label_id}"
 
-        return await self.delete(url)
+        return await self.delete(url)  # returns empty payload / response on success 200
 
     async def get_device_ip_routes(
         self,
-        serial_num: str,
+        serial: str,
         api: str = "V1",
         marker: str = None,
         limit: int = 100
@@ -4431,7 +4284,7 @@ class CentralApi(Session):
         """Get routes for a device.
 
         Args:
-            serial_num (str): Device serial number
+            serial (str): Device serial number
             api (str, optional): API version (V0|V1), Defaults to V1.
             marker (str, optional): Pagination offset.
             limit (int, optional): page size Defaults to 100.
@@ -4442,7 +4295,7 @@ class CentralApi(Session):
         url = "/api/routing/v1/route"
 
         params = {
-            'device': serial_num,
+            'device': serial,
             'api': api,
             'marker': marker,
             'limit': limit
@@ -4453,23 +4306,22 @@ class CentralApi(Session):
     # TODO make add_device actual func sep and make this an aggregator that calls it and anything else based on params
     async def add_devices(
         self,
-        mac_address: str = None,
-        serial_num: str = None,
+        mac: str = None,
+        serial: str = None,
         group: str = None,
         # site: int = None,
         part_num: str = None,
-        license: Union[str, List[str]] = None,
+        license: str | List[str] = None,
         device_list: List[Dict[str, str]] = None
-    ) -> Union[Response, List[Response]]:
+    ) -> Response | List[Response]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
         Will also pre-assign device to group if provided
 
-        Either mac_address and serial_num or device_list (which should contain a dict with mac serial) are required.
-        // Used by add device and batch add devices //
+        Either mac and serial or device_list (which should contain a dict with mac serial) are required.
 
         Args:
-            mac_address (str, optional): MAC address of device to be added
-            serial_num (str, optional): Serial number of device to be added
+            mac (str, optional): MAC address of device to be added
+            serial (str, optional): Serial number of device to be added
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
             site (int, optional): -- Not implemented -- Site ID
             part_num (str, optional): Part Number is required for Central On Prem.
@@ -4484,22 +4336,22 @@ class CentralApi(Session):
         license_kwargs = []
 
         if license:
-            license_kwargs = [{"serials": [serial_num], "services": utils.listify(license)}]
-        if serial_num and mac_address:
+            license_kwargs = [{"serials": [serial], "services": utils.listify(license)}]
+        if serial and mac:
             if device_list:
-                raise ValueError("serial_num and mac_address are not expected when device_list is being provided.")
+                raise ValueError("serial and mac are not expected when device_list is being provided.")
 
-            to_group = None if not group else {group: [serial_num]}
-            # to_site = None if not site else {site: [serial_num]}
+            to_group = None if not group else {group: [serial]}
+            # to_site = None if not site else {site: [serial]}
 
-            mac = utils.Mac(mac_address)
+            mac = utils.Mac(mac)
             if not mac:
-                raise ValueError(f"mac_address {mac_address} appears to be invalid.")
+                raise ValueError(f"mac {mac} appears to be invalid.")
 
             json_data = [
                 {
                     "mac": mac.cols,
-                    "serial": serial_num
+                    "serial": serial
                 }
             ]
             if part_num:
@@ -4508,12 +4360,6 @@ class CentralApi(Session):
         elif device_list:
             if not isinstance(device_list, list) and not all(isinstance(d, dict) for d in device_list):
                 raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
-
-            _keys = {
-                "mac_address": "mac",
-                "serial_num": "serial",
-                "part_num": "partNumber"
-            }
 
             json_data = []
             for d in device_list:
@@ -4535,12 +4381,12 @@ class CentralApi(Session):
             to_group = {d.get("group"): [] for d in device_list if "group" in d}
             for d in device_list:
                 if "group" in d:
-                    to_group[d["group"]].append(d.get("serial_num", d.get("serial")))
+                    to_group[d["group"]].append(d.get("serial", d.get("serial_num")))
 
             # to_site = {d.get("site"): [] for d in device_list if "site" in d}
             # for d in device_list:
             #     if "site" in d:
-            #         to_site[d["site"]].append(d.get("serial_num", d.get("serial")))
+            #         to_site[d["site"]].append(d.get("serial", d.get("serial_num")))
 
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
@@ -4551,7 +4397,7 @@ class CentralApi(Session):
 
                 d["license"] = utils.listify(d["license"])
                 _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
-                _serial = d.get("serial_num", d.get("serial"))
+                _serial = d.get("serial", d.get("serial_num"))
                 if not _serial:
                     raise ValueError(f"No serial found for device: {d}")
 
@@ -4564,13 +4410,11 @@ class CentralApi(Session):
                     }
             license_kwargs = list(_lic_kwargs.values())
 
-            # license_args = [[], []]
-            # by_ser = {d["serial_num"]: utils.listify(d.get("license")) for d in device_list if d.get("license")}
             # TODO most efficient pairing of possible lic/dev for fewest call
             # TODO license via list not implemented yet.
 
         else:
-            raise ValueError("mac_address and serial_num or device_list is required")
+            raise ValueError("mac and serial or device_list is required")
 
         # Perform API call(s) to Central API GW
         # TODO break out the add device call into it's own method.
@@ -4688,15 +4532,15 @@ class CentralApi(Session):
 
     async def preprovision_device_to_group(
         self,
-        group_name: str,
-        serial_nums: List[str] | str,
+        group: str,
+        serials: str | List[str],
         tenant_id: str = None,
     ) -> Response:
-        """Pre Provision a group to the device.
+        """Pre Provision devices to group.
 
         Args:
-            device_id (List[str]): device_id
-            group_name (str): Group name
+            group (str): Group name
+            serials (str | List[str]): serial numbers
             tenant_id (str): Tenant id, (only applicable with MSP mode)
 
         Returns:
@@ -4705,8 +4549,8 @@ class CentralApi(Session):
         url = "/configuration/v1/preassign"
 
         json_data = {
-            'device_id': utils.listify(serial_nums),
-            'group_name': group_name,
+            'device_id': utils.listify(serials),
+            'group_name': group,
         }
 
         if tenant_id is not None:
@@ -4717,33 +4561,33 @@ class CentralApi(Session):
     # TODO verify type-hint for device_list is the right way to do that.
     async def verify_device_addition(
         self,
-        serial_num: str = None,
-        mac_address: str = None,
-        device_list: List[Dict[Literal["mac_address", "serial_num"], str]] = []
+        serial: str = None,
+        mac: str = None,
+        device_list: List[Dict[Literal["serial", "mac"], str]] = []
     ) -> Response:
         """Verify Device Addition
 
         Args:
-            serial_num (str, optional): Serial Number of device to verify. Defaults to None.
-            mac_address (str, optional): Mac Address of device to verify. Defaults to None.
+            serial (str, optional): Serial Number of device to verify. Defaults to None.
+            mac (str, optional): Mac Address of device to verify. Defaults to None.
             device_list (List[Dict[Literal[, optional): device_list list of dicts with
-                "serial_num" and "mac_address" for each device to verify. Defaults to None.
+                "serial" and "mac" for each device to verify. Defaults to None.
 
-        Must provide serial_num and mac_address for each device either via keyword argument or list.
+        Must provide serial and mac for each device either via keyword argument or list.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/device_inventory/v1/devices/verify"
-        if serial_num and mac_address:
+        if serial and mac:
             device_list += {
-                "serial_num": serial_num,
-                "mac_address": mac_address,
+                "serial_num": serial,
+                "mac_address": mac,
             }
 
         if not device_list:
             raise ValueError(
-                "Invalid parameters expecting serial_num and mac_address for each device "
+                "Invalid parameters expecting serial and mac for each device "
                 "either via keyword argument or List[dict]."
             )
 
@@ -4752,7 +4596,7 @@ class CentralApi(Session):
     async def upload_certificate(
         self,
         passphrase: str = "",
-        cert_file: Union[str, Path] = None,
+        cert_file: str | Path = None,
         cert_name: str = None,
         cert_format: Literal["PEM", "DER", "PKCS12"] = None,
         cert_data: str = None,
@@ -4852,6 +4696,7 @@ class CentralApi(Session):
     async def get_subscriptions(
         self,
         license_type: str = None,
+        device_type: constants.GenericDeviceTypes = None,
         offset: int = 0,
         limit: int = 1000,  # Doesn't appear to have max, allowed 10k limit in swagger
     ) -> Response:
@@ -4859,16 +4704,25 @@ class CentralApi(Session):
 
         Args:
             license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing types as well
+            device_type (str, optional): Filter by device type ('ap', 'gw', or 'switch')
             offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of subscriptions to get Defaults to 100.
+            limit (int, optional): Number of subscriptions to get Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/subscriptions"
+        if device_type:
+            device_type = constants.lib_to_api(device_type, "licensing")
+            device_type = device_type if not hasattr(device_type, "value") else device_type.value
+        if license_type:
+            if hasattr(license_type, "value"):
+                license_type = license_type.value
+            license_type = license_type.replace("-", " ").replace(" ", "_").upper()
 
         params = {
             'license_type': license_type,
+            'device_type': device_type,
             'offset': offset,
             'limit': limit
         }
@@ -4913,18 +4767,20 @@ class CentralApi(Session):
     async def get_valid_subscription_names(
         self,
         service_category: str = None,
-        device_type: str = None,
+        device_type: constants.GenericDeviceTypes = None,
     ) -> Response:
         """Get Valid subscription names from Central.
 
         Args:
             service_category (str, optional): Service category - dm/network
-            device_type (str, optional): Device Type - iap/cap/switch/boc/controller
+            device_type (Literal['ap', 'gw', 'switch'], optional): Device Type one of ap, gw, switch
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/services/config"
+        if device_type:
+            device_type = constants.lib_to_api(device_type, "licensing")
 
         params = {
             'service_category': service_category,
@@ -4933,7 +4789,7 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    async def assign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
+    async def assign_licenses(self, serials: str | List[str], services: str | List[str]) -> Response:
         """Assign subscription to a device.
 
         // Used indirectly by add device when --license <license> is provided and batch add devices with license //
@@ -4957,7 +4813,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def unassign_licenses(self, serials: Union[str, List[str]], services: Union[str, List[str]]) -> Response:
+    async def unassign_licenses(self, serials: str | List[str], services: str | List[str]) -> Response:
         """Unassign subscription(s) from device(s).
 
         Args:
@@ -4979,19 +4835,14 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO build aggregator to run report showing rogues/interfering/neighbors
-    # async def wids_get_all(self):
-
     async def wids_get_rogue_aps(
         self,
         group: List[str] = None,
         label: List[str] = None,
         site: List[str] = None,
-        start: int = None,
-        end: int = None,
         swarm_id: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100
     ) -> Response:
@@ -5001,33 +4852,27 @@ class CentralApi(Session):
             group (List[str], optional): List of group names
             label (List[str], optional): List of label names
             site (List[str], optional): List of site names
-            start (int, optional): Need information from this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp minus 3 hours
-            end (int, optional): Need information to this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp
             swarm_id (str, optional): Filter by Swarm ID
-            from_timestamp (int, optional): This parameter supercedes start parameter. Need
-                information from this timestamp. Timestamp is epoch in seconds. Default is current
-                UTC timestamp minus 3 hours
-            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
-                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            from_time (int | float | datetime, optional): Start of timerange to collect data for.
+                Default is now minus 3 hours
+            to_time (int | float | datetime, optional): End of timerange to collect data for.
+                Default is current time.
             offset (int, optional): Pagination offset (default = 0) Defaults to 0.
             limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
         url = "/rapids/v1/rogue_aps"
 
         params = {
             'group': group,
             'label': label,
             'site': site,
-            'start': start,
-            'end': end,
             'swarm_id': swarm_id,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -5039,11 +4884,9 @@ class CentralApi(Session):
         group: List[str] = None,
         label: List[str] = None,
         site: List[str] = None,
-        start: int = None,
-        end: int = None,
         swarm_id: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100
     ) -> Response:
@@ -5053,33 +4896,27 @@ class CentralApi(Session):
             group (List[str], optional): List of group names
             label (List[str], optional): List of label names
             site (List[str], optional): List of site names
-            start (int, optional): Need information from this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp minus 3 hours
-            end (int, optional): Need information to this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp
             swarm_id (str, optional): Filter by Swarm ID
-            from_timestamp (int, optional): This parameter supercedes start parameter. Need
-                information from this timestamp. Timestamp is epoch in seconds. Default is current
-                UTC timestamp minus 3 hours
-            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
-                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            from_time (int | float | datetime, optional): Start of timerange to collect data for.
+                Default is now minus 3 hours
+            to_time (int | float | datetime, optional): End of timerange to collect data for.
+                Default is current time.
             offset (int, optional): Pagination offset (default = 0) Defaults to 0.
             limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
         url = "/rapids/v1/interfering_aps"
 
         params = {
             'group': group,
             'label': label,
             'site': site,
-            'start': start,
-            'end': end,
             'swarm_id': swarm_id,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -5091,11 +4928,9 @@ class CentralApi(Session):
         group: List[str] = None,
         label: List[str] = None,
         site: List[str] = None,
-        start: int = None,
-        end: int = None,
         swarm_id: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100
     ) -> Response:
@@ -5105,33 +4940,27 @@ class CentralApi(Session):
             group (List[str], optional): List of group names
             label (List[str], optional): List of label names
             site (List[str], optional): List of site names
-            start (int, optional): Need information from this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp minus 3 hours
-            end (int, optional): Need information to this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp
             swarm_id (str, optional): Filter by Swarm ID
-            from_timestamp (int, optional): This parameter supercedes start parameter. Need
-                information from this timestamp. Timestamp is epoch in seconds. Default is current
-                UTC timestamp minus 3 hours
-            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
-                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            from_time (int | float | datetime, optional): Start of timerange to collect data for.
+                Default is now minus 3 hours
+            to_time (int | float | datetime, optional): End of timerange to collect data for.
+                Default is current time.
             offset (int, optional): Pagination offset (default = 0) Defaults to 0.
             limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
         url = "/rapids/v1/suspect_aps"
 
         params = {
             'group': group,
             'label': label,
             'site': site,
-            'start': start,
-            'end': end,
             'swarm_id': swarm_id,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -5143,11 +4972,9 @@ class CentralApi(Session):
         group: List[str] = None,
         label: List[str] = None,
         site: List[str] = None,
-        start: int = None,
-        end: int = None,
         swarm_id: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100
     ) -> Response:
@@ -5157,33 +4984,27 @@ class CentralApi(Session):
             group (List[str], optional): List of group names
             label (List[str], optional): List of label names
             site (List[str], optional): List of site names
-            start (int, optional): Need information from this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp minus 3 hours
-            end (int, optional): Need information to this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp
             swarm_id (str, optional): Filter by Swarm ID
-            from_timestamp (int, optional): This parameter supercedes start parameter. Need
-                information from this timestamp. Timestamp is epoch in seconds. Default is current
-                UTC timestamp minus 3 hours
-            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
-                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            from_time (int | float | datetime, optional): Start of timerange to collect data for.
+                Default is now minus 3 hours
+            to_time (int | float | datetime, optional): End of timerange to collect data for.
+                Default is current time.
             offset (int, optional): Pagination offset (default = 0) Defaults to 0.
             limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
         url = "/rapids/v1/neighbor_aps"
 
         params = {
             'group': group,
             'label': label,
             'site': site,
-            'start': start,
-            'end': end,
             'swarm_id': swarm_id,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -5195,11 +5016,9 @@ class CentralApi(Session):
         group: List[str] = None,
         label: List[str] = None,
         site: List[str] = None,
-        start: int = None,
-        end: int = None,
         swarm_id: str = None,
-        from_timestamp: int = None,
-        to_timestamp: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         offset: int = 0,
         limit: int = 100
     ) -> Response:
@@ -5209,31 +5028,25 @@ class CentralApi(Session):
             group (List[str], optional): List of group names
             label (List[str], optional): List of label names
             site (List[str], optional): List of site names
-            start (int, optional): Need information from this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp minus 3 hours
-            end (int, optional): Need information to this timestamp. Timestamp is epoch in
-                milliseconds. Default is current timestamp
             swarm_id (str, optional): Filter by Swarm ID
-            from_timestamp (int, optional): This parameter supercedes start parameter. Need
-                information from this timestamp. Timestamp is epoch in seconds. Default is current
-                UTC timestamp minus 3 hours
-            to_timestamp (int, optional): This parameter supercedes end parameter. Need information
-                to this timestamp. Timestamp is epoch in seconds. Default is current UTC timestamp
+            from_time (int | float | datetime, optional): Start of timerange to collect data for.
+                Default is now minus 3 hours
+            to_time (int | float | datetime, optional): End of timerange to collect data for.
+                Default is current time.
             offset (int, optional): Pagination offset (default = 0) Defaults to 0.
             limit (int, optional): pagination size (default = 100) Defaults to 100.
 
         Returns:
             Response: CentralAPI Response object
         """
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
         params = {
             'group': group,
             'label': label,
             'site': site,
-            'start': start,
-            'end': end,
             'swarm_id': swarm_id,
-            'from_timestamp': from_timestamp,
-            'to_timestamp': to_timestamp,
+            'from_time': from_time,
+            'to_time': to_time,
             'offset': offset,
             'limit': limit
         }
@@ -5250,6 +5063,7 @@ class CentralApi(Session):
             br(f, **params) for f in funcs
         ]
 
+        # TODO send to CombinedResponse
         batch_res = await self._batch_request(batch_req)
         resp = batch_res[-1]
         ok_res = [idx for idx, res in enumerate(batch_res) if res.ok]
@@ -5281,8 +5095,8 @@ class CentralApi(Session):
         label: str = None,
         serial: str = None,
         site: str = None,
-        from_ts: int = None,
-        to_ts: int = None,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
         severity: str = None,
         type: str = None,
         search: str = None,
@@ -5300,10 +5114,10 @@ class CentralApi(Session):
             label (str, optional): Used to filter the notification types based on Label name
             serial (str, optional): Used to filter the result based on serial number of the device
             site (str, optional): Used to filter the notification types based on Site name
-            from_ts (int, optional): 1)start of duration within which alerts are raised
-                2)described using Unix Epoch time in seconds  Default 30 days (max 90)
-            to_ts (int, optional): 1)end of duration within which alerts are raised
-                2)described using Unix Epoch time in seconds
+            from_time (int | float | datetime, optional): start of duration within which alerts are raised
+                Default now - 1 day (max 90) (API endpoint default is 30 days)
+            to_time (int | float | datetime, optional): end of duration within which alerts are raised
+                Default now.
             severity (str, optional): Used to filter the notification types based on severity
             type (str, optional): Used to filter the notification types based on notification type
                 name
@@ -5320,14 +5134,15 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = "/central/v1/notifications"
+        from_time, to_time = utils.parse_time_options(from_time, to_time)
 
-        if not from_ts:
-            from_ts = int(datetime.timestamp(datetime.today() - timedelta(days=1)))
-        if ack in [True, False]:
-            ack = str(ack).lower()
+        # if not from_time:
+        #     from_time = int(datetime.timestamp(datetime.today() - timedelta(days=1)))
+        # if ack in [True, False]:
+        #     ack = str(ack).lower()
 
-        if to_ts and to_ts <= from_ts:
-            return Response(error=f"To timestamp ({to_ts}) can not be less than from timestamp ({from_ts})")
+        # if to_time and to_time <= from_time:
+        #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
 
         params = {
             'customer_id': customer_id,
@@ -5335,8 +5150,8 @@ class CentralApi(Session):
             'label': label,
             'serial': serial,
             'site': site,
-            'from_timestamp': from_ts,
-            'to_timestamp': to_ts,
+            'from_timestamp': from_time,
+            'to_timestamp': to_time,
             'severity': severity,
             'search': search,
             # 'calculate_total': str(calculate_total),
@@ -5757,7 +5572,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO validate IP address format
+    # TODO validate IP address format / Not used by CLI yet
     async def update_cx_properties(
         self,
         *,
@@ -6205,8 +6020,8 @@ class CentralApi(Session):
 
     async def cloudauth_upload_fixme(
         self,
-        upload_type: CloudAuthUploadType,
-        file: Union[Path, str],
+        upload_type: constants.CloudAuthUploadType,
+        file: Path | str,
         ssid: str = None,
     ) -> Response:
         """Upload file.
@@ -6215,7 +6030,7 @@ class CentralApi(Session):
 
         Args:
             upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
-            file (Union[Path, str]): The csv file to upload
+            file (Path | str): The csv file to upload
             ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
 
         Returns:
@@ -6242,8 +6057,8 @@ class CentralApi(Session):
 
     async def cloudauth_upload(
         self,
-        upload_type: CloudAuthUploadType,
-        file: Union[Path, str],
+        upload_type: constants.CloudAuthUploadType,
+        file: Path | str,
         ssid: str = None,
     ) -> Response:
 
@@ -6251,7 +6066,7 @@ class CentralApi(Session):
 
         Args:
             upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
-            file (Union[Path, str]): The csv file to upload
+            file (Path | str): The csv file to upload
             ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
 
         Returns:
@@ -6288,7 +6103,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_status(
         self,
-        upload_type: CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadType,
         ssid: str = None,
     ) -> Response:
         """Read upload status of last file upload.

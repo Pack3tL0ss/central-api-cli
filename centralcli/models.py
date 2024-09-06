@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import pendulum
 from pydantic import BaseModel, Field, validator
-from centralcli import utils
 
+from centralcli import utils
 
 
 class DeviceStatus(str, Enum):
@@ -27,18 +28,53 @@ class TemplateDevType(str, Enum):
     ArubaSwitch = "ArubaSwitch"
 
 # fields from Response.output after cleaner
-class Inventory(BaseModel):
-    type: str
-    model: Optional[str]
-    sku: Optional[str]
-    mac: str = Field(alias="macaddr")
+class _Inventory(BaseModel):
     serial: str
-    services: Union[List[str], str] = Field(alias="license")
+    mac: str
+    type: Optional[str] = None
+    model: Optional[str] = None
+    sku: Optional[str] = None
+    services: Optional[List[str] | str] = None
+    subscription_key: Optional[str] = None
+    subscription_expires: Optional[int] = None
 
 switch_types = {
     "AOS-S": "sw",
     "AOS-CX": "cx"
 }
+
+class Inventory(_Inventory):
+    def __init__(
+        self,
+        serial: str,
+        type: str = None,
+        mac: str = None,
+        macaddr: str = None,
+        model: Optional[str] = None,
+        sku: Optional[str] = None,
+        aruba_part_no: Optional[str] = None,
+        services: Optional[str | List[str]] = None,
+        license: Optional[str | List[str]] = None,
+        device_type: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            type=self._inv_type(model, dev_type=type or device_type),
+            serial=serial,
+            mac=mac or macaddr,
+            model=model,
+            sku=sku or aruba_part_no,
+            services=services or license,
+            **kwargs,
+        )
+
+    def _inv_type(self, model: str, dev_type: str) -> DevType:
+        if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY
+            aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
+            return "sw" if model[0:4] in aos_sw_models else "cx"
+
+        return "gw" if dev_type == "GATEWAY" else dev_type.lower()
+
 
 # Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE
@@ -64,16 +100,42 @@ class Devices(BaseModel):
     gateways: Optional[List[Device]] = Field([])
 
 class Site(BaseModel):
-    name: str
-    id: int
-    address: str
-    city: str
-    state: str
-    zipcode: str    # str because zip+4 with hyphen may be possible
-    country: str
-    longitude: str  # could do float here
-    latitude: str   # could do float here
-    associated_devices: int  # field in cache actually has space "associated devices"
+    name: str = Field()
+    id: int = Field()
+    address: Optional[str] = Field(None)
+    city: Optional[str] = Field(None)
+    state: Optional[str] = Field(None)
+    zipcode: Optional[str] = Field(None)  # str because zip+4 with hyphen may be possible
+    country: Optional[str] = Field(None)
+    longitude: Optional[float] = Field(None)
+    latitude: Optional[float] = Field(None)
+    devices: Optional[int] = Field(0) # field in cache actually has space "associated devices"
+
+class _Sites(BaseModel):
+    sites: List[Site]
+
+class Sites(_Sites):
+    def __init__(self, sites: List[dict]):
+        sites = self.prep_for_cache(sites)
+        super().__init__(sites=sites)
+
+    def prep_for_cache(self, data: List[dict]):
+        strip_keys = ["site_details", "associated devices", "associated_device_count"]
+        return [
+            {
+                **{
+                    k.removeprefix("site_"): v for k, v in s.items() if k not in strip_keys
+                },
+                **s.get("site_details", {}),
+                "devices": s.get("associated_device_count", s.get("associated devices", 0))
+            } for s in data
+        ]
+
+    @property
+    def by_id(self) -> Dict[str, Dict[str, Any]]:
+        return {s.id: s.dict() for s in self.sites}
+
+
 
 class Template_Group(BaseModel):
     Wired: bool
@@ -91,9 +153,13 @@ class Template(BaseModel):
     template_hash: str
     version: str
 
-class Label(BaseModel):
-    name: str
 
+class Label(BaseModel):
+    id: int = Field(alias="label_id")
+    name: str = Field(alias="label_name")
+
+class Labels(BaseModel):
+    labels: List[Label]
 
 class ClientType(str, Enum):
     WIRED = "WIRED"
@@ -108,7 +174,7 @@ class Client(BaseModel):
     connected_port: str = Field(default_factory=str)
     connected_serial: str = Field(default_factory=str)
     connected_name: str = Field(default_factory=str)
-    site: str = Field(default_factory=str)
+    site: Optional[str] = Field(default_factory=str)
     group: str = Field(default_factory=str)
     last_connected: datetime = Field(default=None)
 

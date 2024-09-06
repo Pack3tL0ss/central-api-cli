@@ -3,25 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-from aiohttp.client_exceptions import ContentTypeError, ClientOSError, ClientConnectorError
+import json
+import sys
+import time
+from typing import Any, Dict, List, Literal, Tuple, Union
+
+from aiohttp import ClientResponse, ClientSession
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
-from . import cleaner, constants
-from typing import Union, List, Any, Dict, Tuple, Literal
 from rich import print
+from rich.console import Console, RenderableType
+from rich.status import Status
+from rich.style import StyleType
 from yarl import URL
 
-
-from centralcli import config, utils, log
+from centralcli import config, log, utils
+from centralcli.constants import lib_to_api
 from centralcli.exceptions import CentralCliException
-from halo import Halo
 
-import sys
-import typer
-import json
-from aiohttp import ClientSession, ClientResponse
-import time
-
+from . import cleaner, constants
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
@@ -29,8 +30,10 @@ DEFAULT_HEADERS = {
 }
 INIT_TS = time.monotonic()
 MAX_CALLS_PER_CHUNK = 6
+err_console = Console(stderr=True)
 
 
+# TODO args should be expanded here *args simplifies instantiation
 class BatchRequest:
     def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
         """Constructor object for for api requests.
@@ -90,8 +93,10 @@ class RateLimit():
 
         self.used_day = self.total_day - self.remain_day
         self.used_sec = self.total_sec - self.remain_sec
-        self.ok = True if all([self.remain_day != 0, self.remain_sec > 0]) else False
         self.near_limit = self.near_sec or self.near_day
+
+    def __bool__(self) -> bool:
+        return self.ok
 
     def __str__(self):
         if self.call_performed:
@@ -99,18 +104,8 @@ class RateLimit():
         else:
             return "No API call was performed."
 
-    @property
-    def near_sec(self):
-        return True if self.remain_sec <= 2 else False
-
-    @property
-    def near_day(self):
-        return True if self.remain_day <= 100 else False
-
-    @property
-    def text(self):
-        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
-        return full_text if self.call_performed else str(self)
+    def __len__(self) -> int:
+        return len(self.__str__())
 
     def __lt__(self, other) -> bool:
         return True if self.remain_day is None else bool(self.remain_day < other)
@@ -126,6 +121,57 @@ class RateLimit():
 
     def __ge__(self, other) -> bool:
         return False if self.remain_day is None else bool(self.remain_day >= other)
+
+    @property
+    def ok(self) -> bool:
+        if self.used_sec + self.remain_sec + self.total_sec == 0:
+            secs_ok = True
+        else:
+            secs_ok = True if self.remain_sec > 0 else False
+        return True if self.remain_day != 0 and secs_ok else False
+
+    @property
+    def near_sec(self) -> bool:
+        return True if self.remain_sec <= 2 else False
+
+    @property
+    def near_day(self) -> bool:
+        return True if self.remain_day <= 100 else False
+
+    @property
+    def text(self) -> str:
+        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        return full_text if self.call_performed else str(self)
+
+
+class Spinner(Status):
+    """A Spinner Object that adds methods to rich.status.Status object"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def fail(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":x:  {self.status}") if not text else self.console.print(f":x:  {text}")
+
+    def succeed(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":heavy_check_mark:  {self.status}") if not text else self.console.print(f":heavy_check_mark:  {text}")
+
+    def start(
+            self,
+            text: RenderableType = None,
+            *,
+            spinner: str = None,
+            spinner_style: StyleType = None,
+            speed: float = None,
+        ) -> None:
+        if any([text, spinner, spinner_style, speed]):
+            self.update(text, spinner=spinner, spinner_style=spinner_style, speed=speed)
+        if not self._live.is_started:
+            self._live.start()
+
 
 
 class Response:
@@ -291,6 +337,9 @@ class Response:
                     ) for k, v in self.output.items() if k != "status" and (v or v is False)
                 ]
             )
+        elif not self.output:
+            emoji = '\u2139' if self.ok else '\u26a0'  # \u2139 = :information:, \u26a0 = :warning:
+            r = f"  {emoji}  Empty Response.  This may be normal."
         else:
             r = f"  {self.output}"
 
@@ -299,6 +348,17 @@ class Response:
             r = utils.Output(config=config).sanitize_strings(r)
 
         return f"{status_code}{r}"
+
+    def __rich__(self):
+        fg = "bright_green" if self.ok else "red"
+        ret_str = self.__str__().replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:")
+        ret_str = ret_str.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]")
+
+        if self.status != 418:
+            status_code = f"  status code: {self.status}\n"
+            return ret_str.replace(status_code, f'{status_code.split(":")[0]}:[{fg}]{status_code.split(":")[-1]}[/{fg}]')
+
+        return ret_str
 
     def __setitem__(self, name: str, value: Any) -> None:
         print(f"set name {name} value {value}")
@@ -376,6 +436,8 @@ class Response:
         self.raw[key] = self.raw[key] + other.raw[key]
         if "count" in self.raw and "count" in other.raw:
             self.raw["count"] += other.raw["count"]
+        if self.url.path == "/monitoring/v2/events":  # events url will change the total on subsequent pagination events could go up or down.
+            self.raw["total"] = other.raw["total"]
 
 
         if isinstance(self.output, list) and isinstance(other.output, list):
@@ -388,48 +450,22 @@ class Response:
         return self
 
     @property
+    def table(self) -> List[Dict[str, Any]]:
+        """Returns output with only the keys that are common across all items.
+
+        Returns:
+            List[Dict[str, Any]]: resp.output with only keys common across all items.
+        """
+        if not self.output:
+            return self.output
+
+        common_keys = set.intersection(*map(set, self.output))
+        return [{k: d[k] for k in common_keys} for d in self.output]
+
+    @property
     def status_code(self) -> int:
         """Make attributes used for status code for both aiohttp and requests valid."""
         return self.status
-
-
-# TODO determine which is used.  same is in utils, can't recall if removed all refs one should be whacked
-def get_multiline_input(prompt: str = None, print_func: callable = print,
-                        return_type: str = None, **kwargs) -> Union[List[str], dict, str]:
-    def _get_multiline_sub(prompt: str = prompt, print_func: callable = print_func, **kwargs):
-        prompt = prompt or \
-            "Enter/Paste your content. Then Ctrl-D or Ctrl-Z -> Enter ( windows ) to submit.\n Enter 'exit' to abort"
-        print_func(prompt, **kwargs)
-        contents, line = [], ''
-        while line.strip().lower() != "exit":
-            try:
-                line = input()
-                contents.append(line)
-            except EOFError:
-                break
-
-        if line.strip().lower() == "exit":
-            print("Aborted")
-            exit()
-
-        return contents
-
-    contents = _get_multiline_sub(**kwargs)
-    if return_type:
-        if return_type == "dict":
-            for _ in range(1, 3):
-                try:
-                    contents = json.loads("\n".join(contents))
-                    break
-                except Exception as e:
-                    log.exception(f"get_multiline_input: Exception caught {e.__class__.__name__}\n{e}")
-                    typer.secho("\n !!! Input appears to be invalid.  Please re-input "
-                                "or Enter `exit` to exit !!! \n", fg="red")
-                    contents = _get_multiline_sub(**kwargs)
-        elif return_type == "str":
-            contents = "\n".join(contents)
-
-    return contents
 
 
 class Session():
@@ -448,8 +484,7 @@ class Session():
         self.req_cnt = 1
         self.requests: List[LoggedRequests] = []
         self.throttle: int = 0
-        self.spinner = Halo("Collecting Data...", enabled=bool(utils.tty))
-        self.spinner._spinner_id = "spin_thread"
+        self.spinner = Spinner("Collecting Data...")
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
@@ -460,6 +495,7 @@ class Session():
         if self._aio_session:
             if self._aio_session.closed:
                 # TODO finish refactor
+                # self._aio_session = ClientSession()  # Doing this breaks show all and no doubt others
                 return ClientSession()
             return self._aio_session
         else:
@@ -471,12 +507,17 @@ class Session():
         self._aio_session = session
 
     def _get_spin_text(self, spin_txt: str = None):
-        if not spin_txt:
-            return "" if not self.running_spinners else self.running_spinners[0]
+        if spin_txt:
+            if "retry" in spin_txt:
+                return spin_txt
+
+            self.running_spinners = [*self.running_spinners, spin_txt]
+        elif not self.running_spinners:
+            return "missing spin text"
 
         try:
-            if len(self.running_spinners) > 1 and "retry" not in str(self.running_spinners) and len(set([x.split(":")[0] for x in self.running_spinners])) == 1:
-                return f'{self.running_spinners[0]},{",".join(x.split(":")[1] for x in self.running_spinners[1:])}'
+            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
+                return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
 
             return spin_txt if not self.running_spinners else self.running_spinners[0]
         except Exception as e:
@@ -490,18 +531,20 @@ class Session():
         auth = self.auth
         resp = None
         _url = URL(url).with_query(params)
-        _data_msg = ' ' if not url else f' [{_url.path}]'
+        _data_msg = ' ' if not url else f' \[{_url.path}]'  #  Need to cancel [ or rich will eval it as a closing markup
+        end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
+        if config.sanitize and utils.is_serial(end_name):
+            end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
-        spin_txt_run = f"{spin_word} Data...{run_sfx}"
-        spin_txt_retry = ""
-        spin_txt_fail = f"{spin_word} Data{_data_msg}"
-        self.spinner.text = self._get_spin_text(spin_txt_run)
+        spin_txt_run = f"{spin_word} ({end_name}) Data...{run_sfx}"
+        spin_txt_retry = "\U0001f4a9"  # helps detect if this was not set correctly after previous failure
+        spin_txt_fail = f"{spin_word} ({end_name}) Data{_data_msg}"
+        self.spinner.update("\U0001f4a9")
         for _ in range(0, 2):
-            # spin_txt_run = f"{spin_txt_run} {spin_txt_retry}".rstrip() if _ > 0 else spin_txt_run.replace(spin_txt_retry, "").rstrip()
-            spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
+            spin_txt_run = spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
             token_msg = (
                 f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
@@ -539,15 +582,9 @@ class Session():
                     f'{now:.2f} [{method}]{_url.path_qs} Try: {_try_cnt}'
                 ]
 
-                # TODO spinner steps on each other during long running requests
-                # need to check store prev msg when updating then restore it if that thread is still running
-                self.spinner.stop() # Fix spinner was not starting with below call to start until first stopping it.
-                self.spinner.start(spin_txt_run)
-                self.running_spinners += [spin_txt_run]
+                self.spinner.start(self._get_spin_text(spin_txt_run), spinner="dots")
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
-                # TODO move batch_request _batch_request, get, put, etc into Session
-                # change where client is instantiated to _request / _batch_requests pass in the client
-                # remove aio_session property call ClientSession() direct
+
                 async with self.aio_session as client:
                     resp = await client.request(
                         method=method,
@@ -591,28 +628,31 @@ class Session():
             self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
+                if self.running_spinners:
+                    self.spinner.start(self._get_spin_text(), spinner="dots")
+
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif resp.status == 500:
-                    spin_txt_retry = "(retry after 500: Internal Server Error)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
                     # returns JSON: {'message': 'An unexpected error occurred'}
                 elif resp.status == 503:
-                    spin_txt_retry = "(retry after 503: Service Unavailable)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 503: [cyan]Service Unavailable[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
                     # returns a string: "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
                 elif resp.status == 504:
-                    spin_txt_retry = "(retry after 504: Gatewat Time-out)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
                     log.warning(f"Per second rate limit hit {fail_msg.replace(f'{spin_word} Data', '')}")
-                    spin_txt_retry = "(retry after hitting per second rate limit)"
+                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
                 elif resp.status == 418:  # Spot to handle retries for any caught exceptions
                     if resp.error == "ContentLengthError":
-                        spin_txt_retry = "(retry after ContentLengthError)"
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after [cyan]ContentLengthError[/]"
                         log.warning(f'{resp.url.path_qs} forced to retry after ContentLengthError')
                     else:
                         log.error(f'{resp.url.path_qs} {resp.error} Exception is not configured for retry')
@@ -631,7 +671,7 @@ class Session():
 
                 # This handles long running API calls where subsequent calls finish before the previous...
                 if self.running_spinners:
-                    self.spinner.text = self._get_spin_text()
+                    self.spinner.update(self._get_spin_text(), spinner="dots2")
                 else:
                     self.spinner.stop()
                 break
@@ -646,7 +686,7 @@ class Session():
                 paged_output = {**paged_output, **res.output}
             else:  # FIXME paged_output += r.output was also changing contents of paged_raw dunno why
                 try:
-                    paged_output = paged_output + res.output  # This does work different than += which would turn the string into a list of chars and append
+                    paged_output = paged_output + res.output  # This does work different than += which would turn a string into a list of chars and append
                 except TypeError:
                     log.error(f"Not adding {res.output} to paged output. Call Result {res.error}")
 
@@ -736,9 +776,9 @@ class Session():
 
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
-            # TODO no strip_none for these, may need to add if we determine a scenario needs it.
-            if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total")):
-                _total = count or r.raw["total"] if not url.endswith("/monitoring/v2/events") or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
+            is_events = True if url.endswith("/monitoring/v2/events") else False
+            if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total", 0)):
+                _total = count or r.raw["total"] if not is_events or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
                 if _total > len(r.output):
                     _limit = params.get("limit", 100)
                     _offset = params.get(offset_key, 0)
@@ -748,7 +788,7 @@ class Session():
                         for i in range(len(r.output), _total, _limit)
                     ]
 
-                    batch_res = await self._batch_request(_reqs)
+                    batch_res: List[Response] = await self._batch_request(_reqs)
                     failures: List[Response] = [r for r in batch_res if not r.ok]  # A failure means both the original attempt and the retry failed.
                     successful: List[Response] = batch_res if not failures else [r for r in batch_res if r.ok]
 
@@ -760,12 +800,7 @@ class Session():
                         log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
                         log.error(f"Output incomplete.  {len(failures)} failure occured: [{failures[-1].method}] {failures[-1].url.path}{log_sfx}", caption=True)
 
-                    # page_res = [
-                    #     await self.handle_pagination(res, paged_raw=paged_raw, paged_output=paged_output)
-                    #     for res in successful
-                    # ]
-                    # r.raw, r.output = page_res[-1]
-                    for res in successful:
+                    for res in successful:  # Combines responses into a sigle Response object
                         r += res
                     break
 
@@ -799,20 +834,19 @@ class Session():
         # No errors but the total provided by Central doesn't match the # of records
         try:
             if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
-                log.warning(f"Total records {len(r.output)} != the expected total {r.raw['total']} provided by central", show=True, caption=True)
+                log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
 
         return r
 
-    # TODO verif here but token_data can not be empty, should not be optional.  Only optional in refresh_token
-    def _refresh_token(self, token_data: Union[dict, List[dict]] = [], silent: bool = False) -> bool:
+    def _refresh_token(self, token_data: dict | List[dict], silent: bool = False) -> bool:
         """Refresh Aruba Central API tokens.  Get new set of access/refresh token.
 
         This method performs the actual refresh API call (via pycentral).
 
         Args:
-            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+            token_data (dict | List[dict]): Dict or list of dicts, where each dict is a
                 pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
                 each pair in order.  Stops once a refresh is successful.  Defaults to [].
             silent (bool, optional): Setting to True disables spinner. Defaults to False.
@@ -824,15 +858,13 @@ class Session():
         token_data = utils.listify(token_data)
         token = None
         if not silent:
-            spin = self.spinner
-            spin.start("Attempting to Refresh Tokens")
+            self.spinner.start("Attempting to Refresh Tokens")
         for idx, t in enumerate(token_data):
             try:
                 if idx == 1:
                     if not silent:
-                        spin.fail()
-                        spin.text = spin.text + " retry"
-                        spin.start()
+                        self.spinner.fail()
+                        self.spinner.start(f"{self.spinner.status} [bright_red blink]retry[/]")
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
@@ -844,7 +876,7 @@ class Session():
                     auth.storeToken(token)
                     auth.central_info["token"] = token
                     if not silent:
-                        spin.stop()
+                        self.spinner.stop()
                     break
             except Exception as e:
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
@@ -852,9 +884,9 @@ class Session():
         if token:
             self.headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
             if not silent:
-                spin.succeed()
+                self.spinner.succeed()
         elif not silent:
-            spin.fail()
+            self.spinner.fail()
 
         return token is not None
 
@@ -913,13 +945,15 @@ class Session():
 
             # TODO allow new client_id client_secret and accept paste from "Download Tokens"
             if True in token_only:
-                prompt = f"\n{typer.style('Refresh Failed', fg='red')} Please Generate a new Token for:" \
-                        f"\n    customer_id: {auth.central_info['customer_id']}" \
-                        f"\n    client_id: {auth.central_info['client_id']}" \
-                        "\n\nPaste result of `Download Tokens` from Central UI."\
-                        f"\nUse {typer.style('CTRL-D', fg='magenta')} on empty line after contents to submit." \
-                        f"\n{typer.style('exit', fg='magenta')} to abort." \
-                        f"\n{typer.style('Waiting for Input...', fg='cyan', blink=True)}\n"
+                prompt = "\n".join(
+                    [
+                        "[red]:warning:  Refresh Failed[/]: please generate new tokens for:",
+                        f"    customer_id: [bright_green]{auth.central_info['customer_id']}[/]",
+                        f"    client_id: [bright_green]{auth.central_info['client_id']}[/]",
+                        "\n[grey42 italic]:information:  If you create new tokens using the same [cyan]Application Name[/], the [cyan]client_id[/]/[cyan]client_secret[/] will stay consistent.[/]\n",
+                        "Paste the text from the [cyan]View Tokens[/] -> [cyan]Download Tokens[/] popup in Central UI.",
+                    ]
+                )
 
                 token_data = utils.get_multiline_input(prompt, return_type="dict")
             else:
@@ -975,20 +1009,10 @@ class Session():
             _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
                 chunk += [self.BatchRequest(asyncio.sleep, (1,))]
-            try:
-                task_names = [
-                    c.func.__name__ if c.func.__name__ == "sleep" else
-                    f'{c.args[0].removeprefix(f"{config.base_url}/").replace("/", "_")}_{c.kwargs["params"].get("offset", "")}-{int(c.kwargs["params"].get("offset", 0)) + int(c.kwargs["params"].get("limit", 0))}'
-                    for c in chunk
-                ]
-            except Exception:
-                task_names = [None for _ in range(0, len(chunk))]
 
-            tasks = [asyncio.create_task(call.func(*call.args, **call.kwargs), name=name) for call, name in zip(chunk, task_names)]
-            m_resp += await asyncio.gather(*tasks)
-            # m_resp += await asyncio.gather(
-            #     *[call.func(*call.args, **call.kwargs) for call in chunk]
-            # )
+            m_resp += await asyncio.gather(
+                *[call.func(*call.args, **call.kwargs) for call in chunk]
+            )
 
             _elapsed = time.perf_counter() - _start
             log.debug(f"chunk of {_calls_per_chunk} took {_elapsed:.2f}.")
@@ -1136,25 +1160,16 @@ class CombinedResponse(Response):
                     for inner in output
                 ]
 
-        if _passed:
-            resp = _passed[-1]
-        else:
-            resp = _failed[-1]
-        # resp.rl = min([r.rl for r in responses])
-        # resp.output = output
-        # resp.raw = raw
-        # resp.elapsed = round(elapsed, 2)
+        resp = _passed[-1] if _passed else _failed[-1]
+
         return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
-
-        # return resp
-
 
     def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
         self.responses = responses
         combined_kwargs: dict = combiner_func(responses)
         super().__init__(**combined_kwargs)
         self.error = self.errors = {r.url.path: r.error for r in responses}
-
+        self.rl = self._rl
 
     def __bool__(self):
         return any([r.ok for r in self.responses])
@@ -1188,4 +1203,9 @@ class CombinedResponse(Response):
     @property
     def urls(self) -> List[URL]:
         return [r.url for r in self.responses]
+
+    @property
+    def _rl(self) -> RateLimit:
+        calls = [r for r in self.responses if r.rl.ok]
+        return sorted([r for r in calls or self.responses], key=lambda r: r.rl)[0].rl
 

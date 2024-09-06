@@ -46,17 +46,16 @@ def method(
     method: str = typer.Argument(..., autocompletion=cli.cache.method_test_completion, show_default=False,),
     kwargs: List[str] = typer.Argument(None, metavar="args/kwargs", help="Provide args/kwargs in format: [cyan]arg1 arg2 keyword=value keyword2=value2[/]", show_default=False,),
     _help: bool = typer.Option(False, "--doc", help="Get details on required args/keyword args for provided method."),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
     debugv: bool = typer.Option(
         False, "--debugv",
         envvar="ARUBACLI_VERBOSE_DEBUG",
@@ -64,12 +63,7 @@ def method(
         hidden=True,
         callback=cli.verbose_debug_callback,
     ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Dev testing commands to run CentralApi methods from command line.
 
@@ -198,18 +192,18 @@ def method(
 
 @app.command(hidden=True,)
 def command(
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    do_json: bool = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False),
-    do_yaml: bool = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False),
-    do_csv: bool = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False),
-    do_table: bool = typer.Option(False, "--table", is_flag=True, help="Output in Table", show_default=False),
-    outfile: Path = typer.Option(None, help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output", show_default=False,),
-    update_cache: bool = typer.Option(False, "-U", hidden=True),  # Force Update of cache for testing
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging",
-                               callback=cli.debug_callback),
+    import_file: Path = cli.arguments.import_file,
+    yes: bool = cli.options.yes,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
     debugv: bool = typer.Option(
         False, "--debugv",
         envvar="ARUBACLI_VERBOSE_DEBUG",
@@ -217,27 +211,15 @@ def command(
         hidden=True,
         callback=cli.verbose_debug_callback,
     ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
+    update_cache = cli.options.update_cache,
 ) -> None:
-    """This is a hidden test message used for automated testing.
+    """This is a hidden test command used for automated testing.
 
     This command should not be used.
 
     What this command does changes based on what needs to be tested at the time.
     """
-    resp = Response()
-    from centralcli import render
-    resp.output = render.rich_capture('  Subscriptions successfully removed for devices.\n  :information:  archive/unarchive flushes all subscriptions for a device.', emoji=True)
-    # tablefmt = cli.get_format(
-    #     do_json, do_yaml, do_csv, do_table, default="rich"
-    # )
-
-    cli.display_results(resp, tablefmt="action")
+    ...
 
 
 @app.callback()

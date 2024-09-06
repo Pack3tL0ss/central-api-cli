@@ -191,6 +191,6 @@ cache = Cache(central)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
-# show switches / show switch ...
+# show switches / show switch, delete label / labels ...
 if len(sys.argv) > 2:
     sys.argv[2] = constants.arg_to_what(sys.argv[2], cmd=sys.argv[1])

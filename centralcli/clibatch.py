@@ -40,11 +40,10 @@ from centralcli.constants import (
     state_abbrev_to_pretty,
 )
 from centralcli.exceptions import DevException, ImportException, MissingFieldException
-from centralcli.strings import ImportExamples, LongHelp
+from centralcli.strings import ImportExamples
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
-help_text = LongHelp()
 from centralcli.cache import CentralObject  # NoQA
 
 iden = IdenMetaVars()
@@ -373,6 +372,7 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
 
     return data
 
+# TODO DEPRECATED This now lives in clicommon re-point references then remove
 def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
     data = None
     if import_file is not None:
@@ -381,13 +381,18 @@ def _get_import_file(import_file: Path, import_type: Literal["devices", "sites",
     if not data:
         cli.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
 
-    if import_type and import_type in data:
+    if isinstance(data, dict) and import_type and import_type in data:
         data = data[import_type]
 
-    # accept yaml/json keyed by serial #
-    if data and isinstance(data, dict):
-        if utils.isserial(list(data.keys())[0]):
-            data = [{"serial": k, **v} for k, v in data.items()]
+    if data:
+        if isinstance(data, dict):  # accept yaml/json keyed by serial #
+            if utils.is_serial(list(data.keys())[0]):
+                data = [{"serial": k, **v} for k, v in data.items()]
+        elif isinstance(data, list) and text_ok:
+            if import_type == "devices" and all(utils.is_serial(s) for s in data):
+                data = [{"serial": s} for s in data]
+            if import_type == "labels":
+                data = [{"name": label} for label in data]
 
     # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
     data = [d for d in data if not d.get("retired", d.get("ignore"))]
@@ -448,7 +453,7 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     print("\n[bright_green]The Following Sites will be created:[/]")
     _ = [print(s) for s in site_names]
 
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         reqs = [
             BatchRequest(central.create_site, **site.dict())
             for site in verified_sites
@@ -457,13 +462,8 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         if all([r.ok for r in resp]):
             resp[-1].output = [r.output for r in resp]
             resp = resp[-1]
-            cache_res = asyncio.run(cli.cache.update_site_db(data=resp.output))
-            if len(cache_res) != len(data):
-                log.warning(
-                    "Attempted to add entries to Site Cache after batch import.  Cache Response "
-                    f"{len(cache_res)} but we added {len(data)} sites.",
-                    show=True
-                )
+            cli.central.request(cli.cache.update_site_db, data=resp.output)
+
         return resp or Response(error="No Sites were added")
 
 # TODO REMOVE NOT USED (keeping for now in case I change my mind)
@@ -683,15 +683,12 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
         raise typer.Exit(1)
 
-    if isinstance(data, dict) and "devices" in data:
-        data = data["devices"]
-
     sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
     sub_key = None if not sub_key else sub_key[0]
     if sub_key:
         # Validate license types
         for d in data:
-            if d[sub_key]:
+            if d.get(sub_key):
                 for idx in range(2):
                     try:
                         d["license"] = cli.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
@@ -708,7 +705,6 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
                             print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
                             warn = True
 
-    msg_pfx = "" if not warn else "Warning exist "
     word = "Adding" if not warn and yes else "Add"
     confirm_devices = ['|'.join([f'{k}:{v}' for k, v in d.items()]) for d in data]
     if len(confirm_devices) > 6:
@@ -720,8 +716,12 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     print(f'{len(data)} [cyan]Devices found in {"import file" if not import_file else import_file.name}[/]')
     console.print(confirm_str)
     print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    if warn:
+        msg = ":warning:  Warnings exist"
+        msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
+        cli.econsole.print(msg)
     resp = None
-    if (not warn and yes) or typer.confirm(f"{msg_pfx}Proceed?", abort=True):
+    if cli.confirm(yes=not warn and yes):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
@@ -751,25 +751,21 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
 def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool = False) -> List[Response]:
     if import_file is not None:
-        data = config.get_file_data(import_file)
+        data = _get_import_file(import_file, "labels", text_ok=True)
     elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
-
-    if isinstance(data, dict) and "labels" in data:
-        data = data["labels"]
+        cli.exit("No import file provided")
 
     # TODO common func for this type of multi-element confirmation, we do this a lot.
-    _msg = "\n".join([f"  [cyan]{name}[/]" for name in data])
+    _msg = "\n".join([f"  [cyan]{inner['name']}[/]" for inner in data])
     _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
     _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
     print(_msg)
 
     resp = None
-    if yes or typer.confirm("\nProceed?", abort=True):
-        reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
+    if cli.confirm(yes):
+        reqs = [BatchRequest(cli.central.create_label, label_name=inner['name']) for inner in data]
         resp = cli.central.batch_request(reqs)
-        # if any failures occured don't pass data into update_label_db.  Results in API call to get inv from Central
+        # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
         try:
             _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
             asyncio.run(cli.cache.update_label_db(data=_data))
@@ -814,8 +810,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
             cli.display_results(resp, tablefmt="action")
 
 
-# FIXME
-@app.command(short_help="Validate a batch import")
+@app.command()
 def verify(
     what: BatchAddArgs = typer.Argument(..., show_default=False,),
     import_file: Path = typer.Argument(..., exists=True, show_default=False, autocompletion=lambda incomplete: [],),
@@ -841,8 +836,7 @@ def verify(
     The same file used to import can be used to validate.
     """
     if what != "devices":
-        print("Only devices and device assignments are supported at this time.")
-        raise typer.Exit(1)
+        cli.exit("Only devices and device assignments are supported at this time.")
 
     data = _get_import_file(import_file, import_type=what)
 
@@ -896,7 +890,7 @@ def verify(
 
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s][file_key] != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+            if file_by_serial[s][file_key].replace("-", "_") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
@@ -907,8 +901,8 @@ def verify(
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["license", "group", "site"]:
-                if field in file_by_serial[s] and file_by_serial[s][field]:
+            for field in ["group", "site", file_key]:
+                if field is not None and field in file_by_serial[s] and file_by_serial[s][field]:
                     _msg += f", {field.title()} [bright_green]OK[/]"
             validation[s] += [_msg]
         else:
@@ -944,21 +938,12 @@ def verify(
 
 @app.command(short_help="Batch Deploy groups, sites, devices... from file", hidden=True)
 def deploy(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch Deploy from import.
 
@@ -993,22 +978,13 @@ def deploy(
 @app.command()
 def add(
     what: BatchAddArgs = typer.Argument(..., help="[cyan]macs[/] and [cyan]mpsk[/] are for cloud-auth", show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),  # HACK completion broken when trying to complete a Path
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
     ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform batch Add operations using import data from file
     """
@@ -1261,7 +1237,7 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
     console.print(_msg)
     batch_resp = []
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes, abort=True):
         if not cop_inv_only:
             batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
             if arch_reqs and len(batch_resp) >= 2:
@@ -1362,17 +1338,11 @@ def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Re
 
     print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
     _ = [print(s) for s in site_names]
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = central.request(central.delete_site, del_list)
         if resp:
-            cache_del_res = asyncio.run(cli.cache.update_site_db(data=del_list, remove=True))
-            if len(cache_del_res) != len(del_list):
-                log.warning(
-                    f"Attempt to delete entries from Site Cache returned {len(cache_del_res)} "
-                    f"but we tried to delete {len(del_list)} sites.",
-                    show=True
-                )
-            return resp
+            cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
+        return resp
 
 # TODO copy/paste logic from clidel.py groups()
 def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False, del_groups: bool = None, del_labels: bool = None) -> List[Response]:
@@ -1428,34 +1398,22 @@ def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False,
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
-@app.command(short_help="Delete devices.",)
+@app.command()
 def delete(
-    what: BatchDelArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False, autocompletion=lambda incomplete: [],),
+    what: BatchDelArgs = cli.arguments.what,
+    import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),  # TODO REMOVE THIS IS FOR TESTING ONLY
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    """[bright_green]Perform batch Delete operations using import data from file.[/]
+    """Perform batch Delete operations using import data from file.
 
     [cyan]cencli delete sites <IMPORT_FILE>[/] and
     [cyan]cencli delte groups <IMPORT_FILE>[/]
@@ -1474,14 +1432,13 @@ def delete(
     # TODO common string helpers... started strings.py
     elif not import_file:
         _msg = [
-            "Usage: cencli batch delete [OPTIONS] ['devices'|'sites'|'groups'] IMPORT_FILE",
-            "Use [cyan]cencli batch delete --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE or --show-example"
+            "Usage: cencli batch delete \[OPTIONS] \[devices|sites|groups|labels] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch delete --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
 
     data = _get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
@@ -1518,14 +1475,13 @@ def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchR
         devices = [{**d, "services": d["subscription"]} for d in devices]
 
     subs = set([d["services"] for d in devices if d["services"]])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
-    devices = [d for d in devices if d["services"]]  # filter any devs tghat currently do not have subscription
+    devices = [d for d in devices if d["services"]]  # filter any devs that currently do not have subscription
 
     try:
         subs = [cli.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
     except ValueError as e:
         sub_names = "\n".join(cli.cache.license_names)
-        print("[bright_red]Error[/]: " + str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
-        raise typer.Exit(1)
+        cli.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
 
     devs_by_sub = {s: [] for s in subs}
     for d in devices:
@@ -1538,25 +1494,13 @@ def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchR
 
 @app.command()
 def subscribe(
-    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch subscribe devices
 
@@ -1570,61 +1514,44 @@ def subscribe(
         return
     elif not import_file:
         _msg = [
-            "Usage: cencli batch subscribe [OPTIONS] IMPORT_FILE",
-            "Use [cyan]cencli batch subscribe --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or [cyan]--example[/] flag.",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or --show-example flag."
+            "[yellow]Usage[/]: cencli batch subscribe \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch subscribe --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
-    elif import_file:
-        devices = config.get_file_data(import_file)
-        if "devices" in devices:
-            devices = devices["devices"]
+        cli.exit("\n".join(_msg))
 
-        sub_reqs = _build_sub_requests(devices)
+    devices = _get_import_file(import_file, "devices")
+    sub_reqs = _build_sub_requests(devices)
 
-        cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
-        print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
-        if yes or typer.confirm("\nProceed?", abort=True):
-            resp = cli.central.batch_request(sub_reqs)
-
-    cli.display_results(resp, tablefmt="action")
+    cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
+    print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+    if yes or typer.confirm("\nProceed?", abort=True):
+        resp = cli.central.batch_request(sub_reqs)
+        cli.display_results(resp, tablefmt="action")
 
 @app.command()
 def unsubscribe(
-    import_file: Path = typer.Argument(None, help="Remove subscriptions for devices specified in import file", exists=True, readable=True, show_default=False),
+    import_file: Path = cli.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
     dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Dissasociate the device from the Aruba Central App in Green Lake"),
-    show_example: bool = typer.Option(
-        False, "--example",
-        help="Show Example import file format.",
-        show_default=False,
-    ),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch Unsubscribe devices
 
-    Can Unsubscribe devices specified in import file or all devices in the inventory that
-    have never connected to Aruba Central (-N | --never-connected)
+    Unsubscribe devices specified in import file or all devices in the inventory that
+    have never connected to Aruba Central ([cyan]-N[/]|[cyan]--never-connected[/])
 
-    Use (-D | --dis-cen) flag to also dissasociate the devices from the Aruba Central app in Green Lake.
+    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also dissasociate the devices from the Aruba Central app in Green Lake.
     """
     if show_example:
-        print(getattr(examples, "unsubscribe"))  # TODO need example should be same as add devices
+        print(getattr(examples, "unsubscribe"))
         return
     elif never_connected:
         resp = cli.cache.get_devices_with_inventory()
@@ -1643,19 +1570,15 @@ def unsubscribe(
                     resp = cli.central.batch_request(unsub_reqs)
     elif not import_file:
         _msg = [
-            "Usage: cencli batch unsubscribe [OPTIONS] IMPORT_FILE",
-            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
+            "Invalid combination of arguments / options.",
+            "Provide IMPORT_FILE argument or at least one of: [cyan]-N[/], [cyan]--never-connected[/], [cyan]--example[/] flags.",
             "",
-            "[bright_red]Error[/]: Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or at least one of: -N, --never-connected, --show-example flags."
+            "Usage: cencli batch unsubscribe \[OPTIONS] [IMPORT_FILE]",
+            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     elif import_file:
-        devices = config.get_file_data(import_file)
-        if "devices" in devices:
-            devices = devices["devices"]
-
+        devices = _get_import_file(import_file, "devices")
         unsub_reqs = _build_sub_requests(devices, unsub=True)
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
@@ -1671,35 +1594,34 @@ def unsubscribe(
                 f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
                 )
 
-
     cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def rename(
-    what: BatchRenameArgs = typer.Argument(..., show_default=False,),
-    import_file: Path = typer.Argument(None, metavar="['lldp'|IMPORT FILE PATH]", show_default=False,),
+    what: BatchRenameArgs = cli.arguments.what,
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
     lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
-    lower: bool = typer.Option(False, "--lower", help="Convert LLDP rename result to all lower case.",),
-    space: str = typer.Option(None, "-S", "--space", help="Applies to automatic LLDP rename.  Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]"),
+    lower: bool = typer.Option(False, "--lower", help="[LLDP rename] Convert LLDP result to all lower case.",),
+    space: str = typer.Option(
+        None,
+        "-S",
+        "--space",
+        help="[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]",
+        show_default=False,
+    ),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
     ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
     label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
     group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
     site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
     model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging",),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
     if show_example:
@@ -1711,7 +1633,7 @@ def rename(
         import_file = None
 
     if not import_file and not lldp:
-        cli.exit("Missing required parameter [IMPORT_FILE|'lldp']")
+        cli.exit("Missing required parameter \[IMPORT_FILE|'lldp']")
 
     if import_file:
         data = _get_import_file(import_file)
@@ -1770,249 +1692,28 @@ def rename(
                 cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
 
 
-
-def batch_move_devices(import_file: Path, *, yes: bool = False, do_group: bool = False, do_site: bool = False, do_label: bool = False,):
-    """Batch move devices based on contents of import file
-
-    Args:
-        import_file (Path): Import file
-        yes (bool, optional): Bypass confirmation prompts. Defaults to False.
-        do_group (bool, optional): Process group moves based on import. Defaults to False.
-        do_site (bool, optional): Process site moves based on import. Defaults to False.
-        do_label (bool, optional): Process label assignment based on import. Defaults to False.
-
-    Group/Site/Label are processed by default, unless one of more of do_group, do_site, do_label is specified.
-
-    Raises:
-        typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
-    """
-    # TODO improve logic.  if they are moving to a group we can use inventory as backup
-    # BUT if they are moving to a site it has to be connected to central first.  So would need to be in cache
-    # TODO Break this up / func for each move type...
-    if all([arg is False for arg in [do_site, do_label, do_group]]):
-        do_site = do_label = do_group = True
-    devices = config.get_file_data(import_file)
-
-    dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
-    if "INVALID" in dev_idens:
-        print(f'[bright_red]Error[/]: missing required field for {dev_idens.index("INVALID") + 1} device in import file.')
-        raise typer.Exit(1)
-
-    cache_devs = [cli.cache.get_dev_identifier(d, include_inventory=True) for d in dev_idens]
-
-    site_rm_reqs, site_rm_msgs = {}, {}
-    site_mv_reqs, site_mv_msgs = {}, {}
-    pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
-    group_mv_reqs, group_mv_msgs = {}, {}
-    group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
-    label_ass_reqs, label_ass_msgs = {}, {}
-
-    console = Console(emoji=False)
-    for cd, d in zip(cache_devs, devices):
-        has_connected = True if cd.get("status") else False
-        if do_group:
-            _skip = False
-            to_group = d.get("group")
-            retain_config = d.get("retain_config")
-            if retain_config:
-                if str(retain_config).lower() in ["false", "no", "0"]:
-                    retain_config = False
-                elif str(retain_config).lower() in ["true", "yes", "1"]:
-                    retain_config = True
-                else:
-                    print(f'{cd.help_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
-                    raise typer.Exit(1)
-            if to_group:
-                if to_group not in cli.cache.group_names:
-                    to_group = cli.cache.get_group_identifier(to_group)
-                    to_group = to_group.name
-
-                if to_group == cd.get("group"):
-                    console.print(f'{cd.rich_help_text}: is already in group [magenta]{to_group}[/]. Ignoring.')
-                    _skip = True
-
-                # Determine if device is in inventory only determines use of pre-provision group vs move to group
-                if not has_connected:
-                    _dict = pregroup_mv_reqs
-                    msg_dict = pregroup_mv_msgs
-                    if retain_config:
-                        console.print(f'[bright_red]WARNING[/]: {cd.rich_help_text} Group assignment is being ignored.')
-                        console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                        console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central.')
-                        _skip = True
-                else:
-                    _dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
-                    msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
-
-                if not _skip:
-                    if to_group not in _dict:
-                        _dict[to_group] = [cd.serial]
-                        msg_dict[to_group] = [cd.rich_help_text]
-                    else:
-                        _dict[to_group] += [cd.serial]
-                        msg_dict[to_group] += [cd.rich_help_text]
-
-
-        if do_site:
-            to_site = d.get("site")
-            now_site = cd.get("site")
-            if to_site:
-                to_site = cli.cache.get_site_identifier(to_site)
-                if now_site and now_site == to_site.name:
-                    console.print(f'{cd.rich_help_text} Already in site [magenta]{to_site.name}[/].  Ignoring.')
-                elif not has_connected:
-                    # TODO Need cache update here.  This command doesn't preemptively update cache.  So if device has come onboard since they did a show all it will appear as if it has not checked in
-                    console.print(f'{cd.rich_help_text} Has not checked in to Central.  It can not be added to site [magenta]{to_site.name}[/].  Ignoring.')
-                else:
-                    key = f'{to_site.id}~|~{cd.generic_type}'
-                    if key not in site_mv_reqs:
-                        site_mv_reqs[key] = [cd.serial]
-                    else:
-                        site_mv_reqs[key] += [cd.serial]
-
-                    if to_site.name not in site_mv_msgs:
-                        site_mv_msgs[to_site.name] = [cd.rich_help_text]
-                    else:
-                        site_mv_msgs[to_site.name] += [cd.rich_help_text]
-
-                if now_site:
-                    now_site = cli.cache.get_site_identifier(now_site)
-                    if now_site.name != to_site.name:  # need to remove from current site
-                        console.print(f'{cd.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
-                        key = f'{now_site.id}~|~{cd.generic_type}'
-                        if key not in site_rm_reqs:
-                            site_rm_reqs[key] = [cd.serial]
-                        else:
-                            site_rm_reqs[key] += [cd.serial]
-
-                        if to_site.name not in site_rm_msgs:
-                            site_rm_msgs[to_site.name] = [cd.rich_help_text]
-                        else:
-                            site_rm_msgs[to_site.name] += [cd.rich_help_text]
-
-        if do_label:
-            to_label = d.get("label", d.get("labels"))
-            if to_label:
-                to_label = utils.listify(to_label)
-                for label in to_label:
-                    clabel = cli.cache.get_label_identifier(to_label)
-                    if clabel.name in cd.get("labels"):
-                        console.print(f'{cd.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
-                    else:
-                        key = f'{clabel.id}~|~{cd.generic_type}'
-                        if key not in label_ass_reqs:
-                            label_ass_reqs[key] = [cd.serial]
-                        else:
-                            label_ass_reqs[key] += [cd.serial]
-
-                        if clabel.name not in label_ass_msgs:
-                            label_ass_msgs[clabel.name] = [cd.rich_help_text]
-                        else:
-                            label_ass_msgs[clabel.name] += [cd.rich_help_text]
-
-    site_rm_reqs = []
-    if site_rm_reqs:
-        for k, v in site_rm_reqs.items():
-            site_id, dev_type = k.split("~|~")
-            site_rm_reqs += [cli.central.BatchRequest(cli.central.remove_devices_from_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
-
-    batch_reqs = []
-    if site_mv_reqs:
-        for k, v in site_mv_reqs.items():
-            site_id, dev_type = k.split("~|~")
-            batch_reqs += [cli.central.BatchRequest(cli.central.move_devices_to_site, site_id=int(site_id), serial_nums=v, device_type=dev_type)]
-    if pregroup_mv_reqs:  # TODO fix inconsistency in param group_name vs group used on other similar funcs
-        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.preprovision_device_to_group, group_name=k, serial_nums=v) for k, v in pregroup_mv_reqs.items()]]
-    if group_mv_reqs:
-        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v) for k, v in group_mv_reqs.items()]]
-    if group_mv_cx_retain_reqs:
-        batch_reqs = [*batch_reqs, *[cli.central.BatchRequest(cli.central.move_devices_to_group, group=k, serial_nums=v, cx_retain_config=True) for k, v in group_mv_reqs.items()]]
-    if label_ass_reqs:
-        for k, v in label_ass_reqs.items():
-            label_id, dev_type = k.split("~|~")  # TODO fix inconsistency device_type serial_nums param order vs similar funcs.
-            batch_reqs += [cli.central.BatchRequest(cli.central.assign_label_to_devices, label_id=int(label_id), device_type=dev_type, serial_nums=v)]
-
-    _tot_req = len(site_rm_reqs) + len(batch_reqs)
-    if not _tot_req:
-        print("Nothing to do")
-        raise typer.Exit(0)
-
-    _msg = [""]
-    if pregroup_mv_msgs:
-        for group, devs in pregroup_mv_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be pre-provisioned to group [cyan]{group}[/]']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-    if group_mv_msgs:
-        for group, devs in group_mv_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/]']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-    if group_mv_cx_retain_msgs:
-        for group, devs in group_mv_cx_retain_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be moved to group [cyan]{group}[/].  CX config will be preserved.']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-    if site_mv_msgs:
-        for site, devs in site_mv_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be moved to site [cyan]{site}[/]']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-    if site_rm_msgs:
-        for site, devs in site_mv_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be [red]removed[/] to site [cyan]{site}[/]']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-    if label_ass_msgs:
-        for label, devs in label_ass_msgs.items():
-            _msg += [f'The following {len(devs)} devices will be assigned [cyan]{label}[/] label']
-            if len(devs) > 6:
-                devs = [*devs[0:3], "...", *devs[-3:]]
-            _msg = [*_msg, *[f'  {dev}' for dev in devs]]
-
-    if _tot_req > 1:
-        _msg += [f'\n{_tot_req} API calls will be performed.']
-
-    console.print("\n".join(_msg))
-    if yes or typer.confirm("\nProceed?", abort=True):
-        site_rm_res = []
-        if site_rm_reqs:
-            site_rm_res = cli.central.batch_request(site_rm_reqs)
-            if not all([r.ok for r in site_rm_res]):
-                print("[bright_red]WARNING[/]: Some site remove requests failed, Aborting...")
-                return site_rm_res
-        batch_res = cli.central.batch_request(batch_reqs)
-
-        # TODO need to update cache if successful
-        return [*site_rm_res, *batch_res]
-
-
 @app.command()
 def move(
-    # what: BatchAddArgs = typer.Argument("devices", show_default=False,),
-    import_file: Path = typer.Argument(None, exists=True, show_default=False, autocompletion=lambda incomplete: [],),
-    do_group: bool = typer.Option(False, "-G", "--group", help="process group move from import."),
-    do_site: bool = typer.Option(False, "-S", "--site", help="process site move from import."),
-    do_label: bool = typer.Option(False, "-L", "--label", help="process label assignment from import."),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
+    import_file: List[Path] = typer.Argument(None, autocompletion=lambda incomplete: [("devices", "batch move devices")] if incomplete and "devices".startswith(incomplete.lower()) else [], show_default=False,),
+    do_group: bool = typer.Option(False, "-G", "--group", help="Only process group move from import."),
+    do_site: bool = typer.Option(False, "-S", "--site", help="Only process site move from import."),
+    do_label: bool = typer.Option(False, "-L", "--label", help="Only process label assignment from import."),
+    cx_retain_config: bool = typer.Option(
+        False,
+        "-k",
+        help="Keep config intact for CX switches during group move. [cyan italic]retain_config[/] [italic dark_olive_green2]in import_file takes precedence[/], this flag enables the option without it being specified in the import_file."
     ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
+    cx_retain: bool = typer.Option(
+        None,
+        help="Keep config intact or not for CX switches during group move [italic dark_olive_green2]regardless of what is in the import_file[/].",
+        show_default=False,
     ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Perform batch Move devices to any or all of group / site / label based on import data from file.
 
@@ -2027,37 +1728,33 @@ def move(
         print(examples.move_devices)
         return
 
-    elif not import_file:
+    if not import_file:
         _msg = [
-            "Usage: cencli batch move [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch move ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "[yellow]Usage[/]: cencli batch move \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch move --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
+    elif len(import_file) > 2:
+        cli.exit("Too many arguments.  Use [cyan]cencli batch move --help[/] for help.")
     else:
-        resp = batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label)
+        import_file: Path = [f for f in import_file if not str(f).startswith("device")][0]  # allow unnecessary 'devices' sub-command
+        if not import_file.exists():
+            cli.exit(f"Invalid value for '[IMPORT_FILE]': Path '[cyan]{str(import_file)}[/]' does not exist.")
+        resp = cli.batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain)
         cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def archive(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch archive devices based on import data from file.
 
@@ -2069,15 +1766,14 @@ def archive(
 
     elif not import_file:
         _msg = [
-            "Usage: cencli batch archive [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch archive ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "[yellow]Usage[/]: cencli batch archive \[OPTIONS] WHAT:[devices] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch archive --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     else:
-        data = config.get_file_data(import_file, text_ok=True)
+        data = _get_import_file(import_file, "devices", text_ok=True)
         if data and isinstance(data, list):
             if all([isinstance(x, dict) for x in data]):
                 serials = [x.get("serial") or x.get("serial_num") for x in data]
@@ -2105,21 +1801,13 @@ def archive(
 
 @app.command()
 def unarchive(
-    import_file: Path = typer.Argument(None, exists=True, show_default=False,),
-    show_example: bool = typer.Option(False, "--example", help="Show Example import file format.", show_default=False),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False,
-        callback=cli.default_callback,
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Batch unarchive devices based on import data from file.
 
@@ -2131,15 +1819,14 @@ def unarchive(
 
     elif not import_file:
         _msg = [
-            "Usage: cencli batch unarchive [OPTIONS] WHAT:[devices] IMPORT_FILE",
-            "Try 'cencli batch unarchive ?' for help.",
+            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
             "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
+            "Usage: cencli batch unarchive \[OPTIONS] \[IMPORT_FILE]",
+            "Use [cyan]cencli batch unarchive --help[/] for help.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
     else:
-        data = _get_import_file(import_file, import_type="devices")
+        data = _get_import_file(import_file, import_type="devices", text_ok=True)
 
     if not data:
         cli.exit("No data extracted from import file")
@@ -2163,9 +1850,7 @@ def unarchive(
 
 @app.callback()
 def callback():
-    """
-    Perform batch operations
-    """
+    """Perform batch operations"""
     pass
 
 

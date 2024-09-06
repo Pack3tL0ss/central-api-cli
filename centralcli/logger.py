@@ -127,7 +127,8 @@ class MyLogger:
             self.log_msgs = []
 
         if caption:
-            self._caption = [*self._caption, *[f"{':warning:  ' if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
+            _warn = "\u26a0"
+            self._caption = [*self._caption, *[f"{f'{_warn}  ' if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
 
     @property
     def level_name(self) -> str | int:

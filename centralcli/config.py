@@ -348,6 +348,10 @@ class Config:
         return self.default_cache_file if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}.json"
 
     @property
+    def cache_file_ok(self):
+        return self.cache_file.is_file() and self.cache_file.stat().st_size > 0
+
+    @property
     def last_command_file(self):
         return self.cache_dir / "last_command" if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}_last_command"
 

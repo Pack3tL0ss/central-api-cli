@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import asyncio
 from enum import Enum
 from pathlib import Path
 import sys
@@ -14,25 +13,23 @@ from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, cleaner
+    from centralcli import cli, utils, log, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner
+        from centralcli import cli, utils, log, Response
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, IdenMetaVars, NotifyToArgs, lib_to_api
-from centralcli.strings import LongHelp
+from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
 from centralcli.response import BatchRequest
-help_text = LongHelp()
+from centralcli.cache import CentralObject
 
 
 app = typer.Typer()
 color = utils.color
-iden = IdenMetaVars()
 
 class AddWlanArgs(str, Enum):
     type = "type"
@@ -52,8 +49,39 @@ class AddGroupArgs(str, Enum):
     group = "group"
     mac = "mac"
 
+err_console = Console(stderr=True)
 
-# TODO update completion with mac oui, serial prefix
+
+def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, group: str = None, license: str | List[str] = None) -> None:
+    if license:
+        try:
+            license = utils.unlistify(license)
+            license: str = license.upper().replace("-", " "),
+        except Exception:
+            ...  # This isn't imperative given it's the inv cache.  It's not used for much.
+
+    inv_data = {
+        'type': "-",
+        'model': "-",
+        'sku': "-",
+        'mac': mac,
+        'serial': serial,
+        'services': license,
+    }
+    resp = utils.listify(resp)
+    for r in resp:
+        if r.url.path == '/platform/device_inventory/v1/devices':
+            if not r.ok:
+                return
+            try:
+                inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
+            except Exception as e:
+                log.warning(f"Unable to extract sku after inventory update ({e}), value will be omitted from inv cache.")
+
+    cli.cache.update_inv_db(data=inv_data)
+
+
+# TODO update completion with mac serial partial completion
 # TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
 @app.command()
@@ -71,16 +99,10 @@ def device(
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
     license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),  # type: ignore
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", rich_help_panel="Common Options", show_default=False,),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-        rich_help_panel="Common Options",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Add a Device to Aruba Central.
 
@@ -98,35 +120,26 @@ def device(
 
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            dev = cli.cache.get_dev_identifier(name, silent=True)
+            dev = cli.cache.get_dev_identifier(name, silent=True, exit_on_fail=False)
             if dev:  # allow user to put dev name for rare case where dev is in cache but not in inventory  # TESTME
                 kwargs["serial"] = dev.serial
                 kwargs["mac"] = dev.mac
             else:
-                print(f"[bright_red]Error[/]: {name} is invalid")
-                raise typer.Exit(1)
+                cli.exit(f"[bright_red]Error[/]: {name} is invalid")
         else:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
-    # kwargs["site"] = kwargs["site"] or _site
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
         cli.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
-    api_kwd = {"serial": "serial_num", "mac": "mac_address"}
-    kwargs = {api_kwd.get(k, k): v for k, v in kwargs.items() if v}
-
-    _msg = [f"Add device: [bright_green]{kwargs['serial_num']}|{kwargs['mac_address']}[/bright_green]"]
+    _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if "group" in kwargs and kwargs["group"]:
         _group = cli.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
-    # if "site" in kwargs and kwargs["site"]:
-    #     _site = cli.cache.get_site_identifier(kwargs["site"])
-    #     kwargs["site"] = _site.id
-    #     _msg += [f"\n  Assign to Site: [bright_green]{_site.name}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
         _lic_msg = [lic._value_ for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
@@ -141,18 +154,12 @@ def device(
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
-        # TODO need to update inventory cache after device add
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
 
 
 @app.command(short_help="Add a group", help="Add a group")
 def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
-    # group_password: str = typer.Argument(
-    #     None,
-    #     show_default=False,
-    #     help="Group password is required. You will be prompted for password if not provided.",
-    #     autocompletion=lambda incomplete: incomplete
-    # ),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
     gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: branch][/]", show_default=False,),
@@ -170,28 +177,11 @@ def group(
     gw: bool = typer.Option(None, "--gw", help="Allow gateways in group."),
     mon_only_sw: bool = typer.Option(False, "--mon-only-sw", help="Monitor Only for ArubaOS-SW"),
     mon_only_cx: bool = typer.Option(False, "--mon-only-cx", help="Monitor Only for ArubaOS-CX"),
-    # ap_user: str = typer.Option("admin", help="Provide user for AP group"),  # TODO build func to update group pass
-    # ap_passwd: str = typer.Option(None, help="Provide password for AP group (use single quotes)"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        callback=cli.verbose_debug_callback,
-        hidden=True,
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    # if not group_password:
-    #     group_password = typer.prompt("Group Password", confirmation_prompt=True, hide_input=True,)
-
-    # else:
-    #     _msg = f'{_msg}{typer.style(f"?", fg="cyan")}'
-
     allowed_types = []
     if ap:
         allowed_types += ["ap"]
@@ -207,19 +197,13 @@ def group(
 
     # -- // Error on combinations that are not allowed by API \\ --
     if not aos10 and microbranch:
-        print(
-            f":x: [bright_red]Microbranch is only valid if group is configured as AOS10 group ({color('--aos10')})."
-        )
-        raise typer.Exit(1)
+        cli.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
     if (mon_only_sw or mon_only_cx) and wired_tg:
-        print(":x: [bright_red]Error: Monitor only is not valid for template group.")
-        raise typer.Exit(1)
+        cli.exit("[cyanMonitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
     if mon_only_sw and "sw" not in allowed_types or mon_only_cx and "cx" not in allowed_types:
-        print(":x: [bright_red]Error: Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
-        raise typer.Exit(1)
+        cli.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
-        print(":x: [bright_red]WLAN role for Gateways requires the group be configured as AOS10 via --aos10 option.")
-        raise typer.Exit(1)
+        cli.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
     if all([x is None for x in [ap, sw, cx, gw]]):
         print("[green]No Allowed devices provided. Allowing all device types.")
         print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
@@ -240,9 +224,9 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]True[/bright_green]"
     if mon_only_cx:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
-    print(f"{_msg}\n")
+    print(f"{_msg}")
 
-    if yes or typer.confirm("Proceed?"):
+    if yes or typer.confirm("\nProceed?"):
         resp = cli.central.request(
             cli.central.create_group,
             group,
@@ -254,13 +238,24 @@ def group(
             gw_role=gw_role,
             monitor_only_sw=mon_only_sw,
         )
-        cli.display_results(resp, tablefmt="action")
-        if resp:
-            asyncio.run(
-                cli.cache.update_group_db({'name': group, 'template group': {'Wired': wired_tg, 'Wireless': wlan_tg}})
-            )
-        else:
-            raise typer.Exit(1)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        # prep data for cache  # TODO update fields once group cache is updated with cleaned keys (no camel case)
+        data={
+            'name': group,
+            'AOSVersion': 'AOS8' if not aos10 else 'AOS10',
+            "AllowedDevTypes": allowed_types,
+            "ApNetworkRole": "Standard" if not microbranch else "Microbranch",
+            "Architecture": 'Instant' if not aos10 else 'AOS10',
+            "GwNetworkRole": gw_role,
+            'template group': {
+                'Wired': wired_tg,
+                'Wireless': wlan_tg
+            }
+        }
+        cli.central.request(
+            cli.cache.update_group_db,
+            data=data
+        )
 
 
 # TODO autocompletion
@@ -287,12 +282,10 @@ def wlan(
         show_default=False,
     ),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
@@ -319,7 +312,7 @@ def wlan(
 
 
 
-@app.command(short_help="Add a site.", help=help_text.add_site)
+@app.command()
 def site(
     site_name: str = typer.Argument(... , show_default=False,),
     address: str = typer.Argument(None, help="street address, (enclose in quotes)", show_default=False,),
@@ -339,19 +332,21 @@ def site(
     country: str = typer.Argument(None, show_default=False,),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False,),
     lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
+    """Add a site.
+
+    Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
+    [italic]Google Maps "Plus Codes" are supported for address field.[/]
+
+    If address is provided assoicated geo coordinates are automatically populated.
+    If geo coordinates are provided, address is not calculated.
+
+    [italic green3]Wrap Arguments that contain spaces in quotes i.e. "5402 Champions Hill Dr"[/]
+    """
     # These conversions just make the fields match what is used if done via GUI
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)
@@ -367,72 +362,72 @@ def site(
         "latitude": lat,
         "longitude": lon
     }
-    address_fields = {k: v for k, v in kwargs.items() if v}
+    address_fields = {k: v.rstrip(",") for k, v in kwargs.items() if v}
 
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
-        cli.display_results(resp)
-        if resp:
-            asyncio.run(cli.cache.update_site_db(resp.raw))
-        else:
-            raise typer.Exit(1)
+        cli.display_results(resp, exit_on_fail=True)
+        cli.central.request(cli.cache.update_site_db, data=resp.raw)
 
 
-# TODO allow more than one label and use batch_request
-@app.command(help="Create a new label")
+
+# TODO label can't match any existing label names OR site names.  Add pre-check via cache / cache-update if label already exists with that name ... then error if cache_update confirms it's accurate
+@app.command()
 def label(
-    name: str = typer.Argument(..., show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    labels: List[str] = typer.Argument(..., metavar=iden_meta.label_many, show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
-    _msg = "Creating" if yes else "Create"
-    print(f"{_msg} new label [cyan]{name}[/]")
-    if yes or typer.confirm("Proceed?"):
-        resp = cli.central.request(cli.central.create_label, name)
-        cli.display_results(resp, cleaner=cleaner.get_labels)
-        if resp.ok:  # TODO pass data to cli.cache.update_label_db to update vs doing a subsequenct call
-            asyncio.run(cli.cache.update_label_db(cleaner.get_labels(resp.output)))
+    """Delete label(s)
+
+    Label can't have any devices associated with it to delete.
+    """
+    print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
+    print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
+    ...
+    for idx in range(0, 2):
+        duplicate_names = [name for name in [*[s["name"] for s in cli.cache.sites], *cli.cache.label_names] if name in labels]
+        if duplicate_names:
+            if idx == 0:
+                err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, refreshing cache to ensure data is current.")
+                cli.cache.check_fresh(site_db=True, label_db=True)
+            else:
+                cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, label/site names must be unique (sites included)")
+
+    batch_reqs = [BatchRequest(cli.central.create_label, label) for label in labels]
+    if yes or typer.confirm("\nProceed?", abort=True):
+        batch_resp = cli.central.batch_request(batch_reqs)
+        cli.display_results(batch_resp, tablefmt="action")
+        update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"]} for resp in batch_resp if resp.ok]
+        cli.central.request(cli.cache.update_label_db, data=update_data)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
 # This worked: cencli add certificate lejun23 securelogin.kabrew.com.all.pem -pem -svr  (no passphrase, entering passphrase caused error above)
-# TODO options should prob be --pem to be consistent with other commands
 @app.command(hidden=False)
 def certificate(
     cert_name: str = typer.Argument(..., show_default=False),
-    cert_file: Path = typer.Argument(None, exists=True, readable=True, show_default=False,),
-    passphrase: str = typer.Option(None, help="optional passphrase"),
-    # cert_type: CertTypes = typer.Argument(...),
-    # cert_format: CertFormat = typer.Argument(None,),
-    pem: bool = typer.Option(False, "-pem", help="upload certificate in PEM format", show_default=False,),
-    der: bool = typer.Option(False, "-der", help="upload certificate in DER format", show_default=False,),
-    pkcs12: bool = typer.Option(False, "-pkcs12", help="upload certificate in pkcs12 format", show_default=False,),
-    server_cert: bool = typer.Option(False, "-svr", help="Type: Server Certificate", show_default=False,),
-    ca_cert: bool = typer.Option(False, "-ca", help="Type: CA", show_default=False,),
-    crl: bool = typer.Option(False, "-crl", help="Type: CRL", show_default=False,),
-    int_ca_cert: bool = typer.Option(False, "-int-ca", help="Type: Intermediate CA", show_default=False,),
-    ocsp_resp_cert: bool = typer.Option(False, "-ocsp-resp", help="Type: OCSP responder", show_default=False,),
-    ocsp_signer_cert: bool = typer.Option(False, "-ocsp-signer", help="Type: OCSP signer", show_default=False,),
-    ssh_pub_key: bool = typer.Option(False, "-public", help="Type: SSH Public cert", show_default=False, hidden=True,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    default: bool = typer.Option(
-        False, "-d", is_flag=True, help="Use default central account", show_default=False
-    ),
-    debug: bool = typer.Option(
-        False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-    ),
+    cert_file: Path = typer.Argument(None, help="If not provided you'll be prompted to paste in cert text", exists=True, readable=True, show_default=False,),
+    passphrase: str = typer.Option(None, help="optional passphrase", show_default=False,),
+    pem: bool = typer.Option(False, "--pem", help="upload certificate in PEM format", show_default=False,),
+    der: bool = typer.Option(False, "--der", help="upload certificate in DER format", show_default=False,),
+    pkcs12: bool = typer.Option(False, "--pkcs12", help="upload certificate in pkcs12 format", show_default=False,),
+    server_cert: bool = typer.Option(False, "--svr", help="Type: Server Certificate", show_default=False,),
+    ca_cert: bool = typer.Option(False, "--ca", help="Type: CA", show_default=False,),
+    crl: bool = typer.Option(False, "--crl", help="Type: CRL", show_default=False,),
+    int_ca_cert: bool = typer.Option(False, "--int-ca", help="Type: Intermediate CA", show_default=False,),
+    ocsp_resp_cert: bool = typer.Option(False, "--ocsp-resp", help="Type: OCSP responder", show_default=False,),
+    ocsp_signer_cert: bool = typer.Option(False, "--ocsp-signer", help="Type: OCSP signer", show_default=False,),
+    ssh_pub_key: bool = typer.Option(False, "--public", help="Type: SSH Public cert", show_default=False, hidden=True,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Upload a Certificate to Aruba Central
     """
@@ -467,9 +462,10 @@ def certificate(
     kwargs = {k: v for k, v in kwargs.items() if v}
 
     if not cert_file:
-        print("\n[bright_green]No Cert file specified[/]")
-        print("Provide certificate content encoded in base64 format.")
-        cert_file = utils.get_multiline_input(return_type="str")
+        print("[bright_green]No Cert file specified[/]")
+        if not crl:
+            print("Provide certificate content encoded in base64 format.")
+        cert_file = utils.get_multiline_input(prompt=f"[cyan]Enter/Paste in {'certificate' if not crl else 'crl'} text[/].")
         kwargs["cert_data"] = cert_file
     elif cert_file.exists():
         kwargs["cert_file"] = cert_file
@@ -491,12 +487,10 @@ def certificate(
 def webhook(
     name: str = typer.Argument(..., show_default=False,),
     urls: List[str] = typer.Argument(..., help="webhook urls", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if yes or typer.confirm("\nProceed?", abort=True):
@@ -516,12 +510,10 @@ def template(
     dev_type: DevTypes = typer.Option("sw"),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     if not template:
@@ -560,22 +552,21 @@ def template(
 # TODO config option for different random pass formats
 @app.command()
 def guest(
-    portal_id: str = typer.Argument(..., show_default=False,),
+    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
     password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
-    phone: str = typer.Option(None, help="Phone # of guest; Format [+CountryCode][PhoneNumber]", show_default=False,),
+    phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
     email: str = typer.Option(None, help="email of guest", show_default=False,),
     notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'", show_default=False,),
     disable: bool = typer.Option(False, "--disable", is_flag=True, help="add account, but set to disabled", show_default=False,),
-    yes: bool = typer.Option(False, "-Y", "-y", help="Bypass confirmation prompts - Assume Yes"),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
 ) -> None:
     """Add a guest user to a configured portal"""
+    portal: CentralObject = cli.cache.get_name_id_identifier("portal", portal).id
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
@@ -590,7 +581,7 @@ def guest(
 
     # TODO Add options for expire after / valid forever
     payload = {
-        "portal_id": portal_id,
+        "portal_id": portal,
         "name": name,
         "company_name": company,
         "phone": phone,
@@ -607,10 +598,13 @@ def guest(
 
     _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
     _msg += f"  {options}\n"
-    _msg += "\n[italic dark_olive_green2]Password (if provided) not displayed[/]\n"
+    if password:
+        _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if yes or typer.confirm("\nProceed?", abort=True):
         resp = cli.central.request(cli.central.add_visitor, **payload)
+        password = None
+        payload = None
         cli.display_results(resp, tablefmt="action")
 
 
