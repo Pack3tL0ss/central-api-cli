@@ -643,13 +643,13 @@ class CLICommon:
                             f.write(json.dumps(raw))
 
                 # Nothing returned in response payload
-                if not r.output:
-                    print(f"  Status Code: [{fg}]{r.status}[/]")
-                    print("  :warning: Empty Response.  This may be normal.")
+                # if not r.output:
+                #     print(f"  Status Code: [{fg}]{r.status}[/]")
+                #     print("  :warning: Empty Response.  This may be normal.")
 
-                    if log.caption:
-                        print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
-                elif not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
+                #     if log.caption:
+                #         print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
+                if not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
                     cleaner = clean.parse_caas_response
 
                 if not r or tablefmt in ["action", "raw", "clean"]:
@@ -681,9 +681,9 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
+                        clean_console.print(r)
                         # TODO make __rich__ renderable method in Response object with markups
                         # clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
-                        clean_console.print(r)
                         # console.print(f"[{fg}]{r}[/]")
 
                     if idx + 1 == len(resp):
