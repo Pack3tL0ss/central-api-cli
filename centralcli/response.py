@@ -337,6 +337,9 @@ class Response:
                     ) for k, v in self.output.items() if k != "status" and (v or v is False)
                 ]
             )
+        elif not self.output:
+            emoji = '\u2139' if self.ok else '\u26a0'  # \u2139 = :information:, \u26a0 = :warning:
+            r = f"  {emoji}  Empty Response.  This may be normal."
         else:
             r = f"  {self.output}"
 
