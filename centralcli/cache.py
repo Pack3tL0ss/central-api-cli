@@ -363,7 +363,7 @@ class Cache:
                 license.endswith("baas"),
                 "_vm_" in license,
                 license.endswith("zerto"),
-                license in {"sta", "stb", "stc", "bridge"},
+                license in {"sta", "stb", "stc", "bridge", "st", "pr", "es", "et", "special"},
                 license.startswith("private_cloud"),
                 "k8s" in license,
                 "proliant" in license,

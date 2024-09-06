@@ -835,7 +835,7 @@ def subscription(
         resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)
         title = "Subscription Details"
         _cleaner = cleaner.get_subscriptions
-        set_width_cols = {"name": 40}
+        set_width_cols = {"name": {"min": 39}}
     elif what == "auto":
         resp = cli.central.request(cli.central.get_auto_subscribe)
         if resp and "services" in resp.output:
@@ -852,7 +852,7 @@ def subscription(
         resp = cli.central.request(cli.cache.update_license_db)
         title = "Valid Subscription/License Names"
         _cleaner = None
-        set_width_cols = {"name": 31}
+        set_width_cols = {"name": {"min": 39}}
     else:
         raise ValueError("Error in logic evaluating what")
 
