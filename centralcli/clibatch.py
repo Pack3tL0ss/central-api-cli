@@ -756,14 +756,14 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
         cli.exit("No import file provided")
 
     # TODO common func for this type of multi-element confirmation, we do this a lot.
-    _msg = "\n".join([f"  [cyan]{name}[/]" for name in data])
+    _msg = "\n".join([f"  [cyan]{inner['name']}[/]" for inner in data])
     _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
     _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
     print(_msg)
 
     resp = None
     if cli.confirm(yes):
-        reqs = [BatchRequest(cli.central.create_label, label_name=label_name) for label_name in data]
+        reqs = [BatchRequest(cli.central.create_label, label_name=inner['name']) for inner in data]
         resp = cli.central.batch_request(reqs)
         # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
         try:
@@ -1398,7 +1398,7 @@ def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False,
 # FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
-@app.command(short_help="Delete devices.",)
+@app.command()
 def delete(
     what: BatchDelArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
@@ -1413,7 +1413,7 @@ def delete(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """[bright_green]Perform batch Delete operations using import data from file.[/]
+    """Perform batch Delete operations using import data from file.
 
     [cyan]cencli delete sites <IMPORT_FILE>[/] and
     [cyan]cencli delte groups <IMPORT_FILE>[/]
