@@ -249,6 +249,7 @@ _short_value = {
     "tx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
+    "device_claim_type": lambda v: None if v and v == "UNKNOWN" else v,
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -338,6 +339,10 @@ _short_key = {
     "tx_data_bytes": "TX",
     "rx_data_bytes": "RX",
     "link_speed": "speed",
+    "device_claim_type": "claim_type",
+    "device_model": "model",
+    "part_number": "sku",
+    "serial_number": "serial",
 }
 
 
@@ -459,6 +464,28 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None)
     ]
 
     return data
+
+def get_archived_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    key_order = [
+        "serial_number",
+        "mac_address",
+        "device_type",
+        "device_model",
+        "part_number",
+        "resource_id",
+        "device_claim_type",
+        "extra_attributes",
+        "indent_level",
+        "tag_entities",
+    ]
+
+    # if all platform_customer_id are the same the calling func adds it to the caption.
+    plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in data]))
+    if len(plat_cust_id) > 1:
+        key_order.insert(6, "platform_customer_id")
+
+    data = simple_kv_formatter(data=data, key_order=key_order)
+    return sorted(strip_no_value(data), key=lambda x: x["serial"])
 
 def get_group_names(data: List[List[str],]) -> list:
     """Convert list of single item lists to a list of strs

@@ -870,6 +870,15 @@ class SortOverlayInterfaceOptions(str, Enum):
     routes = "routes"
 
 
+class SortArchivedOptions(str, Enum):
+    serial = "serial"
+    mac = "mac"
+    type = "type"
+    model = "model"
+    sku = "sku"
+    resource_id = "resource-id"
+
+
 class SendCmdArgs(str, Enum):
     device = "device"
     site = "site"
