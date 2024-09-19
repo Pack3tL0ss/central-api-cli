@@ -213,7 +213,11 @@ class Config:
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
         self.base_dir = base_dir or Path(__file__).parent.parent
-        self.cwd = Path().cwd()
+        try:
+            self.cwd = Path.cwd()
+        except FileNotFoundError:
+            self.cwd = Path.home()  # In the very rare event the user launches a command from a directory that they've deleted in another session.
+
         self.file = _get_config_file(
             [
                 Path().home() / ".config" / "centralcli",
