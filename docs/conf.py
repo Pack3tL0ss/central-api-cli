@@ -23,7 +23,7 @@ index_master = True
 # -- Project information -----------------------------------------------------
 
 project = "cencli Aruba Central API CLI"
-copyright = "2023, Wade Wells ~ Pack3tL0ss"
+copyright = "2024, Wade Wells ~ Pack3tL0ss"
 author = "Wade Wells ~ Pack3tL0ss"
 
 

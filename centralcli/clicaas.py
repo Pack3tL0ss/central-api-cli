@@ -165,17 +165,52 @@ def import_vlan(
         raise typer.Exit(1)
 
 
-@app.command("batch", short_help="Run Supported caas commands providing parameters via stored-tasks file")
+@app.command("batch")
 def caas_batch(
-    key: str = typer.Argument(None,),
+    key: str = typer.Argument(None, help="The parent key in sthe stored-tasks file containing the arguments/options to supply to the command.", show_default=False,),
     file: Path = typer.Option(config.stored_tasks_file, exists=True,),
-    command: str = typer.Option(None,),
+    command: str = typer.Option(None, help="The cencli batch command to run with the arguments/options from the stored-tasks file", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """cencli caas batch add-vlan add-vlan-99"""
+    """Run Supported caas commands providing parameters via stored-tasks file
+
+    :warning:  [bright_red]Use Caution[/]  This command is not tested often, as other options are available to accomplish similar tasks.
+        [dark_orange3 italic]Always test against non-production gear before production[/]
+    This command is primarily used for demo/re-use of the other [cyan]cencli batch...[/] commands
+    These commands can take a lot of arguments options.  This command allows you to store those
+    arguments/options in a stored-tasks file (yaml/json).
+
+    The [cyan]key[/] references the parent key in the stored-tasks file.
+    Positional [cyan]arguments[/] for the command are provided via the [cyan]arguments[/] key.
+    All options (command line flags in the form [cyan]--option-name[/]) are provided as key/value pairs under an [cyan]options[/] key.
+    [cyan]-- OR --[/]
+        To send commands to the GW.  Simply provide the list of commands under the [cyan]cmds[/] key.
+        This implies [cyan]--command send-cmds[/]
+
+    [bright_green]Examples[/]:
+    [cyan]cencli caas test-acl /path/to/stored-tasks.yaml[/]
+
+    [italic]Then within stored-tasks.yaml[/]
+    test-acl:
+      arguments:
+        - 20:4C:03:AA:BB:CC
+      cmds:
+        - netdestination star-dot-facebook
+        - name *.facebook.com
+        - "!"
+        - ip access-list session dmz-firewall
+        - any alias star-dot-facebook any deny
+        - any any any permit
+        - "!"
+        - user-role dmz-firewall-role
+        - access-list session apprf-authenticated-sacl
+        - access-list session ra-guard
+        - access-list session dmz-firewall
+        - "!"
+    """
     caasapi = caas.CaasAPI(central=cli.central)
     if file == config.stored_tasks_file and not key:
         cli.exit("key is required when using the default import file")
