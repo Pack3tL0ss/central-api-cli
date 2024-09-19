@@ -199,11 +199,9 @@ def group(
         )  # TODO is there a way to trigger help text
         raise typer.Exit(1)
     if not aos10 and mb:
-        print("[bright_red]Error: Microbranch is only valid if group is configured as AOS10 group.")
-        raise typer.Exit(1)
+        cli.exit("[bright_red]Error[/]: Microbranch is only valid if group is configured as [cyan]AOS10[/] group.")
     if (mo_sw or mo_cx) and wired_tg:
-        print("[bright_red]Error: Monitor only is not valid for template group.")
-        raise typer.Exit(1)
+        cli.exit("[bright_red]Error[/]: Monitor only is not valid for template group.")
     if mo_sw is not None and not sw:
         print("Invalid combination --mo-sw not valid without --sw")
         print("[bright_red]Error: Monitor only can only be set when initially adding AOS-SW as allowed to group.")
@@ -285,8 +283,8 @@ def config_(
     # TODO collect multi-line input as option to paste in config
     cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
-    do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
-    do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
+    do_gw: bool = typer.Option(None, "--gw", help="Update group level config for gateways."),
+    do_ap: bool = typer.Option(None, "--ap", help="Update group level config for APs."),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -310,22 +308,19 @@ def config_(
     if group_dev.is_group:
         device = None
         if not do_ap and not do_gw:
-            print("Invalid Input, --gw or --ap option must be supplied for group level config.")
-            raise typer.Exit(1)
+            cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
     else:  # group_dev is a device iden
         device = group_dev
 
     if do_gw or (device and device.generic_type == "gw"):
         if device and device.generic_type != "gw":
-            print(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
-            raise typer.Exit(1)
+            cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
         use_caas = True
         caasapi = caas.CaasAPI(central=cli.central)  # XXX Burried import
         node_iden = group_dev.name if group_dev.is_group else group_dev.mac
     elif do_ap or (device and device.generic_type == "ap"):
         if device and device.generic_type != "ap":
-            print(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
-            raise typer.Exit(1)
+            cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.serial
 
