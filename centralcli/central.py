@@ -6020,7 +6020,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_fixme(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -6057,7 +6057,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -6103,7 +6103,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_status(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         ssid: str = None,
     ) -> Response:
         """Read upload status of last file upload.

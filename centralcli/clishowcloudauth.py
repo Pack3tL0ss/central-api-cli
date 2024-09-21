@@ -68,7 +68,7 @@ def registered_macs(
 
 @app.command()
 def upload(
-    what: CloudAuthUploadType = typer.Argument("mac", show_default=True),
+    what: CloudAuthUploadType = typer.Argument(CloudAuthUploadType.mac, show_default=True),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,

@@ -15,6 +15,8 @@ EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
+SendConfigTypes = Literal["ap", "gw"]
+CloudAuthUploadTypes = Literal["mpsk", "mac"]
 
 
 class AllDevTypes(str, Enum):
@@ -46,13 +48,6 @@ class TSDevTypes(str, Enum):
     gateway = "gateway"
     gw = "gw"
     mas = "mas"
-
-
-class SendConfigDevIdens(str, Enum):
-    ap = "ap"
-    gw = "gw"
-    # sw = "sw"  # hopefully some day
-    # cx = "cx"
 
 class PoEDetectionStatus(Enum):
     NA = 0
@@ -359,10 +354,11 @@ class BatchAddArgs(str, Enum):
     macs = "macs"
     mpsk = "mpsk"
 
-# CloudAuthUploadType = Literal["mpsk", "mac"]
+
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
+
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
