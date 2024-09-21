@@ -679,7 +679,7 @@ class Utils:
     ) -> str:
         """wrapper function for rich.Prompt().ask()
 
-        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort" or "exit"
+        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
         """
         console = console or Console()
         def abort():
@@ -701,7 +701,7 @@ class Utils:
         except (KeyboardInterrupt, EOFError):
             abort()
 
-        if choice.lower() in ["abort", "exit"]:
+        if choice.lower() == "abort":
             abort()
 
         return choice
