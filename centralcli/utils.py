@@ -620,8 +620,9 @@ class Utils:
 
     @staticmethod
     def color(
-        text: Union[str, bool, List[str]],
+        text: str | bool | List[str],
         color_str: str = "bright_green",
+        pad_len: int = 0,
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
@@ -637,6 +638,7 @@ class Utils:
                 is provided it is converted to str and formatted.
             color_str (str, optional): Text is formatted with this color.
                 Default: bright_green
+            pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
             italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
             bold (bool, optional): Wheather to apply bold to text. Default None/False
@@ -653,9 +655,9 @@ class Utils:
         color_str = color_str if not blink else f"blink {color_str}"
 
         if isinstance(text, str):
-            return f"[{color_str}]{text}[/{color_str}]"
+            return f"{' ':{pad_len}}[{color_str}]{text}[/{color_str}]"
         elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
-            text = [f"[{color_str}]{t}[/{color_str}]" for t in text]
+            text = [f"{' ':{pad_len}}[{color_str}]{t}[/{color_str}]" for t in text]
             return sep.join(text)
         else:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
@@ -664,7 +666,6 @@ class Utils:
     def chunker(seq, size):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
-    # TODO decorator func
     @staticmethod
     def ask(
         prompt: str = "",
@@ -678,11 +679,11 @@ class Utils:
     ) -> str:
         """wrapper function for rich.Prompt().ask()
 
-        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort"
-
+        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort" or "exit"
         """
+        console = console or Console()
         def abort():
-            print("Aborted")
+            console.print(":warning:  [red]Aborted[/]", emoji=True)
             sys.exit()
 
         choices = choices if choices is not None and "abort" in choices else ["abort", *choices]
@@ -700,7 +701,7 @@ class Utils:
         except (KeyboardInterrupt, EOFError):
             abort()
 
-        if choice.lower() == "abort":
+        if choice.lower() in ["abort", "exit"]:
             abort()
 
         return choice
