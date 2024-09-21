@@ -701,7 +701,7 @@ class Utils:
         except (KeyboardInterrupt, EOFError):
             abort()
 
-        if choice.lower() == "abort":
+        if choice == "abort":
             abort()
 
         return choice
