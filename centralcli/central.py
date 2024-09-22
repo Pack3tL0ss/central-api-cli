@@ -2864,22 +2864,24 @@ class CentralApi(Session):
     async def create_group(
         self,
         group: str,
-        allowed_types: constants.AllDevTypes | List[constants.AllDevTypes] = ["ap", "gw", "cx", "sw"],
+        allowed_types: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = ["ap", "gw", "cx", "sw"],
         wired_tg: bool = False,
         wlan_tg: bool = False,
         aos10: bool = False,
         microbranch: bool = False,
-        gw_role: constants.GatewayRole = "branch",
+        gw_role: constants.BranchGwRoleTypes = "branch",
         monitor_only_sw: bool = False,
         monitor_only_cx: bool = False,
+        cnx: bool = False,
     ) -> Response:
         """Create new group with specified properties. v3
 
         Args:
             group (str): Group Name
             allowed_types (str, List[str]): Allowed Device Types in the group. Tabs for devices not allowed
-                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch"
+                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch", "sdwan"
                 ("switch" is generic, will enable both cx and sw)
+                When sdwan (EdgeConnect SD-WAN) is allowed, it has to be the only type allowed.
             wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
                 using templates.
             wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
@@ -2891,6 +2893,7 @@ class CentralApi(Session):
                 Default: "branch"
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
             monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
+            cnx (bool, optional): Make group compatible with cnx (New Central)
 
         Returns:
             Response: CentralAPI Response object
@@ -2908,6 +2911,7 @@ class CentralApi(Session):
             "switch": "Switches",
             "cx": "Switches",
             "sw": "Switches",
+            "sdwan": "SD_WAN_Gateway",
         }
 
         gw_role = gw_role_dict.get(gw_role, "BranchGateway")
@@ -2933,7 +2937,9 @@ class CentralApi(Session):
             log.warning("ignoring monitor only switch setting as no switches were specified as being allowed in group", show=True)
 
         if None in allowed_types:
-            raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"')
+            raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch", "sdwan')
+        elif "sdwan" in allowed_types and len(allowed_types) > 1:
+            raise ValueError('Invalid value for allowed_types.  When sdwan device type is allowed, it must be the only type allowed for the group')
         if microbranch and not aos10:
             raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
         if wired_tg and (monitor_only_sw or monitor_only_cx):
@@ -2948,10 +2954,14 @@ class CentralApi(Session):
                 },
                 "group_properties": {
                     "AllowedDevTypes": allowed_types,
+                    "NewCentral": cnx,
                 }
             }
         }
-        if gw_role and "Gateways" in allowed_types:
+        if "SD_WAN_Gateway" in allowed_types:
+            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = None
+            json_data["group_attributes"]["group_properties"]["Architecture"] = "SD_WAN_Gateway"
+        elif gw_role and "Gateways" in allowed_types:
             json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
             json_data["group_attributes"]["group_properties"]["Architecture"] = \
                 "Instant" if not aos10 else "AOS10"

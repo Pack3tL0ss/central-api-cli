@@ -6,17 +6,19 @@ from enum import Enum
 from typing import Literal, Union
 
 # ------ // Central API Consistent Device Types \\ ------
-lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
-generic_lib_dev_idens = ["ap","gw", "switch"]
-LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
-GenericDeviceTypes = Literal["ap", "gw", "switch"]  # strEnum ok for CLI completion but doesn't enable ide to complete
-DeviceTypes = Literal["ap", "cx", "sw", "gw"]
+lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
+generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
+LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
+LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
+GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete
+DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
 EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
 SendConfigTypes = Literal["ap", "gw"]
 CloudAuthUploadTypes = Literal["mpsk", "mac"]
+BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 
 
 class AllDevTypes(str, Enum):
@@ -25,12 +27,14 @@ class AllDevTypes(str, Enum):
     cx = "cx"
     gw = "gw"
     switch = "switch"
+    sdwan = "sdwan"
 
 
 class GenericDevTypes(str, Enum):
     ap = "ap"
     gw = "gw"
     switch = "switch"
+    sdwan = "sdwan"
 
 
 class DevTypes(str, Enum):
@@ -38,6 +42,7 @@ class DevTypes(str, Enum):
     sw = "sw"
     cx = "cx"
     gw = "gw"
+    sdwan = "sdwan"
 
 
 class TSDevTypes(str, Enum):
