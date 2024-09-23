@@ -257,8 +257,8 @@ class Response:
             _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
-                if isinstance(self.output, dict) and "description" in self.output:
-                    log.error(_log_msg.replace("Elapsed:", f'{self.output["description"]} Elapsed:'))
+                if isinstance(self.output, dict) and "description" in self.output or "detail" in self.output:
+                    log.error(_log_msg.replace("Elapsed:", f'{self.output.get("description", self.output.get("detail", ""))} Elapsed:'))
                 else:
                     log.error(_log_msg)
             elif not isinstance(self, CombinedResponse):
