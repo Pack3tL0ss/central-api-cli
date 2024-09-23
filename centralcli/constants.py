@@ -101,8 +101,6 @@ class ShowInventoryArgs(str, Enum):
     ap = "ap"
     gw = "gw"
     vgw = "vgw"
-    # sw = "sw"
-    # cx = "cx"
     switch = "switch"
 
 
