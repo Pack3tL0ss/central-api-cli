@@ -9,6 +9,7 @@ from typing import List, Literal, Union, Tuple, Dict, Any
 from pathlib import Path
 from rich.console import Console
 from rich.prompt import Confirm
+from rich.text import Text
 from rich import print
 import json
 import pkg_resources
@@ -457,7 +458,7 @@ class CLICommon:
                     sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
 
             if sort_msg:
-                _caption = "\n".join([f"  {m}" for m in sort_msg])
+                _caption = "\n".join([f" {m}" for m in sort_msg])
                 _caption = _caption if tablefmt != "rich" else render.rich_capture(_caption, emoji=True)
                 if caption:
                     c = caption.splitlines()
@@ -588,7 +589,7 @@ class CLICommon:
             cleaner (callable, optional): The Cleaner function to use.
         """
         if isinstance(caption, list):
-            caption = "\n  ".join(caption)
+            caption = "\n ".join(caption)
         if resp is not None:
             resp = utils.listify(resp)
 
@@ -600,7 +601,7 @@ class CLICommon:
                 last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
                 if last_rl:
                     rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
-                    caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
+                    caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
             except Exception as e:
                 rl_str = ""
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
@@ -608,7 +609,7 @@ class CLICommon:
             caption = caption or ""
             if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
                 # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
+                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
@@ -636,7 +637,7 @@ class CLICommon:
                         print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
                         print(f" [{fg}]Response[reset]:")
 
-                if config.capture_raw:
+                if config.capture_raw and r.method == "GET":
                     with clean_console.status("Capturing raw response"):
                         raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
                         with config.capture_file.open("a") as f:
@@ -649,8 +650,6 @@ class CLICommon:
 
                 #     if log.caption:
                 #         print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
-                if not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
-                    cleaner = clean.parse_caas_response
 
                 if not r or tablefmt in ["action", "raw", "clean"]:
 
@@ -681,10 +680,11 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        clean_console.print(r)
-                        # TODO make __rich__ renderable method in Response object with markups
-                        # clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
-                        # console.print(f"[{fg}]{r}[/]")
+                        if not r.url.path == "/caasapi/v1/exec/cmd":
+                            clean_console.print(r)
+                        else:
+                            clean_console.print(Text.from_ansi(clean.parse_caas_response(r.output)))  # TODO still need to covert everything from cleaners to rich MarkUp so we can use rich print consistently vs typer.echo
+                            # TODO make __rich__ renderable method in Response object with markups
 
                     if idx + 1 == len(resp):
                         if caption:
@@ -710,10 +710,6 @@ class CLICommon:
                         cleaner=cleaner,
                         **cleaner_kwargs
                     )
-
-            # TODO make elegant caas send-cmds uses this logic
-            if cleaner and cleaner.__name__ == "parse_caas_response":
-                print(caption)
 
             if exit_on_fail and not all([r.ok for r in resp]):
                 raise typer.Exit(1)
