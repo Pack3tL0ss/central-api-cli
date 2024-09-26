@@ -594,7 +594,7 @@ class Config:
             else:
                 config_data = f"{yaml.safe_dump(config_data)}{config_comments}"
                 Console().rule("\n\n[bold cyan]Resulting Configuration File Content")
-                print(config_data)
+                print(config_data.replace(password, "*********"))
                 Console().rule()
                 if Confirm.ask("\nContinue?"):
                     print(f"\n\n[cyan]Writing to {self.file}")
