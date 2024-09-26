@@ -104,6 +104,7 @@ NOT_ACCOUNT_KEYS = [
     "no_pager",  # deprecated key kept in for older configs that might be using it
     "sanitize",
     "webclient_info",
+    "capture_raw",
 ]
 
 JSON_TYPE = Union[List, Dict, str]  # pylint: disable=invalid-name
