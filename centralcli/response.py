@@ -104,6 +104,9 @@ class RateLimit():
         else:
             return "No API call was performed."
 
+    def __rich__(self):
+        return f"[reset][italic dark_olive_green2]{str(self)}[/]"
+
     def __len__(self) -> int:
         return len(self.__str__())
 
