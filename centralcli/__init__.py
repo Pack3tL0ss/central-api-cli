@@ -144,9 +144,9 @@ from .utils import Utils
 utils = Utils()
 from .response import Response, BatchRequest
 from .central import CentralApi
-from .cache import Cache, CentralObject
+from .cache import Cache, CentralObject, CacheGroup, CacheLabel
 from .clicommon import CLICommon
-from . import cleaner
+from . import cleaner, render
 
 # if no environ vars set for LESS command line options
 # set -X to retain scroll-back after quitting less
@@ -188,6 +188,8 @@ if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for l
 
 central = CentralApi(config.account)
 cache = Cache(central)
+CacheGroup.db(cache.GroupDB)
+CacheLabel.db(cache.LabelDB)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
