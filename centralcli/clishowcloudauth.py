@@ -11,12 +11,12 @@ from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, cleaner
+    from centralcli import cli, cleaner, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, cleaner
+        from centralcli import cli, cleaner, log
     else:
         print(pkg_dir.parts)
         raise e
@@ -87,7 +87,12 @@ def upload(
     This command can be ran after [cyan]cencli batch add <macs|mpsk> to see the status of the upload.
     """
     resp = cli.central.request(cli.central.cloudauth_upload_status, upload_type=what.value)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="action")
+    if resp.ok:
+        try:
+            resp.output = cleaner.cloudauth_upload_status(resp.output)
+        except Exception as e:
+            log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}")
 
     cli.display_results(
         resp,
@@ -98,7 +103,6 @@ def upload(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        cleaner=cleaner.cloudauth_upload_status
     )
 
 @app.callback()
