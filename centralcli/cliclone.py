@@ -44,7 +44,7 @@ def group(
             "\n    Use [cyan]cencli show groups[/] after clone to verify."
         )
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.clone_group, clone_group, new_group)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
         groups = cli.cache.groups_by_name
