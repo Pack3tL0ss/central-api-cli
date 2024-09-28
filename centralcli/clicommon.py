@@ -822,7 +822,10 @@ class CLICommon:
                 while chunk := f.read(4096):
                     md5.update(chunk)
         elif string:
-            md5.update(string.encode("utf-8"))
+            if isinstance(string, bytes):
+                md5.update(string)
+            else:
+                md5.update(string.encode("utf-8"))
         else:
             raise ValueError("One of file or string argument is required")
 
