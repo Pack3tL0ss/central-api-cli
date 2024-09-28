@@ -246,24 +246,24 @@ class Utils:
     def get_multiline_input(
         prompt: str = None,
         return_type: Literal["str", "dict", "list"] = "str",
-        abort_str: str = "exit",
+        abort_str: str = "EXIT",
         **kwargs
     ) -> List[str] | dict | str:
         console = Console(emoji=True)
         exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
-        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]exit[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
+        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]{abort_str}[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
         def _get_multiline_sub(prompt: str = prompt, **kwargs):
             prompt = f"{prompt}\n\n{exit_prompt_text}" if prompt else f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
             console.print(prompt, **kwargs)
             contents, line = [], ''
-            while line.strip().lower() != abort_str:
+            while line != abort_str:
                 try:
                     line = input()
                     contents.append(line)
                 except EOFError:
                     break
 
-            if line.strip().lower() == abort_str:
+            if line == abort_str:
                 console.print("[bright_red]Aborted[/]")
                 sys.exit()
 
