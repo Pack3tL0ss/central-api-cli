@@ -7,17 +7,23 @@ import asyncio
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable
+from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable, TYPE_CHECKING
 
 import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from tinydb.table import Table, Document
 from copy import deepcopy
 
-from centralcli import CentralApi, Response, cleaner, config, constants, log, models, render, utils
+from centralcli import CentralApi, Response, config, constants, log, models, render, utils
 from centralcli.response import CombinedResponse
+from tinydb.table import Document
+
+from rich.protocol import _GIBBERISH
+
+if TYPE_CHECKING:
+    from tinydb.table import Table
+
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -31,7 +37,7 @@ except Exception:
     FUZZ = False
 
 # Used to debug completion
-err_console = Console(stderr=True)
+econsole = Console(stderr=True)
 emoji_console = Console()
 console = Console(emoji=False)
 TinyDB.default_table_name = "devices"
@@ -53,23 +59,24 @@ LIB_DEV_TYPE = {
 # HACK  rich is leading to an exception as it tried to inspect the Cache object during an exception
 # Cache LookUp Failure: 'CentralObject' has no attribute ... (attributes below).
 RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
-    "awehoi234_wdfjwljet234_234wdfoijsdfmmnxpi492",
+    _GIBBERISH,
     "__rich_repr__",
     "_fields"
 ]
 
-CACHE_TABLES = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
+CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
 
 class CentralObject:
     def __init__(
         self,
         db: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
-        data: Union[list, Dict[str, Any]],
-    ) -> Union[list, Dict[str, Any]]:
+        data: Document | Dict[str, Any] | List[Document | Dict[str, Any]],
+    ) -> list | Dict[str, Any]:
         self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_portal = False, False, False, False, False, False, False
         data: Dict | List[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
+        self.doc_id = None if not hasattr(data, "doc_id") else data.doc_id
 
         if isinstance(data, list):
             if len(data) > 1:
@@ -81,14 +88,18 @@ class CentralObject:
 
         # When building Central Object from Inventory this is necessary
         # TODO maybe pydantic model
-        if self.is_dev and self.data:
-            self.name = self.data["name"] = self.data.get("name", self.data["serial"])
-            self.status = self.data["status"] = self.data.get("status")
-            self.ip = self.data["ip"] = self.data.get("ip")
-            self.site = self.data["site"] = self.data.get("site")
-            self.group = self.data["group"] = self.data.get("group")
-            self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
-            self.serial: str = self.data.get("serial")
+        if data:
+            if self.is_dev:
+                self.name = self.data["name"] = self.data.get("name", self.data["serial"])
+                self.status = self.data["status"] = self.data.get("status")
+                self.ip = self.data["ip"] = self.data.get("ip")
+                self.site = self.data["site"] = self.data.get("site")
+                self.group = self.data["group"] = self.data.get("group")
+                self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
+                self.serial: str = self.data.get("serial")
+
+    def __rich__(self):
+        return self.summary_text
 
     def __bool__(self):
         return bool(self.data)
@@ -114,9 +125,9 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        if name not in RICH_EXCEPTION_IGNORE_ATTRIBUTES:
-            log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
-            raise typer.Exit(1)
+        # if name not in RICH_EXCEPTION_IGNORE_ATTRIBUTES:
+        #     log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
+        #     raise typer.Exit(1)
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -209,8 +220,72 @@ class CentralObject:
         )
 
 
+class CacheGroup(CentralObject):
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('group', data)
+        self.name: str = data["name"]
+        self.allowed_types: List[constants.DeviceTypes] = data["allowed_types"]
+        self.gw_role: constants.BranchGwRoleTypes = data["gw_role"]
+        self.aos10: bool = data["aos10"]
+        self.microbranch: bool = data["microbranch"]
+        self.wlan_tg: bool = data["wlan_tg"]
+        self.wired_tg: bool = data["wired_tg"]
+        self.monitor_only_sw: bool = data["monitor_only_sw"]
+        self.monitor_only_cx: bool = data["monitor_only_cx"]
+        self.cnx: bool = data.get("cnx")
 
-# TODO Not used yet refactor to make consistent Response object available for when using contents of cache to avoid API call
+    @classmethod
+    def db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        if doc_id:
+            self._doc_id = doc_id
+        elif hasattr(self, 'db') and hasattr(self, "name"):
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
+
+
+class CacheLabel(CentralObject):
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('label', data)
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+
+    @classmethod
+    def db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        if doc_id:
+            self._doc_id = doc_id
+        elif hasattr(self, 'db') and hasattr(self, "name"):
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
+
+
 class CacheResponses:
     def __init__(
         self,
@@ -222,6 +297,7 @@ class CacheResponses:
         label: Response = None,
         mpsk: Response = None,
         portal: Response = None,
+        license: Response = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -231,6 +307,7 @@ class CacheResponses:
         self._label = label
         self._mpsk = mpsk
         self._portal = portal
+        self._license = license
 
     def update_rl(self, resp: Response | None) -> Response | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
@@ -238,7 +315,7 @@ class CacheResponses:
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal] if r is not None], key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license] if r is not None], key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -306,6 +383,14 @@ class CacheResponses:
     @portal.setter
     def portal(self, resp: Response):
         self._portal = resp
+
+    @property
+    def license(self):
+        return self.update_rl(self._license)
+
+    @license.setter
+    def license(self, resp: Response):
+        self._license = resp
 
 
 class Cache:
@@ -413,12 +498,16 @@ class Cache:
         return self.GroupDB.all()
 
     @property
-    def groups_by_name(self) -> list:
-        return {g["name"]: dict(g) for g in self.groups}
+    def groups_by_name(self) -> Dict[str: CacheGroup]:
+        return {g["name"]: CacheGroup(g) for g in self.groups}
 
     @property
     def labels(self) -> list:
         return self.LabelDB.all()
+
+    @property
+    def labels_by_name(self) -> Dict[str: CacheLabel]:
+        return {label["name"]: CacheLabel(label) for label in self.labels}
 
     @property
     def licenses(self) -> List[str]:
@@ -497,6 +586,40 @@ class Cache:
     async def get_hooks_by_serial(self, serial):
         return self.HookDataDB.get(self.Q.device_id == serial)
 
+    @staticmethod
+    def verify_db_action(db: CacheTable, *, expected: int, response: List[int | List[int]], remove: List[int] = None) -> bool:
+        """Evaluate TinyDB Cache results (search/add/update/delete).
+
+        Verifies response from TinyDB lookup/update, logs and returns a bool indicating success/failure.
+
+        Args:
+            db (CacheTable): The TinyDB Table/Cache the update/lookup was peformed on.
+            expected (int): The number of records that were expected.
+            response (List[int  |  List[int]]): The update/lookup response from TinyDB
+            remove (List[int], optional): Provide the list of doc_ids for delete operations.
+                Results in additional log if len(doc_ids) != expected meaning db lookup
+                did not find a match for every query.  Defaults to None (add/update operation)
+
+        Returns:
+            bool: Bool indicating if update was succesful.
+        """
+        resp_cnt = len(response)
+        if remove:
+            if len(remove) != expected:
+                log.warning(f'{db.capitalize()}DB cache update_{db}_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.')
+
+            expected = len(remove)
+
+        msg = f"remove {expected} records" if remove else f"add/update {expected} records"
+        update_ok = True if expected == resp_cnt else False
+
+        if update_ok:
+            log.info(f'{db.title()} cache update SUCCESS: {msg}')
+            return True
+        else:
+            log.error(f'{db.title()} cache update ERROR:  Attempt to {msg} appears to have failed.  Expecting {expected} doc_ids TinyDB returned {resp_cnt}', show=True, caption=True, log=True)
+            log.error(f'{db} update response: {response}')
+            return False
 
     def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response]:
         """Returns List of Response objects with data from Inventory and Monitoring
@@ -570,7 +693,7 @@ class Cache:
     def method_test_completion(self, incomplete: str, args: List[str] = []):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if self.central is not None:
@@ -598,7 +721,7 @@ class Cache:
     def smg_kw_completion(self, ctx: typer.Context, incomplete: str, args: List[str] = []):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         kwds = ["group", "mac", "serial"]
@@ -639,7 +762,7 @@ class Cache:
     ):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         dev_type = None
@@ -695,7 +818,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(incomplete, dev_type=["switch"], completion=True)
@@ -728,7 +851,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(incomplete, dev_type=[dev_type], completion=True)
@@ -776,7 +899,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match: List[CentralObject] = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
@@ -799,7 +922,7 @@ class Cache:
     ):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_mpsk_identifier(
@@ -831,7 +954,7 @@ class Cache:
     ):
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_name_id_identifier(
@@ -878,7 +1001,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if not args:  # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
@@ -952,7 +1075,7 @@ class Cache:
 
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         dev_types = ["ap"]
@@ -1001,7 +1124,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
 
@@ -1033,7 +1156,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
@@ -1066,7 +1189,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         # Prevents device completion for cencli show config cencli
@@ -1108,7 +1231,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         dev_types = ["switch", "gw"]
@@ -1140,7 +1263,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(incomplete, dev_type="gw", completion=True)
@@ -1159,7 +1282,7 @@ class Cache:
         self,
         incomplete: str,
         ctx: typer.Context = None,
-        dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None,
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
         conductor_only: bool = False,
         args: List[str] = None,
     ) -> Generator[Tuple[str, str], None, None] | None:
@@ -1179,7 +1302,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         # match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
@@ -1245,7 +1368,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         return self._group_dev_completion(incomplete, ctx=ctx, args=args)
@@ -1268,7 +1391,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         # group_match = self.get_group_identifier(incomplete, completion=True)
@@ -1321,7 +1444,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
@@ -1354,7 +1477,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if ctx.params.get("nodes"):
@@ -1415,7 +1538,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_group_identifier(
@@ -1450,7 +1573,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_label_identifier(
@@ -1485,7 +1608,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_client_identifier(
@@ -1529,7 +1652,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if incomplete == "":
@@ -1561,7 +1684,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if incomplete == "":
@@ -1591,7 +1714,7 @@ class Cache:
         """
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
@@ -1621,7 +1744,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_template_identifier(
@@ -1644,7 +1767,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_template_identifier(
@@ -1672,7 +1795,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(
@@ -1700,7 +1823,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         # typer stopped providing args pulling from ctx.params
@@ -1730,7 +1853,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         match = self.get_dev_identifier(
@@ -1759,7 +1882,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         if args[-1].lower() == "site":
@@ -1788,7 +1911,7 @@ class Cache:
     ) -> Generator[Tuple[str, str], None, None] | None:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
-            err_console.print(":warning:  Invalid config")
+            econsole.print(":warning:  Invalid config")
             return
 
         cache = ()
@@ -2124,21 +2247,20 @@ class Cache:
             resp = [r for r in batch_resp if r.ok][-1]
             resp.rl = sorted([r.rl for r in batch_resp if r.rl.ok])[0]
             resp.raw = {r.url.path: r.raw for r in batch_resp}
-            resp.output = [models.Inventory(**d).dict() for d in combined.values()]
+            resp.output = [models.Inventory(**d).model_dump() for d in combined.values()]
             if dev_type == "all":
                 self.updated.append(self.central.get_device_inventory)
                 self.responses.inv = resp
 
                 self.InvDB.truncate()
                 db_res = self.InvDB.insert_multiple(resp.output)
-
-                if len(db_res) < len(resp):
-                    log.error(f"Inventory cache update TinyDB returned {len(db_res)} doc_ids, expected {len(resp)}", caption=True, show=True, log=True)
+                self.verify_db_action("inv", expected=(len(resp)), response=db_res)
             else:
                 self._add_update_devices(resp.output, "inv")
 
             return resp
 
+    # TODO break all update_*_db into update_*_db and refresh_*_db.  So return is consistent
     async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         if data:
             data = utils.listify(data)
@@ -2147,31 +2269,25 @@ class Cache:
                 combined_data = {**self.sites_by_id, **data}
                 self.SiteDB.truncate()
                 update_res = self.SiteDB.insert_multiple(combined_data.values())
-                if len(update_res) != len(combined_data):
-                    log.error(
-                        f"SiteDB Cache update failure: Attempted to Truncate/re-populate SiteDB with {len(combined_data)} sites ({len(data)} added/updated), TinyDB responded with {len(update_res)} doc_ids.",
-                        show=True,
-                        caption=True,
-                        log=True
-                    )
+                self.verify_db_action('site', expected=len(combined_data), response=update_res)
                 return
             else:
                 doc_ids = []
-                for qry in data:
-                    # provided list of site_ids to remove
-                    if isinstance(qry, (int, str)) and str(qry).isdigit():
-                        doc_ids += [self.SiteDB.get((self.Q.id == qry)).doc_id]
-                    else:
-                        # list of dicts with {search_key: value_to_search_for}
-                        if len(qry.keys()) > 1:
-                            raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
-                        q = list(qry.keys())[0]
-                        doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
-                if len(data) != len(doc_ids):
-                    log.warning(f"Site DB cache update_site_db provided {len(data)} records to remove but found only {len(doc_ids)} matching sites.  Could be normal if cache was outdated.", log=True)
-                cache_res = self.SiteDB.remove(doc_ids=doc_ids)
-                if len(cache_res) != len(doc_ids):
-                    log.error(f"Site DB cache removal returned {len(cache_res)} expected {len(doc_ids)}", caption=True, log=True)
+                if all([isinstance(s, int) for s in data]):
+                    doc_ids = data
+                else:
+                    for qry in data:
+                        # provided list of site_ids to remove
+                        if isinstance(qry, str) and qry.isdigit():
+                            doc_ids += [self.SiteDB.get((self.Q.id == qry)).doc_id]
+                        else:
+                            # list of dicts with {search_key: value_to_search_for}
+                            if len(qry.keys()) > 1:
+                                raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
+                            q = list(qry.keys())[0]
+                            doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
+                update_res = self.SiteDB.remove(doc_ids=doc_ids)
+                self.verify_db_action('site', expected=len(data), response=update_res, remove=doc_ids)
 
         else:  # update site cache
             # TODO maybe have all the update funcs check if self.responses.site is not None and use it.  Add force: bool = False if there are scenarios where we may need to trigger a 2nd cache update in same session.
@@ -2186,63 +2302,78 @@ class Cache:
 
                 self.SiteDB.truncate()
                 update_res = self.SiteDB.insert_multiple(resp.output)
-                if len(update_res) != len(resp.output):
-                    log.error(f"Site cache truncate/re-populate expected {len(resp.output)} TinyDB returned {len(update_res)} doc_ids", show=True, caption=True, log=True)
+                self.verify_db_action('site', expected=len(resp), response=update_res)
             return resp
 
-    async def update_group_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_group_db(self, data: list | dict = None, remove: bool = False) -> List[int] | Response:
         if data:
             data = utils.listify(data)
             if not remove:
-                return self.GroupDB.insert_multiple(data)
+                return self.GroupDB.insert_multiple(data)  # TODO update so all these return groups even when cache is updated.  Just log a mismatch between TinyDB len(doc_ids)...
             else:
-                doc_ids = []
-                for qry in data:
-                    if len(qry.keys()) > 1:
-                        raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
-                    q = list(qry.keys())[0]
-                    doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
-                return self.GroupDB.remove(doc_ids=doc_ids)
+                if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
+                    doc_ids = data
+                else:
+                    doc_ids = []
+                    for qry in data:
+                        if len(qry.keys()) > 1:
+                            raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
+                        q = list(qry.keys())[0]
+                        doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
+
+                with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Group cache."):
+                    del_resp = self.GroupDB.remove(doc_ids=doc_ids)
+                    self.verify_db_action('group', expected=len(data), response=del_resp, remove=doc_ids)
+                    return
         else:
+            if self.responses.group:
+                log.info("Update Group DB already refreshed in this session, returning previous group response")
+                return self.responses.group
+
             resp = await self.central.get_all_groups()
             if resp.ok:
-                resp.output = cleaner.get_all_groups(resp.output)
+                groups = models.Groups(resp.output)
+                resp.output = groups.model_dump()
+
                 self.responses.group = resp
                 self.updated.append(self.central.get_all_groups)
+
                 self.GroupDB.truncate()
                 update_res = self.GroupDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error("Tiny DB returned an error during group db update", caption=True)
+                self.verify_db_action('group', expected=len(groups), response=update_res)
             return resp
 
     async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         if data:
             data = utils.listify(data)
             if not remove:
-                return self.LabelDB.insert_multiple(data)
+                update_res = self.LabelDB.insert_multiple(data)
+                self.verify_db_action('label', expected=len(data), response=update_res)
+                return
             else:
-                doc_ids = []
-                for qry in data:
-                    # provided list of label_ids to remove
-                    if isinstance(qry, (int, str)) and str(qry).isdigit():
-                        doc_ids += [self.LabelDB.get((self.Q.id == qry)).doc_id]
-                    else:
-                        # list of dicts with {search_key: value_to_search_for}
+                if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
+                    doc_ids = data
+                else:
+                    doc_ids = []
+                    for qry in data:
                         if len(qry.keys()) > 1:
                             raise ValueError(f"cache.update_label_db remove Should only have 1 query not {len(qry.keys())}")
                         q = list(qry.keys())[0]
                         doc_ids += [self.LabelDB.get((self.Q[q] == qry[q])).doc_id]
-                return self.LabelDB.remove(doc_ids=doc_ids)
+
+                with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Label cache."):
+                    del_resp = self.LabelDB.remove(doc_ids=doc_ids)
+                    self.verify_db_action('label', expected=len(data), response=del_resp, remove=doc_ids)
+                    return
         else:
             resp = await self.central.get_labels()
             if resp.ok:
                 self.responses.label = resp
                 self.updated.append(self.central.get_labels)
-                cache_data = [m.dict() for m in models.Labels(labels=resp.output).labels]
+                cache_data = [m.model_dump() for m in models.Labels(labels=resp.output).labels]
                 self.LabelDB.truncate()
                 update_res = self.LabelDB.insert_multiple(cache_data)
-                if len(update_res) < len(resp):
-                    log.error(f"LabelDB Cache Update error.  Truncate/re-populate TinyDB returned {len(update_res)} doc_ids expected {len(resp)}", show=True, log=True)
+                self.verify_db_action('label', expected=len(resp), response=update_res)
             return resp
 
     async def update_license_db(self) -> Response:
@@ -2256,11 +2387,11 @@ class Cache:
         resp = await self.central.get_valid_subscription_names()
         if resp.ok:
             resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
-            self.updated.append(self.central.get_valid_subscription_names)
+            self.updated.append(self.central.get_valid_subscription_names)  # TODO finish removing this method of verifying an update has occured
+            self.responses.license = resp
             self.LicenseDB.truncate()
             update_res = self.LicenseDB.insert_multiple(resp.output)
-            if False in update_res:
-                log.error("Tiny DB returned an error during license db update")
+            self.verify_db_action('license', expected=len(resp), response=update_res)
         return resp
 
     async def _renew_teplate_db(self):
@@ -2278,8 +2409,7 @@ class Cache:
                 self.responses.template = resp
                 self.TemplateDB.truncate()
                 update_res = self.TemplateDB.insert_multiple(resp.output)
-                if False in update_res:
-                    log.error("Tiny DB returned an error during template db update")
+                self.verify_db_action('template', expected=len(resp), response=update_res)
         return resp
 
 
@@ -2292,29 +2422,25 @@ class Cache:
         if not any([add, remove, update]):
             return await self._renew_teplate_db()
         else:
-            db_res = []
             try:
                 if remove:
                     remove = utils.listify(remove)
                     doc_ids = [t.doc_id for t in remove]  # TODO make sure cache object has doc_id attr for easy deletion, simplify other update funcs
                     db_res = self.TemplateDB.remove(doc_ids=doc_ids)
+                    self.verify_db_action('template', expected=len(remove), response=db_res, remove=doc_ids)
                 elif update:
                     update = utils.listify(update)
-                    db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]
+                    db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]  # FIXME combine existing with updated dict like others, upsert is slow
                     db_res = [doc_id for doc_id_list in db_res for doc_id in doc_id_list]  # return is like [[4], [3]]
-                    if False in db_res:
-                        log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
+                    self.verify_db_action('template', expected=len(update), response=db_res)
                 else: # add
                     add = utils.listify(add)
                     db_res = self.TemplateDB.insert_multiple(add)
+                    self.verify_db_action('template', expected=len(add), response=db_res)
             except Exception as e:
-                    log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True)
+                    log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True, caption=True, log=True)
                     log.exception(e)
-
-        if False in db_res:
-            log.error(f"TinyDB TemplateDB update returned an error.  db_resp: {db_res}", show=True)
-
-        return db_res
+        return
 
     # TODO need a reset cache flag in "show clients"
     async def update_client_db(
@@ -2645,7 +2771,7 @@ class Cache:
             fields = ("name", "serial", "mac", "type")
 
         if isinstance(match[0], models.Client):
-            data = [{k: d.dict()[k] for k in d.dict() if k in fields} for d in match]
+            data = [{k: d[k] for k in d.keys() if k in fields} for d in match]
         else:
             data = [{k: d[k] for k in d.data if k in fields} for d in match]
 
@@ -2755,7 +2881,7 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.LibDevIdens | List[constants.LibDevIdens] = None,
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
         swack: bool = False,
         conductor_only: bool = False,
         retry: bool = True,
@@ -2842,7 +2968,7 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_all_devices not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -2855,7 +2981,7 @@ class Cache:
                         kwargs["inv_db"] = True
                     else:
                         _word = " "
-                    err_console.print(f"Updating Device{_word}Cache.")
+                    econsole.print(f"Updating Device{_word}Cache.")
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
@@ -2912,6 +3038,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
+        exit_on_fail: bool = True,
     ) -> CentralObject | List[CentralObject]:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
@@ -2981,14 +3108,14 @@ class Cache:
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and self.central.get_all_sites not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and not completion:
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.SiteDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    typer.secho(f"No Match Found for {query_str}, Updating Site Cache", fg="red")
+                    econsole.print(":arrows_clockwise: Updating [cyan]site[/] Cache")
                     self.check_fresh(refresh=True, site_db=True)
             if match:
                 match = [CentralObject("site", s) for s in match]
@@ -3005,7 +3132,11 @@ class Cache:
 
         elif retry:
             log.error(f"Unable to gather site info from provided identifier {query_str}", show=not silent)
-            raise typer.Exit(1)
+            if exit_on_fail:
+                raise typer.Exit(1)
+            else:
+                return None
+
 
     def get_group_identifier(
         self,
@@ -3013,6 +3144,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
+        exit_on_fail: bool = True,
     ) -> CentralObject | List[CentralObject]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
@@ -3055,21 +3187,20 @@ class Cache:
                     )
                 )
 
-            # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
-            # fuzzy match
             if not match and retry and self.central.get_all_groups not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ:
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.GroupDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    typer.secho(f"No Match Found for {query_str}, Updating group Cache", fg="red")
+                    econsole.print(":arrows_clockwise: Updating [cyan]group[/] Cache")
                     self.check_fresh(refresh=True, group_db=True)
                 _ += 1
             if match:
-                match = [CentralObject("group", g) for g in match]
+                # match = [CentralObject("group", g) for g in match]
+                match = [CacheGroup(g) for g in match]
                 break
 
         if completion:
@@ -3077,16 +3208,20 @@ class Cache:
 
         if match:
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="group",)  # multi_ok=multi_ok)
+                match = self.handle_multi_match(match, query_str=query_str, query_type="group",)
 
             return match[0]
 
         elif retry:
             log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
-            valid_groups = "\n".join(self.group_names)
-            typer.secho(f"{query_str} appears to be invalid", fg="red")
-            typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
-            raise typer.Exit(1)
+
+            if exit_on_fail:
+                valid_groups = "\n".join(self.group_names)
+                typer.secho(f"{query_str} appears to be invalid", fg="red")
+                typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
+                raise typer.Exit(1)
+            else:
+                return
         else:
             if not completion:
                 log.error(
@@ -3099,7 +3234,8 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject | List[CentralObject]:
+        exit_on_fail: bool = True,
+    ) -> CacheLabel | List[CacheLabel] | None:
         """Allows Case insensitive label match"""
         retry = False if completion else retry
         for _ in range(0, 2):
@@ -3142,8 +3278,8 @@ class Cache:
             # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
             # fuzzy match
             if not match and retry and self.central.get_labels not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ:
+                econsole.print(f"[bright_red]No Match found[/] [cyan]{query_str}[/].")
+                if FUZZ and not silent:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
@@ -3151,11 +3287,11 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.LabelDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    typer.secho(f"No Match Found for {query_str}, Updating label Cache", fg="red")
+                    econsole.print(":arrows_clockwise: Updating [cyan]label[/] Cache")
                     self.check_fresh(refresh=True, label_db=True)
                 _ += 1
             if match:
-                match = [CentralObject("label", g) for g in match]
+                match = [CacheLabel(g) for g in match]
                 break
 
         if completion:
@@ -3169,11 +3305,15 @@ class Cache:
 
         elif retry:
             log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
-            valid_labels = "\n".join(self.label_names)
-            # TODO convert all these to rich
-            typer.secho(f"{query_str} appears to be invalid", fg="red")
-            typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
-            raise typer.Exit(1)
+
+            if exit_on_fail:
+                valid_labels = "\n".join(self.label_names)
+                # TODO convert all these to rich
+                typer.secho(f"{query_str} appears to be invalid", fg="red")
+                typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
+                raise typer.Exit(1)
+            else:
+                return
         else:
             if not completion:
                 log.error(
@@ -3218,7 +3358,7 @@ class Cache:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
             if retry and not match and self.central.get_all_templates not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3311,7 +3451,7 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_clients not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.clients:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3349,16 +3489,16 @@ class Cache:
         try:
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:
-                err_console.print(f"\nUnable to gather log id from short index query [cyan]{query}[/]")
-                err_console.print("Short log_id aliases are built each time [cyan]show logs[/] / [cyan]show audit logs[/]... is ran.")
-                err_console.print("  repeat the command without specifying the log_id to populate the cache.")
-                err_console.print("  You can verify the cache by running (hidden command) 'show cache logs'")
+                econsole.print(f"\nUnable to gather log id from short index query [cyan]{query}[/]")
+                econsole.print("Short log_id aliases are built each time [cyan]show logs[/] / [cyan]show audit logs[/]... is ran.")
+                econsole.print("  repeat the command without specifying the log_id to populate the cache.")
+                econsole.print("  You can verify the cache by running (hidden command) 'show cache logs'")
                 raise typer.Exit(1)
             else:
                 return match[-1]["long_id"]
 
         except ValueError as e:
-            err_console.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
+            econsole.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
             raise typer.Exit(1)
 
     def get_event_log_identifier(self, query: str) -> dict:
@@ -3436,7 +3576,7 @@ class Cache:
 
             if not match and retry and self.central.cloudauth_get_mpsk_networks not in self.updated:
                 if FUZZ:
-                    err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                    econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                     fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
@@ -3444,7 +3584,7 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.MpskDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    err_console.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating mpsk Cache")
+                    econsole.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating mpsk Cache")
                     asyncio.run(self.update_mpsk_db())
                 _ += 1
             if match:
@@ -3535,7 +3675,7 @@ class Cache:
                 )
 
             if not match and retry and this.already_updated_func not in self.updated:
-                err_console.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
                     if fuzz_resp:
@@ -3544,7 +3684,7 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
-                    err_console.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating {cache_name} Cache")
+                    econsole.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating {cache_name} Cache")
                     asyncio.run(this.cache_update_func())
                 _ += 1
             if match:
@@ -3583,6 +3723,7 @@ class CacheDetails:
     def __init__(self, cache = Cache):
         self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.update_dev_db)
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.update_site_db)
+        self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.update_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
         self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
