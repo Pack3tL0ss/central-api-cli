@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import typer
 import sys
-from typing import List, Literal, Union, Tuple, Dict, Any
+from typing import List, Literal, Union, Tuple, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 from rich.console import Console
 from rich.prompt import Confirm
@@ -34,7 +34,9 @@ from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
-from centralcli.cache import CentralObject
+
+if TYPE_CHECKING:
+    from centralcli.cache import CentralObject, CacheGroup, CacheLabel
 
 
 tty = utils.tty
@@ -110,10 +112,10 @@ class CLICommon:
         self.arguments = CLIArgs(cache)
         self.econsole = Console(stderr=True)
         self.console = Console()
-        self._confirm = Confirm(prompt="\nProceed?", console=self.econsole,)
 
-    def confirm(self, yes: bool = False, *, abort: bool = True) -> bool:
-        result = yes or self._confirm()
+    def confirm(self, yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True,) -> bool:
+        confirm = Confirm(prompt=prompt, console=self.econsole,)
+        result = yes or confirm()
         if not result and abort:
             self.econsole.print("[red]Aborted[/]")
             self.exit(code=0)
@@ -616,6 +618,15 @@ class CLICommon:
                     caption = f'{caption}\n{_log_caption}'
 
             for idx, r in enumerate(resp):
+                try:
+                    if config.capture_raw and r.method == "GET":
+                        with clean_console.status("Capturing raw response"):
+                            raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
+                            with config.capture_file.open("a") as f:
+                                f.write(json.dumps(raw))
+                except Exception as e:
+                    log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
+
                 # Multi request url line (example below)
                 # Request 1 [POST: /platform/device_inventory/v1/devices]
                 #  Response:
@@ -627,6 +638,7 @@ class CLICommon:
                     "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
+
                 conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
                 if any(conditions):
                     if isinstance(title, list) and len(title) == len(resp):
@@ -637,22 +649,9 @@ class CLICommon:
                         print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
                         print(f" [{fg}]Response[reset]:")
 
-                if config.capture_raw and r.method == "GET":
-                    with clean_console.status("Capturing raw response"):
-                        raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
-                        with config.capture_file.open("a") as f:
-                            f.write(json.dumps(raw))
 
-                # Nothing returned in response payload
-                # if not r.output:
-                #     print(f"  Status Code: [{fg}]{r.status}[/]")
-                #     print("  :warning: Empty Response.  This may be normal.")
-
-                #     if log.caption:
-                #         print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
-
-                if not r or tablefmt in ["action", "raw", "clean"]:
-
+                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
+                if any(conditions):
                     # raw output (unformatted response from Aruba Central API GW)
                     if tablefmt in ["raw", "clean"]:
                         status_code = f"[{fg}]status code: {r.status}[/{fg}]"
@@ -687,9 +686,12 @@ class CLICommon:
                             # TODO make __rich__ renderable method in Response object with markups
 
                     if idx + 1 == len(resp):
-                        if caption:
-                            print(caption.replace(rl_str, ""))
-                        clean_console.print(f"\n{rl_str}")
+                        if caption.replace(rl_str, "").lstrip():
+                            _caption = caption.replace(rl_str, "") if r.output else f'  {render.unstyle(caption.replace(rl_str, "")).strip()}'
+                            if not r.output:  # Formats any caption directly under Empty Response msg
+                                _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[grey42 italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
+                            self.econsole.print(_caption)
+                        self.econsole.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
                 else:
@@ -826,7 +828,6 @@ class CLICommon:
 
         return md5.hexdigest()
 
-
     def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
@@ -835,14 +836,16 @@ class CLICommon:
         if not data:
             self.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
 
-        if import_type and import_type in data:
+        if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
         if data:
-            if isinstance(data, dict):  # accept yaml/json keyed by serial #
-                if utils.is_serial(list(data.keys())[0]):
+            if isinstance(data, dict):
+                if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
+                    data = [{"name": k, **v} for k, v in data.items()]
+                elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                     data = [{"serial": k, **v} for k, v in data.items()]
-            if isinstance(data, list) and text_ok:
+            elif isinstance(data, list) and text_ok:
                 if import_type == "devices" and all(utils.is_serial(s) for s in data):
                     data = [{"serial": s} for s in data]
                 if import_type == "labels":
@@ -852,7 +855,6 @@ class CLICommon:
         data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
         return data
-
 
     def _check_update_dev_db(self, device: CentralObject) -> CentralObject:
         if self.central.get_all_devices not in self.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
@@ -1192,6 +1194,100 @@ class CLICommon:
             self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
 
             return [*site_rm_res, *batch_res]
+
+    def batch_delete_groups(
+            self,
+            data: list | dict,
+            *,
+            yes: bool = False,
+        ) -> None:
+        names_from_import = [g["name"] for g in data if "name" in g]
+        if not names_from_import:
+            self.exit("Unable to extract group names from import data.  Refer to [cyan]cencli batch delete groups --example[/] for import data format.")
+
+        # If any groups appear to not exist according to local cache, update local cache
+        not_in_cache = [name for name in names_from_import if name not in self.cache.groups_by_name]
+        if not_in_cache:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local group cache.  :arrows_clockwise: [bright_green]Updating local group cache[/].")
+            _ = self.central.request(self.cache.update_group_db)  # This updates cli.cache.groups_by_name
+
+        # notify and remove any groups that don't exist after cache update
+        cache_by_name: Dict[str, CacheGroup] = {name: self.cache.groups_by_name.get(name) for name in names_from_import}
+        not_in_central = [name for name, data in cache_by_name.items() if data is None]
+        if not_in_central:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]group{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
+
+        groups: List[CacheGroup] = [g for g in cache_by_name.values() if g is not None]
+        reqs = [self.central.BatchRequest(self.central.delete_group, g.name) for g in groups]
+
+        if len(groups) == 1:
+            pre = ''
+            pad = 0
+            sep = ", "
+        else:
+            pre = sep = '\n'
+            pad = 4
+
+        group_msg = f'{pre}{utils.color([g.name for g in groups], "cyan", pad_len=pad, sep=sep)}'
+        _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'group ' if len(groups) == 1 else f'{len(reqs)} groups:'}{group_msg}"
+        print(_msg)
+
+        if len(reqs) > 1 and not yes:
+            print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+        if self.confirm(yes):
+            resp = self.central.batch_request(reqs)
+            self.display_results(resp, tablefmt="action")
+            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+            if doc_ids:
+                self.central.request(self.cache.update_group_db, data=doc_ids, remove=True)
+
+    def batch_delete_labels(
+            self,
+            data: list | dict,
+            *,
+            yes: bool = False,
+        ) -> None:
+        names_from_import = [g["name"] for g in data if "name" in g]
+        if not names_from_import:
+            self.exit("Unable to extract label names from import data.  Refer to [cyan]cencli batch delete labels --example[/] for import data format.")
+
+        # If any labels appear to not exist according to local cache, update local cache
+        not_in_cache = [name for name in names_from_import if name not in self.cache.labels_by_name]
+        if not_in_cache:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local label cache.  :arrows_clockwise: [bright_green]Updating local label cache[/].")
+            _ = self.central.request(self.cache.update_label_db)  # This updates cli.cache.labels
+
+        # notify and remove any labels that don't exist after cache update
+        cache_by_name: Dict[str, CacheLabel] = {name: self.cache.labels_by_name.get(name) for name in names_from_import}
+        not_in_central = [name for name, data in cache_by_name.items() if data is None]
+        if not_in_central:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]label{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
+
+        labels: List[CacheLabel] = [label for label in cache_by_name.values() if label is not None]
+        reqs = [self.central.BatchRequest(self.central.delete_label, g.id) for g in labels]
+
+        if len(labels) == 1:
+            pre = ''
+            pad = 0
+            sep = ", "
+        else:
+            pre = sep = '\n'
+            pad = 4
+
+        label_msg = f'{pre}{utils.color([g.name for g in labels], "cyan", pad_len=pad, sep=sep)}'
+        _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'label ' if len(labels) == 1 else f'{len(reqs)} labels:'}{label_msg}"
+        print(_msg)
+
+        if len(reqs) > 1 and not yes:
+            print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+        if self.confirm(yes):
+            resp = self.central.batch_request(reqs)
+            self.display_results(resp, tablefmt="action")
+            doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
+            if doc_ids:
+                self.central.request(self.cache.update_label_db, data=doc_ids, remove=True)
 
 if __name__ == "__main__":
     pass
