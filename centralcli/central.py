@@ -18,8 +18,9 @@ import tablib
 import yaml
 from pycentral.base_utils import tokenLocalStoreUtil
 from yarl import URL
+from copy import deepcopy
 
-from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, models, utils
+from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, utils
 from .exceptions import CentralCliException
 from .response import CombinedResponse, Response, Session
 from .utils import Mac
@@ -785,9 +786,6 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
-        template = template if isinstance(template, Path) else Path(str(template))
-        if not template.exists():
-            raise FileNotFoundError
 
         if device_type:
             device_type = constants.lib_to_api(device_type, "template")
@@ -799,32 +797,40 @@ class CentralApi(Session):
             'model': model
         }
 
-        if template and template.is_file() and template.stat().st_size > 0:
-            template_data: bytes = template.read_bytes()
+        if template:
+            template = template if isinstance(template, Path) else Path(str(template))
+            if not template.exists():
+                raise FileNotFoundError
+            if template.is_file() and template.stat().st_size > 0:
+                template_data: bytes = template.read_bytes()
         elif payload:
+            payload = payload if isinstance(payload, bytes) else payload.encode("utf-8")
             template_data: bytes = payload
         else:
-            raise FileNotFoundError(f"{template.name} not found or empty.  No template data to send.")
+            raise ValueError("One of template or payload is required")
 
-        if isinstance(template_data, bytes):
-            files = {'template': ('template.txt', template_data)}
-        else:
-            files = {'template': ('template.txt', template.read_bytes())}
+        files = {'template': ('template.txt', template_data)}
 
         # HACK aiohttp has issue here similar to add_template
-        import requests
-        headers = {
-            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
-            'Accept': 'application/json'
-        }
-        url=f"{self.auth.central_info['base_url']}{url}"
+        import requests  # TODO MOVE to Session until aiohttp has file types sorted.
+        full_url=f"{self.auth.central_info['base_url']}{url}"
         for _ in range(2):
-            resp = requests.request("PATCH", url=url, params=params, files=files, headers=headers)
-            if "[\n" in resp.text and "\n]" in resp.text:
-                output = "\n".join(json.loads(resp.text))
-            else:
-                output = resp.text.strip('"\n')
-            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+            headers = {
+                "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+                'Accept': 'application/json'
+            }
+            resp = requests.request("PATCH", url=full_url, params=params, files=files, headers=headers)
+            _log = log.info if resp.ok else log.error
+            _log(f"[PATCH] {resp.url} | {resp.status_code} | {'OK' if resp.ok else 'FAILED'} | {resp.reason}")
+            try:
+                output = resp.json()
+            except json.JSONDecodeError:
+                if "[\n" in resp.text and "\n]" in resp.text:
+                    output = "\n".join(json.loads(resp.text))
+                else:
+                    output = resp.text.strip('"\n')
+            resp.status, resp.method, resp.url = resp.status_code, "PATCH", URL(resp.url)
+            resp = Response(resp, output=output, raw=output, elapsed=round(resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
             else:
@@ -894,18 +900,18 @@ class CentralApi(Session):
             ]
         )
 
-        template_by_group = {d["group"]: d["template_details"] for d in template_resp.output}
-        props_by_group = {d["group"]: d["properties"] for d in props_resp.output}
+        template_by_group = {d["group"]: d["template_details"] for d in deepcopy(template_resp.output)}
+        props_by_group = {d["group"]: d["properties"] for d in deepcopy(props_resp.output)}
 
         combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
         if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
             raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
 
-        resp = props_resp
-        resp.output = [{"group": k, **v} for k, v in combined.items()]
-        resp.raw = {"properties": resp.raw, "template_info": template_resp.raw}
+        combined_resp = Response(props_resp._response)
+        combined_resp.output = [{"group": k, **v} for k, v in combined.items()]
+        combined_resp.raw = {"properties": props_resp.raw, "template_info": template_resp.raw}
 
-        return resp
+        return combined_resp
 
 
     async def get_groups_template_status(self, groups: List[str] | str = None) -> Response:
@@ -948,15 +954,32 @@ class CentralApi(Session):
         return resp
 
 
-    async def get_all_templates(self, groups: List[dict] | List[str ]= None, **params) -> Response:
+    async def get_all_templates(
+        self, groups: List[dict] | List[str ] = None,
+        template: str = None,
+        device_type: constants.DeviceTypes = None,
+        version: str = None,
+        model: str = None,
+        query: str = None,
+    ) -> Response:
         """Get data for all defined templates from Aruba Central
 
         Args:
             groups (List[dict] | List[str], optional): List of groups.  If provided additional API
                 calls to get group names for all template groups are not performed).
                 If a list of str (group names) is provided all are queried for templates
-                If a list of dicts is provided:  It should look like: [{"name": "group_name", "template group": {"Wired": True, "Wireless": False}}]
+                If a list of dicts is provided:  It should look like: [{"name": "group_name", "wired_tg": True, "wlan_tg": False}]
                 Defaults to None.
+            template (str, optional): Filter on provided name as template.
+            device_type (Literal['ap', 'gw', 'cx', 'sw'], optional): Filter on device_type.  Valid Values: ap|gw|cx|sw.
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: ALL, 2920, J9727A etc.
+            query (str, optional): Search for template OR version OR model, query will be ignored if any of
+                filter parameters are provided.
 
         Returns:
             Response: centralcli Response Object
@@ -970,7 +993,7 @@ class CentralApi(Session):
         elif isinstance(groups, list) and all([isinstance(g, str) for g in groups]):
                 template_groups = groups
         else:
-            template_groups = [g["name"] for g in groups if True in g["template group"].values()]
+            template_groups = [g["name"] for g in groups if True in [g["wired_tg"], g["wlan_tg"]]]
 
         if not template_groups:
             return Response(
@@ -980,6 +1003,14 @@ class CentralApi(Session):
                 raw=[],
                 error="None of the configured groups are Template Groups.",
             )
+
+        params = {
+            'name': template,
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'query': query,
+        }
 
         reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
         # TODO maybe call the aggregator from _bath_request
@@ -1094,7 +1125,7 @@ class CentralApi(Session):
         # if not combined.passed:
         #     return batch_resp
         # elif combined.failed:
-        if combined.failed:
+        if combined.ok and combined.failed:  # combined.ok indicates at least 1 call was ok, if None are ok no need for Partial failure msg
             for r in combined.failed:
                 log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
@@ -2719,10 +2750,10 @@ class CentralApi(Session):
         city: str = None,
         state: str = None,
         country: str = None,
-        zipcode: str = None,
-        latitude: int = None,
-        longitude: int = None,
-        site_list: List[Dict[str, str | dict]] = None,
+        zipcode: int | str = None,
+        latitude: float = None,
+        longitude: float = None,
+        site_list: List[Dict[str, str | dict]] = None,  # TODO TypedDict
     ) -> Response:
         """Create Site
 
@@ -2736,15 +2767,18 @@ class CentralApi(Session):
             city (str, optional): City. Defaults to None.
             state (str, optional): State. Defaults to None.
             country (str, optional): Country Name. Defaults to None.
-            zipcode (str, optional): Zipcode. Defaults to None.
-            latitude (int, optional): Latitude (in the range of -90 and 90). Defaults to None.
-            longitude (int, optional): Longitude (in the range of -100 and 180). Defaults to None.
+            zipcode (int | str, optional): Zipcode. Defaults to None.
+            latitude (float, optional): Latitude (in the range of -90 and 90). Defaults to None.
+            longitude (float, optional): Longitude (in the range of -100 and 180). Defaults to None.
             site_list (List[Dict[str, str | dict]], optional): A list of sites to be created. Defaults to None.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v2/sites"
+        zipcode = None if not zipcode else str(zipcode)
+        latitude = None if not latitude else str(latitude)
+        longitude = None if not longitude else str(longitude)
 
         address_dict = utils.strip_none({"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode})
         geo_dict = utils.strip_none({"latitude": latitude, "longitude": longitude})
@@ -2904,6 +2938,7 @@ class CentralApi(Session):
             "branch": "BranchGateway",
             "vpnc": "VPNConcentrator",
             "wlan": "WLANGateway",
+            "sdwan": "VPNConcentrator"
         }
         dev_type_dict = {
             "ap": "AccessPoints",
@@ -2940,8 +2975,11 @@ class CentralApi(Session):
             raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch", "sdwan')
         elif "sdwan" in allowed_types and len(allowed_types) > 1:
             raise ValueError('Invalid value for allowed_types.  When sdwan device type is allowed, it must be the only type allowed for the group')
-        if microbranch and not aos10:
-            raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
+        if microbranch:
+            if not aos10:
+                raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
+            if "Gateways" in allowed_types:
+                raise ValueError("Gateways cannot be present in a group with microbranch network role set for Access points")
         if wired_tg and (monitor_only_sw or monitor_only_cx):
             raise ValueError("Invalid combination, Monitor Only is not valid for Template Group")
 
@@ -2959,7 +2997,8 @@ class CentralApi(Session):
             }
         }
         if "SD_WAN_Gateway" in allowed_types:
-            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = None
+            # SD_WAN_Gateway requires Architecture and GwNetworkRole (VPNConcentrator)
+            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
             json_data["group_attributes"]["group_properties"]["Architecture"] = "SD_WAN_Gateway"
         elif gw_role and "Gateways" in allowed_types:
             json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
@@ -4314,6 +4353,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # TODO make add_device actual func sep and make this an aggregator that calls it and anything else based on params
+    # TODO TypeDict for device_list
     async def add_devices(
         self,
         mac: str = None,
@@ -5090,10 +5130,11 @@ class CentralApi(Session):
                 resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
                 resp.output = [*resp.output, *batch_res[idx].output]
 
-        try:
-            resp.output = [models.WIDS(**d).dict() for d in resp.output]
-        except Exception as e:
-            log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
+        # try:
+        #     wids_model = models.Wids(resp.output)
+        #     resp.output = wids_model.model_dump()
+        # except Exception as e:
+        #     log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
 
         return resp
 
@@ -6090,20 +6131,26 @@ class CentralApi(Session):
 
         # HACK need to make the above async function work
         import requests
+
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        full_url=f"{self.auth.central_info['base_url']}{url}"
         headers = {
             "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
             'Accept': 'application/json'
         }
 
-        files = { "file": (file.name, file.open("rb"), "text/csv") }
-        url=f"{self.auth.central_info['base_url']}{url}"
-
         for _ in range(2):
-            _resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+            _resp = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
+            _log = log.info if _resp.ok else log.error
+            _log(f"[PATCH] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
+            try:
+                output = _resp.json()
+            except Exception:
+                output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+
             # Make requests Response look like aiohttp.ClientResponse
             _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
-            resp = Response(_resp, output=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2), status_code=_resp.status_code, rl_str="-")
+            resp = Response(_resp, output=output, raw=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
                 headers["Authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
