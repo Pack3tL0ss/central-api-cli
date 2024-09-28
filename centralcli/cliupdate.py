@@ -101,17 +101,16 @@ def template(
     payload = None
     if not template:
         payload = utils.get_multiline_input(prompt="Paste in new template contents.")
-        payload = "\n".join(payload).encode()
+        payload = payload.encode("utf-8")
 
     print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{obj.name}[/] in group [cyan]{kwargs['group']}[/]")
     print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
     print(f"    Model: [cyan]{kwargs['model']}[/]")
     print(f"    Version: [cyan]{kwargs['version']}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
         cli.display_results(resp, tablefmt="action")
         if resp.ok:
-            # TODO need attribute setter/getters so obj.template_data = newval will update the dict in the data attribute
             obj.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
             _ = cli.central.request(cli.cache.update_template_db, update=obj)
 
