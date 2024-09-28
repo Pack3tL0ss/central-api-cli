@@ -6,7 +6,6 @@ from time import sleep
 from typing import List
 import sys
 import typer
-import asyncio
 from rich import print
 from rich.console import Console
 from rich.progress import track
@@ -24,8 +23,9 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars
-from centralcli.cache import CentralObject
 from centralcli.exceptions import DevException
+
+from centralcli.cache import CentralObject, CacheLabel
 
 iden = IdenMetaVars()
 
@@ -87,15 +87,8 @@ def label_(
 
     Label can't have any devices associated with it to delete.
     """
-    labels = [cli.cache.get_label_identifier(label) for label in labels]
-    print(f'[red]{"Deleting" if yes else "Delete"}[/] label{"s" if len(labels) > 1 else ""}:')
-    print("\n".join([f"  [cyan]{label.name}[/]" for label in labels]))
-    batch_reqs = [BatchRequest(cli.central.delete_label, label.id) for label in labels]
-    if cli.confirm(yes):
-        batch_resp = cli.central.batch_request(batch_reqs)
-        cli.display_results(batch_resp, tablefmt="action")
-        cache_remove_data = [label for label, resp in zip(labels, batch_resp) if resp.ok]
-        cli.central.request(cli.cache.update_label_db, cache_remove_data, remove=True)
+    labels: List[CacheLabel] = [cli.cache.get_label_identifier(label) for label in labels]
+    cli.batch_delete_labels([label.data for label in labels], yes=yes)
 
 
 @app.command(short_help="Delete group(s)")
@@ -126,8 +119,8 @@ def group(
         resp = cli.central.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         if resp:
-            upd_res = asyncio.run(cli.cache.update_group_db(data=[{"name": g.name} for g in groups], remove=True))
-            log.debug(f"cache update to remove deleted groups returns {upd_res}")
+            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+            cli.central.request(cli.cache.update_group_db, data=doc_ids, remove=True)
 
 
 @app.command(short_help="Delete a WLAN (SSID)")
