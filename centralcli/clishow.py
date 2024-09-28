@@ -4,7 +4,6 @@
 from __future__ import annotations
 import typer
 import pendulum
-import asyncio
 import sys
 import json
 import os
@@ -230,6 +229,7 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
+# TODO expand params into available kwargs
 def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
     if include_inventory:
         resp = cli.cache.get_devices_with_inventory(status=status)
@@ -345,7 +345,7 @@ def show_devices(
             _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
-        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+        caption = None if not resp.ok else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -1243,8 +1243,29 @@ def cache_(
             caption=caption,
         )
 
+def _build_groups_caption(data: List[dict]) -> List[str]:
+    if not data:
+        return
 
-@app.command(short_help="Show groups/details")
+    total = ("Total", len(data),)
+    template = ("Template", len(list(filter(lambda g: any([g.get("wired_tg"), g.get("wlan_tg")]), data))),)
+    mon_only = ("Monitor Only (cx or sw)", len(list(filter(lambda g: any([g.get("monitor_only_cx"), g.get("monitor_only_sw")]), data))),)
+    aos10 = ("AOS10", len(list(filter(lambda g: g.get("aos10") is True, data))),)
+    mb = ("MicroBranch", len(list(filter(lambda g: g.get("microbranch") is True, data))),)
+    sdwan = ("EdgeConnect SD-WAN", len(list(filter(lambda g: "sdwan" in g.get("allowed_types"), data))),)
+    counts = [total, template, mon_only, aos10, mb, sdwan]
+
+    caption, _caption = [], []
+    for text, count in counts:
+        if count:
+            _caption += [f'[bright_green]{text}[/] Groups: [cyan]{count}[/]']
+    if len(_caption) > 3:
+        for chunk in utils.chunker(_caption, 3):
+            caption += [", ".join(chunk)]
+
+    return caption or _caption
+
+@app.command(help="Show groups/details")
 def groups(
     sort_by: SortGroupOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -1261,14 +1282,14 @@ def groups(
 ) -> None:
     central = cli.central
     if central.get_all_groups not in cli.cache.updated:
-        resp = asyncio.run(cli.cache.update_group_db())
-    else:
+        resp = cli.central.request(cli.cache.update_group_db)
+    else:  # This is only possible if they pass in -U (hidden) to update the cache prior to running the command
         resp = cli.cache.responses.group
 
-    caption = f'Total Groups: [cyan]{len(resp.output)}[/], Template Groups: [cyan]{len(list(filter(lambda g: any(g.get("template group", {}).values()), resp.output)))}[/]'
+    caption = _build_groups_caption(resp.output)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
 
 
 @app.command()
