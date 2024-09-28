@@ -162,7 +162,7 @@ def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: branch][/]", show_default=False,),
+    gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: vpnc if --sdwan branch if not][/]", show_default=False,),
     aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group [grey42]\[default: AOS8 IAP][/]", show_default=False),
     microbranch: bool = typer.Option(
         None,
@@ -175,8 +175,10 @@ def group(
     sw: bool = typer.Option(None, "--sw", help="Allow ArubaOS-SW switches in group."),
     cx: bool = typer.Option(None, "--cx", help="Allow ArubaOS-CX switches in group."),
     gw: bool = typer.Option(None, "--gw", help="Allow gateways in group."),
+    sdwan: bool = typer.Option(None, "--sdwan", help="Allow EdgeConnect SD-WAN GWs in group. [red italic]Must be the only type allowed[/]"),
     mon_only_sw: bool = typer.Option(False, "--mon-only-sw", help="Monitor Only for ArubaOS-SW"),
     mon_only_cx: bool = typer.Option(False, "--mon-only-cx", help="Monitor Only for ArubaOS-CX"),
+    cnx: bool = typer.Option(False, "--cnx", help="Make Group compatible with New Central (cnx). :warning:  All configurations will be pushed from New Central configuration model."),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -191,11 +193,20 @@ def group(
         allowed_types += ["cx"]
     if gw:
         allowed_types += ["gw"]
-    if not allowed_types:
-        allowed_types = ["ap", "gw", "cx", "sw"]
-    _arch = "Instant" if not aos10 else "AOS10"
+    if not sdwan:
+        _arch = "Instant" if not aos10 else "AOS10"
+        if not allowed_types:
+            allowed_types = ["ap", "gw", "cx", "sw"]
+    else:
+        _arch = "SD_WAN_Gateway"
+        allowed_types = ["sdwan"]
+        if gw_role and gw_role != "vpnc":
+            cli.econsole.print(f":warning:  Ignoring Gateway Role: {gw_role}.  Gateway Role the group is configured for [cyan]--sdwan[/] must be [bright_green]vpnc[/]")
+        gw_role = "vpnc"
 
     # -- // Error on combinations that are not allowed by API \\ --
+    if any([ap, sw, cx, gw]) and sdwan:
+        cli.exit("When allowing [cyan]sdwan[/] in the group it must be the [red]only[/] type allowed in the group")
     if not aos10 and microbranch:
         cli.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
     if (mon_only_sw or mon_only_cx) and wired_tg:
@@ -204,8 +215,8 @@ def group(
         cli.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
         cli.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
-    if all([x is None for x in [ap, sw, cx, gw]]):
-        print("[green]No Allowed devices provided. Allowing all device types.")
+    if all([x is None for x in [ap, sw, cx, gw, sdwan]]):
+        print(f"[green]No Allowed devices provided. Allowing default device types [{utils.color(['ap', 'gw', 'cx', 'sw'], 'cyan')}]")
         print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
 
     _arch_msg = f"[bright_green]{_arch} "
@@ -226,7 +237,7 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
     print(f"{_msg}")
 
-    if yes or typer.confirm("\nProceed?"):
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.create_group,
             group,
@@ -237,20 +248,24 @@ def group(
             microbranch=microbranch,
             gw_role=gw_role,
             monitor_only_sw=mon_only_sw,
+            monitor_only_cx=mon_only_cx,
+            cnx=cnx
         )
+        if not resp.ok:
+            log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
-        # prep data for cache  # TODO update fields once group cache is updated with cleaned keys (no camel case)
+        # prep data for cache
         data={
             'name': group,
-            'AOSVersion': 'AOS8' if not aos10 else 'AOS10',
-            "AllowedDevTypes": allowed_types,
-            "ApNetworkRole": "Standard" if not microbranch else "Microbranch",
-            "Architecture": 'Instant' if not aos10 else 'AOS10',
-            "GwNetworkRole": gw_role,
-            'template group': {
-                'Wired': wired_tg,
-                'Wireless': wlan_tg
-            }
+            "allowed_types": allowed_types,
+            "gw_role": gw_role,
+            'aos10': aos10,
+            "microbranch": None if not aos10 else bool(microbranch),
+            'wlan_tg': wlan_tg,
+            'wired_tg': wired_tg,
+            'monitor_only_sw': mon_only_sw,
+            'monitor_only_cx': mon_only_cx,
+            'cnx': cnx
         }
         cli.central.request(
             cli.cache.update_group_db,
