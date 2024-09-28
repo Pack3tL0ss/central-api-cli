@@ -6,23 +6,31 @@ import asyncio
 import json
 import sys
 import time
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union, TYPE_CHECKING
 
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
 from rich import print
-from rich.console import Console, RenderableType
+from rich.console import Console
 from rich.status import Status
-from rich.style import StyleType
+from rich.text import Text
+
+if TYPE_CHECKING:
+    from rich.style import StyleType
+    from rich.console import RenderableType
+
 from yarl import URL
 
 from centralcli import config, log, utils
 from centralcli.constants import lib_to_api
 from centralcli.exceptions import CentralCliException
 
-from . import cleaner, constants
+
+from . import cleaner, constants, render
+from .typedefs import Method, StrOrURL
+
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
@@ -30,6 +38,7 @@ DEFAULT_HEADERS = {
 }
 INIT_TS = time.monotonic()
 MAX_CALLS_PER_CHUNK = 6
+DEFAULT_SPIN_TXT = "\U0001f4a9 DEFAULT_SPIN_TXT \U0001f4a9"  # should never see this, makes it more obvious we missed a spinner update
 err_console = Console(stderr=True)
 
 
@@ -216,7 +225,8 @@ class Response:
                 output: Normally a List[Dict], extracted from whatever key in the raw response
                 holds the actual data
 
-        Can be used to create a Response without doing an API call by providing
+        Can be used to create a Response without doing an API call by providing any of
+            url, output, error, status_code, ok (OK is calculated based on existence of error if not provided)
 
         Args:
             response (ClientResponse, optional): aiohttp.ClientResponse. Defaults to None.
@@ -250,7 +260,7 @@ class Response:
 
             _offset_str = ""
             # /routing endpoints use "marker" rather than "offset" for pagination
-            offset_key = "marker" if "marker" in self.url.query and ("marker" in self.url.query or self.url.path.startswith("/api/routing/")) else "offset"
+            offset_key = "marker" if "marker" in self.url.query or self.url.path.startswith("/api/routing/") else "offset"
             if offset_key in self.url.query:
                 if offset_key == "offset" and int(self.url.query[offset_key]) > 0:  # only show full query_str if call is beyond first page of results.
                     _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
@@ -268,11 +278,9 @@ class Response:
                 log.info(_log_msg)
         else:
             if error:
-                # self.ok = self._ok or False
                 self.error = error
                 self.output = output or error
             elif output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
-                # self.ok = ok or True
                 self.error = error or "OK"
 
             self.url = URL(url)
@@ -285,7 +293,7 @@ class Response:
         if self._response:
             return self._response.ok
 
-        if self.error:
+        if self.error and self.error != "OK":
             return self._ok or False
 
         if self.output or isinstance(self.output, (list, dict)):
@@ -300,54 +308,80 @@ class Response:
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
 
+    # DEPRECATED cab be removed once we ensure no ill effects of simplifying __rich__
     @staticmethod
     def _split_inner(val):
+        pfx = ''
         if isinstance(val, list):
+            pfx = '\n'
             if len(val) == 1:
                 val = val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
             elif all(isinstance(d, dict) for d in val):
-                val = utils.output(outdata=val, tablefmt="yaml")
+                val = render.output(outdata=val, tablefmt="yaml")
                 val = "\n".join([f"    {line}" for line in val.file.splitlines()])
 
         if isinstance(val, dict):
-            val = utils.output(outdata=[val], tablefmt="yaml")
+            pfx = '\n'
+            val = render.output(outdata=[val], tablefmt="yaml")
             val = "\n".join([f"      {line}" for line in val.file.splitlines() if not line.endswith(": []")])
+
+        val = f'{pfx}{val}' if not hasattr(val, "__rich__") else val.__rich__()
 
         return val
 
-    def __str__(self):
+    def __rich__(self):
+        fg = "red" if not self.ok else "bright_green"
         if self.status != 418:
-            status_code = f"  status code: {self.status}\n"
+            status_code = f"  status code: [{fg}]{self.status}[/]\n"
         else:
             status_code = ""
-        r = self.output
+
+        # Shouldn't happen but if we got what looks like a JSON decoded string try to convert it.  Log so we can fix... convert prior to instantiation
+        if isinstance(self.output, str) and "{\n" in self.output:
+            try:
+                log.warning(f"Response was sent JSON formatted output from [{self.method}]{self.url}")
+                self.output = json.loads(self.output)
+            except json.JSONDecodeError:
+                log.error(f"Failed to decode output from [{self.method}]{self.url}")
 
         # indent single line output
-        if isinstance(self.output, str):
+        if isinstance(self.output, str) and "{\n" in self.output:
             if "\n" not in self.output:
                 r = f"  {self.output}"
             elif "{\n" in self.output:
-                try:
-                    self.output = json.loads(self.output)
-                except Exception:
-                    r = "  {}".format(
-                        self.output.replace('\n  ', '\n').replace('\n', '\n  ')
-                    )
-
-        elif isinstance(self.output, dict):
-            r = "\n".join(
-                [
-                    "  {}: {}".format(
-                        k,
-                        v if isinstance(v, (str, int)) else f"\n{self._split_inner(v)}",
-                    ) for k, v in self.output.items() if k != "status" and (v or v is False)
-                ]
-            )
+                r = "  {}".format(
+                    self.output.replace('\n  ', '\n').replace('\n', '\n  ')
+                )
+        elif isinstance(self.output, dict):  # TODO just use yaml.safe_dump here
+            data = utils.strip_none(self.output, strip_empty_obj=True)
+            r = render.output([data], tablefmt="yaml")
+            r = Text.from_ansi(r.tty)
+            r = "\n".join([f"  {line}" for line in str(r).splitlines()])
+            # r = "\n".join(
+            #     [
+            #         "  {}: {}".format(
+            #             k,
+            #             v if isinstance(v, (str, int, float)) else f"{self._split_inner(v)}",
+            #         ) for k, v in self.output.items() if k != "status" and (v or v is False)
+            #     ]
+            # )
         elif not self.output:
             emoji = '\u2139' if self.ok else '\u26a0'  # \u2139 = :information:, \u26a0 = :warning:
             r = f"  {emoji}  Empty Response.  This may be normal."
         else:
             r = f"  {self.output}"
+
+        if not self.ok:
+            if self.error:
+                if isinstance(self.error, dict) and self.url.path in self.error:  # CombinedResponse.__super__()
+                    r = f"  {self.error[self.url.path]}\n{r}"
+                else:
+                    r = f"  {self.error}\n{r}"
+            if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
+                r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
+
+        r = r.replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:")
+        r = r.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]")
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
@@ -355,16 +389,11 @@ class Response:
 
         return f"{status_code}{r}"
 
-    def __rich__(self):
-        fg = "bright_green" if self.ok else "red"
-        ret_str = self.__str__().replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:")
-        ret_str = ret_str.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]")
-
-        if self.status != 418:
-            status_code = f"  status code: {self.status}\n"
-            return ret_str.replace(status_code, f'{status_code.split(":")[0]}:[{fg}]{status_code.split(":")[-1]}[/{fg}]')
-
-        return ret_str
+    def __str__(self):
+        console = Console(force_terminal=False)
+        with console.capture() as cap:
+            console.print(self.__rich__())
+        return cap.get()
 
     def __setitem__(self, name: str, value: Any) -> None:
         print(f"set name {name} value {value}")
@@ -462,11 +491,11 @@ class Response:
         Returns:
             List[Dict[str, Any]]: resp.output with only keys common across all items.
         """
-        if not self.output:
-            return self.output
+        if isinstance(self.output, list) and all([isinstance(d, dict) for d in self.output]):
+            common_keys = set.intersection(*map(set, self.output))
+            return [{k: d[k] for k in common_keys} for d in self.output]
 
-        common_keys = set.intersection(*map(set, self.output))
-        return [{k: d[k] for k in common_keys} for d in self.output]
+        return self.output
 
     @property
     def status_code(self) -> int:
@@ -500,8 +529,6 @@ class Session():
     def aio_session(self):
         if self._aio_session:
             if self._aio_session.closed:
-                # TODO finish refactor
-                # self._aio_session = ClientSession()  # Doing this breaks show all and no doubt others
                 return ClientSession()
             return self._aio_session
         else:
@@ -531,6 +558,21 @@ class Session():
 
             return spin_txt if not self.running_spinners else self.running_spinners[0]
 
+    async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:
+        if not config.debugv:
+            return
+        call_data = {
+            "method": method,
+            "url": url,
+            "url_params": params,
+            "data": data,
+            "json_data": json_data,
+        }
+        if kwargs:
+            call_data["Additional kwargs"] = kwargs
+        print("[bold magenta]VERBOSE DEBUG[reset]")
+        call_data = utils.strip_none(call_data, strip_empty_obj=True)
+        utils.json_print(call_data)
 
     async def exec_api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
                             method: str = "GET", headers: dict = {}, params: dict = {}, **kwargs) -> Response:
@@ -546,9 +588,9 @@ class Session():
         run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} ({end_name}) Data...{run_sfx}"
-        spin_txt_retry = "\U0001f4a9"  # helps detect if this was not set correctly after previous failure
+        spin_txt_retry = DEFAULT_SPIN_TXT  # helps detect if this was not set correctly after previous failure :poop:
         spin_txt_fail = f"{spin_word} ({end_name}) Data{_data_msg}"
-        self.spinner.update("\U0001f4a9")
+        self.spinner.update(DEFAULT_SPIN_TXT)
         for _ in range(0, 2):
             spin_txt_run = spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
@@ -563,18 +605,7 @@ class Session():
                 f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
-                call_data = {
-                    "method": method,
-                    "url": url,
-                    "url_params": params,
-                    "data": data,
-                    "json_data": json_data,
-                }
-                if kwargs:
-                    call_data["Additional kwargs"] = kwargs
-                print("[bold magenta]VERBOSE DEBUG[reset]")
-                call_data = utils.strip_none(call_data, strip_empty_obj=True)
-                utils.json_print(call_data)
+                asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
 
             headers = self.headers if not headers else {**self.headers, **headers}
             try:
@@ -1111,7 +1142,7 @@ class CombinedResponse(Response):
         elapsed = 0
         raw = {}
         output = []
-        for idx, r in enumerate(_passed):
+        for idx, r in enumerate(_passed or _failed):  # if no requests passed we loop through _failed to retain output {"message": "error message..."}
             this_output = r.output.copy()
             this_raw = r.raw.copy()
             if idx == 0:
@@ -1130,8 +1161,9 @@ class CombinedResponse(Response):
                 elapsed += r.elapsed
 
         # failed responses are added to end of raw output
-        for r in _failed:
-            raw[r.url.path] = r.raw.copy()
+        if _passed:
+            for r in _failed:
+                raw[r.url.path] = r.raw.copy()
 
 
         # for combining device calls, adds consistent "type" to all devices
