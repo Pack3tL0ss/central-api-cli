@@ -17,6 +17,8 @@ import logging
 
 import yaml
 from pygments import formatters, highlight, lexers
+from random import choice
+from rich.color import ANSI_COLOR_NAMES
 from tabulate import tabulate
 from rich import print_json
 from rich.console import Console
@@ -637,6 +639,8 @@ class Utils:
                 it is converted to string and italics applied.  If list of strings
                 is provided it is converted to str and formatted.
             color_str (str, optional): Text is formatted with this color.
+                'random' will pick a random color.  If text is a list, it will pick a random
+                color for each item in the list.
                 Default: bright_green
             pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
             italic (bool, optional): Wheather to apply italic to text.
@@ -650,14 +654,25 @@ class Utils:
             italic = True if italic is None else italic
             text = str(text)
 
-        color_str = color_str if not italic else f"italic {color_str}"
-        color_str = color_str if not bold else f"bold {color_str}"
-        color_str = color_str if not blink else f"blink {color_str}"
+        def get_color_str(color: str):
+            if color == "random":
+                color = choice(list(ANSI_COLOR_NAMES.keys()))
+
+            if not any([italic, bold, blink]):
+                return color
+
+            _color = color if not italic else f"italic {color}"
+            _color = color if not bold else f"bold {color}"
+            _color = color if not blink else f"blink {color}"
+
+            return _color
 
         if isinstance(text, str):
-            return f"{' ':{pad_len}}[{color_str}]{text}[/{color_str}]"
+            color = get_color_str(color_str)
+            return f"{' ' if pad_len else '':{pad_len}}[{color}]{text}[/{color}]"
         elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
-            text = [f"{' ':{pad_len}}[{color_str}]{t}[/{color_str}]" for t in text]
+            colors = [get_color_str(color_str) for _ in range(len(text))]
+            text = [f"{' ' if pad_len else '':{pad_len}}[{c}]{t}[/{c}]" for t, c in zip(text, colors)]
             return sep.join(text)
         else:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
@@ -864,3 +879,23 @@ class Utils:
         #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
 
         return from_time, to_time
+
+    @staticmethod
+    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False):
+        bot = int(max / 2)
+        top = max - bot
+        if any([bold, italic, color is not None]):
+            fmt = f'[{"" if not bold else "bold "}{"" if not italic else "italic "}{color or ""}]'.replace(' ]', ']')
+            item_sep = f'{"" if not pad else " " * pad}[dark_orange3]...[/]'
+        else:
+            fmt = ""
+            item_sep = "...".rjust(pad + 3)
+
+        items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
+
+        if len(items) > max:
+            confirm_str = sep.join([*items[0:top], item_sep, *items[-bot:]])
+        else:
+            confirm_str = sep.join(items)
+
+        return confirm_str
