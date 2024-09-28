@@ -31,9 +31,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibDevIdens
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes
 from centralcli.objects import DateTime
-from centralcli.models import CloudAuthUploadResponse, Sites
+from .models import CloudAuthUploadResponse, Sites
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
@@ -134,7 +134,7 @@ def _serial_to_name(sernum: str | None) -> str | None:
     return match.name
 
 
-def _get_dev_name_from_mac(mac: str, dev_type: LibDevIdens | List[LibDevIdens] = None, summary_text: bool = False) -> str:
+def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | List[LibAllDevTypes] = None, summary_text: bool = False) -> str:
     if mac.count(":") != 5:
         return mac
     else:
@@ -434,20 +434,27 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None) -> List[Dict[str, Any]]:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, emoji_bools: bool = False) -> List[Dict[str, Any]]:
     """Default simple formatter
 
-    runs all key/values through _short_key, _short_value
-
     Args:
-        data (List): Data typically a list of dicts
+        data (List[Dict[str, Any]]): Data to be formatted, data is returned unchanged is data is not a list.
+        key_order (List[str], optional): List of keys in the order desired.
+            If defined only key_order key/value pairs are returned. Defaults to None.
+        emoji_bools (bool, optional): Replace boolean values with emoji ✅ for True ❌ for False. Defaults to False.
 
     Returns:
-        List: Formatted data
+        List[Dict[str, Any]]: Formatted data
     """
     if not isinstance(data, list):
         log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
         return data
+
+    def convert_bools(value: Any) -> Any:
+        if not emoji_bools or not isinstance(value, bool):
+            return value
+
+        return '\u2705' if value is True else '\u274c'  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
 
     if key_order:
         data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data]
@@ -456,7 +463,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None)
         dict(
             short_value(
                 k,
-                v,
+                convert_bools(v),
             )
             for k, v in d.items()
         )
@@ -506,40 +513,24 @@ def get_group_names(data: List[List[str],]) -> list:
     return groups
 
 
-def get_all_groups(
-    data: List[
-        dict,
-    ]
-) -> list:
-    """groups cleaner formats data for cache
+def show_groups(data: List[dict], cleaner_format: TableFormat = "rich") -> List[dict]:
+    if cleaner_format == "csv":  # Makes allowed types a space separated str, to match format of import file for batch add groups
+        data = [{k: v if k != "allowed_types" or not isinstance(v, list) else " ".join(v) for k, v in inner.items()} for inner in data]
+    else:
+        collapse_keys = ["wlan_tg", "wired_tg", "monitor_only_sw", "monitor_only_cx"]
+        data = [
+            {
+                **{k: v for k, v in inner.items() if k not in collapse_keys},
+                "template group": "--" if not any([inner["wlan_tg"], inner["wired_tg"]]) else ", ".join([tgtype for tgtype, tgvar in zip(["Wired", "WLAN"], ["wired_tg", "wlan_tg"]) if inner.get(tgvar)]),
+                "monitor only": "--" if not any([inner["monitor_only_sw"], inner["monitor_only_cx"]]) else ", ".join([tgtype for tgtype, tgvar in zip(["sw", "cx"], ["monitor_only_sw", "monitor_only_cx"]) if inner.get(tgvar)])
+            } for inner in data
+        ]
+        if cleaner_format == "rich":
+            data = simple_kv_formatter(data, emoji_bools=True)
+        data = strip_no_value(data, aggressive=cleaner_format not in ["table", "rich"])
 
-    Args:
-        data (List[ dict, ]): api response output from get_all_groups
+    return data
 
-    Returns:
-        list: reformatted Data with keys/headers changed
-    """
-    allowed_dev_types = {"Gateways": "gw", "AccessPoints": "ap", "AOS_CX": "cx", "AOS_S": "sw"}
-    aos_version = {"AOS_10X": "AOS10", "AOS_8X": "AOS8", "NA": "NA"}
-    gw_role = {"WLANGateway": "WLAN", "VPNConcentrator": "VPNC", "BranchGateway": "Branch", "NA": "NA"}
-
-    # Not all groups will have all field properties.  Make it so.
-    clean = []
-    for g in data:
-        g["properties"]["ApNetworkRole"] = g["properties"].get("ApNetworkRole", "NA")
-        g["properties"]["GwNetworkRole"] = gw_role.get(g["properties"].get("GwNetworkRole", "NA"), "err")
-        g["properties"]["AOSVersion"] = aos_version.get(g["properties"].get("AOSVersion", "NA"), "err")
-        g["properties"]["Architecture"] = g["properties"].get("Architecture", "NA")
-        g["properties"]["AllowedDevTypes"] = ", ".join([allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"])
-
-        g["properties"] = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k not in ["MonitorOnlySwitch", "AllowedSwitchTypes"]}
-        clean += [{"name": g["group"], **g["properties"], "template group": g["template_details"]}]
-
-    return strip_no_value(clean)
-    # return [{_keys.get(k, k): v for k, v in g.items()} for g in clean]
-
-def show_groups(data: List[dict]) -> List[dict]:
-    return [{k: v if k != "template group" else ",".join([kk for kk, vv in v.items() if vv]) or "--" for k, v in inner.items()} for inner in data]
 
 def get_labels(
     data: Union[List[dict,], Dict]
@@ -815,11 +806,11 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
                 inner[ip_word] = f"{inner[ip_word]}/{mask}"
                 del inner[mask_word]
 
-    # calculate used memory percentage if ran with stats
+    # -- calculate used memory percentage if ran with stats --
     if "mem_total" and "mem_free" in all_keys:
         all_keys += ["mem_pct"]
         for inner in data:
-            if inner.get("mem_total") is None or inner.get("mem_free") is None:
+            if any([v in [None, "--"] for v in [inner["mem_total"], inner["mem_free"]]]):  # testing for pre-cleaned data for sake of pytest (cache.responses.dev is already populated)
                 continue
             if inner["mem_total"] and inner["mem_free"]:
                 mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
@@ -1079,7 +1070,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
     data = Sites(sites=data)
-    return data.dict()["sites"]
+    return data.model_dump()["sites"]
 
 
 def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1232,26 +1223,25 @@ def get_template_details_for_device(data: str) -> dict:
         dict: dict with summary(dict), running config(str) and
         central side config(str).
     """
-    summary, running_config, central_config = None, None, None
+    data = utils.unlistify(data)  # TODO we listify before sending to cleaner, this function expects str so unlistify here.  See if listify can be removed in _display_results
     split_line = data.split("\n")[0].rstrip()
     data_parts = [
         d.lstrip().splitlines() for d in data.split(split_line)
         if d.lstrip().startswith("Content-Disposition")
     ]
+    return_dict = {}
     for part in data_parts:
         if 'name="Summary"' in part[0]:
             summary = json.loads("\n".join(part[2:]))
-            summary = {k.lower(): v for k, v in summary.items()}
+            return_dict["summary"] = {k.lower(): v for k, v in summary.items()}
         elif 'name="Device_running_config"' in part[0]:
-            running_config = "\n".join(part[2:]).rstrip()
-        elif 'name="Device_central_side_config"' in part[0]:
-            central_config = "\n".join(part[2:]).rstrip()
+            return_dict["running_config"] = "\n".join(part[2:]).rstrip()
+        elif 'name="Device central_side_config"' in part[0]:
+            return_dict["central_config"] = "\n".join(part[2:]).rstrip()
+        elif 'name="Configuration_error_details"' in part[0]:
+            return_dict["error_details"] = "\n".join(part[2:]).rstrip()
 
-    return {
-        "summary": summary,
-        "running_config": running_config,
-        "central_config": central_config
-    }
+    return return_dict
 
 def parse_caas_response(data: Union[dict, List[dict]]) -> List[str]:
     """Parses Response Object from caas API updates output attribute
@@ -1829,7 +1819,7 @@ def cloudauth_upload_status(data: List[Dict[str, Any]] | Dict[str, Any]) -> Dict
 
     try:
         resp_model = CloudAuthUploadResponse(**data)
-        data = resp_model.dict()
+        data = resp_model.model_dump()
     except Exception as e:
         log.error("Attempt to normalize cloudauth upload status response through model failed.")
         log.exception(e)
