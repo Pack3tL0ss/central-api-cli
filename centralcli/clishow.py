@@ -8,10 +8,11 @@ import sys
 import json
 import os
 from datetime import datetime
-from typing import List, Iterable, Literal, Dict, Any, Tuple
+from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
 from rich import print
 from rich.console import Console
+
 
 
 try:
@@ -47,6 +48,10 @@ from centralcli.constants import (
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
+
+if TYPE_CHECKING:
+    from .cache import CacheSite
+    from tinydb.table import Document, Table
 
 
 app = typer.Typer()
@@ -235,7 +240,7 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         resp = cli.cache.get_devices_with_inventory(status=status)
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
     elif not cli.cache.responses.dev:
-        resp = cli.central.request(cli.cache.update_dev_db, **params)
+        resp = cli.central.request(cli.cache.refresh_dev_db, **params)
         caption = None if not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
@@ -256,7 +261,7 @@ def _get_details_for_specific_devices(
         br = cli.central.BatchRequest
         devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [br(cli.central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
+        reqs = [br(cli.central.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
         batch_res = cli.central.batch_request(reqs)
@@ -302,7 +307,7 @@ def show_devices(
 ) -> None:
     # include subscription implies include_inventory
     if update_cache:
-        cli.central.request(cli.cache.update_dev_db)
+        cli.central.request(cli.cache.refresh_dev_db)
 
     if group:
         group: CentralObject = cli.cache.get_group_identifier(group)
@@ -340,7 +345,7 @@ def show_devices(
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
-        resp = cli.central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
+        resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
@@ -792,7 +797,7 @@ def inventory(
         cli.exit(code=0)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type, sub=sub)
+    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
 
     cli.display_results(
         resp,
@@ -1204,7 +1209,9 @@ def upgrade(
 
 @app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
 def cache_(
-    args: List[CacheArgs] = typer.Argument(None, show_default=False),
+    args: List[CacheArgs] = typer.Argument(None, help="[cyan]all[/] Shows data in [italic bright_green]the most pertinent[/] tables", show_default=False),
+    all: bool = typer.Option(False, "--all", help="This is the Super [cyan]all[/] option, shows data in [bright_green italic]every[/] table.", show_choices=False),
+    no_page: bool = typer.Option(False, "--no-page", help="For [cyan]all[/] | [cyan]--all[/] options, you hit Enter to see the next table.  This option disables that behavior.", show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -1219,29 +1226,41 @@ def cache_(
     update_cache = cli.options.update_cache,
 ):
     args = ('all',) if not args else args
-    for arg in args:
-        cache_out = getattr(cli.cache, arg)
-        arg = arg if not hasattr(arg, "value") else arg.value
+    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
+    if all or "all" in args:
+        tables = cli.cache.all_tables if all else cli.cache.key_tables
+        length = len(cli.cache) if all else len(cli.cache._tables)
+        for idx, t in enumerate(tables, start=1):
+            data = t.all()
+            if t.name == "devices":  # sort devices so output matches cencli show all
+                data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
-        # sort devices so output matches cencli show all
-        if  arg == "all":
-            if "devices" in cache_out:
-                cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+            cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            if not no_page and cli.econsole.is_terminal and not idx == length:
+                cli.pause()
+    else:
+        for idx, arg in enumerate(args, start=1):
+            cache_out: List[Document] = getattr(cli.cache, arg)
+            arg = arg if not hasattr(arg, "value") else arg.value
 
-        caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
-        cli.display_results(
-            data=cache_out,
-            tablefmt=tablefmt,
-            title=f'Cache {arg.title().replace("_", " ")}',
-            pager=pager,
-            outfile=outfile,
-            sort_by=sort_by,
-            reverse=reverse,
-            output_by_key=None,
-            stash=False,
-            caption=caption,
-        )
+            caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
+            cli.display_results(
+                data=cache_out,
+                tablefmt=tablefmt,
+                title=f'Cache {arg.title().replace("_", " ")}',
+                pager=pager,
+                outfile=outfile,
+                sort_by=sort_by,
+                reverse=reverse,
+                output_by_key=None,
+                stash=False,
+                caption=caption,
+            )
+            if not no_page and cli.econsole.is_terminal and not idx == len(args):
+                cli.pause()
+
+    account_msg = "" if config.account in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.account}[/] "
+    cli.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(cli.cache)}[/], Cache File Size: [cyan]{cli.cache.size}[reset]')
 
 def _build_groups_caption(data: List[dict]) -> List[str]:
     if not data:
@@ -1314,19 +1333,21 @@ def labels(
 
 
 def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
-    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
-    counts, count_caption = {}, None
-    if resp.ok:
-        for do, field in zip([count_state, count_country], ["state", "country"]):
-            if do:
-                _cnt_list = [site[field] for site in resp.output if site[field]]
-                _cnt_dict = {
-                    item: _cnt_list.count(item) for item in set(_cnt_list)
-                }
-                counts = {**counts, **_cnt_dict}
+    if not resp.ok:
+        return
 
-            if counts:
-                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    caption = f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    for do, field in zip([count_state, count_country], ["state", "country"]):
+        if do:
+            _cnt_list = [site[field] for site in resp.output if site[field]]
+            _cnt_dict = {
+                item: _cnt_list.count(item) for item in set(_cnt_list)
+            }
+            counts = {**counts, **_cnt_dict}
+
+        if counts:
+            count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
     if count_caption:
         caption = f'[reset]{caption}, {count_caption}[reset][/]'
 
@@ -1356,10 +1377,10 @@ def sites(
 
     site = None if site and site.lower() == "all" else site
     if not site:
-        resp = cli.central.request(cli.cache.update_site_db)
+        resp = cli.central.request(cli.cache.refresh_site_db)
         cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
-        site = cli.cache.get_site_identifier(site)
+        site: CacheSite = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
         cleaner_func = cleaner.sites
 
@@ -1545,10 +1566,10 @@ def lldp(
     central = cli.central
 
     devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
-    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
-    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
+    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"]
+    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
     unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
-    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
+    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, swack_id) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
@@ -1729,7 +1750,7 @@ def config_(
                 devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "gw" and d["group"] == group_dev.name]
                 caasapi = caas.CaasAPI(central=cli.central)
 
-                reqs = [br(caasapi.show_config, (group_dev.name, d.mac)) for d in devs]
+                reqs = [br(caasapi.show_config, group_dev.name, d.mac) for d in devs]
                 res = cli.central.batch_request(reqs)
 
                 outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_gw_configs"
