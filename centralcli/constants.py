@@ -322,6 +322,7 @@ class LogLevel(str, Enum):
     LOG_ERR = "error"
 
 class CacheArgs(str, Enum):
+    all = "all"
     devices = "devices"
     inventory = "inventory"
     sites = "sites"
