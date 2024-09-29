@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Iterable
 
 import pendulum
 from pathlib import Path
@@ -26,20 +26,15 @@ class DevType(str, Enum):
     cx = "cx"
     gw = "gw"
 
-class TemplateDevType(str, Enum):
-    MobilityController = "MobilityController"
-    IAP = "IAP"
-    CX = "CX"
-    ArubaSwitch = "ArubaSwitch"
 
 # fields from Response.output after cleaner
-class _Inventory(BaseModel):
+class InventoryDevice(BaseModel):
     serial: str
-    mac: str
-    type: Optional[str] = None
+    mac: str = Field(alias=AliasChoices("mac", "macaddr"))
+    type: Optional[str] = Field(None, alias=AliasChoices("type", "device_type"))
     model: Optional[str] = None
-    sku: Optional[str] = None
-    services: Optional[List[str] | str] = None
+    sku: Optional[str] = Field(None, alias=AliasChoices("aruba_part_no", "sku"))
+    services: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services"))
     subscription_key: Optional[str] = None
     subscription_expires: Optional[int] = None
 
@@ -48,33 +43,39 @@ switch_types = {
     "AOS-CX": "cx"
 }
 
-class Inventory(_Inventory):
-    def __init__(
-        self,
-        serial: str,
-        type: str = None,
-        mac: str = None,
-        macaddr: str = None,
-        model: Optional[str] = None,
-        sku: Optional[str] = None,
-        aruba_part_no: Optional[str] = None,
-        services: Optional[str | List[str]] = None,
-        license: Optional[str | List[str]] = None,
-        device_type: Optional[str] = None,
-        **kwargs,
-    ):
-        super().__init__(
-            type=self._inv_type(model, dev_type=type or device_type),
-            serial=serial,
-            mac=self._normalize_mac(mac or macaddr),
-            model=model,
-            sku=sku or aruba_part_no,
-            services=services or license,
-            **kwargs,
-        )
+
+class Inventory(RootModel):
+    root: List[InventoryDevice]
+
+    def __init__(self, data: List[dict]) -> None:
+        formatted = self.prep_for_cache(data)
+        super().__init__([InventoryDevice(**d) for d in formatted])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+    def prep_for_cache(self, data: List[Dict[str, str | int | float]]):
+        def format_value(key: str, value: str, device: Dict[str, str | int | float]) -> str:
+            if key.startswith("mac"):
+                return self._normalize_mac(value)
+            if key in ["device_type", "type"]:
+                return self._inv_type(value, model=device.get("model"))
+            return value
+
+        return [
+            {
+                k: format_value(k, v, device=dev) for k, v in dev.items()
+            } for dev in data
+        ]
 
     @staticmethod
-    def _inv_type(model: str, dev_type: str | None) -> DevType | None:
+    def _inv_type(dev_type: str | None, model: str | None) -> DevType | None:
         if dev_type is None:  # Only occurs when import data is passed into this model, inventory data from API should have the type
             return None
 
@@ -90,6 +91,10 @@ class Inventory(_Inventory):
         if not mac_out.ok:
             log.warning(f"MAC Address {mac} passed into Inventory via import does not appear to be valid.", show=True, caption=True, log=True)
         return mac_out.cols.upper()
+
+    @property
+    def by_serial(self) -> Dict[int, Dict[str, str | int | float]]:
+        return {s.serial: s.model_dump() for s in self.root}
 
 
 # Not used yet  None of the Cache models below are currently used.
@@ -121,11 +126,11 @@ class Site(BaseModel):
     address: Optional[str] = Field(None)
     city: Optional[str] = Field(None)
     state: Optional[str] = Field(None)
-    zipcode: Optional[str] = Field(None)  # str because zip+4 with hyphen may be possible
+    zip: Optional[str] = Field(None, alias=AliasChoices("zipcode", "zip"))  # str because zip+4 with hyphen may be possible
     country: Optional[str] = Field(None)
-    longitude: Optional[float] = Field(None)
-    latitude: Optional[float] = Field(None)
-    devices: Optional[int] = Field(0) # field in cache actually has space "associated devices"
+    lon: Optional[float] = Field(None, alias=AliasChoices("longitude", "lon"))
+    lat: Optional[float] = Field(None, alias=AliasChoices("latitude", "lat"))
+    devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices")) # field in prev cache had space "associated devices"
 
 
 class Sites(RootModel):
@@ -144,20 +149,29 @@ class Sites(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
-    def prep_for_cache(self, data: List[Dict[str, Any]]):
+    def prep_for_cache(self, data: List[Dict[str, str | int | float]]):
+        def cache_keys(key: str) -> str:
+            short_keys = {
+                "longitude": "lon",
+                "latitude": "lat",
+                "zipcode": "zip"
+            }
+
+            return short_keys.get(key, key).removeprefix("site_")
+
         strip_keys = ["site_details", "associated devices", "associated_device_count"]
         return [
             {
                 **{
-                    k.removeprefix("site_"): v for k, v in s.items() if k not in strip_keys
+                    cache_keys(k): v for k, v in s.items() if k not in strip_keys
                 },
                 **s.get("site_details", {}),
-                "devices": s.get("associated_device_count", s.get("associated devices", 0))
+                "devices": s.get("associated_device_count", s.get("associated devices", s.get("devices", 0)))
             } for s in data
         ]
 
     @property
-    def by_id(self) -> Dict[int, Dict[str, Any]]:
+    def by_id(self) -> Dict[int, Dict[str, str | int | float]]:
         return {s.id: s.model_dump() for s in self.root}
 
 class GatewayRole(str, Enum):
@@ -241,20 +255,65 @@ class Groups(RootModel):
         return clean
 
 class Template(BaseModel):
-    device_type: TemplateDevType
+    model_config = ConfigDict(use_enum_values=True)
+    name: str
+    device_type: DevType
     group: str
     model: str  # model as in sku here
-    name: str
-    template_hash: str
     version: str
+    template_hash: str
 
+class Templates(RootModel):
+    root: List[Template]
+
+    def __init__(self, data: List[dict]) -> None:
+        formatted = self.format_data(data)
+        super().__init__([Template(**t) for t in formatted])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.model_dump())
+
+    def format_data(self, data: List[Dict[str, str]]):
+        if not isinstance(data, Iterable) or not all([isinstance(d, dict) for d in data]):
+            return data
+        lib_dev_types = {
+            "MobilityController": "gw",
+            "IAP": "ap",
+            "CX": "cx",
+            "ArubaSwitch": "sw"
+        }
+        return [
+            {
+                k: v if k != "device_type" else lib_dev_types.get(v, v)
+                for k, v in inner.items()
+            } for inner in data
+        ]
 
 class Label(BaseModel):
     id: int = Field(alias="label_id")
     name: str = Field(alias="label_name")
+    devices: int = Field(alias=AliasChoices("devices", "associated_device_count"))
 
-class Labels(BaseModel):
-    labels: List[Label]
+class Labels(RootModel):
+    root: List[Label]
+
+    def __init__(self, data: List[dict]) -> None:
+        super().__init__([Label(**g) for g in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.model_dump())
 
 class ClientType(str, Enum):
     WIRED = "WIRED"
