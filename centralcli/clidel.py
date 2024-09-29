@@ -25,7 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import IdenMetaVars
 from centralcli.exceptions import DevException
 
-from centralcli.cache import CentralObject, CacheLabel
+from centralcli.cache import CentralObject, CacheLabel, CacheDevice
 
 iden = IdenMetaVars()
 
@@ -105,7 +105,7 @@ def group(
     account: str = cli.options.account,
 ) -> None:
     groups = [cli.cache.get_group_identifier(g) for g in groups]
-    reqs = [cli.central.BatchRequest(cli.central.delete_group, (g.name, )) for g in groups]
+    reqs = [cli.central.BatchRequest(cli.central.delete_group, g.name) for g in groups]
 
     _grp_msg = "\n".join([f"  [cyan]{g.name}[/]" for g in groups])
     _grp_msg = _grp_msg.lstrip() if len(groups) == 1 else f"\n{_grp_msg}"
@@ -191,16 +191,16 @@ def template(
 
 
 # TODO return status indicating cache update success/failure
-def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
+def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if all(r.ok for r in batch_resp) else False
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
         cache_update_reqs = []
         if cache_devs:
             if all_ok:
-                cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+                cache_update_reqs += [br(cli.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
             else:
-                cache_update_reqs += [br(cli.cache.update_dev_db)]
+                cache_update_reqs += [br(cli.cache.refresh_dev_db)]
 
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
         if cache_devs or inv_del_serials and not ui_only:
@@ -301,13 +301,13 @@ def device(
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
     arch_reqs = [] if ui_only or not inv_del_serials else [
-        br(cli.central.archive_devices, (inv_del_serials,)),
-        br(cli.central.unarchive_devices, (inv_del_serials,)),
+        br(cli.central.archive_devices, inv_del_serials),
+        br(cli.central.unarchive_devices, inv_del_serials),
     ]
 
     # cop only delete devices from GreenLake inventory
     cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, (inv_del_serials,))
+        br(cli.central.cop_delete_device_from_inventory, inv_del_serials)
     ]
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
