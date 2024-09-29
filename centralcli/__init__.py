@@ -144,7 +144,7 @@ from .utils import Utils
 utils = Utils()
 from .response import Response, BatchRequest
 from .central import CentralApi
-from .cache import Cache, CentralObject, CacheGroup, CacheLabel
+from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice
 from .clicommon import CLICommon
 from . import cleaner, render
 
@@ -187,9 +187,13 @@ if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for l
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 
 central = CentralApi(config.account)
+Cache.set_config(config)
 cache = Cache(central)
-CacheGroup.db(cache.GroupDB)
-CacheLabel.db(cache.LabelDB)
+CacheDevice.set_db(cache.DevDB)
+CacheGroup.set_db(cache.GroupDB)
+CacheSite.set_db(cache.SiteDB)
+CacheLabel.set_db(cache.LabelDB)
+CacheTemplate.set_db(cache.TemplateDB)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
