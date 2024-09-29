@@ -44,7 +44,7 @@ err_console = Console(stderr=True)
 
 # TODO args should be expanded here *args simplifies instantiation
 class BatchRequest:
-    def __init__(self, func: callable, args: Any = (), **kwargs: dict) -> None:
+    def __init__(self, func: callable, *args, **kwargs) -> None:
         """Constructor object for for api requests.
 
         Used to pass multiple requests into CentralApi batch_request method for parallel
@@ -52,11 +52,11 @@ class BatchRequest:
 
         Args:
             func (callable): The CentralApi method to execute.
-            args (Any, optional): args passed on to method. Defaults to ().
+            args (Iterable, optional): args passed on to method. Defaults to ().
             kwargs (dict, optional): kwargs passed on to method. Defaults to {}.
         """
         self.func = func
-        self.args: Union[list, tuple] = args if isinstance(args, (list, tuple)) else (args, )
+        self.args = args
         self.kwargs = kwargs
 
     def __repr__(self):
@@ -1045,7 +1045,7 @@ class Session():
 
             _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
-                chunk += [self.BatchRequest(asyncio.sleep, (1,))]
+                chunk += [self.BatchRequest(asyncio.sleep, 1)]
 
             m_resp += await asyncio.gather(
                 *[call.func(*call.args, **call.kwargs) for call in chunk]
