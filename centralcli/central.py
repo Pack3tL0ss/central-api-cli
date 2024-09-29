@@ -848,7 +848,11 @@ class CentralApi(Session):
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
         if resp.ok:
-            resp.output = cleaner.get_group_names(resp.output)
+            # convert list of single item lists to a single list, remove unprovisioned group, move default group to front of list.
+            resp.output = [g for _ in resp.output for g in _ if g != "unprovisioned"]
+            if "default" in resp.output:
+                resp.output.insert(0, resp.output.pop(resp.output.index("default")))
+
         return resp
 
     async def delete_template(
@@ -895,8 +899,8 @@ class CentralApi(Session):
 
         template_resp, props_resp = await self._batch_request(
             [
-                self.BatchRequest(self.get_groups_template_status, (groups,)),
-                self.BatchRequest(self.get_groups_properties, (groups,))
+                self.BatchRequest(self.get_groups_template_status, groups),
+                self.BatchRequest(self.get_groups_properties, groups)
             ]
         )
 
@@ -1085,10 +1089,30 @@ class CentralApi(Session):
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
         ) -> CombinedResponse:
-        """Get all devices from Aruba Central
+        """Get all devices from Aruba Central.
+
+        Args:
+            dev_type (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
+            group (str, optional): Filter by devices in a Group. Defaults to None.
+            site (str, optional): Filter by devices in a Site. Defaults to None.
+            label (str, optional): Filter by devices with a label assigned. Defaults to None.
+            serial (str, optional): Filter by Serial. Defaults to None.
+            mac (str, optional): Filter by mac. Defaults to None.
+            model (str, optional): Filter by model. Defaults to None.
+            stack_id (str, optional): Filter by stack id (switches). Defaults to None.
+            swarm_id (str, optional): Filter by swarm id (APs). Defaults to None.
+            cluster_id (str, optional): Filter by cluster id. Defaults to None.
+            public_ip_address (str, optional): Filter by public ip. Defaults to None.
+            status (constants.DeviceStatus, optional): Filter by status. Defaults to None.
+            show_resource_details (bool, optional): Show device resource utilization details. Defaults to True.
+            calculate_client_count (bool, optional): Calculate client count. Defaults to True.
+            calculate_ssid_count (bool, optional): Calculate SSID count. Defaults to False.
+            fields (list, optional): fields to return. Defaults to None.
+            offset (int, optional): pagination offset. Defaults to 0.
+            limit (int, optional): pagination limit max 1000. Defaults to 1000.
 
         Returns:
-            CombinedResponse: CentralAPI Response object
+            CombinedResponse: CombinedResponse object.
         """
 
         dev_types = ["aps", "switches", "gateways"]  if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
@@ -1122,9 +1146,6 @@ class CentralApi(Session):
         batch_resp = await self._batch_request(reqs)
         combined = CombinedResponse(batch_resp)
 
-        # if not combined.passed:
-        #     return batch_resp
-        # elif combined.failed:
         if combined.ok and combined.failed:  # combined.ok indicates at least 1 call was ok, if None are ok no need for Partial failure msg
             for r in combined.failed:
                 log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
@@ -2796,7 +2817,7 @@ class CentralApi(Session):
             if len(site_list) > 1:
                 ret = await self._batch_request(
                     [
-                        self.BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
+                        self.BatchRequest(self.post, url, json_data=_json, callback=cleaner._unlist)
                         for _json in site_list[1:]
                     ]
                 )
@@ -3581,7 +3602,7 @@ class CentralApi(Session):
         if isinstance(site_id, list):
             return await self._batch_request(
                 [
-                    self.BatchRequest(self.delete, (f"{b_url}/{_id}",))
+                    self.BatchRequest(self.delete, f"{b_url}/{_id}")
                     for _id in site_id
                 ]
             )
@@ -4477,12 +4498,12 @@ class CentralApi(Session):
             # Assign devices to pre-provisioned group.  1 API call per group
             # TODO test that this is 1 API call per group.
             if to_group:
-                group_reqs = [br(self.preprovision_device_to_group, (g, devs)) for g, devs in to_group.items()]
+                group_reqs = [br(self.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
 
-            # TODO You can add the device to a site after it's been pre-assigned
+            # TODO You can add the device to a site after it's been pre-assigned (gateways only)
             # if to_site:
-            #     site_reqs = [br(self.move_devices_to_site, (s, devs, "gw")) for s, devs in to_site.items()]
+            #     site_reqs = [br(self.move_devices_to_site, s, devs, "gw") for s, devs in to_site.items()]
             #     reqs = [*reqs, *site_reqs]
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
