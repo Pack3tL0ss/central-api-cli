@@ -792,8 +792,8 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     if "mem_total" and "mem_free" in all_keys:
         all_keys += ["mem_pct"]
         for inner in data:
-            if any([v in [None, "--"] for v in [inner["mem_total"], inner["mem_free"]]]):  # testing for pre-cleaned data for sake of pytest (cache.responses.dev is already populated)
-                continue
+            if any([v in [None, "--"] for v in [inner.get("mem_total"), inner.get("mem_free")]]):  # testing for pre-cleaned data for sake of pytest (cache.responses.dev is already populated)
+                mem_pct = inner["mem_total"] = inner["mem_free"] = None
             if inner["mem_total"] and inner["mem_free"]:
                 mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
             elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
