@@ -134,6 +134,15 @@ class SortInventoryOptions(str, Enum):
     subscription_key = "subscription-key"
     expires_in = "expires-in"
 
+
+class SortPortalOptions(str, Enum):
+    name = "name"
+    id = "id"
+    auth = "auth"
+    url = "url"
+    reg_by_email = "reg-by-email"
+    reg_by_phone = "reg-by-phone"
+
 class GatewayRole(str, Enum):
     branch = "branch"
     vpnc = "vpnc"
@@ -524,6 +533,7 @@ class ArgToWhat:
         self.template = self.templates = "template"
         self.device = self.devices = self.dev = "device"
         self.label = self.labels = "label"
+        self.portal = self.portals = "portal"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"
