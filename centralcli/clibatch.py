@@ -823,7 +823,7 @@ def verify(
 ) -> None:
     """Validate batch Add operations using import data from file.
 
-    The same file used to import can be used to validate.
+    The same import file used to add/move can be used to validate.
     """
     if what != "devices":
         cli.exit("Only devices and device assignments are supported at this time.")
