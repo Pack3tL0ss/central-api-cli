@@ -3,7 +3,7 @@
 
 from pathlib import Path
 from time import sleep
-from typing import List
+from typing import List, TYPE_CHECKING
 import sys
 import typer
 from rich import print
@@ -26,6 +26,9 @@ from centralcli.constants import IdenMetaVars
 from centralcli.exceptions import DevException
 
 from centralcli.cache import CentralObject, CacheLabel, CacheDevice
+
+if TYPE_CHECKING:
+    from .cache import CachePortal
 
 iden = IdenMetaVars()
 
@@ -89,6 +92,36 @@ def label_(
     """
     labels: List[CacheLabel] = [cli.cache.get_label_identifier(label) for label in labels]
     cli.batch_delete_labels([label.data for label in labels], yes=yes)
+
+
+@app.command()
+def portal(
+    portals: List[str] = typer.Argument(..., metavar=iden.label_many, autocompletion=cli.cache.portal_completion, show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Delete portal(s)
+
+    Delete Guest Portal Profile(s)/Splash Page(s)
+    """
+    cache_portals: List[CachePortal] = [cli.cache.get_name_id_identifier('portal', portal) for portal in portals]
+    reqs = [cli.central.BatchRequest(cli.central.delete_portal_profile, p.id) for p in cache_portals]
+
+    portal_names = utils.summarize_list([p.name for p in cache_portals])
+    if len(portals) == 1:
+        cli.econsole.print(f'[red]Deleting[/] portal profile: {portal_names.strip()}.')
+    else:
+        cli.econsole.print(f'[red]Deleting[/] {len(cache_portals)} portal profiles:\n{portal_names}')
+
+    if cli.confirm(yes):
+        batch_resp = cli.central.batch_request(reqs)
+        cli.display_results(batch_resp, tablefmt="action")
+        if len(batch_resp) == len(cache_portals):
+            doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
+            cli.central.request(cli.cache.update_portal_db, doc_ids, remove=True)
+
 
 
 @app.command(short_help="Delete group(s)")

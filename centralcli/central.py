@@ -5494,14 +5494,15 @@ class CentralApi(Session):
 
     async def get_portals(
         self,
-        sort: str = '+name',
+        sort: str = None,
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
         """Get all portals with limited data.
 
         Args:
-            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.  Defaults to +name.
+            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.
+                Defaults to None.  Which results in use of API default +name.
             offset (int, optional): Starting index of element for a paginated query Defaults to 0.
             limit (int, optional): Number of items required per query Defaults to 100.
 
@@ -5533,6 +5534,22 @@ class CentralApi(Session):
         url = f"/guest/v1/portals/{portal_id}"
 
         return await self.get(url)
+
+    async def delete_portal_profile(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Delete guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        return await self.delete(url)
 
     async def get_visitors(
         self,
