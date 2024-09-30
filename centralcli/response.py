@@ -354,17 +354,19 @@ class Response:
                 )
         elif isinstance(self.output, dict):  # TODO just use yaml.safe_dump here
             data = utils.strip_none(self.output, strip_empty_obj=True)
-            r = render.output([data], tablefmt="yaml")
-            r = Text.from_ansi(r.tty)
-            r = "\n".join([f"  {line}" for line in str(r).splitlines()])
-            # r = "\n".join(
-            #     [
-            #         "  {}: {}".format(
-            #             k,
-            #             v if isinstance(v, (str, int, float)) else f"{self._split_inner(v)}",
-            #         ) for k, v in self.output.items() if k != "status" and (v or v is False)
-            #     ]
-            # )
+            # remove redundant status_code if response includes it in output
+            stripped_status = False
+            if "status_code" in self.output and self.output["status_code"] == self.status:
+                del data["status_code"]
+                stripped_status = True
+
+            if data:
+                r = render.output([data], tablefmt="yaml")
+                r = Text.from_ansi(r.tty)
+                r = "\n".join([f"  {line}" for line in str(r).splitlines()])
+            else:
+                emoji = '\u2139' if self.ok else '\u26a0'
+                r = "" if stripped_status else f"  {emoji}  Empty Response.  This may be normal."
         elif not self.output:
             emoji = '\u2139' if self.ok else '\u26a0'  # \u2139 = :information:, \u26a0 = :warning:
             r = f"  {emoji}  Empty Response.  This may be normal."
