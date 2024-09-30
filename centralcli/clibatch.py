@@ -830,7 +830,7 @@ def verify(
 
     data = cli._get_import_file(import_file, import_type=what)
 
-    resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
+    resp: Response = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         cli.display_results(resp, stash=False, exit_on_fail=True)
     resp.output = cleaner.simple_kv_formatter(resp.output)

@@ -832,7 +832,7 @@ class Cache:
             log.error(f'{db} update response: {response}{elapsed_msg}')
             return False
 
-    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response]:
+    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
