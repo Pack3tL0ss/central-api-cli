@@ -250,9 +250,9 @@ class CacheDevice(CentralObject):
         if self._doc_id:
             return self._doc_id
 
-        if self.db is not None and self.name is not None:
+        if self.db is not None and self.serial is not None:
             Q = Query()
-            match: List[Document] = self.db.search(Q.name == self.name)
+            match: List[Document] = self.db.search(Q.serial == self.serial)
             if match and len(match) == 1:
                 self._doc_id = match[0].doc_id
 
@@ -264,6 +264,46 @@ class CacheDevice(CentralObject):
 
     def __rich__(self) -> str:
         return f'[bright_green]Device[/]:[cyan]{self.name}[/]|({utils.color(self.status, "green_yellow")})'
+
+
+class CacheInvDevice(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('dev', data)
+        self.serial: str = data["serial"]
+        self.mac: str = data["mac"]
+        self.type: str = data["type"]
+        self.model: str = data["model"]
+        self.sku: str = data["sku"]
+        self.services: str | None = data["services"]
+        self.subscription_key: str = data["subscription_key"]
+        self.subscription_expires: int | float = data["subscription_expires"]
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.serial is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.serial == self.serial)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
 
 class CacheGroup(CentralObject):
@@ -3100,7 +3140,7 @@ class Cache:
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
-    ) -> CacheDevice | List[CacheDevice] | None:
+    ) -> CacheDevice | CacheInvDevice | List[CacheDevice | CacheInvDevice | None] | None:
         """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
 
         If multiple matches are found user is promted to select device.
@@ -3125,6 +3165,7 @@ class Cache:
             CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
         """
         retry = False if completion else retry
+        Model = CacheDevice
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
@@ -3143,6 +3184,8 @@ class Cache:
                     (self.Q.serial == query_str)
                     | (self.Q.mac == utils.Mac(query_str).cols)
                 )
+            if match:
+                Model = CacheInvDevice
 
             # retry with case insensitive name match if no match with original query
             if not match:
@@ -3192,7 +3235,7 @@ class Cache:
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
-                match = [CacheDevice("dev", dev) for dev in match]
+                match = [Model(dev) for dev in match]
                 break
 
         all_match = None

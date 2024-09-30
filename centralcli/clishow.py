@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 from __future__ import annotations
 import typer
@@ -50,8 +50,8 @@ from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
-    from .cache import CacheSite
-    from tinydb.table import Document, Table
+    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
+    from tinydb.table import Document
 
 
 app = typer.Typer()
@@ -265,6 +265,11 @@ def _get_details_for_specific_devices(
 
         # Fetch results from API
         batch_res = cli.central.batch_request(reqs)
+        if include_inventory:  # Combine results with inventory results
+            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
+            for r, dev in zip(batch_res, devs):
+                r.output = {**r.output, **cli.cache.inventory_by_serial.get(dev.serial, {})}
+
 
         if do_table and len(dev_types) > 1:
             _output = [r.output for r in batch_res]
@@ -310,11 +315,11 @@ def show_devices(
         cli.central.request(cli.cache.refresh_dev_db)
 
     if group:
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
     if site:
-        site: CentralObject = cli.cache.get_site_identifier(site)
+        site: CacheSite = cli.cache.get_site_identifier(site)
     if label:
-        label: CentralObject = cli.cache.get_label_identifier(label)
+        label: CacheLabel = cli.cache.get_label_identifier(label)
 
     resp = None
     status = status or state
@@ -347,7 +352,7 @@ def show_devices(
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = cli.central.request(cli.cache.refresh_inv_db, dev_type=dev_type)
+            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
         caption = None if not resp.ok else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
