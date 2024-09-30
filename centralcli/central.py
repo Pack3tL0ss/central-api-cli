@@ -897,12 +897,15 @@ class CentralApi(Session):
 
         groups = resp.output
 
-        template_resp, props_resp = await self._batch_request(
+        batch_resp = await self._batch_request(
             [
                 self.BatchRequest(self.get_groups_template_status, groups),
                 self.BatchRequest(self.get_groups_properties, groups)
             ]
         )
+        if all([not r.ok for r in batch_resp]):  # if first call fails possible to only have 1 call returned.
+            return batch_resp
+        template_resp, props_resp = batch_resp
 
         template_by_group = {d["group"]: d["template_details"] for d in deepcopy(template_resp.output)}
         props_by_group = {d["group"]: d["properties"] for d in deepcopy(props_resp.output)}
