@@ -50,7 +50,7 @@ from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
+    from .cache import CacheSite, CacheGroup, CacheLabel
     from tinydb.table import Document
 
 
