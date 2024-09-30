@@ -42,7 +42,7 @@ def site(
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if yes or typer.confirm("proceed?", abort=True):
         print()
-        cliupdate.site(site.name, address=None, city=None, state=None, zipcode=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, default=default, account=account)
+        cliupdate.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, default=default, account=account)
 
 
 @app.command()
