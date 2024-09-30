@@ -3284,7 +3284,7 @@ class Cache:
 
             # no match found initiate cache update
             if retry and not match and self.central.get_all_devices not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3297,7 +3297,7 @@ class Cache:
                         kwargs["inv_db"] = True
                     else:
                         _word = " "
-                    econsole.print(f"Updating Device{_word}Cache.")
+                    econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
@@ -4007,7 +4007,7 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
-                    econsole.print(f":arrows_clockwise:  Updating [cyan]{cache_name}[/] Cache")
+                    econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
                     asyncio.run(this.cache_update_func())
                 _ += 1
             if match:
