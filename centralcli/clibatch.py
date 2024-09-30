@@ -43,7 +43,7 @@ from centralcli.models import Groups
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
-from centralcli.cache import CentralObject  # NoQA
+from centralcli.cache import CentralObject, CacheDevice  # NoQA
 
 iden = IdenMetaVars()
 tty = utils.tty
@@ -719,7 +719,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         _data = None if not all([r.ok for r in resp]) else data
         if _data:
             try:
-                _data = [models.Inventory(**d).model_dump() for d in _data]
+                _data = models.Inventory(_data).model_dump()
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
                 _data = None
@@ -732,7 +732,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
             sleep(3)
             spin.update('Performing full device cache update after device edition.')
             sleep(2)
-        cache_res += [cli.central.request(cli.cache.update_dev_db)]
+        cache_res += [cli.central.request(cli.cache.refresh_dev_db)]
 
     return resp or Response(error="No Devices were added")
 
@@ -1041,15 +1041,15 @@ def show_archive_results(res: Response) -> None:
         cli.display_results(data=data, title=title, caption=caption)
 
 
-def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
+def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
     cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
         if cache_devs and all_ok:
-            cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
+            cache_update_reqs += [br(cli.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
         else:
-            cache_update_reqs += [br(cli.cache.update_dev_db)]
+            cache_update_reqs += [br(cli.cache.refresh_dev_db)]
 
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
         if cache_devs or inv_del_serials and not ui_only:
@@ -1131,13 +1131,13 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
 
     # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
     # to avoid duplication ... # FIXME update clidel with corrections made below
-    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
+    cache_devs: List[CacheDevice | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
     if len(serials_in) != len(cache_devs):
         log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
 
     not_in_inventory: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
     inv_del_serials: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is not None]
-    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
+    cache_devs: List[CacheDevice] = [c for c in cache_devs if c]
     # _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
     # inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
 
@@ -1168,13 +1168,13 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
     # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
     # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
     arch_reqs = [] if ui_only or not _serials else [
-        br(cli.central.archive_devices, (_serials,)),
-        br(cli.central.unarchive_devices, (_serials,)),
+        br(cli.central.archive_devices, _serials),
+        br(cli.central.unarchive_devices, _serials),
     ]
 
     # cop only delete devices from GreenLake inventory
     cop_del_reqs = [] if not _serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, (_serials,))
+        br(cli.central.cop_delete_device_from_inventory, _serials)
     ]
 
     # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.

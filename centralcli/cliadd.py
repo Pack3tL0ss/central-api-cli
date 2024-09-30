@@ -545,7 +545,7 @@ def template(
     if yes or typer.confirm("\nProceed?", abort=True):
         template_hash, resp = cli.central.batch_request(
             [
-                BatchRequest(cli.get_file_hash, (template,)),
+                BatchRequest(cli.get_file_hash, template),
                 BatchRequest(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
             ]
         )
