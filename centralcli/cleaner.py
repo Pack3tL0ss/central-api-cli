@@ -304,8 +304,8 @@ _short_key = {
     "subscription_type": "type",
     "subscription_expires": "expires in",
     "capture_url": "url",
-    "register_accept_email": "accept email",
-    "register_accept_phone": "accept phone",
+    "register_accept_email": "reg by email",
+    "register_accept_phone": "reg by phone",
     "neighbor_id": "router id",
     "dr_address": "DR IP",
     "bdr_address": "BDR IP",
@@ -1457,9 +1457,10 @@ def get_portals(data: List[dict],) -> List[dict]:
             if k in d["auth_type"]:
                 d["auth_type"] = d["auth_type"].replace(k, v)
 
-    data = [
-        dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
-    ]
+    # data = [
+    #     dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
+    # ]
+    data = simple_kv_formatter(data, key_order=field_order, emoji_bools=True)
     data = strip_no_value(data)
 
     return data
