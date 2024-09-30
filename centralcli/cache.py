@@ -3250,8 +3250,8 @@ class Cache:
                     (self.Q.serial == query_str)
                     | (self.Q.mac == utils.Mac(query_str).cols)
                 )
-            if match:
-                Model = CacheInvDevice
+                if match:
+                    Model = CacheInvDevice
 
             # retry with case insensitive name match if no match with original query
             if not match:
