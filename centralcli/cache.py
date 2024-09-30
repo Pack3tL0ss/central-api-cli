@@ -7,7 +7,7 @@ import asyncio
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable, TYPE_CHECKING
+from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable, Optional, TYPE_CHECKING
 
 import typer
 from rich import print
@@ -17,12 +17,14 @@ from copy import deepcopy
 
 from centralcli import CentralApi, Response, config, constants, log, models, render, utils
 from centralcli.response import CombinedResponse
+from .typedefs import SiteData
 from tinydb.table import Document
 
 from rich.protocol import _GIBBERISH
 
 if TYPE_CHECKING:
     from tinydb.table import Table
+    from .config import Config
 
 
 try:
@@ -38,8 +40,8 @@ except Exception:
 
 # Used to debug completion
 econsole = Console(stderr=True)
-emoji_console = Console()
-console = Console(emoji=False)
+console = Console()
+clean_console = Console(emoji=False)
 TinyDB.default_table_name = "devices"
 
 # DBType = Literal["dev", "site", "template", "group"]
@@ -155,7 +157,7 @@ class CentralObject:
             parts = [
                 self.device_type,
                 self.model,
-                f"s:{self.group}",
+                f"g:{self.group}",
             ]
         elif self.cache == "dev":
             parts = [
@@ -220,7 +222,53 @@ class CentralObject:
         )
 
 
+class CacheDevice(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('dev', data)
+        self.name: str = data["name"]
+        self.status: Literal["Up", "Down"] | None = data["status"]
+        self.type: constants.DeviceTypes = data["type"]
+        self.model: str = data["model"]
+        self.ip: str | None = data["ip"]
+        self.mac: str = data["mac"]
+        self.serial: str = data["serial"]
+        self.group: str = data["group"]
+        self.site: str = data["site"]
+        self.version: str = data["version"]
+        self.swack_id: str | None = data["swack_id"]
+        self.switch_role: str | None = data["switch_role"]
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.name is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Device[/]:[cyan]{self.name}[/]|({utils.color(self.status, "green_yellow")})'
+
+
 class CacheGroup(CentralObject):
+    db: Table | None = None
+
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
         super().__init__('group', data)
@@ -236,51 +284,142 @@ class CacheGroup(CentralObject):
         self.cnx: bool = data.get("cnx")
 
     @classmethod
-    def db(cls, db: Table):
+    def set_db(cls, db: Table):
         cls.db: Table = db
 
     @property
     def doc_id(self) -> int:
-        return self._doc_id
+        if self._doc_id:
+            return self._doc_id
 
-    @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
-        if doc_id:
-            self._doc_id = doc_id
-        elif hasattr(self, 'db') and hasattr(self, "name"):
+        if self.db is not None and self.name is not None:
             Q = Query()
             match: List[Document] = self.db.search(Q.name == self.name)
             if match and len(match) == 1:
                 self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
+
+
+class CacheSite(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('site', data)
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+        self.address: Optional[str] = data.get("address")
+        self.city: Optional[str] = data.get("city")
+        self.state: Optional[str] = data.get("state")
+        self.zip: Optional[str] = data.get("zip", data.get("zipcode"))
+        self.country: Optional[str] = data.get("country")
+        self.lon: Optional[str] = data.get("lon", data.get("longitude"))
+        self.lat: Optional[str] = data.get("lat", data.get("latitude"))
+        self.devices: int = data.get("devices")
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.name is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
 
     def __rich__(self) -> str:
         return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
 
 
 class CacheLabel(CentralObject):
+    db: Table | None = None
+
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
         super().__init__('label', data)
         self.name: str = data["name"]
         self.id: int = data["id"]
+        self.devices: int = data.get("devices", data.get("associated_device_count", 0))
 
     @classmethod
-    def db(cls, db: Table):
+    def set_db(cls, db: Table):
         cls.db: Table = db
 
     @property
-    def doc_id(self) -> int:
-        return self._doc_id
+    def doc_id(self) -> int | None:
+        if self._doc_id:
+            return self._doc_id
 
-    @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
-        if doc_id:
-            self._doc_id = doc_id
-        elif hasattr(self, 'db') and hasattr(self, "name"):
+        if self.db is not None and self.name is not None:
             Q = Query()
             match: List[Document] = self.db.search(Q.name == self.name)
             if match and len(match) == 1:
                 self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
+
+
+class CacheTemplate(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('template', data)
+        self.name: str = data["name"]
+        self.device_type: constants.DeviceTypes = data["device_type"]
+        self.group: str = data["group"]
+        self.model: str = data["model"]  # model as in sku here =
+        self.name: str = data["name"]
+        self.template_hash: str = data["template_hash"]
+        self.version: str = data["version"]
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int | None:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.name is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> None:
+        self._doc_id = doc_id
 
     def __rich__(self) -> str:
         return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
@@ -394,6 +533,12 @@ class CacheResponses:
 
 
 class Cache:
+    config: Config = None
+
+    @classmethod
+    def set_config(cls, config: Config) -> None:
+        cls.config = config
+
     def __init__(
         self,
         central: CentralApi = None,
@@ -424,10 +569,11 @@ class Cache:
             self.HookDataDB: Table = self.DevDB.table("wh_data")
             self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
-            self._tables = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
+            self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
-                self.insert(data)
+                raise ValueError("This should not have happened.  Passing data directly to cache object was deprecated.  Please open issue on GitHub. I apparently missed something.")
+                # TODO should be good, once soaked to be sure remove data from constructor and this conditional
             if central:
                 self.check_fresh(refresh)
 
@@ -435,9 +581,11 @@ class Cache:
         if refresh:
             self.check_fresh(refresh)
 
-    def __iter__(self) -> Generator[Tuple[str, TinyDB | Table], None, None]:
-        for db in self._tables:
-            yield db.name(), db.all()
+    def __iter__(self) -> Generator[Tuple[str, List[Document]], None, None]:
+        yield from self.all_tables
+
+    def __len__(self) -> int:
+        return len(list(self.DevDB.tables()))
 
     def is_central_license(self, license: str) -> bool:
         if not any(
@@ -463,6 +611,29 @@ class Cache:
             return True
         else:
             return False
+
+    @property
+    def size(self) -> str:
+        def human_size(size_in_bytes: int | float, suffix: str = "B") -> str:
+            for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
+                if abs(size_in_bytes) < 1024.0:
+                    return f"{size_in_bytes:3.1f}{unit}{suffix}"
+                size_in_bytes /= 1024.0
+            return f"{size_in_bytes:.1f}Y{suffix}"
+
+        if self.config is not None:
+            db_stats = self.config.cache_file.stat()
+            return human_size(db_stats.st_size)
+
+    @property
+    def all_tables(self) -> Generator[Table, None, None]:
+        for table in self.DevDB.tables():
+            yield self.DevDB.table(table)
+
+    @property
+    def key_tables(self) -> Generator[Table, None, None]:
+        for table in self._tables:
+            yield table
 
     @property
     def devices(self) -> list:
@@ -579,15 +750,11 @@ class Cache:
     def hook_active(self) -> list:
         return [h for h in self.HookDataDB.all() if h["state"].lower() == "open"]
 
-    @property
-    def all(self) -> dict:
-        return {t.name: getattr(self, t.name) for t in self._tables}
-
     async def get_hooks_by_serial(self, serial):
         return self.HookDataDB.get(self.Q.device_id == serial)
 
     @staticmethod
-    def verify_db_action(db: CacheTable, *, expected: int, response: List[int | List[int]], remove: List[int] = None) -> bool:
+    def verify_db_action(db: CacheTable, *, expected: int, response: List[int | List[int]], remove: List[int] = None, elapsed: int | float = None) -> bool:
         """Evaluate TinyDB Cache results (search/add/update/delete).
 
         Verifies response from TinyDB lookup/update, logs and returns a bool indicating success/failure.
@@ -599,14 +766,18 @@ class Cache:
             remove (List[int], optional): Provide the list of doc_ids for delete operations.
                 Results in additional log if len(doc_ids) != expected meaning db lookup
                 did not find a match for every query.  Defaults to None (add/update operation)
+            elapsed (int | float, optional): Amount of time it took to update the cache.
 
         Returns:
             bool: Bool indicating if update was succesful.
         """
         resp_cnt = len(response)
+        elapsed_msg = "" if not elapsed else f" Elapsed: {elapsed}"
         if remove:
             if len(remove) != expected:
-                log.warning(f'{db.capitalize()}DB cache update_{db}_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.')
+                log.warning(
+                    f'{db.capitalize()}DB cache update_{db}_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.{elapsed_msg}'
+                )
 
             expected = len(remove)
 
@@ -614,11 +785,11 @@ class Cache:
         update_ok = True if expected == resp_cnt else False
 
         if update_ok:
-            log.info(f'{db.title()} cache update SUCCESS: {msg}')
+            log.info(f'{db.title()} cache update SUCCESS: {msg}{elapsed_msg}')
             return True
         else:
             log.error(f'{db.title()} cache update ERROR:  Attempt to {msg} appears to have failed.  Expecting {expected} doc_ids TinyDB returned {resp_cnt}', show=True, caption=True, log=True)
-            log.error(f'{db} update response: {response}')
+            log.error(f'{db} update response: {response}{elapsed_msg}')
             return False
 
     def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response]:
@@ -1779,7 +1950,19 @@ class Cache:
             incomplete,
             completion=True,
         )
-        match += dev_match or []
+
+        # filter device matches by those that are in template groups
+        group_type = [(m.group, m.type) for m in dev_match]
+        template_dev_match = []
+        for (group, dev_type), dev in zip(group_type, dev_match):
+            if dev_type == "ap":
+                if self.groups_by_name.get(group, {"wlan_tg": True})["wlan_tg"] is True:
+                    template_dev_match += [dev]
+            elif dev_type in ["cx", "sw"]:
+                if self.groups_by_name.get(group, {"wired_tg": True})["wired_tg"] is True:
+                    template_dev_match += [dev]
+
+        match += template_dev_match or []
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
@@ -1798,18 +1981,21 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_dev_identifier(
+        match: List[CacheDevice] = self.get_dev_identifier(
             incomplete,
             completion=True,
-        )
-        match = match or []
-        match += self.get_site_identifier(
+        ) or []  # TODO update get_*_identifier methods to return empty list when no completion yields no matches
+
+        site_match: List[CacheSite] = self.get_site_identifier(
             incomplete,
             completion=True,
         ) or []
+        match += site_match
+
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
+                # TODO needs check to see if key fields already in args
                 out += [tuple([m.name, m.help_text])]
 
         for m in out:
@@ -1830,7 +2016,7 @@ class Cache:
         if not args:
             args = [arg for p in ctx.params.values() for arg in utils.listify(p)]
 
-        match = self.get_dev_identifier(
+        match: List[CacheDevice] = self.get_dev_identifier(
             incomplete,
             dev_type=["gw", "switch"],
             completion=True,
@@ -1952,30 +2138,6 @@ class Cache:
         for m in out:
             yield m
 
-    # TODO ??deprecated?? should be able to remove this method. don't remember this note. looks used
-    def insert(
-        self,
-        data: Union[
-            List[
-                dict,
-            ],
-            dict,
-        ],
-    ) -> bool:
-        log.warning("DEV WARNING: Cache().insert() is being used.", show=True)
-        _data = data
-        if isinstance(data, list) and data:
-            _data = data[1]
-
-        table = self.DevDB
-        if "zipcode" in _data.keys():
-            table = self.SiteDB
-
-        data = data if isinstance(data, list) else [data]
-        ret = table.insert_multiple(data)
-
-        return len(ret) == len(data)
-
     async def format_raw_devices_for_cache(self, resp: Response):
         dev_types = {
             "aps": "ap",
@@ -2017,7 +2179,7 @@ class Cache:
 
         return _ret
 
-    def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> None:
+    def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
         # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
         if db == "dev":
             DB = self.DevDB
@@ -2032,9 +2194,8 @@ class Cache:
             updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
             DB.truncate()
             db_res = DB.insert_multiple(list(updated_devs_by_serial.values()))
-            log.info(f"{db} cache update add/update {len(new_data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
-            if len(db_res) != len(updated_devs_by_serial):
-                log.error(f'TinyDB {db.replace("_", " ").title().replace(" ", "")}DB table update returned an error.  data included {len(updated_devs_by_serial)} but DB only returned {len(db_res)} doc_ids', show=True, caption=True,)
+            self.verify_db_action(db, expected=len(updated_devs_by_serial), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
+
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     async def update_dev_db(
@@ -2042,6 +2203,61 @@ class Cache:
             data: str | List[str] | List[dict] = None,
             *,
             remove: bool = False,
+        ) -> CombinedResponse | None:
+        """Update Device Database (local cache).
+
+        If data is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
+        Args:
+            data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
+            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
+
+                    Returns:
+            Response | List[Response] | None: returns Response object(s) from device api call(s) if no data was provided for add/remove.
+                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+        """
+        data = utils.listify(data)
+        _start_time = time.perf_counter()
+
+        if not remove:
+            self._add_update_devices(data)
+        else:
+            doc_ids = []
+            if all([isinstance(d, int) for d in data]):
+                doc_ids = data
+            else:
+                for qry in data:
+                    # allow list of dicts with device data, only interested in serial
+                    # TODO simplify and remove once all calls are refactored to send doc_ids (now an attribute of the CentralObject/CacheDevice)
+                    if isinstance(qry, dict):
+                        qry = qry if "data" not in qry else qry["data"]
+                        if "serial" not in qry.keys():
+                            log.error("No Cahce Update: update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}", caption=True)
+                            return
+                        qry = qry["serial"]
+
+                    if not isinstance(qry, str):
+                        log.error(f"No Cahce Update: update_dev_db data should be serial number(s) as str or list of str not {type(qry)}", caption=True)
+                        return
+
+                    if not utils.is_serial(qry):
+                        log.error(f"No Cahce Update: update_dev_db provided str {qry} does not appear to be a serial number.", caption=True)
+                        return
+
+                    doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
+
+                if len(doc_ids) != len(data):
+                    log.warning(
+                        f"update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided. May be normal if cache was stale.",
+                        caption=True, log=True
+                    )
+
+            with console.status(f"Performing dev cache update, deleting {len(data)} records"):
+                db_res = self.DevDB.remove(doc_ids=doc_ids)
+                self.verify_db_action("dev", expected=len(doc_ids), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
+
+
+    async def refresh_dev_db(
+            self,
             dev_type: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None,
             group: str = None,
             site: str = None,
@@ -2060,107 +2276,75 @@ class Cache:
             fields: list = None,
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
-        ) -> CombinedResponse | None:
-        """Update Device Database (local cache).
-
-        If data is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
-        If dev_types is provided those device_types will be fetched from central and cache will be updated.
-
-        If None of data, and dev_types are provided all devices are fetched from Central and the database is truncated/re-populated.
+        ) -> CombinedResponse:
+        """Get all devices from Aruba Central, and refresh local cache.
 
         Args:
-            data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
-            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
-            dev_type (Literal["ap", "gw", "switch"] | List[Literal["ap", "gw", "switch"]]): If provided calls will be made to update
-                the dev_db for only dev_types specified, the response object will be returned.
-            All remain args are passed to get_all_devices.
-
-        Raises:
-            ValueError: if provided data is of wrong type or does not appear to be a serial number
+            dev_type (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
+            group (str, optional): Filter by devices in a Group. Defaults to None.
+            site (str, optional): Filter by devices in a Site. Defaults to None.
+            label (str, optional): Filter by devices with a label assigned. Defaults to None.
+            serial (str, optional): Filter by Serial. Defaults to None.
+            mac (str, optional): Filter by mac. Defaults to None.
+            model (str, optional): Filter by model. Defaults to None.
+            stack_id (str, optional): Filter by stack id (switches). Defaults to None.
+            swarm_id (str, optional): Filter by swarm id (APs). Defaults to None.
+            cluster_id (str, optional): Filter by cluster id. Defaults to None.
+            public_ip_address (str, optional): Filter by public ip. Defaults to None.
+            status (constants.DeviceStatus, optional): Filter by status. Defaults to None.
+            show_resource_details (bool, optional): Show device resource utilization details. Defaults to True.
+            calculate_client_count (bool, optional): Calculate client count. Defaults to True.
+            calculate_ssid_count (bool, optional): Calculate SSID count. Defaults to False.
+            fields (list, optional): fields to return. Defaults to None.
+            offset (int, optional): pagination offset. Defaults to 0.
+            limit (int, optional): pagination limit max 1000. Defaults to 1000.
 
         Returns:
-            Response | List[Response] | None: returns Response object(s) from device api call(s) if no data was provided for add/remove.
-                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+            CombinedResponse: CombinedResponse object.
         """
         dev_type = utils.listify(dev_type)
-        data = utils.listify(data)
+        resp: List[Response] | CombinedResponse = await self.central.get_all_devices(
+            cache=True,
+            dev_types=dev_type,
+            group=group,
+            site=site,
+            label=label,
+            serial=serial,
+            mac=mac,
+            model=model,
+            stack_id=stack_id,
+            swarm_id=swarm_id,
+            cluster_id=cluster_id,
+            public_ip_address=public_ip_address,
+            status=status,
+            show_resource_details=show_resource_details,
+            calculate_client_count=calculate_client_count,
+            calculate_ssid_count=calculate_ssid_count,
+            fields=fields,
+            offset=offset,
+            limit=limit,
+        )
+        if resp.ok:
+            raw_data = await self.format_raw_devices_for_cache(resp)
+            with console.status(f"preparing {len(resp)} records for cache update"):
+                _start_time = time.perf_counter()
+                raw_models_by_type = models.Devices(**raw_data)
+                raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
+                log.debug(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
 
-        _start_time = time.perf_counter()
-        if data:
-                if not remove:
-                    self._add_update_devices(data)
-                else:
-                    doc_ids = []
-                    for qry in data:
-                        # allow list of dicts with device data, only interested in serial
-                        if isinstance(qry, dict):
-                            qry = qry if "data" not in qry else qry["data"]
-                            if "serial" not in qry.keys():
-                                raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                            qry = qry["serial"]
+            filtered_resonse = True if any([dev_type, group, site, label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
+            if resp.all_ok and not filtered_resonse:
+                _start_time = time.perf_counter()
+                with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
+                    self.DevDB.truncate()
+                    cache_resp = self.DevDB.insert_multiple([dev.model_dump() for dev in raw_models])
+                    self.verify_db_action("dev", expected=len(raw_models), response=cache_resp, elapsed=round(time.perf_counter() - _start_time, 2))
+                self.updated.append(self.central.get_all_devices)
+                self.responses.dev = resp
+            else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
+                self._add_update_devices([dev.model_dump() for dev in raw_models])
 
-                        if not isinstance(qry, str):
-                            raise ValueError(f"update_dev_db data should be serial number(s) as str or list of str not {type(qry)}")
-                        if not utils.is_serial(qry):
-                            raise ValueError("Provided str does not appear to be a serial number.")
-                        else:
-                            doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
-
-                    if len(doc_ids) != len(data):
-                        log.error(
-                            f"update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided.",
-                            show=True, caption=True
-                        )
-
-                    with console.status(f"Performing dev cache update, deleting {len(data)} records"):
-                        _ = self.DevDB.remove(doc_ids=doc_ids)
-                        log.info(f"dev cache update deleted {len(data)} records completed in {round(time.perf_counter() - _start_time, 2)}")
-        else:
-            resp: List[Response] | CombinedResponse = await self.central.get_all_devices(
-                cache=True,
-                dev_types=dev_type,
-                group=group,
-                site=site,
-                label=label,
-                serial=serial,
-                mac=mac,
-                model=model,
-                stack_id=stack_id,
-                swarm_id=swarm_id,
-                cluster_id=cluster_id,
-                public_ip_address=public_ip_address,
-                status=status,
-                show_resource_details=show_resource_details,
-                calculate_client_count=calculate_client_count,
-                calculate_ssid_count=calculate_ssid_count,
-                fields=fields,
-                offset=offset,
-                limit=limit,
-            )
-            if resp.ok:
-                raw_data = await self.format_raw_devices_for_cache(resp)
-                with console.status(f"preparing {len(resp)} records for cache update"):
-                    _start_time = time.perf_counter()
-                    raw_models_by_type = models.Devices(**raw_data)
-                    raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
-                    log.debug(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
-
-                filtered_resonse = True if any([dev_type, group, site, label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
-                if resp.all_ok:
-                    if not filtered_resonse:
-                        _start_time = time.perf_counter()
-                        with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
-                            self.DevDB.truncate()
-                            _ = self.DevDB.insert_multiple([dev.dict() for dev in raw_models])
-                            log.debug(f"Dev cache update truncate/re-populate {len(raw_models)} records in {round(time.perf_counter() - _start_time, 2)}")
-                        self.updated.append(self.central.get_all_devices)
-                        self.responses.dev = resp
-                    else:  # Response is filtered merge with existing cache data (update)
-                        self._add_update_devices([dev.dict() for dev in raw_models])
-                else:  # partial failure at least one of the calls (call for each device type) failed.  Partial cache update
-                    self._add_update_devices([dev.dict() for dev in raw_models])
-
-            return resp
+        return resp
 
     async def update_inv_db(
             self,
@@ -2168,7 +2352,6 @@ class Cache:
             *,
             remove: bool = False,
             dev_type: Literal['ap', 'gw', 'switch', 'all'] = None,
-            sub: bool = None
         ) -> Response | None:
         """Update Inventory Database (local cache).
 
@@ -2176,7 +2359,6 @@ class Cache:
             data (Union[str, List[str]], optional): serial number or list of serials numbers to add or remove. Defaults to None.
             remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device type. None equates to 'all'.  Defaults to None.
-            sub (str, optional): whether or not to filter return by subscribed / not subscribed. Defaults to None (no filter)
 
         Raises:
             ValueError: if provided data is of wrong type or does not appear to be a serial number
@@ -2247,7 +2429,7 @@ class Cache:
             resp = [r for r in batch_resp if r.ok][-1]
             resp.rl = sorted([r.rl for r in batch_resp if r.rl.ok])[0]
             resp.raw = {r.url.path: r.raw for r in batch_resp}
-            resp.output = [models.Inventory(**d).model_dump() for d in combined.values()]
+            resp.output = models.Inventory(list(combined.values())).model_dump()
             if dev_type == "all":
                 self.updated.append(self.central.get_device_inventory)
                 self.responses.inv = resp
@@ -2261,22 +2443,21 @@ class Cache:
             return resp
 
     # TODO break all update_*_db into update_*_db and refresh_*_db.  So return is consistent
-    async def update_site_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
+    async def update_site_db(self, data: SiteData = None, remove: bool = False) -> bool | None:
         if data:
             data = utils.listify(data)
             if not remove:
-                data = models.Sites(sites=data).by_id
+                data = models.Sites(data).by_id
                 combined_data = {**self.sites_by_id, **data}
                 self.SiteDB.truncate()
                 update_res = self.SiteDB.insert_multiple(combined_data.values())
-                self.verify_db_action('site', expected=len(combined_data), response=update_res)
-                return
+                return self.verify_db_action('site', expected=len(combined_data), response=update_res)
             else:
                 doc_ids = []
                 if all([isinstance(s, int) for s in data]):
                     doc_ids = data
                 else:
-                    for qry in data:
+                    for qry in data:  # TODO remove once all cache removal calls refactored to use doc_ids from cache
                         # provided list of site_ids to remove
                         if isinstance(qry, str) and qry.isdigit():
                             doc_ids += [self.SiteDB.get((self.Q.id == qry)).doc_id]
@@ -2287,23 +2468,25 @@ class Cache:
                             q = list(qry.keys())[0]
                             doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
                 update_res = self.SiteDB.remove(doc_ids=doc_ids)
-                self.verify_db_action('site', expected=len(data), response=update_res, remove=doc_ids)
+                return self.verify_db_action('site', expected=len(data), response=update_res, remove=doc_ids)
 
-        else:  # update site cache
-            # TODO maybe have all the update funcs check if self.responses.site is not None and use it.  Add force: bool = False if there are scenarios where we may need to trigger a 2nd cache update in same session.
-            # This will allow us to remove the conditionals in a lot of the calling funcs that check if that cache has already been updated.
-            resp = await self.central.get_all_sites()
-            if resp.ok:
-                sites = models.Sites(sites=resp.raw["sites"])
-                resp.output = sites.dict()["sites"]
+    async def refresh_site_db(self, force: bool = False) -> Response:
+        if self.responses.site and not force:
+            log.warning("cache.refresh_side_db called, but site cache has already been fetched this session.  Returning stored response.")
+            return self.responses.site
 
-                self.responses.site = resp
-                self.updated.append(self.central.get_all_sites)
+        resp = await self.central.get_all_sites()
+        if resp.ok:
+            sites = models.Sites(resp.raw["sites"])
+            resp.output = sites.model_dump()
 
-                self.SiteDB.truncate()
-                update_res = self.SiteDB.insert_multiple(resp.output)
-                self.verify_db_action('site', expected=len(resp), response=update_res)
-            return resp
+            self.responses.site = resp
+            self.updated.append(self.central.get_all_sites)  # TODO remove once all checks refactored to look for self.responses.site
+
+            self.SiteDB.truncate()
+            update_res = self.SiteDB.insert_multiple(resp.output)
+            self.verify_db_action('site', expected=len(resp), response=update_res)
+        return resp
 
     async def update_group_db(self, data: list | dict = None, remove: bool = False) -> List[int] | Response:
         if data:
@@ -2370,7 +2553,8 @@ class Cache:
             if resp.ok:
                 self.responses.label = resp
                 self.updated.append(self.central.get_labels)
-                cache_data = [m.model_dump() for m in models.Labels(labels=resp.output).labels]
+                label_models = models.Labels(resp.output)
+                cache_data = label_models.model_dump()
                 self.LabelDB.truncate()
                 update_res = self.LabelDB.insert_multiple(cache_data)
                 self.verify_db_action('label', expected=len(resp), response=update_res)
@@ -2394,8 +2578,12 @@ class Cache:
             self.verify_db_action('license', expected=len(resp), response=update_res)
         return resp
 
-    async def _renew_teplate_db(self):
-        if self.central.get_all_groups not in self.updated:
+    async def _renew_teplate_db(self) -> Response:
+        if self.responses.template is not None:
+            log.warning("cache.refresh_template_db called, but template cache has already been fetched this session.  Returning stored response.")
+            return self.responses.template
+
+        if self.responses.group is None:
             gr_resp = await self.update_group_db()
             if not gr_resp.ok:
                 return gr_resp
@@ -2405,6 +2593,8 @@ class Cache:
         if resp.ok:
             if len(resp) > 0: # handles initial cache population when none of the groups are template groups
                 resp.output = utils.listify(resp.output)
+                template_models = models.Templates(resp.output)
+                resp.output = template_models.model_dump()
                 self.updated.append(self.central.get_all_templates)
                 self.responses.template = resp
                 self.TemplateDB.truncate()
@@ -2431,7 +2621,7 @@ class Cache:
                 elif update:
                     update = utils.listify(update)
                     db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]  # FIXME combine existing with updated dict like others, upsert is slow
-                    db_res = [doc_id for doc_id_list in db_res for doc_id in doc_id_list]  # return is like [[4], [3]]
+                    db_res = utils.unlistify(db_res)
                     self.verify_db_action('template', expected=len(update), response=db_res)
                 else: # add
                     add = utils.listify(add)
@@ -2518,7 +2708,7 @@ class Cache:
             if len(client_resp) > 0:
                 client_resp.output = utils.listify(client_resp.output)
                 self.updated.append(self.central.get_clients)
-                with console.status(f"Preparing [cyan]{len(client_resp.output)}[/] clients for cache update") as spin:
+                with clean_console.status(f"Preparing [cyan]{len(client_resp.output)}[/] clients for cache update") as spin:
                     data = {c.get("macaddr", "NOMAC"):
                         {
                             "mac": c.get("macaddr"),
@@ -2655,11 +2845,11 @@ class Cache:
         if group_db:
             update_funcs += [self.update_group_db]
         if dev_db:
-            update_funcs += [self.update_dev_db]
+            update_funcs += [self.refresh_dev_db]
         if inv_db:
             update_funcs += [self.update_inv_db]
         if site_db:
-            update_funcs += [self.update_site_db]
+            update_funcs += [self.refresh_site_db]
         if template_db:
             update_funcs += [self.update_template_db]
         if label_db:
@@ -2683,13 +2873,13 @@ class Cache:
             else:
                 db_res += [await self.update_group_db()]  # update groups first so template update can use the result
                 if db_res[-1]:
-                    db_res += [await self.update_dev_db()]  # dev_db separate as it uses asyncio.gather/central._batch_request
+                    db_res += [await self.refresh_dev_db()]  # dev_db separate as it uses asyncio.gather/central._batch_request
                     if db_res[-1]:
                         db_res = [
                             *db_res,
                             *await asyncio.gather(
                                 self.update_inv_db(),
-                                self.update_site_db(),
+                                self.refresh_site_db(),
                                 self.update_template_db(),
                                 self.update_label_db(),
                                 self.update_license_db()
@@ -2875,7 +3065,7 @@ class Cache:
             return match
 
         if not match:
-            emoji_console.print(f":warning:  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
+            console.print(f":warning:  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
             raise typer.Exit(1)
 
     def get_dev_identifier(
@@ -2889,7 +3079,7 @@ class Cache:
         silent: bool = False,
         include_inventory: bool = False,
         exit_on_fail: bool = True,
-    ) -> CentralObject | List[CentralObject] | None:
+    ) -> CacheDevice | List[CacheDevice] | None:
         """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
 
         If multiple matches are found user is promted to select device.
@@ -2913,11 +3103,7 @@ class Cache:
         Returns:
             CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
         """
-
         retry = False if completion else retry
-        # TODO dev_type currently not passed in or handled identifier for show switches would also
-        # try to match APs ...  & (self.Q.type == dev_type)
-        # TODO refactor to single test function usable by all identifier methods 1 search with a more involved test
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
@@ -2985,7 +3171,7 @@ class Cache:
                     self.check_fresh(refresh=True, **kwargs)
 
             if match:
-                match = [CentralObject("dev", dev) for dev in match]
+                match = [CacheDevice("dev", dev) for dev in match]
                 break
 
         all_match = None
@@ -3039,7 +3225,7 @@ class Cache:
         completion: bool = False,
         silent: bool = False,
         exit_on_fail: bool = True,
-    ) -> CentralObject | List[CentralObject]:
+    ) -> CacheSite | List[CacheSite]:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -3118,7 +3304,7 @@ class Cache:
                     econsole.print(":arrows_clockwise: Updating [cyan]site[/] Cache")
                     self.check_fresh(refresh=True, site_db=True)
             if match:
-                match = [CentralObject("site", s) for s in match]
+                match = [CacheSite(s) for s in match]
                 break
 
         if completion:
@@ -3145,7 +3331,7 @@ class Cache:
         completion: bool = False,
         silent: bool = False,
         exit_on_fail: bool = True,
-    ) -> CentralObject | List[CentralObject]:
+    ) -> CacheGroup | List[CacheGroup]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
         for _ in range(0, 2):
@@ -3199,7 +3385,6 @@ class Cache:
                     self.check_fresh(refresh=True, group_db=True)
                 _ += 1
             if match:
-                # match = [CentralObject("group", g) for g in match]
                 match = [CacheGroup(g) for g in match]
                 break
 
@@ -3216,9 +3401,9 @@ class Cache:
             log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
 
             if exit_on_fail:
-                valid_groups = "\n".join(self.group_names)
-                typer.secho(f"{query_str} appears to be invalid", fg="red")
-                typer.secho(f"Valid Groups:\n--\n{valid_groups}\n--\n", fg="cyan")
+                valid_groups = utils.summarize_list(self.group_names, max=50)
+                econsole.print(f":warning:  [cyan]{query_str}[/] appears to be [red]invalid[/]")
+                econsole.print(f"Valid Groups:\n{valid_groups}")
                 raise typer.Exit(1)
             else:
                 return
@@ -3327,7 +3512,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject:
+    ) -> CacheTemplate | List[CacheTemplate]:
         """Allows case insensitive template match by template name"""
         retry = False if completion else retry
         if not query_str and completion:
@@ -3368,7 +3553,7 @@ class Cache:
                     typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
                     self.check_fresh(refresh=True, template_db=True)
             if match:
-                match = [CentralObject("template", tmplt) for tmplt in match]
+                match = [CacheTemplate(tmplt) for tmplt in match]
                 break
 
         if match:
@@ -3627,8 +3812,10 @@ class Cache:
         db = this.db
         """Fetch items from cache based on query
 
-        This is a common identifier lookup function for all stored types that only have
+        This is a common identifier lookup function for all stored types that primarily have
         name and id as potential match fields.
+
+        DEV NOTE appears only to be used by portal currently
 
         returns:
             CentralObject | List[CentralObject]: returns any matches
@@ -3721,8 +3908,8 @@ class CacheAttributes:
 
 class CacheDetails:
     def __init__(self, cache = Cache):
-        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.update_dev_db)
-        self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.update_site_db)
+        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.refresh_dev_db)
+        self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
         self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.update_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
