@@ -62,7 +62,7 @@ def device(
     """
     if device:
         devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch"], conductor_only=True) for dev in device]
-        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, (dev.serial if dev.type != "ap" else dev.swack_id,)) for dev in devs]
+        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
                 f'[cyan]--dev-type[/] [bright_green]{dev_type.value}[/] ignored as device{"s" if len(devs) > 1 else ""} [bright_green]{"[/], [bright_green]".join([dev.name for dev in devs])}[/] {"were" if len(devs) > 1 else "was"} specified.',
@@ -123,7 +123,7 @@ def swarms(
 
     if device:
         devs = [cli.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
-        batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, (dev.swack_id,)) for dev in devs]
+        batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, dev.swack_id) for dev in devs]
     else:
         if group:
             group: CentralObject = cli.cache.get_group_identifier(group)
