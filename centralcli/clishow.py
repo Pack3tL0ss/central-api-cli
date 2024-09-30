@@ -43,8 +43,8 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, DeviceStatus, DeviceTypes,
-    lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, DeviceStatus,
+    DeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
@@ -2807,7 +2807,7 @@ def portals(
         show_default = False,
         writable=True,
     ),
-    sort_by: str = cli.options.sort_by,
+    sort_by: SortPortalOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2834,7 +2834,7 @@ def portals(
         portal = portal[0]
 
     if portal is None:
-        resp: Response = cli.central.request(cli.cache.update_portal_db)
+        resp: Response = cli.central.request(cli.cache.refresh_portal_db)
         _cleaner = cleaner.get_portals
     else:
         p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
