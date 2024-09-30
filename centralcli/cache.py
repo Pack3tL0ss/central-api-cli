@@ -19,12 +19,14 @@ from centralcli import CentralApi, Response, config, constants, log, models, ren
 from centralcli.response import CombinedResponse
 from .typedefs import SiteData
 from tinydb.table import Document
+from yarl import URL
 
 from rich.protocol import _GIBBERISH
 
 if TYPE_CHECKING:
     from tinydb.table import Table
     from .config import Config
+    from .typedefs import PortalAuthTypes
 
 
 try:
@@ -426,6 +428,58 @@ class CacheLabel(CentralObject):
         return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
 
 
+class CachePortal(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('portal', data)
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+        self.url: URL = URL(data["url"])
+        self.auth_type: str = data["auth_type"]
+        self.auth_types: PortalAuthTypes = self.get_auth_types(data["auth_type"])
+        self.is_aruba_cert: bool = data["is_aruba_cert"]
+        self.is_default: bool = data["is_default"]
+        self.is_shared: bool = data["is_shared"]
+        self.reg_by_email: bool = data["reg_by_email"]
+        self.reg_by_phone: bool = data["reg_by_phone"]
+
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @staticmethod
+    def get_auth_types(auth_types: str) -> PortalAuthTypes:
+        short_auth_types = {
+            "Username/Password": "user/pass",
+            "Self-Registration": "self-reg",
+            "Anonymous": "anon",
+        }
+        return [short_auth_types.get(auth_type, auth_type) for auth_type in auth_types.split()]
+
+    @property
+    def doc_id(self) -> int | None:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.id is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.id == self.id)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Portal Profile[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
+
+
 class CacheTemplate(CentralObject):
     db: Table | None = None
 
@@ -749,6 +803,10 @@ class Cache:
     @property
     def portals(self) -> list:
         return self.PortalDB.all()
+
+    @property
+    def portals_by_id(self) -> Dict[str, Dict[str, str | bool]]:
+        return {p["id"]: p for p in self.portals}
 
     @property
     def logs(self) -> list:
@@ -2865,30 +2923,38 @@ class Cache:
                 self.responses.mpsk = resp
             return resp
 
-    async def update_portal_db(self, data: List[Dict[str, Any]] = None) -> bool:
-        if data:
-            if isinstance(data, list):
-                data = {"portals": data}
-            data = models.CachePortals(**data)
-            data = data.dict()["portals"]
-            self.PortalDB.truncate()
-            return self.PortalDB.insert_multiple(data)
-        else:
+    # Not used or tested... would only need if delete portal or add portal is added
+    async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = True) -> bool:
+        if remove:
+            with console.status(f"Performing portal cache update, deleting {len(data)} records"):
+                db_res = self.PortalDB.remove(doc_ids=data)
+                ret = self.verify_db_action("portal", expected=len(data), response=db_res)
+            return ret
+
+        portal_models = models.Portals(data)
+        data_by_id = {p.id: p.model_dump() for p in portal_models}
+        update_data = {**self.portals_by_id, **data_by_id}
+        self.PortalDB.truncate()
+        update_res = self.PortalDB.insert_multiple(update_data)
+        return self.verify_db_action("portal", expected=len(update_data), response=update_res)
+
+    async def refresh_portal_db(self) -> Response:
             resp = await self.central.get_portals()
-            if resp.ok:
-                if resp.output:
-                    _update_data = utils.listify(deepcopy(resp.output))
-                    _update_data = models.CachePortals(**resp.raw)
-                    _update_data = _update_data.dict()["portals"]
+            if not resp.ok:
+                return resp
 
-                    self.PortalDB.truncate()
-                    update_res = self.PortalDB.insert_multiple(_update_data)
-                    if False in update_res:
-                        log.error("Tiny DB returned an error during Portal db update", caption=True)
+            portal_model = models.Portals(deepcopy(resp.output))
+            update_data = portal_model.model_dump()
 
-                self.updated.append(self.central.get_portals)
-                self.responses.portal = resp
+            self.PortalDB.truncate()
+            update_res = self.PortalDB.insert_multiple(update_data)
+            self.verify_db_action("portal", expected=len(update_data), response=update_res)
+
+            self.updated.append(self.central.get_portals)
+            self.responses.portal = resp
+
             return resp
+
 
     # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
     async def _check_fresh(
@@ -3358,7 +3424,7 @@ class Cache:
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and self.central.get_all_sites not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3862,6 +3928,7 @@ class Cache:
                 )
 
 
+    # TODO make this a wrapper for other specific get_portal_identifier.... calls
     def get_name_id_identifier(
         self,
         cache_name: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
@@ -3884,6 +3951,11 @@ class Cache:
         returns:
             CentralObject | List[CentralObject]: returns any matches
         """
+        name_to_model = {
+            "portal": CachePortal,
+            "label": CacheLabel
+        }
+        Model = name_to_model.get(cache_name, CentralObject)
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -3926,7 +3998,7 @@ class Cache:
                 )
 
             if not match and retry and this.already_updated_func not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
                     if fuzz_resp:
@@ -3935,11 +4007,11 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
-                    econsole.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating {cache_name} Cache")
+                    econsole.print(f":arrows_clockwise:  Updating [cyan]{cache_name}[/] Cache")
                     asyncio.run(this.cache_update_func())
                 _ += 1
             if match:
-                match = [CentralObject(this.name, g) for g in match]
+                match = [Model(m) for m in match]
                 break
 
         if completion:
@@ -3975,6 +4047,6 @@ class CacheDetails:
         self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.refresh_dev_db)
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
         self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.update_group_db)
-        self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.update_portal_db)
+        self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
         self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
