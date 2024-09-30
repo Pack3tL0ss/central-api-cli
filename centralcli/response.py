@@ -601,8 +601,9 @@ class Session():
             # TODO This DEBUG messasge won't hit for COP, need conditional to compare url to config.base_url
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
+            log_msg = _data_msg.replace(' \[', ' [')
             log.debug(
-                f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
+                f'Attempt API Call to:{log_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
@@ -683,7 +684,8 @@ class Session():
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
-                    log.warning(f"Per second rate limit hit {fail_msg.replace(f'{spin_word} Data', '')}")
+                    # _msg = fail_msg.replace(f'{spin_word} Data', '').replace(' \[', ' [')
+                    # log.warning(f"Per second rate limit hit {_msg}")
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
@@ -1021,6 +1023,7 @@ class Session():
 
     async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         # TODO implement retry_failed
+        # TODO return Response objects for all requests, when first fails build empty Response for remainder so not to cause issue when unpacking
         self.silent = True
         m_resp: List[Response] = []
         _tot_start = time.perf_counter()
