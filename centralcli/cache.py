@@ -2397,49 +2397,72 @@ class Cache:
                 if len(db_res) != len(doc_ids):
                     log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
         else:
-            br = self.central.BatchRequest
-            batch_resp = await self.central._batch_request(
-                [
-                    br(self.central.get_device_inventory, device_type=dev_type),
-                    br(self.central.get_subscriptions, device_type=dev_type)
-                ]
-            )
-            if not any([r.ok for r in batch_resp]):
-                log.error("Unable to perform Inv cache update due to API call failure")
-                return batch_resp
+            ...
 
-            inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
+    async def refresh_inv_db(
+            self,
+            device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
+            offset: int = 0,
+            limit: int = 1000,
+    ) -> Response:
+        """Get devices from device inventory, and Update device Cache with results.
 
-            _inv_by_ser = {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
-            if not batch_resp[1].ok:
-                log.error(f"Call to fetch subscription details failed.  {'' if len(batch_resp) < 2 else batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)
-                combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
-            else:
-                raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
-                dev_subs = list(set(raw_devs_by_serial.values()))
-                subs_by_key = {sub["subscription_key"]: {"expires_in": sub["end_date"], "expired": sub["status"] == "EXPIRED"} for sub in sub_resp.output if sub["subscription_key"] in dev_subs}
-                combined = {
-                    serial: {
-                        **dev_data,
-                        "subscription_expires": None if raw_devs_by_serial[serial] is None else subs_by_key[raw_devs_by_serial[serial]]["expires_in"]
-                    } for serial, dev_data in _inv_by_ser.items()
-                }
-            resp = [r for r in batch_resp if r.ok][-1]
-            resp.rl = sorted([r.rl for r in batch_resp if r.rl.ok])[0]
-            resp.raw = {r.url.path: r.raw for r in batch_resp}
-            inv_model = models.Inventory(list(combined.values()))
-            resp.output = inv_model.model_dump()
-            if dev_type == "all":
-                self.updated.append(self.central.get_device_inventory)
-                self.responses.inv = resp
+        This combines the results from 2 API calls:
+            - central.get_device_inventory: /platform/device_inventory/v1/devices
+            - central.get_subscriptions: /platform/licensing/v1/subscriptions
 
-                self.InvDB.truncate()
-                db_res = self.InvDB.insert_multiple(resp.output)
-                self.verify_db_action("inv", expected=(len(resp)), response=db_res)
-            else:
-                self._add_update_devices(resp.output, "inv")
+        Args:
+            device_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
+                Defaults to None = 'all' device types.
+            offset (int, optional): offset or page number Defaults to 0.
+            limit (int, optional): Number of devices to get Defaults to 1000.
 
-            return resp
+        Returns:
+            Response: CentralAPI Response object
+        """
+        br = self.central.BatchRequest
+        batch_resp = await self.central._batch_request(
+            [
+                br(self.central.get_device_inventory, device_type=device_type),
+                br(self.central.get_subscriptions, device_type=device_type)
+            ]
+        )
+        if not any([r.ok for r in batch_resp]):
+            log.error("Unable to perform Inv cache update due to API call failure", show=True)
+            return batch_resp
+
+        inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
+        _inv_by_ser = {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
+
+        if not batch_resp[1].ok:
+            log.error(f"Call to fetch subscription details failed.  {batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)
+            combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
+        else:
+            raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
+            dev_subs = list(set(raw_devs_by_serial.values()))
+            subs_by_key = {sub["subscription_key"]: {"expires_in": sub["end_date"], "expired": sub["status"] == "EXPIRED"} for sub in sub_resp.output if sub["subscription_key"] in dev_subs}
+            combined = {
+                serial: {
+                    **dev_data,
+                    "subscription_expires": None if raw_devs_by_serial[serial] is None else subs_by_key[raw_devs_by_serial[serial]]["expires_in"]
+                } for serial, dev_data in _inv_by_ser.items()
+            }
+        resp = [r for r in batch_resp if r.ok][-1]
+        resp.rl = sorted([r.rl for r in batch_resp])[0]
+        resp.raw = {r.url.path: r.raw for r in batch_resp}
+        inv_model = models.Inventory(list(combined.values()))
+        resp.output = inv_model.model_dump()
+        if device_type == "all":
+            self.updated.append(self.central.get_device_inventory)
+            self.responses.inv = resp
+
+            self.InvDB.truncate()
+            db_res = self.InvDB.insert_multiple(resp.output)
+            self.verify_db_action("inv", expected=(len(resp)), response=db_res)
+        else:
+            self._add_update_devices(resp.output, "inv")
+
+        return resp
 
     # TODO break all update_*_db into update_*_db and refresh_*_db.  So return is consistent
     async def update_site_db(self, data: SiteData = None, remove: bool = False) -> bool | None:
@@ -2840,13 +2863,13 @@ class Cache:
         dev_type: constants.AllDevTypes = None
         ):
         update_funcs, db_res = [], []
-        dev_update_funcs = ["update_inv_db", "update_dev_db"]
+        dev_update_funcs = ["refresh_inv_db", "refresh_dev_db"]
         if group_db:
             update_funcs += [self.update_group_db]
         if dev_db:
             update_funcs += [self.refresh_dev_db]
         if inv_db:
-            update_funcs += [self.update_inv_db]
+            update_funcs += [self.refresh_inv_db]
         if site_db:
             update_funcs += [self.refresh_site_db]
         if template_db:
@@ -2869,20 +2892,19 @@ class Cache:
 
             # If all *_db params are false refresh cache for all
             # TODO make more elegant
-            else:
-                db_res += [await self.update_group_db()]  # update groups first so template update can use the result
+            else:  # TODO asyncio.sleep is a temp until build better session wide rate limit handling.
+                br = self.central.BatchRequest
+                db_res += await self.central._batch_request([br(self.update_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
                 if db_res[-1]:
-                    db_res += [await self.refresh_dev_db()]  # dev_db separate as it uses asyncio.gather/central._batch_request
+                    db_res += await self.central._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
                     if db_res[-1]:
+                        batch_reqs = [
+                            self.central.BatchRequest(req)
+                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.update_label_db, self.update_license_db]
+                        ]
                         db_res = [
                             *db_res,
-                            *await asyncio.gather(
-                                self.update_inv_db(),
-                                self.refresh_site_db(),
-                                self.update_template_db(),
-                                self.update_label_db(),
-                                self.update_license_db()
-                            )
+                            *await self.central._batch_request(batch_reqs)
                         ]
         return db_res
 
@@ -2930,7 +2952,7 @@ class Cache:
                 log.error(err_msg)
                 self.central.spinner.fail(err_msg)
             else:
-                self.central.spinner.succeed(f"Cache Refresh Completed in {elapsed}s")
+                self.central.spinner.succeed(f"Cache Refresh [bright_green]Completed[/] in [cyan]{elapsed}[/]s")
 
         return db_res
 

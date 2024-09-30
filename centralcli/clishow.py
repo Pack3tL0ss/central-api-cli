@@ -347,7 +347,7 @@ def show_devices(
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
+            _ = cli.central.request(cli.cache.refresh_inv_db, dev_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
         caption = None if not resp.ok else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
@@ -797,7 +797,7 @@ def inventory(
         cli.exit(code=0)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
+    resp = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
 
     cli.display_results(
         resp,

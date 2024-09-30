@@ -1053,7 +1053,7 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
 
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
         if cache_devs or inv_del_serials and not ui_only:
-            if all_ok:
+            if all_ok:  # TODO Update to pass Inv doc_ids
                 cache_update_reqs += [
                     br(
                         cli.cache.update_inv_db,
@@ -1062,7 +1062,7 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
                     )
                 ]
             else:
-                cache_update_reqs += [br(cli.cache.update_inv_db)]
+                cache_update_reqs += [br(cli.cache.refresh_inv_db)]
 
     # Update cache remove deleted items
     if cache_update_reqs:
