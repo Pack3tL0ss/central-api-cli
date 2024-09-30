@@ -1609,19 +1609,23 @@ def rename(
     if ap not in cli.cache.devices_by_serial:
         print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
 
-    if yes or typer.confirm("\nProceed with AP rename?", abort=True):
+    if cli.confirm(yes, prompt="\nProceed with AP rename?"):
         resp = cli.central.batch_request(calls)
 
 
     cli.display_results(resp, tablefmt="action")
     # cache update
     if import_file:
-        for r in resp:
-            if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
-                dev = cli.cache.get_dev_identifier(r.output)
-                dev.data["name"] = data[r.output]["hostname"]
-                # TODO upsert is very slow at scale, can grab cli.cache.devices_by_serial update then update_dev_db with data
-                cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
+        cache_data = [cli.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
+        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]                                              # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
+        cli.central.request(cli.cache.update_dev_db, data=cache_data)
+        # TODO need to check impact on client cache, don't need ap name in client cache.  if AP name is changed the connected device name changes in client cache
+        # for r in resp:
+        #     if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
+        #         dev: CacheDevice = cli.cache.get_dev_identifier(r.output)  # r.output is serial of the AP
+        #         dev.name = data[r.output]["hostname"]
+        #         # TODO upsert is very slow at scale, can grab cli.cache.devices_by_serial update then update_dev_db with data
+        #         cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
 
 
 @app.command()
