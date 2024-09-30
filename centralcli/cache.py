@@ -2397,7 +2397,6 @@ class Cache:
                 if len(db_res) != len(doc_ids):
                     log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
         else:
-            resp = await self.central.get_device_inventory(device_type=dev_type)
             br = self.central.BatchRequest
             batch_resp = await self.central._batch_request(
                 [
@@ -2409,14 +2408,13 @@ class Cache:
                 log.error("Unable to perform Inv cache update due to API call failure")
                 return batch_resp
 
-            inv_resp = batch_resp[0]
+            inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
 
             _inv_by_ser = {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
-            if len(batch_resp) < 2 or not batch_resp[1].ok:
+            if not batch_resp[1].ok:
                 log.error(f"Call to fetch subscription details failed.  {'' if len(batch_resp) < 2 else batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)
                 combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
             else:
-                sub_resp = batch_resp[1]
                 raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
                 dev_subs = list(set(raw_devs_by_serial.values()))
                 subs_by_key = {sub["subscription_key"]: {"expires_in": sub["end_date"], "expired": sub["status"] == "EXPIRED"} for sub in sub_resp.output if sub["subscription_key"] in dev_subs}
@@ -2429,7 +2427,8 @@ class Cache:
             resp = [r for r in batch_resp if r.ok][-1]
             resp.rl = sorted([r.rl for r in batch_resp if r.rl.ok])[0]
             resp.raw = {r.url.path: r.raw for r in batch_resp}
-            resp.output = models.Inventory(list(combined.values())).model_dump()
+            inv_model = models.Inventory(list(combined.values()))
+            resp.output = inv_model.model_dump()
             if dev_type == "all":
                 self.updated.append(self.central.get_device_inventory)
                 self.responses.inv = resp
