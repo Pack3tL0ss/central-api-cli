@@ -125,12 +125,14 @@ class SortWebHookOptions(str, Enum):
 
 
 class SortInventoryOptions(str, Enum):
+    serial = "serial"
+    mac = "mac"
     type = "type"
     model = "model"
     sku = "sku"
-    mac = "mac"
-    serial = "serial"
     services = "services"
+    subscription_key = "subscription-key"
+    expires_in = "expires-in"
 
 class GatewayRole(str, Enum):
     branch = "branch"
