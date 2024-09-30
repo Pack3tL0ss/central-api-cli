@@ -8,7 +8,7 @@ import sys
 from typing import List, Literal, Union, Tuple, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 from rich.console import Console
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.text import Text
 from rich import print
 import json
@@ -36,7 +36,7 @@ from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
 
 if TYPE_CHECKING:
-    from centralcli.cache import CentralObject, CacheGroup, CacheLabel
+    from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice
 
 
 tty = utils.tty
@@ -121,6 +121,11 @@ class CLICommon:
             self.exit(code=0)
 
         return result
+
+    def pause(self, prompt="Press Enter to Continue", *, console: Console = None) -> None:
+        console = console or self.econsole
+        ask = Prompt(prompt, console=console, password=True, show_default=False, show_choices=False)
+        _ = ask()
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -419,10 +424,20 @@ class CLICommon:
         """Print msg text and exit.
 
         Prepends warning emoji to msg if code indicates an error.
+            emoji arg has not impact on this behavior.
+            Nothing is displayed if msg is not provided.
+
+        Args:
+            msg (str, optional): The msg to display (supports rich markup). Defaults to None.
+            code (int, optional): The exit status. Defaults to 1 (indicating error).
+            emoji (bool, optional): Set to false to disable emoji. Defaults to True.
+
+        Raises:
+            typer.Exit: Exit
         """
         console = Console(emoji=emoji)
         if code != 0:
-            msg = f"\u26a0  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
+            msg = f"[dark_orange3]\u26a0[/]  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
         if msg:
             console.print(msg)
@@ -553,6 +568,7 @@ class CLICommon:
         stash: bool = True,
         output_by_key: str | List[str] = "name",
         exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
+        cache_update_pending: bool = False,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -584,6 +600,9 @@ class CLICommon:
                 show last.  Default: True
             output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
                 the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
+            exit_on_fail: (bool, optional): If provided resp indicates a failure exit after display.  Defaults to False
+            cache_update_pending: (bool, optional): If a cache update is to be performed if resp is success.
+                Results in a warning before exit if failure. Defaults to False
             set_width_cols (Dict[str: Dict[str, int]]): Passed to output function defines cols with min/max width
                 example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}.  Applies to tablefmt=rich.
             full_cols (list): columns to ensure are displayed at full length (no wrap no truncate). Applies to tablfmt=rich. Defaults to [].
@@ -714,6 +733,8 @@ class CLICommon:
                     )
 
             if exit_on_fail and not all([r.ok for r in resp]):
+                if cache_update_pending:
+                    self.econsole.print(":warning:  [italic]Cache update skipped due to failed API response(s)[/].")
                 raise typer.Exit(1)
 
         elif data:
@@ -859,9 +880,11 @@ class CLICommon:
 
         return data
 
-    def _check_update_dev_db(self, device: CentralObject) -> CentralObject:
-        if self.central.get_all_devices not in self.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
-            _ = self.central.request(self.cache.update_dev_db, dev_type=device.type)
+    def _check_update_dev_db(self, device: CacheDevice) -> CacheDevice:
+        if self.cache.responses.dev:  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
+            log.warning(f"_check_update_dev_db called for {device} devices have already been fetched this session. Skipping.")
+        else:
+            _ = self.central.request(self.cache.refresh_dev_db, dev_type=device.type)
             device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
 
         return device
