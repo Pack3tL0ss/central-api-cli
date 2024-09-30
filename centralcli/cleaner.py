@@ -494,24 +494,6 @@ def get_archived_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     data = simple_kv_formatter(data=data, key_order=key_order)
     return sorted(strip_no_value(data), key=lambda x: x["serial"])
 
-def get_group_names(data: List[List[str],]) -> list:
-    """Convert list of single item lists to a list of strs
-
-    Also removes "unprovisioned" group as it has no value for our
-    purposes, and moves default group to beginning of list.
-
-    Args:
-        data (List[List[str],]): Central response payload
-
-    Returns:
-        list: List of strings with "unprovisioned" group removed
-        and default moved to front.
-    """
-    groups = [g for _ in data for g in _ if g != "unprovisioned"]
-    if "default" in groups:
-        groups.insert(0, groups.pop(groups.index("default")))
-    return groups
-
 
 def show_groups(data: List[dict], cleaner_format: TableFormat = "rich") -> List[dict]:
     if cleaner_format == "csv":  # Makes allowed types a space separated str, to match format of import file for batch add groups
@@ -1069,7 +1051,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
 
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
-    data = Sites(sites=data)
+    data = Sites(data)
     return data.model_dump()["sites"]
 
 
@@ -1387,13 +1369,6 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     ]
 
     _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
-    # data = [
-    #     {
-    #         "type": _inv_type(d["model"], d.get("device_type", d.get("type", "err"))),
-    #         **{key: val for key, val in d.items() if key != "device_type"}
-    #     }
-    #     for d in data
-    # ]
     data = [
         dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
     ]
