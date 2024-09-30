@@ -187,7 +187,7 @@ def bounce(
     if len(ports) > 1:
         print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if cli.confirm(yes):
-        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, (dev.serial, command, p,)) for p in ports])
+        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
 
@@ -256,7 +256,7 @@ def remove(
             ) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
         # central will show the stack_id and all member serials in the success output.  So we strip the stack id
         swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
         update_data = [{**dict(cli.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
@@ -297,7 +297,7 @@ def reboot(
                 arg = dev.swack_id
                 conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
-        batch_reqs += [BatchRequest(func, (arg, 'reboot',))]
+        batch_reqs += [BatchRequest(func, arg, 'reboot')]
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
