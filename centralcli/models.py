@@ -878,18 +878,37 @@ class CacheMpskNetworks(BaseModel):
     items: List[CacheMpskNetwork]
 
 
-class CachePortal(BaseModel):
+# We don't use this, but if there is a need, this is what they should map to
+class PortalAuthType(Enum):
+    anon = 0
+    user_pass = 1
+    self_reg = 2
+
+class Portal(BaseModel):
     name: str
     id: str
-    url: str = Field(alias="capture_url")
+    url: str = Field(alias=AliasChoices("url", "capture_url"))
     auth_type: str
+    # auth_types: Optional[List[PortalAuthType]] = Field(None, alias=AliasChoices("auth_type_num", "auth_types"))
     is_aruba_cert: bool
     is_default: bool
     is_editable: bool
     is_shared: bool
-    register_accept_email: bool
-    register_accept_phone: bool
+    reg_by_email: bool = Field(alias=AliasChoices("register_accept_email", "reg_by_email"))
+    reg_by_phone: bool = Field(alias=AliasChoices("register_accept_phone", "reg_by_phone"))
 
 
-class CachePortals(BaseModel):
-    portals: List[CachePortal]
+class Portals(RootModel):
+    root: List[Portal]
+
+    def __init__(self, data: List[dict]) -> None:
+        super().__init__([Portal(**p) for p in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
