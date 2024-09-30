@@ -372,7 +372,7 @@ def site(
         ],
         show_default=False
     ),
-    zipcode: int = typer.Argument(None, show_default=False),
+    zip: int = typer.Argument(None, help="zipcode", show_default=False),
     country: str = typer.Argument(None, show_default=False),
     new_name: str = typer.Option(None, show_default=False, help="Change Site Name"),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False),
@@ -410,7 +410,7 @@ def site(
         "address": address,
         "city": city,
         "state": state,
-        "zipcode": zipcode if zipcode is None else str(zipcode),
+        "zipcode": zip if zip is None else str(zip),
         "country": country,
         "latitude": lat,
         "longitude": lon
@@ -418,9 +418,7 @@ def site(
     address_fields = {k: v for k, v in kwargs.items() if v}
 
     if not address_fields and not new_name:
-        print(" [red]No Update data provided[/]")
-        print(" [italic]Must provide address data and/or --new-name.")
-        raise typer.Exit(1)
+        cli.exit("[red]No Update data provided[/]\n[italic]Must provide address data and/or --new-name.")
 
     print(f"Updating Site: {site_now.summary_text}")
     print(f" [bright_green]Send{'ing' if yes else ''} the following updates:[reset]")
@@ -438,11 +436,11 @@ def site(
     if rename_only:
         print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:
-            asyncio.run(cli.cache.update_site_db(data={"name": new_name or site_now.name, "id": site_now.id, **address_fields}))
+            cli.central.request(cli.cache.update_site_db, data={"name": new_name or site_now.name, "id": site_now.id, **address_fields})
 
 
 @app.command()
