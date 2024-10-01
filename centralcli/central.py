@@ -1091,7 +1091,7 @@ class CentralApi(Session):
             fields: list = None,
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
-        ) -> CombinedResponse:
+        ) -> CombinedResponse | List[Response]:
         """Get all devices from Aruba Central.
 
         Args:
@@ -1147,6 +1147,9 @@ class CentralApi(Session):
             for dev_type in dev_types
         ]
         batch_resp = await self._batch_request(reqs)
+        if all([not r.ok for r in batch_resp]):
+            return utils.unlistify(batch_resp)
+
         combined = CombinedResponse(batch_resp)
 
         if combined.ok and combined.failed:  # combined.ok indicates at least 1 call was ok, if None are ok no need for Partial failure msg
