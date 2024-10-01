@@ -26,6 +26,9 @@ from rich.prompt import Prompt
 from rich.pretty import pprint
 from jinja2 import FileSystemLoader, Environment
 from datetime import datetime
+import pendulum
+
+
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -899,3 +902,10 @@ class Utils:
             confirm_str = sep.join(items)
 
         return confirm_str
+
+    @staticmethod
+    def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:
+        dt = ts if isinstance(ts, datetime) else pendulum.from_timestamp(ts, tz=tz)
+        diff = pendulum.now(tz=tz) - dt
+        return getattr(diff, f'in_{unit}')() > time_frame
+
