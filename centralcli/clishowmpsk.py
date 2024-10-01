@@ -41,7 +41,7 @@ def networks(
 ) -> None:
     """Show all MPSK networks (SSIDs)
     """
-    resp = cli.central.request(cli.cache.update_mpsk_db)
+    resp = cli.central.request(cli.cache.refresh_mpsk_db)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(resp, tablefmt=tablefmt, title="MPSK Networks", pager=pager, outfile=outfile, full_cols=["id", "accessURL"])
 
