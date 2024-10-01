@@ -2,6 +2,7 @@ from centralcli import log
 from pathlib import Path
 import sys
 
+batch_dir = Path("/home/wade/git/myrepos/cencli-batch")
 
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():
@@ -21,6 +22,22 @@ def vscode_arg_handler():
                     # replace ~/ notation for home dir with full path
                     if " ~/" in vsc_args:
                         vsc_args = vsc_args.replace(" ~/", f" {Path.home()}/")
+
+                    if any([ext in vsc_args for ext in [".yaml", ".csv", ".json", ".j2"]]) and batch_dir.is_dir():
+                        out = []
+                        for arg in vsc_args.split():
+                            updated = False
+                            if "." in arg and arg.split(".")[-1] in ["yaml", "csv", "json", "j2"] and not Path(arg).exists():
+                                batch_file = Path.joinpath(batch_dir, arg)
+                                if batch_file.exists():
+                                    out += [str(batch_file)]
+                                    updated = True
+                                elif Path.joinpath(batch_dir, arg.split("/")[-1]).exists():
+                                    out += [str(Path.joinpath(batch_dir, arg.split("/")[-1]))]
+                                    updated = True
+                            if not updated:
+                                out += [arg]
+                        vsc_args = " ".join(out)
 
                     found = False
                     for qstr in ["\\'", '\\"']:
