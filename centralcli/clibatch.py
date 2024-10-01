@@ -527,13 +527,26 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     names_from_import = [g.name for g in groups]
     if any([name in cli.cache.groups_by_name for name in names_from_import]):
         cli.econsole.print(":warning:  Import includes groups that already exist according to local cache.  Updating local group cache.")
-        _ = cli.central.request(cli.cache.update_group_db)  # This updates cli.cache.groups_by_name
+        _ = cli.central.request(cli.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
         # TODO maybe split batch_verify into the command and the function that does the validation, then send the data from import for groups that already exist to the validation func.
 
     skip = []
     for g in groups:
+        for dev_type, cfg_file, var_file in zip(["gw", "ap"], [g.gw_config, g.ap_config], [g.gw_vars, g.ap_vars]):
+            if cfg_file is not None:
+                pc = _build_pre_config(g.name, dev_type=dev_type, cfg_file=cfg_file, var_file=var_file)
+                pre_cfgs += [pc]
+                confirm_msg += (
+                    f"  [bright_green]{len(pre_cfgs)}[/]. [cyan]{g.name}[/] {'Gateway' if dev_type == 'gw' else 'AP'} "
+                    f"group level will be configured based on [cyan]{cfg_file.name}[/]\n"
+                )
+                if dev_type == "gw":
+                    gw_reqs += [pc.request]
+                else:
+                    ap_reqs += [pc.request]
+
         if g.name in cli.cache.groups_by_name:
-            cli.econsole.print(f":warning:  Group [cyan]{g.name}[/] already exists. [red]Skipping...[/]")
+            cli.econsole.print(f":warning:  Group [cyan]{g.name}[/] already exists. [red]Skipping Group Add...[/]")
             skip += [g.name]
             continue
 
@@ -552,20 +565,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 cnx=g.cnx,
             )
         ]
-
         cache_data += [g.model_dump()]
-        for dev_type, cfg_file, var_file in zip(["gw", "ap"], [g.gw_config, g.ap_config], [g.gw_vars, g.ap_vars]):
-            if cfg_file is not None:
-                pc = _build_pre_config(g.name, dev_type=dev_type, cfg_file=cfg_file, var_file=var_file)
-                pre_cfgs += [pc]
-                confirm_msg += (
-                    f"  [bright_green]{len(pre_cfgs)}[/]. [cyan]{g.name}[/] {'Gateway' if dev_type == 'gw' else 'AP'} "
-                    f"group level will be configured based on [cyan]{cfg_file.name}[/]\n"
-                )
-                if dev_type == "gw":
-                    gw_reqs += [pc.request]
-                else:
-                    ap_reqs += [pc.request]
 
     groups_cnt = len(groups) - len(skip)
     reqs_cnt = len(reqs) + len(gw_reqs) + len(ap_reqs)
@@ -575,17 +575,21 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
             "\n[bright_green]Group level configurations will be sent:[/]\n"
             f"{confirm_msg}"
         )
-    _groups_text = utils.color([g.name for g in groups if g.name not in skip], "cyan", pad_len=4, sep="\n")
-    confirm_msg = (
-        f"[bright_green]The following {f'[cyan]{groups_cnt}[/] groups' if groups_cnt > 1 else 'group'} will be created[/]:\n{_groups_text}\n"
-        f"{confirm_msg}"
-    )
+
+    if cache_data:
+        _groups_text = utils.color([g.name for g in groups if g.name not in skip], "cyan", pad_len=4, sep="\n")
+        confirm_msg = (
+            f"[bright_green]The following {f'[cyan]{groups_cnt}[/] groups' if groups_cnt > 1 else 'group'} will be created[/]:\n{_groups_text}\n"
+            f"{confirm_msg}"
+        )
 
     if len(reqs) + len(gw_reqs) + len(ap_reqs) > 1:
         confirm_msg = f"{confirm_msg}\n[italic dark_olive_green2]{reqs_cnt} API calls will be performed.[/]\n"
 
-    console.print(confirm_msg)
+    if not reqs_cnt:
+        cli.exit("No Updates to perform...", code=0)
 
+    console.print(confirm_msg)
     if pre_cfgs:
         idx = 0
         while True:
@@ -609,16 +613,19 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 console.rule(f"End {pc.name} {pretty_type} config")
             idx += 1
 
-    resp = None
+    resp = []
     if reqs and cli.confirm(yes):
         resp = cli.central.batch_request(reqs)
 
         # -- Update group cache --
-        if all(r.ok for r in resp):
-            cli.central.request(cli.cache.update_group_db, data=cache_data)
-        else:
-            log.warning("Failures occured, performing full cache update", show=True)
-            cli.central.request(cli.cache.update_group_db)
+        cache_update_data = [group_data for res, group_data in zip(resp, cache_data) if res.ok]
+        cli.central.request(cli.cache.update_group_db, data=cache_update_data)
+
+    if [*ap_reqs, *gw_reqs]:
+        if not reqs:
+            cli.econsole.print("[dark_orange3]:warning:[/]  Updating Group level config for group(s) that [dark_olive_green2]already exists[/][red]![/]  [dark_orange3]:warning:[/]")
+            if not cli.confirm():
+                ...  # cli.confirm aborts
 
         config_reqs = []
         if gw_reqs:
