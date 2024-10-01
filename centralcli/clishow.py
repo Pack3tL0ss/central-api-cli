@@ -241,7 +241,7 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
     elif not cli.cache.responses.dev:
         resp = cli.central.request(cli.cache.refresh_dev_db, **params)
-        caption = None if not resp.ok else _build_device_caption(resp, status=status)
+        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
         resp, caption = cli.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
@@ -1235,8 +1235,13 @@ def cache_(
         data = data[0].keys()
         return f">> [bright_green]{name} fields[/]\n{utils.color(list(data), 'cyan')}".splitlines()
 
+    def sort_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        # make device order from cache match device order from other show device commands
+        return sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+
     args = ('all',) if not args else args
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
+
     if all or "all" in args:
         tables = cli.cache.all_tables if all else cli.cache.key_tables
         length = len(cli.cache) if all else len(cli.cache._tables)
@@ -1244,6 +1249,8 @@ def cache_(
             data = t.all()
             if headers:
                 data = get_fields(data, t.name)
+            if t.name == "devices":
+                data = sort_devices(data)
 
             cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.' if not headers else None, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
             if not no_page and cli.econsole.is_terminal and not idx == length and not headers:
@@ -1254,6 +1261,8 @@ def cache_(
             arg = arg if not hasattr(arg, "value") else arg.value
             if headers:
                 cache_out = get_fields(cache_out, arg)
+            elif arg == "devices":
+                cache_out = sort_devices(cache_out)
 
             caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]" if not headers else None
             cli.display_results(
@@ -1717,6 +1726,7 @@ def config_(
         hidden=True,
     ),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
+    file: bool = typer.Option(False, "-f", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1739,6 +1749,9 @@ def config_(
     \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
     """
     if group_dev == "cencli":  # Hidden show cencli config
+        if file:
+            cli.display_results(data=config.file.read_text())
+            cli.exit(code=0)
         return _get_cencli_config()
 
     group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
@@ -2223,7 +2236,7 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = central.request(cli.cache.update_client_db, **kwargs)
+        resp = central.request(cli.cache.refresh_client_db, **kwargs)
     else:
         resp = central.request(cli.central.get_denylist_clients, **kwargs)
 
@@ -2354,7 +2367,7 @@ def roaming(
     title = "Roaming history"
 
     if refresh or drop:
-        resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
+        resp = cli.central.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
@@ -2887,27 +2900,7 @@ def version(
     cli.version_callback()
 
 
-def _get_cencli_config(
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-
+def _get_cencli_config() -> None:
     try:
         from centralcli import config
     except (ImportError, ModuleNotFoundError):
@@ -2916,10 +2909,10 @@ def _get_cencli_config(
             sys.path.insert(0, str(pkg_dir.parent))
             from centralcli import config
 
-    omit = ["deprecation_warning", "webhook", "snow"]
+    omit = ["deprecation_warning", "webhook", "snow", "valid_suffix", "is_completion", "forget", "default_scache_file"]
     out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
-    out["webhook"] = None if not config.webhook else config.webhook.dict()
-    out["snow"] = None if not config.snow else config.snow.dict()
+    out["webhook"] = None if not config.webhook else config.webhook.model_dump()
+    out["snow"] = None if not config.snow else config.snow.model_dump()
 
     resp = Response(output=out)
 
