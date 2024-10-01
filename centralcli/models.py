@@ -11,6 +11,8 @@ from pydantic import BaseModel, RootModel, Field, validator, field_serializer, C
 from centralcli import utils, log
 from centralcli.constants import DevTypes
 from centralcli.objects import DateTime
+from random import randint
+import json
 
 if TYPE_CHECKING:
     from collections.abc import KeysView
@@ -316,21 +318,37 @@ class Labels(RootModel):
         return len(self.model_dump())
 
 class ClientType(str, Enum):
-    WIRED = "WIRED"
-    WIRELESS = "WIRELESS"
+    wired = "wired"
+    wireless = "wireless"
 
 # Client Cache  # TODO need to include attribute for TinyDB.Table doc_id
 class Client(BaseModel):
-    mac: str = Field(default_factory=str)
-    name: str = Field(default_factory=str)
-    ip: str = Field(default_factory=str)
-    type: str = Field(default_factory=str)
-    connected_port: str = Field(default_factory=str)
-    connected_serial: str = Field(default_factory=str)
-    connected_name: str = Field(default_factory=str)
-    site: Optional[str] = Field(default_factory=str)
-    group: str = Field(default_factory=str)
-    last_connected: datetime = Field(default=None)
+    model_config = ConfigDict(
+        use_enum_values=True,
+        arbitrary_types_allowed=True,
+        json_encoders={
+            DateTime: lambda dt: dt.ts
+        }
+    )
+    mac: str = Field(None, alias=AliasChoices("macaddr", "mac"))
+    name: str = Field(None, alias=AliasChoices("name", "username"))
+    ip: str = Field(None, alias=AliasChoices("ip_address", "ip"))
+    type: ClientType = Field(None, alias=AliasChoices("client_type", "type"))
+    network_port: str = Field(None, alias=AliasChoices("network", "interface_port", "network_port"))
+    connected_serial: str = Field(None, alias=AliasChoices("associated_device", "connected_serial"))
+    connected_name: str = Field(None, alias=AliasChoices("associated_device_name", "connected_name"))
+    site: Optional[str] = Field(None,)
+    group: str = Field(None, alias=AliasChoices("group_name", "group"))
+    last_connected: datetime | None = Field(None, alias=AliasChoices("last_connection_time", "last_connection"))
+
+
+    @field_serializer('last_connected')
+    @classmethod
+    def pretty_dt(cls, dt: datetime) -> DateTime:
+        if dt is None:  # TODO all with potential for there not to be a value need this
+            return None
+
+        return DateTime(dt.timestamp(), "timediff")
 
     @property
     def summary_text(self):
@@ -354,6 +372,40 @@ class Client(BaseModel):
     def keys(self) -> KeysView:
         return self.model_dump().keys()
 
+    @property
+    def help_text(self):
+        return [
+            tuple([self.name, f'{self.ip}|{self.mac} type: {self.type} connected to: {self.connected_name} ~ {self.network_port}'])
+        ]
+
+class Clients(RootModel):
+    root: List[Client]
+
+    def __init__(self, data: List[dict]) -> None:
+        formatted = self.prep_for_cache(data)
+        super().__init__([Client(**c) for c in formatted])
+
+    @staticmethod
+    def prep_for_cache(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
+        return [
+            {k: v if k not in ["client_type", "type"] else v.lower() for k, v in inner.items()}
+            for inner in data
+        ]
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+    @property
+    def by_mac(self) -> Dict[str, Any]:  # Nedd to use model_dump_json to use models JsonEncoder
+        return {
+            c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root
+        }
 
 
 class Event(BaseModel):
