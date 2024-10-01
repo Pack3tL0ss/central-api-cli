@@ -76,7 +76,7 @@ def client(
     The [cyan]-R[/] flag can be used to force a cache refresh prior to performing the disconnect.
     """
     if refresh or drop:
-        resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
+        resp = cli.central.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
