@@ -330,9 +330,9 @@ class Client(BaseModel):
             DateTime: lambda dt: dt.ts
         }
     )
-    mac: str = Field(None, alias=AliasChoices("macaddr", "mac"))
-    name: str = Field(None, alias=AliasChoices("name", "username"))
-    ip: str = Field(None, alias=AliasChoices("ip_address", "ip"))
+    mac: str = Field(default_factory=str, alias=AliasChoices("macaddr", "mac"))
+    name: str = Field(default_factory=str, alias=AliasChoices("name", "username"))
+    ip: str = Field(default_factory=str, alias=AliasChoices("ip_address", "ip"))
     type: ClientType = Field(None, alias=AliasChoices("client_type", "type"))
     network_port: str = Field(None, alias=AliasChoices("network", "interface_port", "network_port"))
     connected_serial: str = Field(None, alias=AliasChoices("associated_device", "connected_serial"))
@@ -910,24 +910,50 @@ class CloudAuthUploadResponse(BaseModel):
     #     }
 
 
+# class MpskNetwork(BaseModel):
+#     id: str
+#     ssid: str
+#     accessURL: str
+#     passwordPolicy: str
+
+
+# class MpskNetworks(RootModel):
+#     root: List[MpskNetwork]
+
+#     def __init__(self, data: List[dict]) -> None:
+#         super().__init__([CacheMpskNetwork(**m) for m in data])
+
+#     def __iter__(self):
+#         return iter(self.root)
+
+#     def __getitem__(self, item):
+#         return self.root[item]
+
+#     def __len__(self) -> int:
+#         return len(self.root)
+
+
 class MpskNetwork(BaseModel):
     id: str
-    ssid: str
-    accessURL: str
-    passwordPolicy: str
+    name: str = Field(alias=AliasChoices("ssid", "name"))
 
 
-class MpskNetworks(BaseModel):
-    items: List[MpskNetwork]
+class MpskNetworks(RootModel):
+    root: List[MpskNetwork]
 
+    def __init__(self, data: List[dict]) -> None:
+        if isinstance(data, dict) and "items" in data:
+            data = data["items"]
+        super().__init__([MpskNetwork(**m) for m in data])
 
-class CacheMpskNetwork(BaseModel):
-    id: str
-    name: str = Field(alias="ssid")
+    def __iter__(self):
+        return iter(self.root)
 
+    def __getitem__(self, item):
+        return self.root[item]
 
-class CacheMpskNetworks(BaseModel):
-    items: List[CacheMpskNetwork]
+    def __len__(self) -> int:
+        return len(self.root)
 
 
 # We don't use this, but if there is a need, this is what they should map to
