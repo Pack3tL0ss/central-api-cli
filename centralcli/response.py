@@ -377,7 +377,7 @@ class Response:
             if self.error:
                 if isinstance(self.error, dict) and self.url.path in self.error:  # CombinedResponse.__super__()
                     r = f"  {self.error[self.url.path]}\n{r}"
-                else:
+                elif str(self.error) != str(self.output):
                     r = f"  {self.error}\n{r}"
             if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
                 r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
