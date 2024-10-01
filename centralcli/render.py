@@ -347,7 +347,7 @@ def rich_output(
     return outdata, outdata
 
 def output(
-    outdata: Union[List[str], Dict[str, Any]],
+    outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any],
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
     title: str = None,
     caption: str = None,
@@ -369,9 +369,13 @@ def output(
     if tablefmt != "simple" and outdata and all(isinstance(x, str) for x in outdata):
         tablefmt = "simple"
 
-    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
+        # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
         outdata = utils.listify(outdata)
+        if isinstance(outdata[0], dict) and all([isinstance(k, str) for k in list(outdata[0].keys())]):
+            outdata = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in data.items()} for data in outdata]
+
+        # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
         if output_by_key and outdata and isinstance(outdata[0], dict):
             if len(output_by_key) == 1 and "+" in output_by_key[0]:
                 found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
@@ -412,6 +416,10 @@ def output(
                 return str(value.original)
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
+        def normalize_key_for_csv(key: str) -> str:
+            if not isinstance(key, str):
+                return key
+            return key.replace(" ", "_").replace("\n", "_")
 
         csv_data = "\n".join(
                         [
@@ -423,7 +431,7 @@ def output(
                             for d in outdata
                         ]
         )
-        raw_data = table_data = csv_data if not outdata else f"{','.join([k for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
+        raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)

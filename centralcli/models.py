@@ -475,7 +475,7 @@ class WidsItem(BaseModel):
     first_det_device: Optional[str] = Field(default_factory=str)
     first_det_device_name: Optional[str] = Field(default_factory=str)
     first_seen: Optional[datetime] = Field(default=None)
-    group: Optional[str] = Field(default_factory=str, alias="group_name")
+    group: Optional[str] = Field(default_factory=str, alias=AliasChoices("group_name", "group"))
     id: Optional[str] = Field(default_factory=str)
     labels: Optional[str] = Field(default_factory=str)
     lan_mac: Optional[str] = Field(default_factory=str)
@@ -490,7 +490,7 @@ class WidsItem(BaseModel):
     @field_serializer('first_seen', 'last_seen')
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
-        return DateTime(dt.timestamp())
+        return DateTime(dt.timestamp(), "mdyt")
 
 class Wids(RootModel):
     root: List[WidsItem]

@@ -286,6 +286,12 @@ _short_key = {
     "lease_start_ts": "lease start",
     "lease_end_ts": "lease end",
     "lease_time_left": "lease remaining",
+    "classification_method": "classification\nmethod",
+    "containment_status": "status",
+    "first_det_device": "first det\ndevice",
+    "first_det_device_name": "first det\ndevice name",
+    "last_det_device": "last det\ndevice",
+    "last_det_device_name": "last det\ndevice name",
     "vlan_id": "pvid",
     "free_ip_addr_percent": "free ip %",
     "events_details": "details",
@@ -434,13 +440,15 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, emoji_bools: bool = False) -> List[Dict[str, Any]]:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, strip_keys: List[str] = None, strip_null: bool = False, emoji_bools: bool = False) -> List[Dict[str, Any]]:
     """Default simple formatter
 
     Args:
         data (List[Dict[str, Any]]): Data to be formatted, data is returned unchanged is data is not a list.
         key_order (List[str], optional): List of keys in the order desired.
             If defined only key_order key/value pairs are returned. Defaults to None.
+        strip_keys (List[str], optional): List of keys to be stripped from output.
+        strip_null (bool, optional): Set True to strip keys that have no value for any items.  Defaults to False.
         emoji_bools (bool, optional): Replace boolean values with emoji ✅ for True ❌ for False. Defaults to False.
 
     Returns:
@@ -456,6 +464,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
 
         return '\u2705' if value is True else '\u274c'  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
 
+    strip_keys = strip_keys or []
     if key_order:
         data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data]
 
@@ -466,11 +475,12 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
                 convert_bools(v),
             )
             for k, v in d.items()
+            if k not in strip_keys
         )
         for d in data
     ]
 
-    return data
+    return data if not strip_null else strip_no_value(data)
 
 def get_archived_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     key_order = [
@@ -1146,20 +1156,42 @@ def routes(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def wids(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    all_keys = set([k for d in data for k in d])
-    strip_keys = ["cust_id"]
-    data = [
-        dict(
-            short_value(
-                k,
-                d.get(k),
-            )
-            for k in all_keys
-            if k not in strip_keys
-        )
-        for d in data
+    # all_keys = set([k for d in data for k in d])
+    key_order = [
+        "id",
+        "name",
+        "mac_vendor",
+        "signal",
+        "ssid",
+        "encryption",
+        "class",
+        "containment_status",
+        "classification_method",
+        "acknowledged",
+        "first_seen",
+        "first_det_device",
+        "first_det_device_name",
+        "last_seen",
+        "last_det_device",
+        "last_det_device_name",
+        "labels",
+        "lan_mac",
+        "group",
     ]
-    return data
+    # strip_keys = ["cust_id"]
+    return simple_kv_formatter(data, key_order=key_order, strip_null=True, emoji_bools=False)
+    # data = [
+    #     dict(
+    #         short_value(
+    #             k,
+    #             d.get(k),
+    #         )
+    #         for k in all_keys
+    #         if k not in strip_keys
+    #     )
+    #     for d in data
+    # ]
+    # return strip_no_value(data)
 
 
 def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

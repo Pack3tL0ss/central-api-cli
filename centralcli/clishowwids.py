@@ -293,6 +293,7 @@ def all(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        cleaner=cleaner.wids,
     )
 
 
