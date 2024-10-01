@@ -144,7 +144,7 @@ from .utils import Utils
 utils = Utils()
 from .response import Response, BatchRequest
 from .central import CentralApi
-from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal
+from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheClient
 from .clicommon import CLICommon
 from . import cleaner, render
 
@@ -193,6 +193,7 @@ CacheDevice.set_db(cache.DevDB)
 CacheInvDevice.set_db(cache.InvDB)
 CacheGroup.set_db(cache.GroupDB)
 CacheSite.set_db(cache.SiteDB)
+CacheClient.set_db(cache.ClientDB, cache=cache)
 CacheLabel.set_db(cache.LabelDB)
 CachePortal.set_db(cache.PortalDB)
 CacheTemplate.set_db(cache.TemplateDB)
