@@ -2696,39 +2696,33 @@ class Cache:
             self.verify_db_action('group', expected=len(groups), response=update_res)
         return resp
 
-    async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
-        if data:
-            data = utils.listify(data)
-            if not remove:
-                update_res = self.LabelDB.insert_multiple(data)
-                self.verify_db_action('label', expected=len(data), response=update_res)
-                return
-            else:
-                if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
-                    doc_ids = data
-                else:
-                    doc_ids = []
-                    for qry in data:
-                        if len(qry.keys()) > 1:
-                            raise ValueError(f"cache.update_label_db remove Should only have 1 query not {len(qry.keys())}")
-                        q = list(qry.keys())[0]
-                        doc_ids += [self.LabelDB.get((self.Q[q] == qry[q])).doc_id]
-
-                with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Label cache."):
-                    del_resp = self.LabelDB.remove(doc_ids=doc_ids)
-                    self.verify_db_action('label', expected=len(data), response=del_resp, remove=doc_ids)
-                    return
+    async def update_label_db(self, data: List[Dict[str, Any]] | Dict[str, Any] | List[int], remove: bool = False) -> Response:
+        data = utils.listify(data)
+        if not remove:
+            update_res = self.LabelDB.insert_multiple(data)
+            return self.verify_db_action('label', expected=len(data), response=update_res)
         else:
-            resp = await self.central.get_labels()
-            if resp.ok:
-                self.responses.label = resp
-                self.updated.append(self.central.get_labels)
-                label_models = models.Labels(resp.output)
-                cache_data = label_models.model_dump()
-                self.LabelDB.truncate()
-                update_res = self.LabelDB.insert_multiple(cache_data)
-                self.verify_db_action('label', expected=len(resp), response=update_res)
-            return resp
+            if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
+                doc_ids = data
+            else:
+                log.error(f"DEV NOTE: Unable to update label cache, instructed to remove {len(data)}, unexpected type sent, expected. List[int]", show=True)
+                return False
+
+            with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Label cache."):
+                del_resp = self.LabelDB.remove(doc_ids=doc_ids)
+                return self.verify_db_action('label', expected=len(data), response=del_resp, remove=doc_ids)
+
+    async def refresh_label_db(self) -> bool:
+        resp = await self.central.get_labels()
+        if resp.ok:
+            self.responses.label = resp
+            self.updated.append(self.central.get_labels)
+            label_models = models.Labels(resp.output)
+            cache_data = label_models.model_dump()
+            self.LabelDB.truncate()
+            update_res = self.LabelDB.insert_multiple(cache_data)
+            self.verify_db_action('label', expected=len(resp), response=update_res)
+        return resp
 
     async def update_license_db(self) -> Response:
         """Update License DB
@@ -3007,7 +3001,7 @@ class Cache:
         if template_db:
             update_funcs += [self.update_template_db]
         if label_db:
-            update_funcs += [self.update_label_db]
+            update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.update_license_db]
         async with self.central.aio_session:
@@ -3032,7 +3026,7 @@ class Cache:
                     if db_res[-1]:
                         batch_reqs = [
                             self.central.BatchRequest(req)
-                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.update_label_db, self.update_license_db]
+                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.refresh_label_db, self.update_license_db]
                         ]
                         db_res = [
                             *db_res,
@@ -4078,4 +4072,4 @@ class CacheDetails:
         self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.refresh_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.refresh_mpsk_db)
-        self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
+        self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.refresh_label_db)

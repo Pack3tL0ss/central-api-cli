@@ -1348,7 +1348,7 @@ def labels(
     account: str = cli.options.account,
 ) -> None:
     """Show labels/details"""
-    resp = cli.central.request(cli.cache.update_label_db)
+    resp = cli.central.request(cli.cache.refresh_label_db)
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
     cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 

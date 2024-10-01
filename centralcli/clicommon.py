@@ -1282,7 +1282,7 @@ class CLICommon:
         not_in_cache = [name for name in names_from_import if name not in self.cache.labels_by_name]
         if not_in_cache:
             self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local label cache.  :arrows_clockwise: [bright_green]Updating local label cache[/].")
-            _ = self.central.request(self.cache.update_label_db)  # This updates cli.cache.labels
+            _ = self.central.request(self.cache.refresh_label_db)  # This updates cli.cache.labels
 
         # notify and remove any labels that don't exist after cache update
         cache_by_name: Dict[str, CacheLabel] = {name: self.cache.labels_by_name.get(name) for name in names_from_import}
