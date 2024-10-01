@@ -859,7 +859,7 @@ def subscription(
         _cleaner = None
         set_width_cols = None
     elif what == "names":
-        resp = cli.central.request(cli.cache.update_license_db)
+        resp = cli.central.request(cli.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         _cleaner = None
         set_width_cols = {"name": {"min": 39}}

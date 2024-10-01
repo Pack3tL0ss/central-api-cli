@@ -2724,7 +2724,7 @@ class Cache:
             self.verify_db_action('label', expected=len(resp), response=update_res)
         return resp
 
-    async def update_license_db(self) -> Response:
+    async def refresh_license_db(self) -> Response:
         """Update License DB
 
         License DB stores the valid license names accepted by GreenLake/Central
@@ -3003,7 +3003,7 @@ class Cache:
         if label_db:
             update_funcs += [self.refresh_label_db]
         if license_db:
-            update_funcs += [self.update_license_db]
+            update_funcs += [self.refresh_license_db]
         async with self.central.aio_session:
             if update_funcs:
                 kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
@@ -3026,7 +3026,7 @@ class Cache:
                     if db_res[-1]:
                         batch_reqs = [
                             self.central.BatchRequest(req)
-                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.refresh_label_db, self.update_license_db]
+                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.refresh_label_db, self.refresh_license_db]
                         ]
                         db_res = [
                             *db_res,

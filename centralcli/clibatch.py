@@ -687,7 +687,7 @@ def validate_license_type(data: List[Dict[str, Any]]):
                 except ValueError:
                     if idx == 0 and cli.cache.responses.license is None:
                         print(f'[bright_red]:warning:[/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
-                        resp = cli.central.request(cli.cache.update_license_db)
+                        resp = cli.central.request(cli.cache.refresh_license_db)
                         if not resp:
                             cli.display_results(resp, exit_on_fail=True)
                     else:
