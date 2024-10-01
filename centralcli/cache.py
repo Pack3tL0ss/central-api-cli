@@ -43,7 +43,6 @@ except Exception:
 # Used to debug completion
 econsole = Console(stderr=True)
 console = Console()
-clean_console = Console(emoji=False)
 TinyDB.default_table_name = "devices"
 
 # DBType = Literal["dev", "site", "template", "group"]
@@ -793,8 +792,25 @@ class Cache:
         return self.ClientDB.all()
 
     @property
-    def clients_by_mac(self) -> list:
-        return {c["mac"]: dict(c) for c in self.clients}
+    def cache_clients_by_mac(self) -> Dict[str: Document]:
+        """All Clients by MAC connected within the last 90 days
+
+        This property is used by the cache to filter clients older than 90 days
+
+        Returns:
+            Dict[str,Document]: Client Dict keyed by MAC
+            with any clients last connected > 90 days ago filtered out.
+        """
+        days = 90 if not self.config else self.config.cache_client_days
+        return {
+            c["mac"]: c
+            for c in self.clients
+            if c["last_connected"] is not None and not utils.older_than(c["last_connected"], days)
+        }
+
+    @property
+    def clients_by_mac(self) -> Dict[str: Document]:
+        return {c["mac"]: c for c in self.clients}
 
     @property
     def mpsk(self) -> list:
@@ -1574,8 +1590,6 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        # match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
-
         # Add cencli as option to show and update config commands (update not implememnted yet)
         utils.listify(dev_type)
         out = []
@@ -1605,15 +1619,6 @@ class Cache:
             dev_out = self.dev_completion(incomplete, args=_args)
             if dev_out:
                 out += list(dev_out)
-
-        # match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
-
-        # partial completion by serial: out appears to have list with expected tuple but does
-        # not appear in zsh
-
-        # if match:
-        #     for m in sorted(match, key=lambda i: i.name):
-        #         out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -1663,14 +1668,8 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        # group_match = self.get_group_identifier(incomplete, completion=True)
-
         dev_types = ["ap", "gw"]
-        # match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
         match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
-
-        # match = group_match + match
-
 
         out = []
         if match:
@@ -1687,13 +1686,10 @@ class Cache:
             if "cencli".lower().startswith(incomplete):
                 out += [("cencli", "update cencli configuration")]
 
-
-
         # partial completion by serial: out appears to have list with expected tuple but does
         # not appear in zsh
 
         for m in out:
-            log.debug(f"yielding to completion {m}")  # FIXME DEBUG remove me serial completion yielding expected tuple but does not appear in zsh
             yield m
 
     def group_dev_gw_completion(
@@ -1810,7 +1806,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_group_identifier(
+        match: List[CacheGroup] = self.get_group_identifier(
             incomplete,
             completion=True,
         )
@@ -1820,6 +1816,7 @@ class Cache:
                 if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
                     # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])] # FIXME case insensitive and group completion now broken used to work
+                    # FIXME zsh is displaying "name name name --help-text"  (name x 3 the help text on each line)
 
         for m in out:
             yield m
@@ -1891,14 +1888,14 @@ class Cache:
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
                 if c.name.startswith(incomplete):
-                    out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                    out += c.help_text
                 elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
-                    out += [tuple([c.mac, f'{c.name}|{c.ip} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                    out += c.help_text
                 elif c.ip.startswith(incomplete):
-                    out += [tuple([c.mac, f'{c.name}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port}'])]
+                    out += c.help_text
                 else:
                     # failsafe, shouldn't hit
-                    out += [tuple([c.name, f'{c.ip}|{c.mac} type: {c.type} connected to: {c.connected_name} ~ {c.connected_port} (fail-safe match)'])]
+                    out += (c.help_text[0], f'{c.help_text[1]} FailSafe Match')
 
 
         for c in out:  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
@@ -2187,55 +2184,6 @@ class Cache:
             for m in out:
                 yield m
 
-    # TODO double check not used and remove
-    def completion(
-        self,
-        incomplete: str,
-        args: List[str],
-    ) -> Generator[Tuple[str, str], None, None] | None:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
-        cache = ()
-        if [True for m in DEV_COMPLETION if args[-1].endswith(m)]:
-            cache += tuple(["dev"])
-        elif [True for m in GROUP_COMPLETION if args[-1].endswith(m)]:
-            cache += tuple(["group"])
-        elif [True for m in SITE_COMPLETION if args[-1].endswith(m)]:
-            cache += tuple(["site"])
-        elif [True for m in TEMPLATE_COMPLETION if args[-1].endswith(m)]:
-            cache += tuple(["template"])
-
-        if not cache:
-            match = self.get_identifier(
-                incomplete,
-                ("dev", "group", "site", "template"),
-                completion=True,
-            )
-        else:
-            match = self.get_identifier(
-                incomplete,
-                tuple(cache),
-                completion=True,
-            )
-
-        out = []
-        _extra = [e for e in EXTRA_COMPLETION if e in args and args[-1] != e]
-        if _extra:
-            out += [
-                tuple([m, "COMMAND KEYWORD"]) for e in _extra for m in EXTRA_COMPLETION[e]
-                if m.startswith(incomplete) and args[-1] != m
-                ]
-
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
-
-        for m in out:
-            yield m
-
     async def format_raw_devices_for_cache(self, resp: Response):
         dev_types = {
             "aps": "ap",
@@ -2287,7 +2235,7 @@ class Cache:
             cache_by_serial = self.inventory_by_serial
 
         _start_time = time.perf_counter()
-        with console.status(f"Performing {db} cache update, adding/updating {len(new_data)} records"):
+        with console.status(f"Performing dark_olive_green2{db}[/] cache update, adding/updating {len(new_data)} records"):
             new_by_serial = {dev["serial"]: dev for dev in new_data}
             updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
             DB.truncate()
@@ -2422,7 +2370,7 @@ class Cache:
             offset=offset,
             limit=limit,
         )
-        if resp.ok:
+        if isinstance(resp, CombinedResponse) and resp.ok:
             raw_data = await self.format_raw_devices_for_cache(resp)
             with console.status(f"preparing {len(resp)} records for cache update"):
                 _start_time = time.perf_counter()
@@ -2608,43 +2556,47 @@ class Cache:
             self.verify_db_action('site', expected=len(resp), response=update_res)
         return resp
 
-    async def update_group_db(self, data: list | dict = None, remove: bool = False) -> List[int] | Response:
-        if data:
-            data = utils.listify(data)
-            if not remove:
-                return self.GroupDB.insert_multiple(data)  # TODO update so all these return groups even when cache is updated.  Just log a mismatch between TinyDB len(doc_ids)...
-            else:
-                if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
-                    doc_ids = data
-                else:
-                    doc_ids = []
-                    for qry in data:
-                        if len(qry.keys()) > 1:
-                            raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
-                        q = list(qry.keys())[0]
-                        doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
-
-                with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Group cache."):
-                    del_resp = self.GroupDB.remove(doc_ids=doc_ids)
-                    self.verify_db_action('group', expected=len(data), response=del_resp, remove=doc_ids)
-                    return
+    async def update_group_db(self, data: list | dict, remove: bool = False) -> bool:
+        data = utils.listify(data)
+        if not remove:
+            with econsole.status(f":arrows_clockwise:  Updating [cyan]{len(data)} records in local [dark_olive_green2]Group[/] Cache."):
+                # update_data = {**self.groups_by_name, **{g["name"]: g for g in data}}
+                # self.GroupDB.truncate()
+                db_res = self.GroupDB.insert_multiple(data)
+                self.verify_db_action("group", expected=(len(data)), response=db_res)
         else:
-            if self.responses.group:
-                log.info("Update Group DB already refreshed in this session, returning previous group response")
-                return self.responses.group
+            if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
+                doc_ids = data
+            else:
+                doc_ids = []
+                for qry in data:
+                    if len(qry.keys()) > 1:
+                        raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
+                    q = list(qry.keys())[0]
+                    doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
 
-            resp = await self.central.get_all_groups()
-            if resp.ok:
-                groups = models.Groups(resp.output)
-                resp.output = groups.model_dump()
+            with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Group cache."):
+                del_resp = self.GroupDB.remove(doc_ids=doc_ids)
+                return self.verify_db_action('group', expected=len(data), response=del_resp, remove=doc_ids)
 
-                self.responses.group = resp
-                self.updated.append(self.central.get_all_groups)
 
-                self.GroupDB.truncate()
-                update_res = self.GroupDB.insert_multiple(resp.output)
-                self.verify_db_action('group', expected=len(groups), response=update_res)
-            return resp
+    async def refresh_group_db(self) -> Response:
+        if self.responses.group:
+            log.info("Update Group DB already refreshed in this session, returning previous group response")
+            return self.responses.group
+
+        resp = await self.central.get_all_groups()
+        if resp.ok:
+            groups = models.Groups(resp.output)
+            resp.output = groups.model_dump()
+
+            self.responses.group = resp
+            self.updated.append(self.central.get_all_groups)
+
+            self.GroupDB.truncate()
+            update_res = self.GroupDB.insert_multiple(resp.output)
+            self.verify_db_action('group', expected=len(groups), response=update_res)
+        return resp
 
     async def update_label_db(self, data: Union[list, dict] = None, remove: bool = False) -> Union[List[int], Response]:
         if data:
@@ -2704,7 +2656,7 @@ class Cache:
             return self.responses.template
 
         if self.responses.group is None:
-            gr_resp = await self.update_group_db()
+            gr_resp = await self.refresh_group_db()
             if not gr_resp.ok:
                 return gr_resp
 
@@ -2752,10 +2704,8 @@ class Cache:
                     log.exception(e)
         return
 
-    # TODO need a reset cache flag in "show clients"
-    async def update_client_db(
+    async def refresh_client_db(
         self,
-        truncate: bool = False,
         client_type: constants.ClientType = None,
         group: str = None,
         swarm_id: str = None,
@@ -2771,15 +2721,15 @@ class Cache:
         client_status: constants.ClientStatus = "CONNECTED",
         past: str = "3H",
     ) -> Response:
-        """Update client DB
+        """refresh client DB
 
-        Client cache only updates when the user does a show clients
+        all args are passed to central.get_clients, Local Cache is updated with any results.
+        Local Cache retains clients connected within last 90 days.
 
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
 
         Args:
-            truncate (bool, optional): Truncate the DB and repopulate with results from API.  Defaults to False.
             client_type (Literal['wired', 'wireless', 'all'], optional): Client type to retrieve.  Defaults to None.
                 if not provided all client types will be returned, unless a filter specific to a client type is
                 specified.  i.e. providing band will result in WLAN clients.
@@ -2801,12 +2751,7 @@ class Cache:
 
         Past users are always retained, unless truncate=True
         """
-        # TODO running pytest on subsequent tests of show clients this would eval True and return None
-        # if self.central.get_clients not in self.updated:
-
-        # truncate = truncate if any([args, kwargs]) else True  # if no filters we truncate the DB
-        # TODO Add cleanup function for client cache to delete clients with last_connected_time > x days
-        client_resp: Response = await self.central.get_clients(
+        resp: Response = await self.central.get_clients(
             client_type=client_type,
             group=group,
             swarm_id=swarm_id,
@@ -2822,39 +2767,20 @@ class Cache:
             client_status=client_status,
             past=past,
         )
-        if not client_resp.ok:
-            return client_resp
+        if not resp.ok:
+            return resp
         else:
-            if len(client_resp) > 0:
-                client_resp.output = utils.listify(client_resp.output)
+            if len(resp) > 0:
+                resp.output = utils.listify(resp.output)
                 self.updated.append(self.central.get_clients)
-                with clean_console.status(f"Preparing [cyan]{len(client_resp.output)}[/] clients for cache update") as spin:
-                    data = {c.get("macaddr", "NOMAC"):
-                        {
-                            "mac": c.get("macaddr"),
-                            "name": c.get("name", c.get("macaddr")),
-                            "ip": c.get("ip_address", ""),
-                            "type": c["client_type"],
-                            "connected_port": c.get("network", c.get("interface_port", "!!ERROR!!")),
-                            "connected_serial": c.get("associated_device"),
-                            "connected_name": c.get("associated_device_name"),
-                            "site": c.get("site"),
-                            "group": c.get("group_name"),
-                            "last_connected": c.get("last_connection_time")
-                        }
-                        for c in client_resp.output
-                    }
-                    data = data if truncate else {**self.clients_by_mac, **data}
-
-                    spin.update(f"{'Truncate/re-populate' if truncate else 'Updating'} client cache: [cyan]{len(data)}[/] clients")
+                with econsole.status(f"Preparing [cyan]{len(resp.output)}[/] clients for cache update") as spin:
+                    new_clients = models.Clients(resp.output)
+                    data = {**self.cache_clients_by_mac, **new_clients.by_mac}
+                    spin.update(f":arrows_clockwise: Updating [dark_olive_green2]client[/] With [cyan]{len(new_clients)}[/] new clients.  [cyan]{len(data)}[/] total with existing cache")
                     self.ClientDB.truncate()
-                    cache_update_res = self.ClientDB.insert_multiple(data.values())
-
-                if len(cache_update_res) < len(data):  # this is a list of one item lists but len is still OK here
-                    log.error(f"Client cache update returned {len(cache_update_res)} doc_ids, expected {len(data)}", caption=True, log=True)
-                else:
-                    log.info(f"Client cache {'truncated/re-populated' if truncate else 'updated'} with {len(data)} clients")
-        return client_resp
+                    db_res = self.ClientDB.insert_multiple(data.values())
+                    self.verify_db_action("client", expected=len(data), response=db_res)
+        return resp
 
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
@@ -2971,7 +2897,7 @@ class Cache:
         update_funcs, db_res = [], []
         dev_update_funcs = ["refresh_inv_db", "refresh_dev_db"]
         if group_db:
-            update_funcs += [self.update_group_db]
+            update_funcs += [self.refresh_group_db]
         if dev_db:
             update_funcs += [self.refresh_dev_db]
         if inv_db:
@@ -3000,7 +2926,7 @@ class Cache:
             # TODO make more elegant
             else:  # TODO asyncio.sleep is a temp until build better session wide rate limit handling.
                 br = self.central.BatchRequest
-                db_res += await self.central._batch_request([br(self.update_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
+                db_res += await self.central._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
                 if db_res[-1]:
                     db_res += await self.central._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
                     if db_res[-1]:
@@ -3113,7 +3039,7 @@ class Cache:
         except KeyboardInterrupt:
             raise typer.Abort()
 
-        return [match.pop(int(selection) - 1)]
+        return [match[int(selection) - 1]]
 
     def get_identifier(
         self,
@@ -3725,7 +3651,7 @@ class Cache:
             query_str = " ".join(query_str)
 
         if completion and not query_str.strip():
-            return [models.Client(**c) for c in self.clients]
+            return [models.Clients(self.clients)]
 
         match = None
         for _ in range(0, 2 if retry else 1):
@@ -3774,10 +3700,10 @@ class Cache:
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
                 if not match:
                     print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Client Cache")
-                    asyncio.run(self.update_client_db("wireless"))  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
+                    asyncio.run(self.refresh_client_db("wireless"))  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
 
             if match:
-                match = [models.Client(**c) for c in match]
+                match = models.Clients(match)
                 break
 
         if completion:
@@ -4046,7 +3972,7 @@ class CacheDetails:
     def __init__(self, cache = Cache):
         self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.refresh_dev_db)
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
-        self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.update_group_db)
+        self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.refresh_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
         self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
