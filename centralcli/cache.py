@@ -128,10 +128,6 @@ class CentralObject:
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
 
-        # if name not in RICH_EXCEPTION_IGNORE_ATTRIBUTES:
-        #     log.exception(f"Cache LookUp Failure: 'CentralObject' has no attribute '{name}'", show=True)
-        #     raise typer.Exit(1)
-
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
 
@@ -518,10 +514,102 @@ class CacheTemplate(CentralObject):
         return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
 
 
+ClientType = Literal["wired", "wireless"]
+
+class CacheClient(CentralObject):
+    db: Table | None = None
+    cache: Cache | None = None
+
+    # mac, name, ip, type, network_port, connected_serial, connected_name, site, group, last_connected
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('group', data)
+        self.name: str = data["name"]
+        self.ip: str = data["ip"]
+        self.mac: str = data["mac"]
+        self.type: ClientType = data["type"]
+        self.network_port: str = data["network_port"]
+        self.connected_serial: str = data["connected_serial"]
+        self.connected_name: str = data["connected_name"]
+        self.site: str = data["site"]
+        self.group: str = data["group"]
+        self.last_connected: int | float = data.get("last_connected")
+
+    @classmethod
+    def set_db(cls, db: Table, cache: Cache = None):
+        cls.db: Table = db
+        cls.cache: Cache = cache
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.name is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.name == self.name)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    def get_group(self) -> CacheGroup:
+        if self.cache is None:
+            return None
+        return self.cache.get_group_identifier(self.group)
+
+    def get_site(self) -> CacheSite:
+        if self.cache is None:
+            return None
+        return self.cache.get_site_identifier(self.site)
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s[green_yellow]{self.site})[/]'
+
+
+class CacheMpskNetwork(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('mpsk', data)
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+
+    @classmethod
+    def set_db(cls, db: Table, cache: Cache = None):
+        cls.db: Table = db
+        cls.cache: Cache = cache
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.id is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.id == self.id)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]MPSK Network[/]:[cyan]{self.id}[/]|[green_yellow]{self.name})[/]'
+
+
 class CacheResponses:
     def __init__(
         self,
-        dev: Response = None,
+        dev: CombinedResponse = None,
         inv: Response = None,
         site: Response = None,
         template: Response = None,
@@ -530,6 +618,7 @@ class CacheResponses:
         mpsk: Response = None,
         portal: Response = None,
         license: Response = None,
+        client: Response = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -540,28 +629,29 @@ class CacheResponses:
         self._mpsk = mpsk
         self._portal = portal
         self._license = license
+        self._client = client
 
-    def update_rl(self, resp: Response | None) -> Response | None:
+    def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
         """
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license] if r is not None], key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license, self._client] if r is not None])  # , key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
 
     @property
-    def dev(self):
+    def dev(self) -> CombinedResponse | None:
         return self.update_rl(self._dev)
 
     @dev.setter
-    def dev(self, resp: Response):
+    def dev(self, resp: CombinedResponse):
         self._dev = resp
 
     @property
-    def inv(self):
+    def inv(self) -> Response | None:
         return self.update_rl(self._inv)
 
     @inv.setter
@@ -569,7 +659,7 @@ class CacheResponses:
         self._inv = resp
 
     @property
-    def site(self):
+    def site(self) -> Response | None:
         return self.update_rl(self._site)
 
     @site.setter
@@ -577,7 +667,7 @@ class CacheResponses:
         self._site = resp
 
     @property
-    def template(self):
+    def template(self) -> Response | None:
         return self.update_rl(self._template)
 
     @template.setter
@@ -585,7 +675,7 @@ class CacheResponses:
         self._template = resp
 
     @property
-    def group(self):
+    def group(self) -> Response | None:
         return self.update_rl(self._group)
 
     @group.setter
@@ -593,7 +683,7 @@ class CacheResponses:
         self._group = resp
 
     @property
-    def label(self):
+    def label(self) -> Response | None:
         return self.update_rl(self._label)
 
     @label.setter
@@ -601,7 +691,7 @@ class CacheResponses:
         self._label = resp
 
     @property
-    def mpsk(self):
+    def mpsk(self) -> Response | None:
         return self.update_rl(self._mpsk)
 
     @mpsk.setter
@@ -609,7 +699,7 @@ class CacheResponses:
         self._mpsk = resp
 
     @property
-    def portal(self):
+    def portal(self) -> Response | None:
         return self.update_rl(self._portal)
 
     @portal.setter
@@ -617,12 +707,20 @@ class CacheResponses:
         self._portal = resp
 
     @property
-    def license(self):
+    def license(self) -> Response | None:
         return self.update_rl(self._license)
 
     @license.setter
     def license(self, resp: Response):
         self._license = resp
+
+    @property
+    def client(self) -> Response | None:
+        return self.update_rl(self._client)
+
+    @client.setter
+    def client(self, resp: Response):
+        self._client = resp
 
 
 class Cache:
@@ -2775,6 +2873,8 @@ class Cache:
                 self.updated.append(self.central.get_clients)
                 with econsole.status(f"Preparing [cyan]{len(resp.output)}[/] clients for cache update") as spin:
                     new_clients = models.Clients(resp.output)
+                    if "wireless" in [new_clients[0].type, new_clients[-1].type]:
+                        self.responses.client = resp
                     data = {**self.cache_clients_by_mac, **new_clients.by_mac}
                     spin.update(f":arrows_clockwise: Updating [dark_olive_green2]client[/] With [cyan]{len(new_clients)}[/] new clients.  [cyan]{len(data)}[/] total with existing cache")
                     self.ClientDB.truncate()
@@ -2823,31 +2923,31 @@ class Cache:
             self.HookDataDB.truncate()
             return self.HookDataDB.insert_multiple(data)
 
-    async def update_mpsk_db(self, data: List[Dict[str, Any]] = None) -> bool:
-        if data:
-            if isinstance(data, list):
-                data = {"items": data}
-            data = models.CacheMpskNetworks(**data)
-            data = data.dict()["items"]
-            self.MpskDB.truncate()
-            return self.MpskDB.insert_multiple(data)
+    # Not tested or used yet, until we have commands that add/del MPSK networks
+    async def update_mpsk_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
+        if remove:
+            db_res = self.MpskDB.remove(doc_ids=data)
         else:
-            resp = await self.central.cloudauth_get_mpsk_networks()
-            if resp.ok:
-                if resp.output:
-                    _update_data = utils.listify(deepcopy(resp.output))
-                    _update_data = models.CacheMpskNetworks(**resp.raw)
-                    _update_data = _update_data.dict()["items"]
+            data = models.MpskNetworks(data)
+            data = data.model_dump()
+            self.MpskDB.truncate()
+            db_res = self.MpskDB.insert_multiple(data)
+        return self.verify_db_action("mpsk", expected=len(data), response=db_res)
 
-                    self.MpskDB.truncate()
-                    update_res = self.MpskDB.insert_multiple(_update_data)
-                    if False in update_res:
-                        log.error("Tiny DB returned an error during MPSK db update", caption=True)
+    async def refresh_mpsk_db(self) -> Response:
+        resp = await self.central.cloudauth_get_mpsk_networks()
+        if resp.ok:
+            self.updated.append(self.central.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
+            self.responses.mpsk = resp
+            if resp.output:
+                _update_data = models.MpskNetworks(resp.raw)
+                _update_data = _update_data.model_dump()
 
-                # TODO change updated from  list of funcs to class with bool attributes or something
-                self.updated.append(self.central.cloudauth_get_mpsk_networks)
-                self.responses.mpsk = resp
-            return resp
+                self.MpskDB.truncate()
+                db_res = self.MpskDB.insert_multiple(_update_data)
+                self.verify_db_action("mpsk", expected=len(_update_data), response=db_res)
+
+        return resp
 
     # Not used or tested... would only need if delete portal or add portal is added
     async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = True) -> bool:
@@ -3644,14 +3744,17 @@ class Cache:
         completion: bool = False,
         exit_on_fail: bool = False,
         silent: bool = False,
-    ) -> models.Client | List[models.Client]:
-        """Allows Case insensitive client match"""
+    ) -> CacheClient | List[CacheClient]:
+        """Search for Client in DB matching on name, ip or mac
+
+        Allows partial and case insensitive match
+        """
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
         if completion and not query_str.strip():
-            return [models.Clients(self.clients)]
+            return [CacheClient(c) for c in self.clients]
 
         match = None
         for _ in range(0, 2 if retry else 1):
@@ -3680,7 +3783,7 @@ class Cache:
             if not match:
                 match = self.ClientDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.ip.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.ip.test(lambda v: v and v.lower().startswith(query_str.lower()))
                 )
                 if not match:
                     qry_mac = utils.Mac(query_str)
@@ -3690,28 +3793,28 @@ class Cache:
                             self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
                         )
 
-            # no match found initiate cache update
-            if retry and not match and self.central.get_clients not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+            # no match found try fuzzy match (typos) and initiate cache update
+            if retry and not match and self.responses.client is not None:
+                econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.clients:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
-                if not match:
-                    print(f"[bright_red]No Match Found[/] for [cyan]{query_str}[/], Updating Client Cache")
-                    asyncio.run(self.refresh_client_db("wireless"))  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
+                if not match:  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
+                    print(":arrows_clockwise: Updating [cyan]client[/] Cache")
+                    self.central.request(self.refresh_client_db, "wireless")
+                    # asyncio.run(self.refresh_client_db("wireless"))
 
             if match:
-                match = models.Clients(match)
+                match = [CacheClient(c) for c in match]
                 break
 
         if completion:
             return match or []
 
         if match:
-            # user selects which device if multiple matches returned
-            if len(match) > 1:
+            if len(match) > 1:  # user selects which device if multiple matches returned
                 match = self.handle_multi_match(match, query_str=query_str, query_type="client")
 
             return match[0]
@@ -3777,7 +3880,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject | List[CentralObject]:
+    ) -> CacheMpskNetwork | List[CacheMpskNetwork]:
         """Allows Case insensitive ssid match"""
         retry = False if completion else retry
         for _ in range(0, 2):
@@ -3815,9 +3918,9 @@ class Cache:
                     )
                 )
 
-            if not match and retry and self.central.cloudauth_get_mpsk_networks not in self.updated:
+            if not match and retry and self.responses.mpsk is None:
                 if FUZZ:
-                    econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                    econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                     fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
@@ -3825,11 +3928,11 @@ class Cache:
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.MpskDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    econsole.print(f":warning:  [bright_red]No Match found for[/] [cyan]{query_str}[/].  Updating mpsk Cache")
-                    asyncio.run(self.update_mpsk_db())
+                    econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
+                    self.central.request(self.refresh_mpsk_db)
                 _ += 1
             if match:
-                match = [CentralObject("mpsk", g) for g in match]
+                match = [CacheMpskNetwork(g) for g in match]
                 break
 
         if completion:
@@ -3842,7 +3945,7 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            log.error(f"Central API CLI Cache unable to gather MPSK data from provided identifier {query_str}", show=True)
             valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk])
             print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
             print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
@@ -3974,5 +4077,5 @@ class CacheDetails:
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
         self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.refresh_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
-        self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.update_mpsk_db)
+        self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.refresh_mpsk_db)
         self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.update_label_db)
