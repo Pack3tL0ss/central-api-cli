@@ -13,7 +13,7 @@ from typing import Any, List, Dict, Union, TypeVar, TextIO, Tuple, Optional
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
-from pydantic import BaseModel, Field, HttpUrl, ValidationError
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, AliasChoices, RootModel
 from yarl import URL
 # from pydantic import ConfigDict  # pydantic 2 not supported yet
 
@@ -44,7 +44,7 @@ class WebHook(BaseModel):
 class ServiceNow(BaseModel):
     # model_config = ConfigDict(arbitrary_types_allowed=True) pydantic 2 / not supported yet
     id: str
-    base_url: HttpUrl = Field(..., alias="url")
+    base_url: HttpUrl = Field(..., alias=AliasChoices("base_url", "url"))
     port: int = None
     incident_path: str
     refresh_path: str = "oauth_token.do"
@@ -62,7 +62,19 @@ class ServiceNow(BaseModel):
     def refresh_url(self) -> URL:
         return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.refresh_path.lstrip('/')}")
 
+class AccountModel(BaseModel):
+    base_url: HttpUrl = Field(..., alias=AliasChoices("base_url", "url"))
+    client_id: str
+    client_secret: str
+    customer_id: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    token: Optional[Token] = None
 
+
+# class ConfigModel(RootModel):
+#     central_info: AccountModel = Field(alias=AliasChoices("central_info", "default"))
+#     ... # TODO finish Config Model use pydantic for config validation
 
 clear = Console().clear
 class ClusterName(str, Enum):
@@ -105,6 +117,7 @@ NOT_ACCOUNT_KEYS = [
     "sanitize",
     "webclient_info",
     "capture_raw",
+    "cache_client_days",
 ]
 
 JSON_TYPE = Union[List, Dict, str]  # pylint: disable=invalid-name
@@ -284,6 +297,7 @@ class Config:
         self.account = self.get_account_from_args()
         self.base_url = self.data.get(self.account, {}).get("base_url")
         self.limit: int | None = self.data.get("limit")  # Allows override of paging limit for pagination testing
+        self.cache_client_days: int = self.data.get("cache_client_days", 90)
         try:
             self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
