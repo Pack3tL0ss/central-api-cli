@@ -234,9 +234,9 @@ _short_value = {
     "mem_free": _format_memory,
     "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "recommended": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
-    "learn_time": _log_timestamp,
-    "last_state_change": _log_timestamp,
-    "graceful_restart_timer": _duration_words,
+    "learn_time":  lambda x: DateTime(x, "log"),
+    "last_state_change":  lambda x: DateTime(x, "log"),
+    "graceful_restart_timer": lambda x: DateTime(x, "durwords"),
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
     "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
     "reserved_power_in_watts": lambda v: round(v, 2),
