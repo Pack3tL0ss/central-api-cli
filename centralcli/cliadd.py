@@ -4,7 +4,7 @@
 from enum import Enum
 from pathlib import Path
 import sys
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 import typer
 import yaml
 from rich import print
@@ -25,7 +25,10 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
 from centralcli.response import BatchRequest
-from centralcli.cache import CentralObject
+
+if TYPE_CHECKING:
+    from .cache import CachePortal, CacheGroup
+
 
 
 app = typer.Typer()
@@ -530,7 +533,7 @@ def template(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    group = cli.cache.get_group_identifier(group)
+    group: CacheGroup = cli.cache.get_group_identifier(group)
     if not template:
         print("[bright_green]No Template file provided[/].  Template content is required.")
         print("Provide Template Content:")
@@ -552,14 +555,15 @@ def template(
         cli.display_results(resp, tablefmt="action")
         if resp.ok:
             _ = cli.central.request(
-                cli.cache.update_template_db, add={
+                cli.cache.update_template_db, data={
                     "device_type": lib_to_api(dev_type, "template"),
                     "group": group.name,
                     "model": model,
                     "name": name,
                     "template_hash": template_hash,
                     "version": version,
-                }
+                },
+                add=True
             )
 
 
@@ -581,7 +585,7 @@ def guest(
     account: str = cli.options.account,
 ) -> None:
     """Add a guest user to a configured portal"""
-    portal: CentralObject = cli.cache.get_name_id_identifier("portal", portal).id
+    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal).id
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 

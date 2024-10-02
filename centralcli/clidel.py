@@ -28,7 +28,7 @@ from centralcli.exceptions import DevException
 from centralcli.cache import CentralObject, CacheLabel, CacheDevice
 
 if TYPE_CHECKING:
-    from .cache import CachePortal
+    from .cache import CachePortal, CacheGroup, CacheTemplate
 
 iden = IdenMetaVars()
 
@@ -209,10 +209,10 @@ def template(
     group = _group or group
 
     if group is not None:
-        group = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
         group = group.name
 
-    template = cli.cache.get_template_identifier(template, group=group)
+    template: CacheTemplate = cli.cache.get_template_identifier(template, group=group)
 
     print(
         f"[bright_red]{'Delete' if not yes else 'Deleting'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
@@ -220,7 +220,7 @@ def template(
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.delete_template, template.group, template.name)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
-        _ = cli.central.request(cli.cache.update_template_db, remove=template)
+        _ = cli.central.request(cli.cache.update_template_db, doc_ids=template.doc_id)
 
 
 # TODO return status indicating cache update success/failure

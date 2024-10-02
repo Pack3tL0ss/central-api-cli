@@ -724,22 +724,25 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
+        update_func = cli.cache.refresh_inv_db
+        kwargs = {}
         if _data:
             try:
                 _data = models.Inventory(_data).model_dump()
+                update_func = cli.cache.update_inv_db
+                kwargs = {"data": _data}
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
                 _data = None
 
-        # always perform full dev_db update as we don't know the other fields.
         console = Console()
-        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.') as spin:
-            cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-            spin.update("Allowing time for devices to populate before updating dev cache.")
+        cache_res = [cli.central.request(update_func, **kwargs)]  # This starts it's own spinner
+        with console.status("Allowing time for devices to populate before updating dev cache.") as spin:
             sleep(3)
             spin.update('Performing full device cache update after device edition.')
             sleep(2)
-        cache_res += [cli.central.request(cli.cache.refresh_dev_db)]
+        # always perform full dev_db update as we don't know the other fields.
+        cache_res += [cli.central.request(cli.cache.refresh_dev_db)]  # This starts it's own spinner
 
     return resp or Response(error="No Devices were added")
 

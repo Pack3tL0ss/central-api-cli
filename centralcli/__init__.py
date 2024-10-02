@@ -179,8 +179,13 @@ if "--debugv" in sys.argv:
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
 if "--again" in sys.argv:
-    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "--out", "-d", "--debug", "--account"]
-    args = [arg for arg in sys.argv if arg in valid_options]
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug", "--account"]
+    out_args = []
+    if "--out" in sys.argv:
+        outfile = sys.argv[sys.argv.index("--out") + 1]
+        out_args = ["--out", outfile]
+
+    args = [*[arg for arg in sys.argv if arg in valid_options], *out_args]
     sys.argv = [sys.argv[0], "show", "last", *args]
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
     config.capture_raw = True

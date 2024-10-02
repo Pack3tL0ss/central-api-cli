@@ -10,7 +10,6 @@ from rich import print
 from rich.console import Console
 from jinja2 import FileSystemLoader, Environment
 import yaml
-import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -26,6 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
 from centralcli import CentralObject
+from .cache import CacheTemplate
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -38,8 +38,7 @@ app = typer.Typer()
 
 
 # TODO add support for j2 / variable conversion as with cencli update config
-# FIXME pushing template via API returned 200 but template was not updated??
-@app.command(short_help="Update an existing template")
+@app.command(help="Update an existing template")
 def template(
     name: str = typer.Argument(
         ...,
@@ -88,14 +87,14 @@ def template(
         if len(_tmplt) != 1:
             cli.exit(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
 
-        obj = CentralObject("template", _tmplt[0])
+        cache_template = CacheTemplate(_tmplt[0])
 
     kwargs = {
-        "name": obj.name,
-        "group": group or obj.group,
-        "device_type": device_type or obj.device_type,
-        "version": version or obj.version,
-        "model": model or obj.model
+        "name": cache_template.name,
+        "group": group or cache_template.group,
+        "device_type": device_type or cache_template.device_type,
+        "version": version or cache_template.version,
+        "model": model or cache_template.model
     }
 
     payload = None
@@ -103,16 +102,15 @@ def template(
         payload = utils.get_multiline_input(prompt="Paste in new template contents.")
         payload = payload.encode("utf-8")
 
-    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{obj.name}[/] in group [cyan]{kwargs['group']}[/]")
+    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{cache_template.name}[/] in group [cyan]{kwargs['group']}[/]")
     print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
     print(f"    Model: [cyan]{kwargs['model']}[/]")
     print(f"    Version: [cyan]{kwargs['version']}[/]")
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
-        cli.display_results(resp, tablefmt="action")
-        if resp.ok:
-            obj.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
-            _ = cli.central.request(cli.cache.update_template_db, update=obj)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        cache_template.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
+        _ = cli.central.request(cli.cache.update_template_db, data=cache_template)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")

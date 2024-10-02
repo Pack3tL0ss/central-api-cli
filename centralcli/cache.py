@@ -951,6 +951,13 @@ class Cache:
         return self.TemplateDB.all()
 
     @property
+    def templates_by_name_group(self) -> list:
+        return {
+            f'{template["name"]}_{template["group"]}': template
+            for template in self.TemplateDB.all()
+        }
+
+    @property
     def hook_config(self) -> list:
         return self.HookConfigDB.all()
 
@@ -966,7 +973,7 @@ class Cache:
         return self.HookDataDB.get(self.Q.device_id == serial)
 
     @staticmethod
-    def verify_db_action(db: CacheTable, *, expected: int, response: List[int | List[int]], remove: List[int] = None, elapsed: int | float = None) -> bool:
+    def verify_db_action(db: Table, *, expected: int, response: List[int | List[int]], remove: bool = False, elapsed: int | float = None) -> bool:
         """Evaluate TinyDB Cache results (search/add/update/delete).
 
         Verifies response from TinyDB lookup/update, logs and returns a bool indicating success/failure.
@@ -975,33 +982,32 @@ class Cache:
             db (CacheTable): The TinyDB Table/Cache the update/lookup was peformed on.
             expected (int): The number of records that were expected.
             response (List[int  |  List[int]]): The update/lookup response from TinyDB
-            remove (List[int], optional): Provide the list of doc_ids for delete operations.
-                Results in additional log if len(doc_ids) != expected meaning db lookup
-                did not find a match for every query.  Defaults to None (add/update operation)
+            remove (bool, optional): If the operation was a delete/remove
             elapsed (int | float, optional): Amount of time it took to update the cache.
 
         Returns:
             bool: Bool indicating if update was succesful.
         """
         resp_cnt = len(response)
+        db_str = db.name.title()
         elapsed_msg = "" if not elapsed else f" Elapsed: {elapsed}"
-        if remove:
-            if len(remove) != expected:
-                log.warning(
-                    f'{db.capitalize()}DB cache update_{db}_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.{elapsed_msg}'
-                )
+        # if remove:
+        #     if len(remove) != expected:
+        #         log.warning(
+        #             f'{db_str}DB cache update_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.{elapsed_msg}'
+        #         )
 
-            expected = len(remove)
+        #     expected = len(remove)
 
         msg = f"remove {expected} records" if remove else f"add/update {expected} records"
         update_ok = True if expected == resp_cnt else False
 
         if update_ok:
-            log.info(f'{db.title()} cache update SUCCESS: {msg}{elapsed_msg}')
+            log.info(f'{db_str} cache update SUCCESS: {msg}{elapsed_msg}')
             return True
         else:
-            log.error(f'{db.title()} cache update ERROR:  Attempt to {msg} appears to have failed.  Expecting {expected} doc_ids TinyDB returned {resp_cnt}', show=True, caption=True, log=True)
-            log.error(f'{db} update response: {response}{elapsed_msg}')
+            log.error(f'{db_str} cache update ERROR:  Attempt to {msg} appears to have failed.  Expecting {expected} doc_ids TinyDB returned {resp_cnt}', show=True, caption=True, log=True)
+            log.error(f'{db_str} update response: {response}{elapsed_msg}')
             return False
 
     def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
@@ -2323,7 +2329,7 @@ class Cache:
 
         return _ret
 
-    def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
+    async def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
         # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
         if db == "dev":
             DB = self.DevDB
@@ -2332,73 +2338,60 @@ class Cache:
             DB = self.InvDB
             cache_by_serial = self.inventory_by_serial
 
+        new_by_serial = {dev["serial"]: dev for dev in new_data}
+        updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
+        return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
+
+
+    async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, doc_ids: List[int] | int = None, truncate: bool = True) -> bool:
+        """Update Local Cache DB
+
+        Args:
+            db (Table): TinyDB Table object to be updated.
+            data (List[Dict[str, Any]] | Dict[str, Any], optional): Data to be added to database. Defaults to None.
+            truncate (bool, optional): Existing DB data will be discarded, and all data in DB will be replaced with provided. Defaults to True.
+            doc_ids (List[int] | int, optional): doc_ids to be deleted from the DB. Defaults to None.
+
+        Returns:
+            bool: _description_
+        """
         _start_time = time.perf_counter()
-        with econsole.status(f":arrows_clockwise:  Updating [cyan]{len(new_data)} records in local [dark_olive_green2]{db}[/] Cache."):
-            new_by_serial = {dev["serial"]: dev for dev in new_data}
-            updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
-            DB.truncate()
-            db_res = DB.insert_multiple(list(updated_devs_by_serial.values()))
-            self.verify_db_action(db, expected=len(updated_devs_by_serial), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
+        if data:
+            with econsole.status(f":arrows_clockwise:  Updating [dark_olive_green2]{db.name}[/] Cache: [cyan]{len(data)}[/] records."):
+                if truncate:
+                    db.truncate()
+                db_res = db.insert_multiple(data)
+                return self.verify_db_action(db, expected=len(data), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
+
+        doc_ids = utils.listify(doc_ids)
+        with econsole.status(f":wastebasket:  [red]Removing[/]] [cyan]{len(doc_ids)}[/] records from [dark_olive_green2]{db.name}[/] cache."):
+            db_res = db.remove(doc_ids=doc_ids)
+            return self.verify_db_action(db, expected=len(doc_ids), response=db_res, remove=True, elapsed=round(time.perf_counter() - _start_time, 2))
 
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     async def update_dev_db(
             self,
-            data: str | List[str] | List[dict] = None,
+            data: List[Dict[str, Any]] | Dict[str, Any] | List[int] | int,
             *,
             remove: bool = False,
-        ) -> CombinedResponse | None:
+        ) -> bool:
         """Update Device Database (local cache).
 
         If data is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
         Args:
-            data (Union[str, List[str]], List[dict] optional): serial number or list of serials numbers to add or remove. Defaults to None.
-            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False (add devices).
+            data (List[Dict[str, Any]] | Dict[str, Any] | List[int] | int): Device data to update cache with.  Existing devices are
+                retained and updated with any changes from the new data provided.
+            remove (bool, optional): Set True to remove devices from cache, data should be a list of doc_ids (int).
 
-                    Returns:
-            Response | List[Response] | None: returns Response object(s) from device api call(s) if no data was provided for add/remove.
-                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+        Returns:
+            bool: Returns bool indicating cache update success.
         """
         data = utils.listify(data)
-        _start_time = time.perf_counter()
-
         if not remove:
-            self._add_update_devices(data)
+            return await self._add_update_devices(data)
         else:
-            doc_ids = []
-            if all([isinstance(d, int) for d in data]):
-                doc_ids = data
-            else:
-                for qry in data:
-                    # allow list of dicts with device data, only interested in serial
-                    # TODO simplify and remove once all calls are refactored to send doc_ids (now an attribute of the CentralObject/CacheDevice)
-                    if isinstance(qry, dict):
-                        qry = qry if "data" not in qry else qry["data"]
-                        if "serial" not in qry.keys():
-                            log.error("No Cahce Update: update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}", caption=True)
-                            return
-                        qry = qry["serial"]
-
-                    if not isinstance(qry, str):
-                        log.error(f"No Cahce Update: update_dev_db data should be serial number(s) as str or list of str not {type(qry)}", caption=True)
-                        return
-
-                    if not utils.is_serial(qry):
-                        log.error(f"No Cahce Update: update_dev_db provided str {qry} does not appear to be a serial number.", caption=True)
-                        return
-
-                    doc_ids += [self.DevDB.get((self.Q.serial == qry)).doc_id]
-
-                if len(doc_ids) != len(data):
-                    log.warning(
-                        f"update_dev_db: no match found for {len(data) - len(doc_ids)} of the {len(data)} serials provided. May be normal if cache was stale.",
-                        caption=True, log=True
-                    )
-
-            with console.status(f"Performing dev cache update, deleting {len(data)} records"):
-                db_res = self.DevDB.remove(doc_ids=doc_ids)
-                self.verify_db_action("dev", expected=len(doc_ids), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
-
+            return await self.update_db(self.DevDB, doc_ids=data)
 
     async def refresh_dev_db(
             self,
@@ -2478,76 +2471,68 @@ class Cache:
 
             filtered_resonse = True if any([dev_type, group, site, label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
             if resp.all_ok and not filtered_resonse:
-                _start_time = time.perf_counter()
-                with console.status(f"Performing Cache Update, truncate/re-populate, {len(raw_models)} records"):
-                    self.DevDB.truncate()
-                    cache_resp = self.DevDB.insert_multiple([dev.model_dump() for dev in raw_models])
-                    self.verify_db_action("dev", expected=len(raw_models), response=cache_resp, elapsed=round(time.perf_counter() - _start_time, 2))
                 self.updated.append(self.central.get_all_devices)
                 self.responses.dev = resp
+                _ = await self.update_db(self.DevDB, data=[dev.model_dump() for dev in raw_models], truncate=True)
             else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
-                self._add_update_devices([dev.model_dump() for dev in raw_models])
+                _ = await self._add_update_devices([dev.model_dump() for dev in raw_models])
 
         return resp
 
+    # TODO need add bool or something to prevent combining and added device with current when a device is added as insert is all that is needed
     async def update_inv_db(
             self,
-            data: str | List[str] = None,
+            data: List[Dict[str, Any]] | Dict[str, Any] | List[int] | int,
             *,
             remove: bool = False,
-            dev_type: Literal['ap', 'gw', 'switch', 'all'] = None,
-        ) -> Response | None:
+        ) -> bool:
         """Update Inventory Database (local cache).
 
         Args:
-            data (Union[str, List[str]], optional): serial number or list of serials numbers to add or remove. Defaults to None.
-            remove (bool, optional): Determines if update is to add or remove from cache. Defaults to False.
-            dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device type. None equates to 'all'.  Defaults to None.
-
-        Raises:
-            ValueError: if provided data is of wrong type or does not appear to be a serial number
+            data (List[Dict[str, Any]] | Dict[str, Any] | List[int] | int,): Data to be updated in Inventory, Existing inventory
+                data is retained, new data is added, any changes in existing device is updated.
+            remove (bool, optional): Determines if update is to remove from cache. Defaults to False.
+                data should be a list of doc_ids when removing from cache.
 
         Returns:
-            Response | None: returns Response object from inventory api call if no data was provided for add/remove.
-                If adding/removing (providing serials) returns None.  Logs errors if any occur during db update.
+            bool: Returns bool indicating cache update success.
         """
-        if data:
-            # provide serial or list of serials to remove
-            data = utils.listify(data)
-            if not remove:
-                self._add_update_devices(data, "inv")
-            else:
-                doc_ids = []
-                for qry in data:
-                    # allow list of dicts with inventory data, only interested in serial
-                    if isinstance(qry, dict):
-                        qry = qry if "data" not in qry else qry["data"]
-                        if "serial" not in qry.keys():
-                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                        qry = qry["serial"]
-
-                    if not isinstance(qry, str):
-                        raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
-                    if not utils.is_serial(qry):
-                        raise ValueError("Provided str does not appear to be a serial number.")
-                    else:
-                        match = self.InvDB.get((self.Q.serial == qry))
-                        if match:
-                            doc_ids += [match.doc_id]
-                        else:
-                            log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
-
-                db_res = self.InvDB.remove(doc_ids=doc_ids)
-                if len(db_res) != len(doc_ids):
-                    log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
+        # provide serial or list of serials to remove
+        data = utils.listify(data)
+        if not remove:
+            return await self._add_update_devices(data, "inv")
         else:
-            ...
+            # return await self.update_db(self.InvDB, doc_ids=data)
+            # TODO batch update_dev_inv_cache... needs to be updated to send doc_ids for removal b4 this can be simplified.
+            doc_ids = []
+            for qry in data:
+                # allow list of dicts with inventory data, only interested in serial
+                if isinstance(qry, dict):
+                    qry = qry if "data" not in qry else qry["data"]
+                    if "serial" not in qry.keys():
+                        raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                    qry = qry["serial"]
+
+                if not isinstance(qry, str):
+                    raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
+                if not utils.is_serial(qry):
+                    raise ValueError("Provided str does not appear to be a serial number.")
+                else:
+                    match = self.InvDB.get((self.Q.serial == qry))
+                    if match:
+                        doc_ids += [match.doc_id]
+                    else:
+                        log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
+
+            db_res = self.InvDB.remove(doc_ids=doc_ids)
+
+            if len(db_res) != len(doc_ids):
+                log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
+
 
     async def refresh_inv_db(
             self,
             device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
-            offset: int = 0,
-            limit: int = 1000,
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
 
@@ -2558,8 +2543,6 @@ class Cache:
         Args:
             device_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
-            offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of devices to get Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -2600,11 +2583,9 @@ class Cache:
             self.updated.append(self.central.get_device_inventory)
             self.responses.inv = resp
 
-            self.InvDB.truncate()
-            db_res = self.InvDB.insert_multiple(resp.output)
-            self.verify_db_action("inv", expected=(len(resp)), response=db_res)
+            _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
         else:
-            self._add_update_devices(resp.output, "inv")
+            _ = await self._add_update_devices(resp.output, "inv")
 
         return resp
 
@@ -2615,9 +2596,7 @@ class Cache:
             if not remove:
                 data = models.Sites(data).by_id
                 combined_data = {**self.sites_by_id, **data}
-                self.SiteDB.truncate()
-                update_res = self.SiteDB.insert_multiple(combined_data.values())
-                return self.verify_db_action('site', expected=len(combined_data), response=update_res)
+                return await self.update_db(self.SiteDB, data=combined_data.values(), truncate=True)
             else:
                 doc_ids = []
                 if all([isinstance(s, int) for s in data]):
@@ -2633,8 +2612,7 @@ class Cache:
                                 raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
                             q = list(qry.keys())[0]
                             doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
-                update_res = self.SiteDB.remove(doc_ids=doc_ids)
-                return self.verify_db_action('site', expected=len(data), response=update_res, remove=doc_ids)
+                return await self.update_db(doc_ids=doc_ids)
 
     async def refresh_site_db(self, force: bool = False) -> Response:
         if self.responses.site and not force:
@@ -2643,25 +2621,19 @@ class Cache:
 
         resp = await self.central.get_all_sites()
         if resp.ok:
-            sites = models.Sites(resp.raw["sites"])
-            resp.output = sites.model_dump()
-
             self.responses.site = resp
             self.updated.append(self.central.get_all_sites)  # TODO remove once all checks refactored to look for self.responses.site
 
-            self.SiteDB.truncate()
-            update_res = self.SiteDB.insert_multiple(resp.output)
-            self.verify_db_action('site', expected=len(resp), response=update_res)
+            sites = models.Sites(resp.raw["sites"])
+            resp.output = sites.model_dump()
+
+            _ = await self.update_db(self.SiteDB, data=resp.output, truncate=True)
         return resp
 
     async def update_group_db(self, data: list | dict, remove: bool = False) -> bool:
         data = utils.listify(data)
         if not remove:
-            with econsole.status(f":arrows_clockwise:  Updating [cyan]{len(data)} records in local [dark_olive_green2]Group[/] Cache."):
-                # update_data = {**self.groups_by_name, **{g["name"]: g for g in data}}
-                # self.GroupDB.truncate()
-                db_res = self.GroupDB.insert_multiple(data)
-                self.verify_db_action("group", expected=(len(data)), response=db_res)
+            return await self.update_db(self.GroupDB, data=data, truncate=False)
         else:
             if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
                 doc_ids = data
@@ -2673,9 +2645,7 @@ class Cache:
                     q = list(qry.keys())[0]
                     doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
 
-            with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Group cache."):
-                del_resp = self.GroupDB.remove(doc_ids=doc_ids)
-                return self.verify_db_action('group', expected=len(data), response=del_resp, remove=doc_ids)
+            return await self.update_db(self.GroupDB, doc_ids=doc_ids)
 
 
     async def refresh_group_db(self) -> Response:
@@ -2691,26 +2661,15 @@ class Cache:
             self.responses.group = resp
             self.updated.append(self.central.get_all_groups)
 
-            self.GroupDB.truncate()
-            update_res = self.GroupDB.insert_multiple(resp.output)
-            self.verify_db_action('group', expected=len(groups), response=update_res)
+            _ = await self.update_db(self.GroupDB, data=resp.output, truncate=True)
         return resp
 
     async def update_label_db(self, data: List[Dict[str, Any]] | Dict[str, Any] | List[int], remove: bool = False) -> Response:
         data = utils.listify(data)
         if not remove:
-            update_res = self.LabelDB.insert_multiple(data)
-            return self.verify_db_action('label', expected=len(data), response=update_res)
+            return await self.update_db(self.LabelDB, data=data, truncate=False)
         else:
-            if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
-                doc_ids = data
-            else:
-                log.error(f"DEV NOTE: Unable to update label cache, instructed to remove {len(data)}, unexpected type sent, expected. List[int]", show=True)
-                return False
-
-            with econsole.status(f":wastebasket:  Removing [cyan]{len(doc_ids)}[/] from local Label cache."):
-                del_resp = self.LabelDB.remove(doc_ids=doc_ids)
-                return self.verify_db_action('label', expected=len(data), response=del_resp, remove=doc_ids)
+            return await self.update_db(self.LabelDB, doc_ids=data)
 
     async def refresh_label_db(self) -> bool:
         resp = await self.central.get_labels()
@@ -2719,9 +2678,7 @@ class Cache:
             self.updated.append(self.central.get_labels)
             label_models = models.Labels(resp.output)
             cache_data = label_models.model_dump()
-            self.LabelDB.truncate()
-            update_res = self.LabelDB.insert_multiple(cache_data)
-            self.verify_db_action('label', expected=len(resp), response=update_res)
+            _ = await self.update_db(self.LabelDB, data=cache_data, truncate=True)
         return resp
 
     async def refresh_license_db(self) -> Response:
@@ -2737,12 +2694,10 @@ class Cache:
             resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
             self.updated.append(self.central.get_valid_subscription_names)  # TODO finish removing this method of verifying an update has occured
             self.responses.license = resp
-            self.LicenseDB.truncate()
-            update_res = self.LicenseDB.insert_multiple(resp.output)
-            self.verify_db_action('license', expected=len(resp), response=update_res)
+            _ = await self.update_db(self.LicenseDB, data=resp.output, truncate=True)
         return resp
 
-    async def _renew_teplate_db(self) -> Response:
+    async def refresh_template_db(self) -> Response:
         if self.responses.template is not None:
             log.warning("cache.refresh_template_db called, but template cache has already been fetched this session.  Returning stored response.")
             return self.responses.template
@@ -2753,6 +2708,7 @@ class Cache:
                 return gr_resp
 
         groups = self.groups
+
         resp = await self.central.get_all_templates(groups=groups)
         if resp.ok:
             if len(resp) > 0: # handles initial cache population when none of the groups are template groups
@@ -2761,40 +2717,49 @@ class Cache:
                 resp.output = template_models.model_dump()
                 self.updated.append(self.central.get_all_templates)
                 self.responses.template = resp
-                self.TemplateDB.truncate()
-                update_res = self.TemplateDB.insert_multiple(resp.output)
-                self.verify_db_action('template', expected=len(resp), response=update_res)
+                _ = await self.update_db(self.TemplateDB, data=resp.output, truncate=True)
         return resp
 
 
     async def update_template_db(
             self,
-            add: Dict[str, Any] | List[Dict[str, Any]] = None,
-            remove: CentralObject | List[CentralObject] = None,
-            update: CentralObject | List[CentralObject] = None
+            data: Dict[str, str] | List[Dict[str, str]] = None,
+            doc_ids: int | List[int] = None,
+            add: bool = False,
         ):
-        if not any([add, remove, update]):
-            return await self._renew_teplate_db()
-        else:
-            try:
-                if remove:
-                    remove = utils.listify(remove)
-                    doc_ids = [t.doc_id for t in remove]  # TODO make sure cache object has doc_id attr for easy deletion, simplify other update funcs
-                    db_res = self.TemplateDB.remove(doc_ids=doc_ids)
-                    self.verify_db_action('template', expected=len(remove), response=db_res, remove=doc_ids)
-                elif update:
-                    update = utils.listify(update)
-                    db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]  # FIXME combine existing with updated dict like others, upsert is slow
-                    db_res = utils.unlistify(db_res)
-                    self.verify_db_action('template', expected=len(update), response=db_res)
-                else: # add
-                    add = utils.listify(add)
-                    db_res = self.TemplateDB.insert_multiple(add)
-                    self.verify_db_action('template', expected=len(add), response=db_res)
-            except Exception as e:
-                    log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True, caption=True, log=True)
-                    log.exception(e)
-        return
+        try:
+            if doc_ids:
+                doc_ids = utils.listify(doc_ids)
+                resp = await self.update_db(self.TemplateDB, doc_ids=doc_ids)
+
+            elif not add:
+                cache_data = self.templates_by_name_group
+                data = {f'{t["name"]}_{t["group"]}': t for t in data}
+                update_data = list({**cache_data, **data}.values())
+            else:
+                update_data = data
+
+            resp = await self.update_db(self.TemplateDB, data=update_data, truncate=not add)
+        except Exception as e:
+            log.exception(f"Exception during update of TemplateDB\n{e}")
+
+        return resp
+
+        #         if True:
+        #             ...
+        #         elif update:
+        #             update = utils.listify(update)
+        #             db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]  # FIXME combine existing with updated dict like others, upsert is slow
+        #             db_res = utils.unlistify(db_res)
+        #             self.verify_db_action('template', expected=len(update), response=db_res)
+        #         else: # add
+        #             add = utils.listify(add)
+        #             db_res = self.TemplateDB.insert_multiple(add)
+        #             self.verify_db_action('template', expected=len(add), response=db_res)
+        #     except Exception as e:
+        #             log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True, caption=True, log=True)
+        #             log.exception(e)
+        # return
 
     async def refresh_client_db(
         self,
@@ -2865,30 +2830,25 @@ class Cache:
             if len(resp) > 0:
                 resp.output = utils.listify(resp.output)
                 self.updated.append(self.central.get_clients)
-                with econsole.status(f"Preparing [cyan]{len(resp.output)}[/] clients for cache update") as spin:
+                with econsole.status(f"Preparing [cyan]{len(resp.output)}[/] clients for cache update"):
                     new_clients = models.Clients(resp.output)
                     if "wireless" in [new_clients[0].type, new_clients[-1].type]:
                         self.responses.client = resp
                     data = {**self.cache_clients_by_mac, **new_clients.by_mac}
-                    spin.update(f":arrows_clockwise: Updating [dark_olive_green2]client[/] With [cyan]{len(new_clients)}[/] new clients.  [cyan]{len(data)}[/] total with existing cache")
-                    self.ClientDB.truncate()
-                    db_res = self.ClientDB.insert_multiple(data.values())
-                    self.verify_db_action("client", expected=len(data), response=db_res)
+                _ = await self.update_db(self.ClientDB, data=data.values(), truncate=True)
         return resp
 
 
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
-        self.LogDB.truncate()
-        return self.LogDB.insert_multiple(log_data)
+        return asyncio.run(self.update_db(self.LogDB, data=log_data, truncate=True))
 
     def update_event_db(self, log_data: List[Dict[str, Any]]) -> bool:
-        self.EventDB.truncate()
-        return self.EventDB.insert_multiple(log_data)
+        return asyncio.run(self.update_db(self.EventDB, data=log_data, truncate=True))
 
+    # Currently not used
     def update_hook_config_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
         data = utils.listify(data)
-        self.HookConfigDB.truncate()
-        return self.HookConfigDB.insert_multiple(data)
+        return asyncio.run(self.update_db(self.HookConfigDB, data=data, truncate=True))
 
     async def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:
         data = utils.listify(data)
@@ -2920,13 +2880,12 @@ class Cache:
     # Not tested or used yet, until we have commands that add/del MPSK networks
     async def update_mpsk_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
         if remove:
-            db_res = self.MpskDB.remove(doc_ids=data)
-        else:
-            data = models.MpskNetworks(data)
-            data = data.model_dump()
-            self.MpskDB.truncate()
-            db_res = self.MpskDB.insert_multiple(data)
-        return self.verify_db_action("mpsk", expected=len(data), response=db_res)
+            return await self.update_db(self.MpskDB, doc_ids=data)
+
+        data = models.MpskNetworks(data)
+        data = data.model_dump()
+        return await self.update_db(self.MpskDB, data=data, truncate=True)
+
 
     async def refresh_mpsk_db(self) -> Response:
         resp = await self.central.cloudauth_get_mpsk_networks()
@@ -2937,41 +2896,31 @@ class Cache:
                 _update_data = models.MpskNetworks(resp.raw)
                 _update_data = _update_data.model_dump()
 
-                self.MpskDB.truncate()
-                db_res = self.MpskDB.insert_multiple(_update_data)
-                self.verify_db_action("mpsk", expected=len(_update_data), response=db_res)
+                _ = await self.update_db(self.MpskDB, data=_update_data, truncate=True)
 
         return resp
 
     # Not used or tested... would only need if delete portal or add portal is added
     async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = True) -> bool:
         if remove:
-            with console.status(f"Performing portal cache update, deleting {len(data)} records"):
-                db_res = self.PortalDB.remove(doc_ids=data)
-                ret = self.verify_db_action("portal", expected=len(data), response=db_res)
-            return ret
+            return await self.update_db(self.PortalDB, doc_ids=data)
 
         portal_models = models.Portals(data)
         data_by_id = {p.id: p.model_dump() for p in portal_models}
         update_data = {**self.portals_by_id, **data_by_id}
-        self.PortalDB.truncate()
-        update_res = self.PortalDB.insert_multiple(update_data)
-        return self.verify_db_action("portal", expected=len(update_data), response=update_res)
+        return await self.update_db(self.PortalDB, data=update_data, truncate=True)
 
     async def refresh_portal_db(self) -> Response:
             resp = await self.central.get_portals()
             if not resp.ok:
                 return resp
 
-            portal_model = models.Portals(deepcopy(resp.output))
-            update_data = portal_model.model_dump()
-
-            self.PortalDB.truncate()
-            update_res = self.PortalDB.insert_multiple(update_data)
-            self.verify_db_action("portal", expected=len(update_data), response=update_res)
-
             self.updated.append(self.central.get_portals)
             self.responses.portal = resp
+
+            portal_model = models.Portals(deepcopy(resp.output))
+            update_data = portal_model.model_dump()
+            _ = await self.update_db(self.PortalDB, data=update_data, truncate=True)
 
             return resp
 
@@ -2999,7 +2948,7 @@ class Cache:
         if site_db:
             update_funcs += [self.refresh_site_db]
         if template_db:
-            update_funcs += [self.update_template_db]
+            update_funcs += [self.refresh_template_db]
         if label_db:
             update_funcs += [self.refresh_label_db]
         if license_db:
@@ -3026,7 +2975,7 @@ class Cache:
                     if db_res[-1]:
                         batch_reqs = [
                             self.central.BatchRequest(req)
-                            for req in [self.refresh_inv_db, self.refresh_site_db, self.update_template_db, self.refresh_label_db, self.refresh_license_db]
+                            for req in [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
                         ]
                         db_res = [
                             *db_res,
@@ -3959,7 +3908,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CentralObject | List[CentralObject]:
+    ) -> CachePortal | List[CachePortal] | CacheLabel | List[CacheLabel]:
         cache_details = CacheDetails(self)
         this: CacheAttributes = getattr(cache_details, cache_name)
         db_all = this.db.all()
@@ -4031,7 +3980,7 @@ class Cache:
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
-                    asyncio.run(this.cache_update_func())
+                    self.central.request(this.cache_update_func)
                 _ += 1
             if match:
                 match = [Model(m) for m in match]

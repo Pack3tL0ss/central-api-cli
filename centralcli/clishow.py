@@ -1320,12 +1320,7 @@ def groups(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    central = cli.central
-    if central.get_all_groups not in cli.cache.updated:
-        resp = cli.central.request(cli.cache.update_group_db)
-    else:  # This is only possible if they pass in -U (hidden) to update the cache prior to running the command
-        resp = cli.cache.responses.group
-
+    resp = cli.central.request(cli.cache.refresh_group_db)
     caption = _build_groups_caption(resp.output)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
@@ -1436,7 +1431,7 @@ def templates(
         None, "--group",
         help="Get Templates for Group",
         hidden=False,
-        autocompletion=cli.cache.group_completion,
+        autocompletion=cli.cache.group_completion,  # TODO add group completion specific to template_groups only
         show_default=False,
     ),
     device_type: DevTypes = typer.Option(
@@ -1498,7 +1493,7 @@ def templates(
     else:
         title = "All Templates"
         if central.get_all_templates not in cli.cache.updated:
-            resp = cli.central.request(cli.cache.update_template_db)
+            resp = cli.central.request(cli.cache.refresh_template_db)
         else:
             resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
