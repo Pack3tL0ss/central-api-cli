@@ -2333,7 +2333,7 @@ class Cache:
             cache_by_serial = self.inventory_by_serial
 
         _start_time = time.perf_counter()
-        with console.status(f"Performing dark_olive_green2{db}[/] cache update, adding/updating {len(new_data)} records"):
+        with econsole.status(f":arrows_clockwise:  Updating [cyan]{len(new_data)} records in local [dark_olive_green2]{db}[/] Cache."):
             new_by_serial = {dev["serial"]: dev for dev in new_data}
             updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
             DB.truncate()
