@@ -2504,25 +2504,28 @@ class Cache:
         else:
             # return await self.update_db(self.InvDB, doc_ids=data)
             # TODO batch update_dev_inv_cache... needs to be updated to send doc_ids for removal b4 this can be simplified.
-            doc_ids = []
-            for qry in data:
-                # allow list of dicts with inventory data, only interested in serial
-                if isinstance(qry, dict):
-                    qry = qry if "data" not in qry else qry["data"]
-                    if "serial" not in qry.keys():
-                        raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                    qry = qry["serial"]
+            if all([isinstance(d, int) for d in data]):
+                doc_ids = data
+            else:
+                doc_ids = []
+                for qry in data:
+                    # allow list of dicts with inventory data, only interested in serial
+                    if isinstance(qry, dict):
+                        qry = qry if "data" not in qry else qry["data"]
+                        if "serial" not in qry.keys():
+                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
+                        qry = qry["serial"]
 
-                if not isinstance(qry, str):
-                    raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
-                if not utils.is_serial(qry):
-                    raise ValueError("Provided str does not appear to be a serial number.")
-                else:
-                    match = self.InvDB.get((self.Q.serial == qry))
-                    if match:
-                        doc_ids += [match.doc_id]
+                    if not isinstance(qry, str):
+                        raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
+                    if not utils.is_serial(qry):
+                        raise ValueError("Provided str does not appear to be a serial number.")
                     else:
-                        log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
+                        match = self.InvDB.get((self.Q.serial == qry))
+                        if match:
+                            doc_ids += [match.doc_id]
+                        else:
+                            log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
 
             db_res = self.InvDB.remove(doc_ids=doc_ids)
 

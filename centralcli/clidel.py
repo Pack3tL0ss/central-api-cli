@@ -227,8 +227,9 @@ def template(
 def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if all(r.ok for r in batch_resp) else False
+    inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
+    cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        cache_update_reqs = []
         if cache_devs:
             if all_ok:
                 cache_update_reqs += [br(cli.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
@@ -236,23 +237,21 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
                 cache_update_reqs += [br(cli.cache.refresh_dev_db)]
 
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
-        if cache_devs or inv_del_serials and not ui_only:
+        if inventory_devs and not ui_only:
             if all_ok:
                 cache_update_reqs += [
                     br(
                         cli.cache.update_inv_db,
-                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
+                        [d.doc_id for d in inventory_devs],
                         remove=True
                     )
                 ]
             else:
                 cache_update_reqs += [br(cli.cache.refresh_inv_db)]
 
-        # Update cache remove deleted items
-        # TODO failure detection
+        # Update cache remove deleted items by doc_id
         if cache_update_reqs:
-            cache_res = cli.central.batch_request(cache_update_reqs)
-            log.debug(f'cache update response: {cache_res}')
+            _ = cli.central.batch_request(cache_update_reqs)
 
 
 # TODO also coppied from clibatch need clishared or put in clicommon
@@ -302,6 +301,7 @@ def device(
     cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in devices]
     not_in_inventory = [d for d, c in zip(devices, cache_devs) if c is None]
     cache_devs = [c for c in cache_devs if c]
+    # inventory_devs = [dev for dev in cache_devs if dev.db.name == "inventory"]
     serials_in = [d.serial for d in cache_devs]
     inv_del_serials = [s for s in serials_in if s in cli.cache.inventory_by_serial]
 
@@ -309,7 +309,7 @@ def device(
     aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
     # TODO profile these (1 loop vs multiple list comprehensions)
     for dev in cache_devs:
-        if not dev.status:
+        if dev.db.name == "inventory":
             continue
         elif dev.generic_type == "ap":
             aps += [dev]

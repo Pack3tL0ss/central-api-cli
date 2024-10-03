@@ -6,7 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Dict, List, Tuple, Literal, Any
+from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
 from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
@@ -43,7 +43,9 @@ from centralcli.models import Groups
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
-from centralcli.cache import CentralObject, CacheDevice  # NoQA
+
+if TYPE_CHECKING:
+    from .cache import CentralObject, CacheDevice, CacheInvDevice
 
 iden = IdenMetaVars()
 tty = utils.tty
@@ -1054,6 +1056,7 @@ def show_archive_results(res: Response) -> None:
 def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
     br = BatchRequest
     all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
+    inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
     cache_update_reqs = []
     with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
         if cache_devs and all_ok:
@@ -1067,7 +1070,7 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
                 cache_update_reqs += [
                     br(
                         cli.cache.update_inv_db,
-                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
+                        [d.doc_id for d in inventory_devs],
                         remove=True
                     )
                 ]
@@ -1141,15 +1144,13 @@ def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_on
 
     # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
     # to avoid duplication ... # FIXME update clidel with corrections made below
-    cache_devs: List[CacheDevice | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
+    cache_devs: List[CacheDevice | CacheInvDevice | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
     if len(serials_in) != len(cache_devs):
         log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
 
     not_in_inventory: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
     inv_del_serials: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is not None]
     cache_devs: List[CacheDevice] = [c for c in cache_devs if c]
-    # _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
-    # inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
 
     # Devices in monitoring (have a status), If only in inventory they lack status
     aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
