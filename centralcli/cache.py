@@ -836,16 +836,17 @@ class Cache:
         return set([d["type"] for d in db.all()])
 
     @property
-    def devices_by_serial(self) -> dict:
-        return {d["serial"]: dict(d) for d in self.devices}
+    def devices_by_serial(self) -> Dict[str, Document]:
+        return {d["serial"]: d for d in self.devices}
 
     @property
     def inventory(self) -> list:
         return self.InvDB.all()
 
+    # TODO return dict of Cache Objects need to check impact, but likely easier to work with
     @property
-    def inventory_by_serial(self) -> dict:
-        return {d["serial"]: dict(d) for d in self.inventory}
+    def inventory_by_serial(self) -> Dict[str, Document]:
+        return {d["serial"]: d for d in self.inventory}
 
     @property
     def sites(self) -> list:
