@@ -821,7 +821,7 @@ def inventory(
 
 # TODO break into seperate command group if we can still all show subscription without an arg to default to details
 @app.command()
-def subscription(
+def subscriptions(
     what: SubscriptionArgs = typer.Argument("details"),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
     service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
@@ -1212,11 +1212,10 @@ def upgrade(
     )
 
 
-@app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
+@app.command("cache", hidden=True)
 def cache_(
     args: List[CacheArgs] = typer.Argument(None, help="[cyan]all[/] Shows data in [italic bright_green]the most pertinent[/] tables", show_default=False),
     all: bool = typer.Option(False, "--all", help="This is the Super [cyan]all[/] option, shows data in [bright_green italic]every[/] table.", show_choices=False),
-    headers: bool = typer.Option(False, "-h", help="Show only the key field names / headers, not the cache data.", show_choices=False),
     no_page: bool = typer.Option(False, "--no-page", help="For [cyan]all[/] | [cyan]--all[/] options, you hit Enter to see the next table.  This option disables that behavior.", show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -1231,9 +1230,18 @@ def cache_(
     account: str = cli.options.account,
     update_cache = cli.options.update_cache,
 ):
-    def get_fields(data: List[Dict[str, Any]], name: str) -> List[str]:
-        data = data[0].keys()
-        return f">> [bright_green]{name} fields[/]\n{utils.color(list(data), 'cyan')}".splitlines()
+    """Show contents/size/record-count in Local Cache.
+
+    By default (or with [cyan]all[/] as argument) the command shows the data in the most frequently used tables:
+        devices, inventory, sites, groups, templates, labels, licenses, clients
+        Use [cyan]--all[/] flag to see data for all tables.
+
+    Use [cyan]tables[/] as argument to see summary and headers for all tables.
+    """
+    def get_fields(data: List[Dict[str, Any]], name: str = None) -> List[str]:
+        data = [] if not data else data[0].keys()
+        pfx = ">>" if not name else f">> {name}"
+        return f"[bright_green]{pfx} fields[/]:\n{utils.color(list(data), 'cyan')}".splitlines()
 
     def sort_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         # make device order from cache match device order from other show device commands
@@ -1247,24 +1255,26 @@ def cache_(
         length = len(cli.cache) if all else len(cli.cache._tables)
         for idx, t in enumerate(tables, start=1):
             data = t.all()
-            if headers:
-                data = get_fields(data, t.name)
             if t.name == "devices":
                 data = sort_devices(data)
 
-            cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.' if not headers else None, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
-            if not no_page and cli.econsole.is_terminal and not idx == length and not headers:
+            cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            if not no_page and cli.econsole.is_terminal and not idx == length:
                 cli.pause()
+
+    elif "tables" in args:
+        tables = cli.cache.all_tables
+        data = [f"[dark_olive_green2]{t.name}[/]: records: [cyan]{len(t)}[/]\n    {' '.join(get_fields(t.all()))}" for t in tables]
+        cli.display_results(data=data, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+
     else:
         for idx, arg in enumerate(args, start=1):
             cache_out: List[Document] = getattr(cli.cache, arg)
             arg = arg if not hasattr(arg, "value") else arg.value
-            if headers:
-                cache_out = get_fields(cache_out, arg)
-            elif arg == "devices":
+            if arg == "devices":
                 cache_out = sort_devices(cache_out)
 
-            caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]" if not headers else None
+            caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
             cli.display_results(
                 data=cache_out,
                 tablefmt=tablefmt,
