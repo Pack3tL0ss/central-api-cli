@@ -702,6 +702,45 @@ def disable(
         resp = cli.central.request(cli.central.disable_auto_subscribe, services=services)
         cli.display_results(resp, tablefmt="action")
 
+@app.command(hidden=True)
+def renew_license(
+    device: List[str] = cli.arguments.devices,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Renew-Licenses on devices.
+
+    :warning: Device may go offline briefly.
+    This command will unnassign then reassign the subscription currently applied to the device,
+
+    [italic]This is useful when the subscription currently applied is approaching expiration, and other subscription
+    keys exist with expiration further out.  When reassigned central will use the subscription with the longest
+    duration remianing.[/]
+    """
+    def normalize_sub(subscription: str) -> str:
+        return subscription.lower().replace(" ", "_").replace("/", "_")
+
+    raise NotImplementedError()
+    from centralcli.cache import CacheInvDevice
+    devices = [cli.cache.get_dev_identifier(d) for d in device]
+    inv_data = [CacheInvDevice(cli.cache.inventory_by_serial[s]) for s in [s.serial for s in devices]]
+    calls_by_sub = {}
+    dev_types = []
+    for idx, dev in enumerate(set(inv_data)):
+        if not dev.services:
+            skipped = inv_data.pop(idx)
+            cli.econsole.print(f":warning: Skipping {skipped} as it does not have any subscriptions assigned.  Use [cyan]cencli assign license <device(s)>[/] to assign licenses.")
+            continue
+        dev_types += ["switch" if dev.type in ["cx", "sw"] else dev.type]
+        for sub in dev.services:
+            calls_by_sub = utils.update_dict(calls_by_sub, normalize_sub(sub), dev.serial)
+    # subs_resp = cli.central.request(cli.central.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
+    # subs_by_name = {f'{normalize_sub(sub["license_type"])}_{sub["subscription_key"]}': sub["end_date"] / 1000 for sub in subs_resp.output if sub["available"] and sub["status"] != "EXPIRED"}
+    # Gave up on this for now, the names from the inventory don't map well with the names from get_subscriptions.  Would need to build a map
+    # i.e. Foundation-90/70xx vs foundation_70xx
+
 
 @app.command(short_help="convert j2 templates")
 def convert(
