@@ -349,6 +349,7 @@ class CacheArgs(str, Enum):
     hook_active = "hook_active"
     mpsk = "mpsk"
     portals = "portals"
+    tables = "tables"
 
 
 class KickArgs(str, Enum):
@@ -503,7 +504,7 @@ class ArgToWhat:
         self.routes = self.route = "routes"
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
-        self.subscription = self.subscriptions = "subscription"
+        self.subscriptions = self.subscription = "subscriptions"
         self.portal = self.portals = "portals"
         self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
