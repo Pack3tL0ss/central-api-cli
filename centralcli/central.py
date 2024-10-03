@@ -3821,7 +3821,7 @@ class CentralApi(Session):
         if not resp and resp.status == 500:
             match_str = "group move has been initiated, please check audit trail for details"
             if match_str in resp.output.get("description", ""):
-                resp.ok = True
+                resp._ok = True
 
         return resp
 
