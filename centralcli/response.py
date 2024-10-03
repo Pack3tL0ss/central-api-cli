@@ -382,8 +382,8 @@ class Response:
             if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
                 r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
 
-        r = r.replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:")
-        r = r.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]")
+        r = r.replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:").replace("failed_devices", "[red]failed_devices[/]")
+        r = r.replace("SUCCESS", f"[{fg}]SUCCESS[/{fg}]").replace("FAILED", "[red]FAILED[/red]").replace("INVALID", "[red]INVALID[/]").replace("succeeded_devices", "[bright_green]succeeded_devices[/]")
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
