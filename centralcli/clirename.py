@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import typer
 from rich import print
+from typing import TYPE_CHECKING
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -19,15 +20,17 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars # noqa
+from centralcli.constants import iden_meta
 
-iden = IdenMetaVars()
+if TYPE_CHECKING:
+    from centralcli.cache import CacheSite, CacheDevice, CacheGroup
+
 app = typer.Typer()
 
 
 @app.command()
 def site(
-    site: str = typer.Argument(..., metavar=iden.site, autocompletion=cli.cache.site_completion, show_default=False,),
+    site: str = typer.Argument(..., metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False,),
     new_name: str = typer.Argument(..., show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -37,17 +40,16 @@ def site(
     """
     :office: [bright_green]Rename A Site.[/] :office:
     """
-
-    site = cli.cache.get_site_identifier(site)
+    site: CacheSite = cli.cache.get_site_identifier(site)
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
-    if yes or typer.confirm("proceed?", abort=True):
+    if cli.confirm(yes):
         print()
         cliupdate.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, default=default, account=account)
 
 
 @app.command()
 def ap(
-    ap: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    ap: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     new_name: str = typer.Argument(..., show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -57,17 +59,17 @@ def ap(
     """
     [bright_green]Rename an Access Point[/]
     """
-    ap = cli.cache.get_dev_identifier(ap, dev_type="ap")
+    ap: CacheDevice = cli.cache.get_dev_identifier(ap, dev_type="ap")
     print(f"Please Confirm: rename ap [bright_red]{ap.name}[/] -> [bright_green]{new_name}[/]")
     print("    [italic]Will result in 2 API calls[/italic]\n")
-    if yes or typer.confirm("Proceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_ap_settings, ap.serial, new_name)
         cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def group(
-    group: str = typer.Argument(..., metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = typer.Argument(..., metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False,),
     new_name: str = typer.Argument(..., show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -80,10 +82,10 @@ def group(
     :pile_of_poo:[red]WARNING: the API endpoint has limited scope where this command will work.[/]:pile_of_poo:
     :pile_of_poo:[red]Clone (or build a new group) are the only options if it does not work.[/]:pile_of_poo:
     """
-    group = cli.cache.get_group_identifier(group)
+    group: CacheGroup = cli.cache.get_group_identifier(group)
 
     print(f"Please Confirm: rename group [red]{group.name}[/red] -> [bright_green]{new_name}[/bright_green]")
-    if yes or typer.confirm("proceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_group_name, group.name, new_name)
 
         # API-FLAW Doesn't actually appear to be valid for any group type
