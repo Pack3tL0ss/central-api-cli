@@ -50,7 +50,7 @@ from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel
+    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
     from tinydb.table import Document
 
 
@@ -1759,10 +1759,10 @@ def config_(
             cli.exit(code=0)
         return _get_cencli_config()
 
-    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
+    group_dev: CacheGroup | CacheDevice = cli.cache.get_identifier(group_dev, ["group", "dev"],)
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
-        _group = cli.cache.get_group_identifier(group_dev.group)
-        if _group.data["template group"]["Wired"]:
+        _group: CacheGroup = cli.cache.get_group_identifier(group_dev.group)
+        if _group.wired_tg:
             return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
         else:
             return run(group_dev.serial, outfile=outfile, pager=pager)
