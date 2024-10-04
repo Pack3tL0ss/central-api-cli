@@ -65,6 +65,8 @@ def ap(
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_ap_settings, ap.serial, new_name)
         cli.display_results(resp, tablefmt="action")
+        if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
+            cli.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
 
 
 @app.command()
