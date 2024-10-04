@@ -3372,7 +3372,7 @@ class CentralApi(Session):
             'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
-            resp = await self._request(self.get_ap_settings, serial)
+            resp: Response = await self._request(self.get_ap_settings, serial)
             if not resp:
                 log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
                 return resp
