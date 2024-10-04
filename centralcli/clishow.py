@@ -251,12 +251,11 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
 
 def _get_details_for_specific_devices(
         devices: List[CentralObject],
-        dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+        dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
         do_table: bool = False
     ) -> Tuple[Response | List[Response], str]:
         caption = None
-        dev_type = None if not dev_type else lib_to_api(dev_type)  # convert show command "what" to Generic lib dev_type ap, gw, switch
 
         # Build requests
         br = cli.central.BatchRequest
