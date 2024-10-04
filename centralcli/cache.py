@@ -3165,7 +3165,7 @@ class Cache:
             return match
 
         if not match:
-            console.print(f":warning:  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
+            econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
             raise typer.Exit(1)
 
     def get_dev_identifier(
@@ -3204,6 +3204,13 @@ class Cache:
             CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
         """
         retry = False if completion else retry
+        all_match = None
+        cache_updated = False
+        if dev_type:
+            dev_type = utils.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
+
         Model = CacheDevice
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -3255,11 +3262,20 @@ class Cache:
                             self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
                         )
 
+            if match and dev_type:
+                all_match: List[Document] = match.copy()
+                match = [d for d in all_match if d.get("type", "") in dev_type]
+
+
             # no match found initiate cache update
-            if retry and not match and self.central.get_all_devices not in self.updated:
-                econsole.print(f"[bright_red]No Match found[/] for [cyan]{query_str}[/].")
+            if retry and not match and not cache_updated:
+                dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/]{dev_type_sfx}.")
                 if FUZZ:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
+                    if dev_type:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if d["type"] in dev_type], limit=1)[0]
+                    else:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.DevDB.search(self.Q.name == fuzz_match)
@@ -3271,20 +3287,12 @@ class Cache:
                     else:
                         _word = " "
                     econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
-                    self.check_fresh(refresh=True, **kwargs)
+                    self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
+                    cache_updated = True
 
             if match:
                 match = [Model(dev) for dev in match]
                 break
-
-        all_match = None
-        if dev_type:
-            all_match = match.copy()
-            dev_type = utils.listify(dev_type)
-            if "switch" in dev_type:
-                dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
-
-            match = [d for d in all_match if d.type in dev_type]
 
         # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
         # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
@@ -3310,7 +3318,7 @@ class Cache:
         elif retry:
             log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
-                all_match_msg = f"{', '.join(m.name for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
+                all_match_msg = f"{', '.join(m.get('name', m.get('serial')) for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
                 _dev_type_str = ", ".join(dev_type)
                 log.error(
                     f"The Following devices matched {all_match_msg} excluded as device type != [{_dev_type_str}]",
@@ -3397,7 +3405,7 @@ class Cache:
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and self.central.get_all_sites not in self.updated:
-                econsole.print(f"[bright_red]No Match found[/] for [cyan]{query_str}[/].")
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3477,7 +3485,7 @@ class Cache:
                 )
 
             if not match and retry and self.central.get_all_groups not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
@@ -3566,7 +3574,7 @@ class Cache:
             # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
             # fuzzy match
             if not match and retry and self.central.get_labels not in self.updated:
-                econsole.print(f"[bright_red]No Match found[/] [cyan]{query_str}[/].")
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
@@ -3645,15 +3653,15 @@ class Cache:
             if not match:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
-            if retry and not match and self.central.get_all_templates not in self.updated:
-                econsole.print(f"[bright_red]No Match found for[/] [cyan]{query_str}[/].")
+            if retry and not match and self.responses.template is None:
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.TemplateDB.search(self.Q.name == fuzz_match)
                 if not match:
-                    typer.secho(f"No Match Found for {query_str}, Updating template Cache", fg="red")
+                    econsole.print(":arrows_clockwise: Updating template Cache")
                     self.check_fresh(refresh=True, template_db=True)
             if match:
                 match = [CacheTemplate(tmplt) for tmplt in match]
@@ -3742,16 +3750,15 @@ class Cache:
 
             # no match found try fuzzy match (typos) and initiate cache update
             if retry and not match and self.responses.client is not None:
-                econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.clients:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
                 if not match:  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
-                    print(":arrows_clockwise: Updating [cyan]client[/] Cache")
+                    econsole.print(":arrows_clockwise: Updating [cyan]client[/] Cache")
                     self.central.request(self.refresh_client_db, "wireless")
-                    # asyncio.run(self.refresh_client_db("wireless"))
 
             if match:
                 match = [CacheClient(c) for c in match]
@@ -3789,7 +3796,7 @@ class Cache:
                 return match[-1]["long_id"]
 
         except ValueError as e:
-            econsole.print(f"\n:warning:  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
+            econsole.print(f"\n[dark_orage3]:warning:[/]  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
             raise typer.Exit(1)
 
     def get_event_log_identifier(self, query: str) -> dict:
@@ -3867,7 +3874,7 @@ class Cache:
 
             if not match and retry and self.responses.mpsk is None:
                 if FUZZ:
-                    econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
+                    econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                     fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
@@ -3894,8 +3901,8 @@ class Cache:
         elif retry:
             log.error(f"Central API CLI Cache unable to gather MPSK data from provided identifier {query_str}", show=True)
             valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk])
-            print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
-            print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
+            econsole.print(f"[dark_orage3]:warning:[/]  [cyan]{query_str}[/] appears to be invalid")
+            econsole.print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
             raise typer.Exit(1)
         else:
             if not completion:
@@ -3931,6 +3938,7 @@ class Cache:
             "portal": CachePortal,
             "label": CacheLabel
         }
+        cache_updated = False
         Model = name_to_model.get(cache_name, CentralObject)
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
@@ -3973,8 +3981,8 @@ class Cache:
                     )
                 )
 
-            if not match and retry and this.already_updated_func not in self.updated:
-                econsole.print(f":warning:  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
+            if not match and retry and not cache_updated:
+                econsole.print(f"[dark_orage3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ:
                     fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
                     if fuzz_resp:
@@ -3985,6 +3993,7 @@ class Cache:
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
                     self.central.request(this.cache_update_func)
+                    cache_updated = True
                 _ += 1
             if match:
                 match = [Model(m) for m in match]
@@ -4000,15 +4009,15 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            log.error(f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=True)
             valid = "\n".join([f'[cyan]{m["name"]}[/]' for m in db_all])
-            print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
-            print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
+            econsole.print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
+            econsole.print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
             raise typer.Exit(1)
         else:
             if not completion:
                 log.error(
-                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                    f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
                 )
 
 class CacheAttributes:
