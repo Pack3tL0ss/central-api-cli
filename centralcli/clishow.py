@@ -346,10 +346,10 @@ def show_devices(
     if devices:  # cencli show devices <device iden>
         verbosity = verbosity or 99  # specific device implies verbose output vertically
         default_tablefmt = "yaml"
-        resp, caption = _get_details_for_specific_devices(devices, include_inventory=include_inventory, do_table=do_table)
+        resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
-    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
+    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
