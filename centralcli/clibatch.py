@@ -678,6 +678,7 @@ def validate_license_type(data: List[Dict[str, Any]]):
     if not sub_key:
         return data, warn
 
+    already_warned = []
     for d in data:
         if d.get(sub_key):
             for idx in range(2):
@@ -688,13 +689,15 @@ def validate_license_type(data: List[Dict[str, Any]]):
                     break
                 except ValueError:
                     if idx == 0 and cli.cache.responses.license is None:
-                        print(f'[bright_red]:warning:[/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
+                        cli.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["license"]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
                         resp = cli.central.request(cli.cache.refresh_license_db)
                         if not resp:
                             cli.display_results(resp, exit_on_fail=True)
                     else:
-                        print(f"[bright_red]:warning:[/] [cyan]{d['license']}[/] does not appear to be a valid license type.")
                         warn = True
+                        if d['license'] not in already_warned:
+                            already_warned += [d['license']]
+                            cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d['license']}[/] does not appear to be a valid license type.")
     return data, warn
 
 
