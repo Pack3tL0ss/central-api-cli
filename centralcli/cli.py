@@ -631,7 +631,7 @@ def unarchive(
     else:
         _dev_msg = '\n    '.join(serials)
         _msg = f"{_msg}\n    {_dev_msg}\n"
-    print(_msg)
+    cli.console.print(_msg, emoji=False)
 
     resp = cli.central.request(cli.central.unarchive_devices, serials)
     cli.display_results(resp, tablefmt="action")
