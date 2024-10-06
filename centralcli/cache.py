@@ -1456,20 +1456,13 @@ class Cache:
             Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # if not args:
-        #     _last = ctx.command_path.split()[-1]
-        #     if _last in ctx.params:
-        #         args = ctx.params[_last]
-        #     else:
-        #         args = [k for k, v in ctx.params.items() if v and k not in ["account", "debug"]]
-
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
         dev_types = ["ap"]
-        match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        match: List[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
 
         # TODO this completion complete using the type of iden they start, and omits any idens already on the command line regardless of iden type
         # so they could put serial then auto-complete name and the name of the device whos serial is already on the cli would not appear.
@@ -1549,7 +1542,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
+        match: List[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
 
         # TODO fancy map to ensure dev.name, dev.mac, dev.serial, dev.ip are all not in args
         out = []
