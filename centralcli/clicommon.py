@@ -62,7 +62,7 @@ class MoveData:
         ) -> None:
         self._move_type = move_type
         self.cache_devs = cache_devs
-        self.reqs: List[BatchRequest] = mv_reqs or []
+        self.reqs: Tuple[BatchRequest] = mv_reqs or []
         self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type, retain_config=retain_config)
 
     def __bool__(self) -> bool:
@@ -918,8 +918,7 @@ class CLICommon:
         def serials_by_site_id(self) -> Dict[str, List[str]]:
             out = {}
             for req in self.move.reqs:
-                site_id = req.kwargs["site_id"]
-                serials = req.kwargs["serials"]
+                site_id, serials = (req.kwargs["site_id"], req.kwargs["serials"].copy())
                 out = utils.update_dict(out, key=site_id, value=serials)
 
             return out
@@ -958,19 +957,19 @@ class CLICommon:
             out = {}
             for req in [*self.move.reqs, *self.move_keep_config.reqs]:
                 group = req.kwargs["group"]
-                serials = req.kwargs["serials"]
+                serials = req.kwargs["serials"].copy()
                 out = utils.update_dict(out, key=group, value=serials)
 
             return out
 
 
-    def _check_group(self, cache_devs: List[CentralObject], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
+    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
         _skip = False
         for cache_dev, mv_data in zip(cache_devs, import_data):
-            has_connected = True if cache_dev.get("status") else False
+            has_connected = True if cache_dev.db.name == "devices" else False
             for idx in range(0, 2):
                 to_group = mv_data.get("group")
                 if cx_retain_force is not None:
@@ -992,7 +991,7 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.rich_help_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
                             _skip = True
 
                     # Determine if device is in inventory only determines use of pre-provision group vs move to group
@@ -1000,7 +999,7 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.rich_help_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                             err_console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
                             err_console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
@@ -1031,11 +1030,11 @@ class CLICommon:
         )
 
 
-    def _check_site(self, cache_devs: List[CentralObject], import_data: dict) -> SiteMoves:
+    def _check_site(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict) -> SiteMoves:
         site_rm_reqs, site_rm_msgs = {}, {}
         site_mv_reqs, site_mv_msgs = {}, {}
         for cache_dev, mv_data in zip(cache_devs, import_data):
-            has_connected = True if cache_dev.get("status") else False
+            has_connected = True if cache_dev.db.name == "devices" else False
             for idx in range(0, 2):
                 to_site = mv_data.get("site")
                 now_site = cache_dev.get("site")
@@ -1047,12 +1046,12 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         elif now_site == to_site.name:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
                     elif not has_connected:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
                     elif idx != 0:
                         site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
@@ -1060,7 +1059,7 @@ class CLICommon:
                     if now_site:
                         now_site = self.cache.get_site_identifier(now_site)
                         if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
-                            clean_console.print(f'{cache_dev.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                            clean_console.print(f'{cache_dev.summary_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
                             site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                             site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
 
@@ -1068,13 +1067,13 @@ class CLICommon:
         if site_rm_reqs:
             for k, v in site_rm_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                rm_reqs += [BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         mv_reqs = []
         if site_mv_reqs:
             for k, v in site_mv_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                mv_reqs += [BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         return self.SiteMoves(
             cache_devs=cache_devs,
@@ -1126,11 +1125,11 @@ class CLICommon:
         }
         cache_by_serial = {k: self.cache.devices_by_serial.get(k, self.cache.inventory_by_serial[k]) for k in [*self.cache.inventory_by_serial, *self.cache.devices_by_serial] if k in serials}
         for r, (move_type, name, serials) in zip(mv_resp, [(move_type, name, serials) for move_type, v in moves_by_type.items() for name, serials in v.items()]):
-            if move_type == "site":
-                site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
-                cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
-            if move_type == "group":  # All or none here as far as the rresponse.
-                if r.ok:
+            if r.ok:
+                if move_type == "site":
+                    site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
+                    cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
+                if move_type == "group":  # All or none here as far as the rresponse.
                     cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
 
         self.central.request(
@@ -1189,7 +1188,17 @@ class CLICommon:
             err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
 
         # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
-        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True) for d in dev_idens]
+        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True, silent=True, exit_on_fail=False) for d in dev_idens]
+        not_found_devs: List[str] = [s for s, c in zip(dev_idens, cache_devs) if c is None]
+        cache_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+
+        if not_found_devs:
+            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
+            self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            self.econsole.print("[grey42 italic]They will be skipped[/]\n")
+            if not cache_devs:
+                self.exit("No devices found")
+
 
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
         if do_site:
@@ -1212,10 +1221,10 @@ class CLICommon:
         if not _tot_req:
             self.exit("[italic dark_olive_green2]Nothing to do[/]", code=0)
         if _tot_req > 1:
-            confirm_msgs += [f'\n{_tot_req} API calls will be performed.']
+            confirm_msgs += [f"\n[italic dark_olive_green2]Will result in {_tot_req} additional API Calls."]
 
         clean_console.print("\n".join(confirm_msgs))
-        if yes or typer.confirm("\nProceed?", abort=True):
+        if self.confirm(yes):
             site_rm_res = []
             if site_rm_reqs:
                 site_rm_res = self.central.batch_request(site_rm_reqs)
