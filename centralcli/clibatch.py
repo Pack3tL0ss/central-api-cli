@@ -1457,6 +1457,9 @@ def move(
     Use -G|--group, -S|--site, -L|--label flags to only process specified moves, and ignore
     others even if found in the import.
 
+    If a device has not connected to Central, and has a group assoicated with it in the import
+    data. It will be pre-provisioned to the group in Central.
+
     i.e. if import includes a definition for group, site, and label, and you only want to
     process the site move. Use the -S|--site flag, to ignore the other columns.
     """
