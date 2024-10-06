@@ -48,6 +48,9 @@ class ToBool:
         elif value.lower() in ["true", "yes", "1"]:
             return True
 
+    def __bool__(self) -> bool:
+        return self.value
+
     @property
     def ok(self) -> bool:
         if isinstance(self._original, bool):
