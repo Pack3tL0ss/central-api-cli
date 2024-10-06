@@ -68,7 +68,7 @@ class Inventory(RootModel):
                 return self._normalize_mac(value)
             if key in ["device_type", "type"]:
                 return self._inv_type(value, model=device.get("model"))
-            if key == "subscription_expires":
+            if key == "subscription_expires" and value:
                 return value / 1000 # convert ts in ms to ts in seconds
             return value
 
