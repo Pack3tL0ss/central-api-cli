@@ -272,7 +272,7 @@ def show_archive_results(res: Response) -> None:
 # TODO simplify do not allow batch delete via this command, only via batch delete
 @app.command(short_help="Delete devices.")
 def device(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
+    devices: List[str] = cli.arguments.devices,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  App assignment and subscriptions remain intact."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=True),
     yes: bool = cli.options.yes,
@@ -280,7 +280,7 @@ def device(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Delete devices.
+    """Delete device(s).
 
     Unassigns any subscriptions and removes the devices assignment with the Aruba Central app in GreenLake.
     Which makes it possible to add it to a different GreenLake WorkSpace.
@@ -292,195 +292,10 @@ def device(
     [cyan]cencli unassign license <LICENSE> <DEVICES>[/] can also be used to unassign a specific license
     from a device(s), (device will remain associated with central App in GreenLake).
     """
-    # TODO Literally copy/paste from clibatch.py (slightly modified)... maybe move some things to clishared or clicommon
-    # clibatch is more current logic.
-
-    br = cli.central.BatchRequest
-    console = Console(emoji=False)
-
-    cache_devs = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in devices]
-    not_in_inventory = [d for d, c in zip(devices, cache_devs) if c is None]
-    cache_devs = [c for c in cache_devs if c]
-    # inventory_devs = [dev for dev in cache_devs if dev.db.name == "inventory"]
-    serials_in = [d.serial for d in cache_devs]
-    inv_del_serials = [s for s in serials_in if s in cli.cache.inventory_by_serial]
-
-    # Devices in monitoring (have a status)
-    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    # TODO profile these (1 loop vs multiple list comprehensions)
-    for dev in cache_devs:
-        if dev.db.name == "inventory":
-            continue
-        elif dev.generic_type == "ap":
-            aps += [dev]
-        elif dev.generic_type == "gw":
-            gws += [dev]
-        elif dev.generic_type == "switch":
-            if dev.swack_id is None:
-                switches += [dev]
-            elif dev.swack_id in _stack_ids:
-                continue
-            else:
-                _stack_ids += [dev.swack_id]
-                stacks += [dev]
-        else:
-            raise DevException(f'Unexpected device type {dev.generic_type}')
-
-    # aps = [dev for dev in cache_devs if dev.generic_type == "ap" and dev.status]
-    # switches = [dev for dev in cache_devs if dev.generic_type == "switch" and dev.status]  # FIXME Need to use stack_id for stacks
-    # gws = [dev for dev in cache_devs if dev.generic_type == "gw" and dev.status]
-    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
-
-    # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
-    # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
-    arch_reqs = [] if ui_only or not inv_del_serials else [
-        br(cli.central.archive_devices, inv_del_serials),
-        br(cli.central.unarchive_devices, inv_del_serials),
-    ]
-
-    # cop only delete devices from GreenLake inventory
-    cop_del_reqs = [] if not inv_del_serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, inv_del_serials)
-    ]
-
-    # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-    mon_del_reqs, delayed_mon_del_reqs = [], []
-    for dev_type, _devs in zip(["ap", "switch", "stack", "gateway"], [aps, switches, stacks, gws]):
-        if _devs:
-            down_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "down"]
-            up_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "up"]
-            if [*down_now, *up_now]:
-                func = getattr(cli.central, f"delete_{dev_type}")
-                if down_now:
-                    mon_del_reqs += [br(func, s) for s in down_now]
-                if up_now:
-                    delayed_mon_del_reqs += [br(func, s) for s in up_now]
-
-    # warn about devices that were not found
-    if not_in_inventory:
-        if len(not_in_inventory) == 1:
-            console.print(f"\n[dark_orange]Warning[/]: Skipping [cyan]{not_in_inventory[0]}[/] as it was not found in inventory.")
-        else:
-            console.print("\n[dark_orange]Warning[/]: Skipping the following as they were not found in inventory.")
-            _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
-        print("")
-
-    # None of the provided devices were found in cache or inventory
-    if not [*arch_reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
-        print("Everything is as it should be, nothing to do.")
-        raise typer.Exit(0)
-
-    # construnct confirmation msg
-    _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
-    if len(cache_devs) > 1:
-        _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-
-    if ui_only:
-        _total_reqs = len(mon_del_reqs)
-    elif cop_inv_only:
-        _total_reqs = len(cop_del_reqs)
-    else:
-        _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
-
-    if ui_only:
-        if delayed_mon_del_reqs:
-            print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
-            delayed_mon_del_reqs = []
-        if not mon_del_reqs:
-            cli.exit("No devices found to remove from UI... Exiting")
-        else:
-            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
-
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
-
-    # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
-    console.print(_msg)
-    batch_resp = []
-    if cli.confirm(yes):
-        if not cop_inv_only:
-            batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
-            if arch_reqs and len(batch_resp) >= 2:
-                # if archive requests all pass we summarize the result.
-                if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
-                    batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
-                else:
-                    show_archive_results(batch_resp[0])  # archive
-                    show_archive_results(batch_resp[1])  # unarchive
-                    batch_resp = batch_resp[2:]
-
-            if not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE
-                # console.print("[bright_red]A Failure occured aborting remaining actions.[/]")
-                log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
-                # console.print("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]")
-                # log.warning("[italic]Cache has not been updated, [cyan]cencli show all -v[/ cyan] will result in a full cache update.[/ italic]", caption=True)
-                update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-                cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
-
-    if not delayed_mon_del_reqs and not cop_del_reqs:
-        # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
-        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-        cli.display_results(batch_resp, tablefmt="action")
-        cli.exit(code=0)
-
-    elif delayed_mon_del_reqs and not cop_inv_only:
-        del_resp = []
-        del_reqs_try = delayed_mon_del_reqs.copy()
-        _delay = 10 if not switches else 30  # switches take longer to drop off
-        for _try in range(4):
-            _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
-            _delay -= (5 * _try) # reduce delay by 5 secs for each request
-            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
-                sleep(1)
-
-            _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
-            if _try == 3:
-                if not all([r.ok for r in _del_resp]):
-                    print("\n[dark_orange]:warning:[/]  Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-                del_resp += _del_resp
-            else:
-                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-
-            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
-            if del_reqs_try:
-                print(f"{len(del_reqs_try)} out of {len([*mon_del_reqs, *delayed_mon_del_reqs])} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-            else:
-                break
-
-        batch_resp += del_resp or _del_resp
-        # TODO if switch doesn't disconnect after archive/unarchive no cache update is made, maybe delete from inventory?
-        # or try to delete device from monitoring, then delay if it fails, despite what the cache says.
-
-    # On COP delete devices from GreenLake inventory (only available on CoP)
-    # TODO test against a cop system
-    # TODO add to cencli delete device ...
-    cop_del_resp = []
-    if cop_del_reqs:
-        cop_del_resp = cli.central.batch_request(cop_del_reqs)
-        if not all(r.ok for r in cop_del_resp):
-            log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
-
-        #     cli.display_results(cop_del_resp, tablefmt="action")
-        # else:
-        #     # display results (below) with results of previous calls
-        #     batch_resp += cop_del_resp
-
-    # TODO need to update cache after ui-only delete
-    # TODO need to improve logic throughout and update inventory cache
-    if batch_resp:
-        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-        if cop_del_resp:
-            batch_resp += cop_del_resp
-    elif cop_inv_only and cop_del_resp:
-        batch_resp = cop_del_resp
-
-    if batch_resp:
-        cli.display_results(batch_resp, tablefmt="action")
-
+    # The provided input does not have to be the serial number batch_del_devices will use get_dev_identifier to look the dev
+    # up.  It just validates the import has the `serial` field.
+    data = [{"serial": d} for d in devices]
+    cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
 
 
 @app.callback()

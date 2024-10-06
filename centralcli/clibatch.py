@@ -9,7 +9,7 @@ from time import sleep
 from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
-from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict, AliasChoices
 from rich import print
 from rich.console import Console
 from rich.progress import track
@@ -40,37 +40,19 @@ from centralcli.constants import (
 from centralcli.exceptions import DevException
 from centralcli.strings import ImportExamples
 from centralcli.models import Groups
+from centralcli.cache import CentralObject
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
 
 if TYPE_CHECKING:
-    from .cache import CentralObject, CacheDevice, CacheInvDevice
+    from .cache import CacheDevice, CacheInvDevice
 
 iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
 
 
-# TODO template upload based on j2 support
-# We convert any hyphen separated values to underscore before sending to the model
-# class GroupImport(BaseModel):
-#     name: str
-#     allowed_types: Optional[List[AllDevTypes]] = Field(["ap", "gw", "cx", "sw"], alias=AliasChoices("allowed_types", "types"))
-#     gw_role: Optional[GatewayRole] = GatewayRole.branch
-#     aos10: Optional[bool] = False
-#     microbranch: Optional[bool] = False
-#     wlan_tg: Optional[bool] = False
-#     wired_tg: Optional[bool] = False
-#     monitor_only_sw: Optional[bool] = False
-#     monitor_only_cx: Optional[bool] = False
-#     cnx: Optional[bool] = False
-#     gw_config: Optional[Path] = None
-#     ap_config: Optional[Path] = None
-#     gw_vars: Optional[Path] = None
-#     ap_vars: Optional[Path] = None
-#     class Config:
-#         use_enum_values = True
 
 # TODO move to models.py
 class SiteImport(BaseModel):
@@ -80,14 +62,9 @@ class SiteImport(BaseModel):
     city: str = None
     state: str = None
     country: str = Field(None, min_length=3)
-    zipcode: str | int = Field(None, alias="zip")
-    latitude: str | float = Field(None, alias="lat")
-    longitude: str | float = Field(None, alias="lon")
-
-    # class Config:
-    #     extra = "allow"
-    #     use_enum_values = True
-    #     allow_population_by_alias = True
+    zipcode: str | int = Field(None, alias=AliasChoices("zip", "zipcode"))
+    latitude: str | float = Field(None, alias=AliasChoices("lat", "latitude"))
+    longitude: str | float = Field(None, alias=AliasChoices("lon", "longitude"))
 
     @field_validator("state")
     @classmethod
@@ -703,7 +680,7 @@ def validate_license_type(data: List[Dict[str, Any]]):
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
     # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-    data = data or cli._get_import_file(import_file, import_type="devices")
+    data: List[Dict[str, Any]] = data or cli._get_import_file(import_file, import_type="devices")
     if not data:
         cli.exit("No data/import file")
 
@@ -716,9 +693,10 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 
     confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items()]) for d in data]
     confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
-    print(f'{len(data)} Devices found in {"import file" if not import_file else import_file.name}')
+    file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
+    print(f'{len(data)} Devices found in {file_str}')
     cli.console.print(confirm_str, emoji=False)
-    print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    print(f'\n{word} {len(data)} devices found in {file_str}')
     if warn:
         msg = ":warning:  Warnings exist"
         msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
@@ -1135,191 +1113,6 @@ def batch_delete_devices_dry_run(data: list | dict, *, ui_only: bool = False, co
     console.print(f"Size of Device DB: {len(cli.cache.devices)}")
     # inspect(cli.cache, console=console)
 
-
-def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
-    br = cli.central.BatchRequest
-    console = Console(emoji=False)
-
-    if not data:
-        cli.exit("[bright_red]Error[/]: Parsing of import file resulted in [bright_red italic bold]no[/] data.")
-
-    serials_in = [dev["serial"].upper() for dev in data]
-
-    # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
-    # to avoid duplication ... # FIXME update clidel with corrections made below
-    cache_devs: List[CacheDevice | CacheInvDevice | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
-    if len(serials_in) != len(cache_devs):
-        log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
-
-    not_in_inventory: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
-    inv_del_serials: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is not None]
-    cache_devs: List[CacheDevice] = [c for c in cache_devs if c]
-
-    # Devices in monitoring (have a status), If only in inventory they lack status
-    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    for dev in cache_devs:
-        if not dev.status:
-            continue
-        elif dev.generic_type == "ap":
-            aps += [dev]
-        elif dev.generic_type == "gw":
-            gws += [dev]
-        elif dev.generic_type == "switch":
-            if dev.swack_id is None:
-                switches += [dev]
-            elif dev.swack_id in _stack_ids:
-                continue
-            else:
-                _stack_ids += [dev.swack_id]
-                stacks += [dev]
-        else:
-            raise DevException(f'Unexpected device type {dev.generic_type}')
-
-    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
-    log.debug(f"{devs_in_monitoring=}, {inv_del_serials=}")
-
-    _serials = inv_del_serials if not force else serials_in
-    # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
-    # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
-    arch_reqs = [] if ui_only or not _serials else [
-        br(cli.central.archive_devices, _serials),
-        br(cli.central.unarchive_devices, _serials),
-    ]
-
-    # cop only delete devices from GreenLake inventory
-    cop_del_reqs = [] if not _serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, _serials)
-    ]
-
-    # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-    mon_del_reqs, delayed_mon_del_reqs = [], []
-    for dev_type, _devs in zip(["ap", "switch", "stack", "gateway"], [aps, switches, stacks, gws]):
-        if _devs:
-            down_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "down"]
-            up_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "up"]
-            if [*down_now, *up_now]:
-                func = getattr(cli.central, f"delete_{dev_type}")
-                if down_now:
-                    mon_del_reqs += [br(func, s) for s in down_now]
-                if up_now:
-                    delayed_mon_del_reqs += [br(func, s) for s in up_now]
-
-    # warn about devices that were not found
-    if not_in_inventory:
-        console.print("\n[dark_orange]Warning[/]: The following provided devices were not found in the inventory.")
-        _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
-        print(f"{'[bright_green italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
-
-    # None of the provided devices were found in cache or inventory
-    if not [*arch_reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
-        cli.exit("Everything is as it should be, nothing to do.", code=0)
-
-    # construnct confirmation msg
-    if force:
-        _msg = f"[bright_red]Delete[/] [cyan]{serials_in[0]}[/]\n"
-        if len(serials_in) > 1:
-            _msg += "\n".join([f"       [cyan]{d}[/]" for d in serials_in[1:]])
-    else:
-        _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
-        if len(cache_devs) > 1:
-            _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-
-    if ui_only:
-        _total_reqs = len(mon_del_reqs)
-    elif cop_inv_only:
-        _total_reqs = len(cop_del_reqs)
-    else:
-        _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
-
-    if ui_only:
-        if delayed_mon_del_reqs:
-            print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
-            delayed_mon_del_reqs = []
-        if not mon_del_reqs:
-            cli.exit("No devices found to remove from UI... Exiting")
-        else:
-            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
-
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
-
-    # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
-    console.print(_msg)
-    batch_resp = []
-    if cli.confirm(yes, abort=True):
-        if not cop_inv_only:
-            batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
-            if arch_reqs and len(batch_resp) >= 2:
-                # if archive requests all pass we summarize the result.
-                if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
-                    batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
-                else:
-                    show_archive_results(batch_resp[0])  # archive
-                    show_archive_results(batch_resp[1])  # unarchive
-                    batch_resp = batch_resp[2:]
-
-            if not force and not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE (archive failures alone will proceed as they are removed from batch_resp)
-                log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
-                update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-                cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
-
-    if not delayed_mon_del_reqs and not cop_del_reqs:
-        # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
-        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-        if batch_resp:  # Can occur if archive/unarchive has failures batch_resp[2:] could be an empty list.
-            cli.display_results(batch_resp, tablefmt="action")
-        cli.exit(code=0)
-
-    elif delayed_mon_del_reqs and not cop_inv_only:
-        del_resp = []
-        del_reqs_try = delayed_mon_del_reqs.copy()
-        _delay = 10 if not switches else 30  # switches take longer to drop off
-        for _try in range(4):
-            _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
-            _delay -= (5 * _try) # reduce delay by 5 secs for each request
-            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
-                sleep(1)
-
-            _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
-            if _try == 3:
-                if not all([r.ok for r in _del_resp]):
-                    print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-                del_resp += _del_resp
-            else:
-                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-
-            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
-            if del_reqs_try:
-                print(f"{len(del_reqs_try)} out of {len([*mon_del_reqs, *delayed_mon_del_reqs])} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-            else:
-                break
-
-        batch_resp += del_resp or _del_resp
-
-        if batch_resp:
-            update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-    # On COP delete devices from GreenLake inventory (only available on CoP)
-    # TODO test against a cop system
-    # TODO add to cencli delete device ...
-    cop_del_resp = []
-    if cop_del_reqs:
-        cop_del_resp = cli.central.batch_request(cop_del_reqs)
-        if not all(r.ok for r in cop_del_resp):
-            log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
-
-    if cop_del_resp:
-        batch_resp += cop_del_resp
-    elif cop_inv_only and cop_del_resp:
-        batch_resp = cop_del_resp
-
-    if batch_resp:
-        cli.display_results(batch_resp, tablefmt="action")
-
-
 def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
@@ -1401,7 +1194,7 @@ def delete(
 
     if what == "devices":
         if not dry_run:
-            resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+            resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
         else:
             resp = batch_delete_devices_dry_run(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
@@ -1506,13 +1299,13 @@ def unsubscribe(
         else:
             devices = [d for d in resp.output if d.get("status") is None and d["services"]]
             if dis_cen:
-                resp = batch_delete_devices(devices, yes=yes)
+                resp = cli.batch_delete_devices(devices, yes=yes)
             else:
                 unsub_reqs = _build_sub_requests(devices, unsub=True)
 
                 cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
                 print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
-                if yes or typer.confirm("\nProceed?", abort=True):
+                if cli.confirm(yes):
                     resp = cli.central.batch_request(unsub_reqs)
     elif not import_file:
         _msg = [

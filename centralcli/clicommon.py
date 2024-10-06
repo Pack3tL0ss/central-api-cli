@@ -10,6 +10,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.text import Text
+from rich.progress import track
 from rich import print
 import json
 import pkg_resources
@@ -36,7 +37,7 @@ from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
 
 if TYPE_CHECKING:
-    from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice
+    from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
 
 
 tty = utils.tty
@@ -855,10 +856,15 @@ class CLICommon:
     def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
-            data = config.get_file_data(import_file, text_ok=text_ok)
+            try:
+                data = config.get_file_data(import_file, text_ok=text_ok)
+            except UserWarning as e:
+                log.exception(e)
+                self.exit(e)
+
 
         if not data:
-            self.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
+            self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
 
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
@@ -1314,6 +1320,234 @@ class CLICommon:
             doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
             if doc_ids:
                 self.central.request(self.cache.update_label_db, data=doc_ids, remove=True)
+
+    def show_archive_results(self, arch_resp: List[Response]) -> None:
+        def summarize_arch_res(arch_resp: List[Response]) -> None:
+            for res in arch_resp:
+                caption = res.output.get("message")
+                action = res.url.name
+                if res.get("succeeded_devices"):
+                    title = f"Devices successfully {action}d."
+                    data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+                    self.display_results(data=data, title=title, caption=caption)
+                if res.get("failed_devices"):
+                    title = f"Devices that [bright_red]failed[/] to {action}d."
+                    data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+                    self.display_results(data=data, title=title, caption=caption)
+
+        if all([r.ok for r in arch_resp[0:2]]) and all([not r.get("failed_devices") for r in arch_resp[0:2]]):
+            arch_resp[0].output = arch_resp[0].output.get("message")
+            arch_resp[1].output =  f'  {arch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(arch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
+            self.display_results(arch_resp[0:2], tablefmt="action")
+        else:
+            summarize_arch_res(arch_resp[0:2])
+
+    def update_dev_inv_cache(self, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
+        br = BatchRequest
+        all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
+        inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
+        cache_update_reqs = []
+        if cache_devs and all_ok:
+            cache_update_reqs += [br(self.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
+        else:
+            cache_update_reqs += [br(self.cache.refresh_dev_db)]
+
+        if cache_devs or inv_del_serials and not ui_only:
+            if all_ok:  # TODO Update to pass Inv doc_ids
+                cache_update_reqs += [
+                    br(
+                        self.cache.update_inv_db,
+                        [d.doc_id for d in inventory_devs],
+                        remove=True
+                    )
+                ]
+            else:
+                cache_update_reqs += [br(self.cache.refresh_inv_db)]
+        # Update cache remove deleted items
+        if cache_update_reqs:
+            _ = self.central.batch_request(cache_update_reqs)
+
+    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
+        mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
+        for dev in set(cache_devs):
+            if dev.generic_type == "switch" and dev.swack_id is not None:
+                dev_type = "stack"
+                if dev.swack_id in _stack_ids:
+                    continue
+                else:
+                    _stack_ids += [dev.swack_id]
+            else:
+                dev_type = dev.generic_type if dev.generic_type != "gw" else "gateway"
+
+            func = getattr(self.central, f"delete_{dev_type}")
+            update_list = mon_del_reqs if dev.status.lower() == "down" else delayed_mon_del_reqs
+            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id, cache_object=dev)]
+
+        return mon_del_reqs, delayed_mon_del_reqs
+
+    def _process_delayed_mon_deletes(self, reqs: List[BatchRequest]) -> Tuple[List[Response], List[int]]:
+        del_resp: List[Response] = []
+        del_reqs_try = reqs.copy()
+
+        _delay = 30
+        for _try in range(4):
+            _word = "more " if _try > 0 else ""
+            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+            _delay -= (5 * _try) # reduce delay by 5 secs for each loop
+            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
+                time.sleep(1)
+
+            _del_resp: List[Response] = self.central.batch_request(del_reqs_try, continue_on_fail=True)
+
+            if _try == 3:
+                if not all([r.ok for r in _del_resp]):
+                    self.econsole.print("\n[dark_orange]:warning:[/]  Retries exceeded. Devices still remain [bright_green]Up[/] in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                del_resp += _del_resp
+            else:
+                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
+
+            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
+            if del_reqs_try:
+                print(f"{len(del_reqs_try)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+            else:
+                break
+
+        return del_resp
+
+    def _get_inv_doc_ids(self, batch_resp: List[Response]) -> List[int] | None:
+        if not batch_resp[1].url.name == "unarchive":
+            return
+
+        if isinstance(batch_resp[1].raw, dict) and "succeeded_devices" in batch_resp[1].raw:
+            try:
+                cache_inv_to_del = [self.cache.inventory_by_serial.get(d["serial_number"]) for d in batch_resp[1].raw["succeeded_devices"]]
+                inv_doc_ids = [dev.doc_id for dev in cache_inv_to_del]
+            except Exception as e:
+                log.exception(f"Exception while attempting to extract unarchive results for Inv Cache Update.\n{e}")
+                return
+            return inv_doc_ids
+
+    def _get_mon_doc_ids(self, del_resp: List[Response]) -> List[int]:
+        doc_ids = []
+        try:
+            doc_ids = [self.cache.devices_by_serial[r.url.name].doc_id for r in del_resp if r.ok and "switch_stacks" not in r.url.parts]
+            stack_ids = [r.url.name for r in del_resp if r.ok and "switch_stacks" in r.url.parts]
+            for stack_id in stack_ids:
+                doc_ids += [d.doc_id for d in self.cache.DevDB.search(self.cache.Q.swack_id == stack_id) if d is not None]
+        except Exception as e:
+            log.error(f"Error: {e.__class__.__name__} occured fetching doc_ids for local cache update after delete.  Use [cyan]cencli show all[/] to ensure device cache is current.", caption=True, log=True)
+
+        return doc_ids
+
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+        BR = BatchRequest
+        confirm_msg = []
+
+        try:
+            serials_in = [dev["serial"].upper() for dev in data]
+        except KeyError:
+            self.exit("Missing required field: [cyan]serial[/].")
+
+        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False,) for d in serials_in]  # returns None if device not found in cache after update
+        not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
+        cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+        cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
+        # cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
+        _serials = [d.serial for d in cache_found_devs] if not force else serials_in  # Should no longer be necessary
+
+        # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
+        # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
+        arch_reqs = [] if ui_only or not _serials else [
+            BR(self.central.archive_devices, _serials),
+            BR(self.central.unarchive_devices, _serials),
+        ]
+
+        # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
+        mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+
+        # cop only delete devices from GreenLake inventory
+        cop_del_reqs = [] if not config.is_cop or not _serials else [
+            BR(self.central.cop_delete_device_from_inventory, _serials)
+        ]
+
+        # warn about devices that were not found
+        if not_found_devs:
+            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
+            self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            self.econsole.print(f"{'[grey42 italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
+
+        if ui_only:
+            _total_reqs = len(mon_del_reqs)
+        elif cop_inv_only:
+            _total_reqs = len(cop_del_reqs)
+        else:
+            _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
+
+        if not _total_reqs:
+            self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
+
+        sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
+        confirm_msg += [f"\n[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [grey42 italic]monitoring UI only[/]'}:"]
+        if ui_only:
+            confirmation_devs = utils.summarize_list([c.summary_text for c in cache_mon_devs if c.status.lower() == 'down'], max=40, color=None)
+            if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
+                self.econsole.print(
+                    f"[cyan]{len([c for c in cache_mon_devs if c.status.lower() == 'up'])}[/] of the [cyan]{len(cache_mon_devs)}[/] found devices are currently [bright_green]online[/]. [grey42 italic]They will be skipped.[/]\n"
+                    "Devices can only be removed from UI if they are [red]offline[/]."
+                )
+                delayed_mon_del_reqs = []
+            if not mon_del_reqs:
+                self.exit("No devices found to remove from UI. [red]Exiting[/]...")
+            else:
+                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
+        else:
+            confirmation_list = serials_in if force else [d.summary_text for d in cache_found_devs]
+            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
+
+        if _total_reqs > 1:
+            confirm_msg += [f"\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."]
+
+        # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
+        self.console.print("\n".join(confirm_msg), emoji=False)
+        batch_resp = []
+        mon_doc_ids = []
+        inv_doc_ids = []
+        if self.confirm(yes):
+            ...  # We abort if they don't confirm.
+
+        if not cop_inv_only:
+            # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
+            # Also monitoring UI delete for any devices currently offline.
+            batch_resp = self.central.batch_request([*arch_reqs, *mon_del_reqs])
+            if arch_reqs and len(batch_resp) >= 2:
+                inv_doc_ids = self._get_inv_doc_ids(batch_resp)
+                self.show_archive_results(batch_resp[:2])
+                batch_resp = batch_resp[2:]
+
+            if batch_resp:  # Now represents responses associated with mon_del_reqs
+                mon_doc_ids += self._get_mon_doc_ids(batch_resp)
+                # Any that failed with device currently online error, append to back of delayed_mon_reqs (possible if dev status in cache was stale)
+                delayed_mon_del_reqs += [req for req, resp in zip(mon_del_reqs, batch_resp) if not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007"]
+
+            if delayed_mon_del_reqs:
+                delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_reqs)
+                batch_resp += delayed_mon_resp
+                mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
+
+        if cop_del_reqs:
+            batch_resp += self.central.batch_request(cop_del_reqs)
+
+        if batch_resp:
+            self.display_results(batch_resp, tablefmt="action")
+
+        # Cache Updates
+        if mon_doc_ids:
+            self.central.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
+        if inv_doc_ids:
+            self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+        # elif arch_reqs and cache_inv_devs:  # Full cache update as arch/unarchive had failures.
+        #     self.econsole.print("[dark_orange3]:warning:[/]  Errors occured during Archive/Unarchive.  Inventory Cache update will not occur.  Cache may be out of date.  Use [cyan]show inventory[/] to update inventory cache.")
+            # self.central.request(self.cache.refresh_inv_db)
 
 if __name__ == "__main__":
     pass
