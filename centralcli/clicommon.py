@@ -1381,7 +1381,7 @@ class CLICommon:
 
             func = getattr(self.central, f"delete_{dev_type}")
             update_list = mon_del_reqs if dev.status.lower() == "down" else delayed_mon_del_reqs
-            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id, cache_object=dev)]
+            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id)]
 
         return mon_del_reqs, delayed_mon_del_reqs
 
