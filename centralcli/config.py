@@ -13,7 +13,7 @@ from typing import Any, List, Dict, Union, TypeVar, TextIO, Tuple, Optional
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, AliasChoices, RootModel
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, AliasChoices
 from yarl import URL
 # from pydantic import ConfigDict  # pydantic 2 not supported yet
 
