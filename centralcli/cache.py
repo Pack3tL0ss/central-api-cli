@@ -1810,7 +1810,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
+        match: List[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
 
         out = []
         if match:
@@ -1925,7 +1925,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_label_identifier(
+        match: List[CacheLabel] = self.get_label_identifier(
             incomplete,
             completion=True,
         )
@@ -1960,7 +1960,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_client_identifier(
+        match: List[CacheClient] = self.get_client_identifier(
             incomplete,
             completion=True,
         )
