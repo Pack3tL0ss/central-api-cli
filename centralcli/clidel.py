@@ -2,28 +2,25 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
-from time import sleep
 from typing import List, TYPE_CHECKING
 import sys
 import typer
 from rich import print
 from rich.console import Console
-from rich.progress import track
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log, config, utils, Response, BatchRequest, clidelfirmware
+    from centralcli import cli, utils, Response, BatchRequest, clidelfirmware
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, config, utils, Response, BatchRequest, clidelfirmware
+        from centralcli import cli, utils, Response, BatchRequest, clidelfirmware
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import IdenMetaVars
-from centralcli.exceptions import DevException
 
 from centralcli.cache import CentralObject, CacheLabel, CacheDevice
 
