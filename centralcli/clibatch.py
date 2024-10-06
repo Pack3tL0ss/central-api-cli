@@ -46,7 +46,7 @@ from centralcli.cache import CentralObject
 examples = ImportExamples()
 
 if TYPE_CHECKING:
-    from .cache import CacheDevice, CacheInvDevice
+    from .cache import CacheDevice
 
 iden = IdenMetaVars()
 tty = utils.tty
