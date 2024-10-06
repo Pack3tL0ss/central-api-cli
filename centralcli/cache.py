@@ -2396,7 +2396,7 @@ class Cache:
 
     async def refresh_dev_db(
             self,
-            dev_type: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None,
+            dev_type: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None,  # TODO make consistent throughout using device_type in many places
             group: str = None,
             site: str = None,
             label: str = None,
@@ -2440,7 +2440,7 @@ class Cache:
         Returns:
             CombinedResponse: CombinedResponse object.
         """
-        dev_type = utils.listify(dev_type)
+        dev_type = None if not dev_type or dev_type == "all" else utils.listify(dev_type)
         resp: List[Response] | CombinedResponse = await self.central.get_all_devices(
             cache=True,
             dev_types=dev_type,
