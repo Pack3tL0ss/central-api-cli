@@ -1859,21 +1859,6 @@ class Cache:
             else:
                 db = "dev"
 
-        # FIXME typer broke this a long time ago
-        # if args[-1] == "all":
-        #     yield "commands"
-        # elif args[-1] in ["commands", "file"]:
-        #     yield None
-        # elif args[-1] not in ["group", "site", "device"]:
-        #     yield "commands"
-        # else:
-        #     if args[-1] == "group":
-        #         db = "group"
-        #     elif args[-1] == "site":
-        #         db = "site"
-        #     else:
-        #         db = "dev"
-
             match = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
 
             out = []
