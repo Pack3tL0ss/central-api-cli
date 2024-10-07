@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigD
 from rich import print
 from rich.console import Console
 from rich.progress import track
-from tinydb.table import Document
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -37,7 +36,7 @@ from centralcli.constants import (
     SiteStates,
     state_abbrev_to_pretty,
 )
-from centralcli.exceptions import DevException
+
 from centralcli.strings import ImportExamples
 from centralcli.models import Groups
 from centralcli.cache import CentralObject
