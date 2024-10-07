@@ -1063,56 +1063,6 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
         _ = cli.central.batch_request(cache_update_reqs)
 
 
-# TODO DELME temporary debug testing
-def batch_delete_devices_dry_run(data: list | dict, *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
-    console = Console(emoji=False)
-
-    if not data:
-        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
-        raise typer.Exit(1)
-
-    serials_in = [dev["serial"].upper() for dev in data]
-
-    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
-    not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
-    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
-    _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
-    inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
-
-    # Devices in monitoring (have a status), If only in inventory they lack status
-    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    for dev in cache_devs:
-        if not dev.status:
-            continue
-        elif dev.generic_type == "ap":
-            aps += [dev]
-        elif dev.generic_type == "gw":
-            gws += [dev]
-        elif dev.generic_type == "switch":
-            if dev.swack_id is None:
-                switches += [dev]
-            elif dev.swack_id in _stack_ids:
-                continue
-            else:
-                _stack_ids += [dev.swack_id]
-                stacks += [dev]
-        else:
-            raise DevException(f'Unexpected device type {dev.generic_type}')
-
-    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
-
-    console.rule(f"{len(cache_devs)} cache_devs")
-    console.print("\ncache_devs=")
-    _ = [console.print(c.rich_help_text) for c in cache_devs]
-    console.rule("")
-    console.print(f"\n{not_in_inventory=}\n\n_all_in_inventory (keys)={list(_all_in_inventory.keys())}\n\n{inv_del_serials=}")
-    console.rule(f"{len(devs_in_monitoring)} devs_in_monitoring")
-    _ = [console.print(c.rich_help_text) for c in devs_in_monitoring]
-    console.rule("")
-    console.print(f"Size of Inventory DB: {len(cli.cache.inventory)}")
-    console.print(f"Size of Device DB: {len(cli.cache.devices)}")
-    # inspect(cli.cache, console=console)
-
 def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
@@ -1146,7 +1096,6 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response
         return resp
 
 
-# FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
 # TODO batch delete sites does a call for each site, not multi-site endpoint?
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
 @app.command()
@@ -1155,7 +1104,6 @@ def delete(
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),  # TODO REMOVE THIS IS FOR TESTING ONLY
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
@@ -1193,10 +1141,7 @@ def delete(
     data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
     if what == "devices":
-        if not dry_run:
-            resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
-        else:
-            resp = batch_delete_devices_dry_run(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
