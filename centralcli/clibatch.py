@@ -690,7 +690,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
     data, warn = validate_license_type(data)
     word = "Adding" if not warn and yes else "Add"
 
-    confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items()]) for d in data]
+    confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
     confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
     file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
     print(f'{len(data)} Devices found in {file_str}')

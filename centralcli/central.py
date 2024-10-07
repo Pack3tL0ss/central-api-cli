@@ -4455,21 +4455,21 @@ class CentralApi(Session):
 
                 json_data += [_this_dict]
 
-            to_group = {d.get("group"): [] for d in device_list if "group" in d}
+            to_group = {d.get("group"): [] for d in device_list if "group" in d and d["group"]}
             for d in device_list:
-                if "group" in d:
+                if "group" in d and d["group"]:
                     to_group[d["group"]].append(d.get("serial", d.get("serial_num")))
 
-            # to_site = {d.get("site"): [] for d in device_list if "site" in d}
+            # to_site = {d.get("site"): [] for d in device_list if "site" in d and d["site"]}
             # for d in device_list:
-            #     if "site" in d:
+            #     if "site" in d and d["site"]:
             #         to_site[d["site"]].append(d.get("serial", d.get("serial_num")))
 
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
             _lic_kwargs = {}
             for d in device_list:
-                if "license" not in d:
+                if "license" not in d or not d["license"]:
                     continue
 
                 d["license"] = utils.listify(d["license"])
@@ -4487,14 +4487,10 @@ class CentralApi(Session):
                     }
             license_kwargs = list(_lic_kwargs.values())
 
-            # TODO most efficient pairing of possible lic/dev for fewest call
-            # TODO license via list not implemented yet.
-
         else:
             raise ValueError("mac and serial or device_list is required")
 
         # Perform API call(s) to Central API GW
-        # TODO break out the add device call into it's own method.
         if to_group or license_kwargs:
             # Add devices to central.  1 API call for 1 or many devices.
             br = self.BatchRequest
@@ -4502,7 +4498,6 @@ class CentralApi(Session):
                 br(self.post, url, json_data=json_data),
             ]
             # Assign devices to pre-provisioned group.  1 API call per group
-            # TODO test that this is 1 API call per group.
             if to_group:
                 group_reqs = [br(self.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
