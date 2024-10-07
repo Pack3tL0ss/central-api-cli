@@ -869,17 +869,17 @@ class CLICommon:
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
-        if data:
-            if isinstance(data, dict):
-                if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
-                    data = [{"name": k, **v} for k, v in data.items()]
-                elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
-                    data = [{"serial": k, **v} for k, v in data.items()]
-            elif isinstance(data, list) and text_ok:
-                if import_type == "devices" and all(utils.is_serial(s) for s in data):
-                    data = [{"serial": s} for s in data]
-                if import_type == "labels":
-                    data = [{"name": label} for label in data]
+
+        if isinstance(data, dict):
+            if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
+                data = [{"name": k, **v} for k, v in data.items()]
+            elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
+                data = [{"serial": k, **v} for k, v in data.items()]
+        elif isinstance(data, list) and text_ok:
+            if import_type == "devices" and all([isinstance(s, str) for s in data]):   # all(utils.is_serial(s) for s in data):
+                data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
+            if import_type == "labels":
+                data = [{"name": label} for label in data]
 
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         data = [d for d in data if not d.get("retired", d.get("ignore"))]
