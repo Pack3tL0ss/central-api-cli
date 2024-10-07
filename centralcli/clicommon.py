@@ -966,6 +966,7 @@ class CLICommon:
     def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
+        req_dict, msg_dict = {}, {}
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
         _skip = False
         for cache_dev, mv_data in zip(cache_devs, import_data):
