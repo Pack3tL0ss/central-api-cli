@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Iterable
 
 import pendulum
 from pathlib import Path
-from pydantic import BaseModel, RootModel, Field, validator, field_serializer, ConfigDict, AliasChoices
+from pydantic import BaseModel, RootModel, Field, validator, field_serializer, field_validator, ConfigDict, AliasChoices
 
 from centralcli import utils, log
-from centralcli.constants import DevTypes
+from centralcli.constants import DevTypes, SiteStates, state_abbrev_to_pretty
 from centralcli.objects import DateTime
 from random import randint
 import json
@@ -177,6 +177,62 @@ class Sites(RootModel):
     @property
     def by_id(self) -> Dict[int, Dict[str, str | int | float]]:
         return {s.id: s.model_dump() for s in self.root}
+
+
+class ImportSite(BaseModel):
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+    site_name: str = Field(..., alias=AliasChoices("site_name", "site", "name"))
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = Field(None, min_length=3)
+    zipcode: Optional[str | int] = Field(None, alias=AliasChoices("zip", "zipcode"))
+    latitude: Optional[str | float] = Field(None, alias=AliasChoices("lat", "latitude"))
+    longitude: Optional[str | float] = Field(None, alias=AliasChoices("lon", "longitude"))
+
+    @field_validator("state")
+    @classmethod
+    def short_to_long(cls, v: str) -> str:
+        try:
+            return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
+        except ValueError:
+            return SiteStates(v).value
+
+
+class ImportSites(RootModel):
+    root: List[ImportSite]
+
+    def __init__(self, data: List[Dict[str, Any]]) -> None:
+        formatted = self._convert_site_key(data)
+        super().__init__([ImportSite(**s) for s in formatted])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+    @staticmethod
+    def _convert_site_key(_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def auto_usa(data: Dict[str, str | int | float]) -> str:
+            if not data.get("country") and data.get("state") and data["state"] in state_abbrev_to_pretty.values():
+                return "United States"
+
+            return data.get("country")
+
+        _data = [
+            {
+                **inner.get("site_address", {}),
+                **inner.get("geolocation", {}),
+                **{k: v for k, v in inner.items() if k not in ["site_address", "geolocation"]},
+                "country": auto_usa(inner)
+            } for inner in _data
+        ]
+        # _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
+        return _data
 
 class GatewayRole(str, Enum):
     branch = "branch"
