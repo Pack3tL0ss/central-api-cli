@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars
 
-from centralcli.cache import CentralObject, CacheLabel, CacheDevice
+from centralcli.cache import CacheSite, CacheLabel, CacheDevice
 
 if TYPE_CHECKING:
     from .cache import CachePortal, CacheGroup, CacheTemplate
@@ -60,19 +60,18 @@ def site(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    sites: List[CentralObject] = [cli.cache.get_site_identifier(s) for s in sites]
+    sites: List[CacheSite] = [cli.cache.get_site_identifier(s) for s in sites]
 
-    _del_msg = [f"  {s.summary_text}" for s in sites]
-    if len(_del_msg) > 7:
-        _del_msg = [*_del_msg[0:3], "  ...", *_del_msg[-3:]]
-    _del_msg = "\n".join(_del_msg)
+    _del_msg = utils.summarize_list([s.summary_text for s in sites], max=7, color=None)
     print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")
 
     if cli.confirm(yes):
         del_list = [s.id for s in sites]
-        resp = cli.central.request(cli.central.delete_site, del_list)
+        resp: List[Response] = cli.central.request(cli.central.delete_site, del_list)
         cli.display_results(resp, tablefmt="action")
-        cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
+        if len(sites) == len(resp):  # resp will be a single failed Response if the first one fails, otherwise all should be there.
+            cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
+            cli.central.request(cli.cache.update_site_db, data=cache_del_list, remove=True)
 
 
 @app.command(name="label")
