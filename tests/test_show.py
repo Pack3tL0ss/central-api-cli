@@ -51,7 +51,7 @@ def test_show_all_verbose():
     print(result.stdout)
     assert result.exit_code == 0
     assert "serial" in result.stdout
-    assert "cpu %" in result.stdout
+    assert "uptime" in result.stdout
     if result.exception:
         traceback.print_exception(result.exception)
 
