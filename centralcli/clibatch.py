@@ -9,7 +9,7 @@ from time import sleep
 from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
-from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict, AliasChoices
+from pydantic import BaseModel, ValidationError, ConfigDict
 from rich import print
 from rich.console import Console
 from rich.progress import track
@@ -33,45 +33,22 @@ from centralcli.constants import (
     IdenMetaVars,
     SendConfigTypes,
     CloudAuthUploadTypes,
-    SiteStates,
-    state_abbrev_to_pretty,
 )
 
 from centralcli.strings import ImportExamples
-from centralcli.models import Groups
+from centralcli.models import Groups, ImportSites
 from centralcli.cache import CentralObject
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
 
 if TYPE_CHECKING:
-    from .cache import CacheDevice
+    from .cache import CacheSite
 
 iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
 
-
-
-# TODO move to models.py
-class SiteImport(BaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True, use_enum_values=True)
-    site_name: str
-    address: str = None
-    city: str = None
-    state: str = None
-    country: str = Field(None, min_length=3)
-    zipcode: str | int = Field(None, alias=AliasChoices("zip", "zipcode"))
-    latitude: str | float = Field(None, alias=AliasChoices("lat", "latitude"))
-    longitude: str | float = Field(None, alias=AliasChoices("lon", "longitude"))
-
-    @field_validator("state")
-    @classmethod
-    def short_to_long(cls, v: str) -> str:
-        try:
-            return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
-        except ValueError:
-            return SiteStates(v).value
 
 class FstrInt:
     def __init__(self, val: int) -> None:
@@ -376,41 +353,42 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
 
     central = cli.central
-    if import_file is not None:
-        # data = config.get_file_data(import_file)
-        data = cli._get_import_file(import_file)
-
-    resp = None
-    verified_sites: List[SiteImport] = []
     # We allow a list of flat dicts or a list of dicts where loc info is under
     # "site_address" or "geo_location"
-    # can be keyed on name or flat.
-    for i in data:
-        if isinstance(i, str) and isinstance(data[i], dict):
-            out_dict = _convert_site_key(
-                {"site_name": i, **data[i]}
-            )
-        else:
-            out_dict = _convert_site_key(i)
+    # can be keyed by name or flat.
+    if import_file is not None:
+        data = cli._get_import_file(import_file, "sites")
+    elif isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):  # Data keyed by site name
+        data = [{"site_name": k, **data[k]} for k in data]  # deploy is the only one that passed raw data in.
 
-        verified_sites += [SiteImport(**out_dict)]
+    try:
+        verified_sites = ImportSites(data)
+    except Exception as e:
+        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{repr(e)}")
 
+    if not verified_sites:
+        cli.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
+
+    resp = None
     site_names = utils.summarize_list([s.site_name for s in verified_sites], max=7)
-    print("\n[bright_green]The Following Sites will be created:[/]")
+    cli.console.print("\n[bright_green]The Following Sites will be created:[/]")
     cli.console.print(site_names, emoji=False)
-
     if cli.confirm(yes):
         reqs = [
             BatchRequest(central.create_site, **site.model_dump())
             for site in verified_sites
         ]
         resp = central.batch_request(reqs)
-        if all([r.ok for r in resp]):  # TODO update for any that passed
-            resp[-1].output = [r.output for r in resp]
-            resp = resp[-1]
-            cli.central.request(cli.cache.update_site_db, data=resp.output)
+        passed = list(sorted([r for r in resp if r.ok], key=lambda r: r.rl))
+        failed = [r for r in resp if not r.ok]
+        if passed:
+            cache_data = [r.output for r in passed]
+            cli.central.request(cli.cache.update_site_db, data=cache_data)  # TODO need an add function, this update combines old with new then truncates and re-writes all sites.
+            # we combine the passing responses into 1.
+            passed[0].output = cache_data
+            resp = passed[0] if not failed else [passed[0], *failed]
 
-        return resp or Response(error="No Sites were added")
+        return resp
 
 class PreConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -775,8 +753,8 @@ def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: 
 # TODO TEST and complete.
 def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
     print("Batch Deploy is new, and has not been completely tested yet.")
-    if typer.confirm("Proceed?"):
-        data = config.get_file_data(import_file)
+    if cli.confirm(yes=False):  # TODO not honoring -Y until tested further
+        data = cli._get_import_file(import_file)
         if "groups" in data:
             resp = batch_add_groups(data=data["groups"], yes=yes)
             cli.display_results(resp)
@@ -784,7 +762,6 @@ def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
             resp = batch_add_sites(data=data["sites"], yes=yes)
             cli.display_results(resp)
         if "labels" in data:
-            print("[bright_red]WARNING!![/]: batch add labels not tested yet.  Still here as there is no real risk if it fails.")
             resp = batch_add_labels(data=data["labels"], yes=yes)
             cli.display_results(resp, tablefmt="action")
         if "devices" in data:
@@ -1006,7 +983,7 @@ def add(
             try:
                 resp.output = cleaner.cloudauth_upload_status(resp.output)
             except Exception as e:
-                log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}")
+                log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}", caption=True, log=True)
     elif what == "mpsk":
         if not ssid:
             cli.exit("[cyan]--ssid[/] option is required when uploading mpsk")
@@ -1033,69 +1010,38 @@ def show_archive_results(res: Response) -> None:
         cli.display_results(data=data, title=title, caption=caption)
 
 
-def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
-    br = BatchRequest
-    all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
-    inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
-    cache_update_reqs = []
-    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        if cache_devs and all_ok:
-            cache_update_reqs += [br(cli.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
-        else:
-            cache_update_reqs += [br(cli.cache.refresh_dev_db)]
-
-    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
-        if cache_devs or inv_del_serials and not ui_only:
-            if all_ok:  # TODO Update to pass Inv doc_ids
-                cache_update_reqs += [
-                    br(
-                        cli.cache.update_inv_db,
-                        [d.doc_id for d in inventory_devs],
-                        remove=True
-                    )
-                ]
-            else:
-                cache_update_reqs += [br(cli.cache.refresh_inv_db)]
-
-    # Update cache remove deleted items
-    if cache_update_reqs:
-        _ = cli.central.batch_request(cache_update_reqs)
-
-
 def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
-    verified_sites: List[SiteImport] = []
-    for i in data:
-        if isinstance(i, str) and isinstance(data[i], dict):
-            out_dict = _convert_site_key(
-                {"site_name": i, **data[i]}
-            )
-        else:
-            out_dict = _convert_site_key(i)
+    if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
+        data = [{"site_name": k, **data[k]} for k in data]
 
-        verified_sites += [SiteImport(**out_dict)]
+    try:
+        verified_sites = ImportSites(data)
+    except Exception as e:
+        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch delete sites --example[/] for example formats.\n{repr(e)}")
 
-    cache_by_name = {s.site_name: cli.cache.get_site_identifier(s.site_name, silent=True, exit_on_fail=False) for s in verified_sites}
-    not_in_central = [name for name, data in cache_by_name.items() if data is None]
+    cache_sites: List[CacheSite | None] = [cli.cache.get_site_identifier(s.site_name, silent=True, exit_on_fail=False) for s in verified_sites]
+    not_in_central = [name for name, data in zip(verified_sites, cache_sites) if data is None]
+
     if not_in_central:
         cli.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]site{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
-    sites: List[CentralObject] = [s for s in cache_by_name.values() if s is not None]
+    sites: List[CacheSite] = [s for s in cache_sites if s is not None]
     del_list = [s.id for s in sites]
-    site_names = utils.summarize_list([s.name for s in sites], max=7)
+    if not del_list:
+        cli.exit("[italic dark_olive_green2]No sites remain after validation.[/]")
 
-    print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
-    cli.econsole.print(site_names)
+    site_names = utils.summarize_list([s.summary_text for s in sites], max=7)
+    cli.console.print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:\n{site_names}", emoji=False)
     if cli.confirm(yes):
-        resp = central.request(central.delete_site, del_list)
+        resp: List[Response] = central.request(central.delete_site, del_list)
         if len(resp) == len(sites):
             doc_ids = [s.doc_id for s, r in zip(sites, resp) if r.ok]
             cli.central.request(cli.cache.update_site_db, data=doc_ids, remove=True)
         return resp
 
 
-# TODO batch delete sites does a call for each site, not multi-site endpoint?
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
 @app.command()
 def delete(
