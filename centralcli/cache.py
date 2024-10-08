@@ -21,8 +21,6 @@ from .typedefs import SiteData
 from tinydb.table import Document
 from yarl import URL
 
-from rich.protocol import _GIBBERISH
-
 if TYPE_CHECKING:
     from tinydb.table import Table
     from .config import Config
@@ -45,7 +43,6 @@ econsole = Console(stderr=True)
 console = Console()
 TinyDB.default_table_name = "devices"
 
-# DBType = Literal["dev", "site", "template", "group"]
 DEV_COMPLETION = ["move", "device", ""]
 SITE_COMPLETION = ["site"]
 GROUP_COMPLETION = ["group", "wlan"]
@@ -59,13 +56,6 @@ LIB_DEV_TYPE = {
     "gateway": "gw"
 }
 
-# HACK  rich is leading to an exception as it tried to inspect the Cache object during an exception
-# Cache LookUp Failure: 'CentralObject' has no attribute ... (attributes below).
-RICH_EXCEPTION_IGNORE_ATTRIBUTES = [
-    _GIBBERISH,
-    "__rich_repr__",
-    "_fields"
-]
 
 CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
 
@@ -741,7 +731,6 @@ class Cache:
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.responses = CacheResponses()
-        # self.LicenseDB = LicenseDB()  # for the benefit of sphinx
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
@@ -2594,7 +2583,7 @@ class Cache:
                                 raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
                             q = list(qry.keys())[0]
                             doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
-                return await self.update_db(doc_ids=doc_ids)
+                return await self.update_db(self.SiteDB, doc_ids=doc_ids)
 
     async def refresh_site_db(self, force: bool = False) -> Response:
         if self.responses.site and not force:
@@ -2702,7 +2691,6 @@ class Cache:
                 _ = await self.update_db(self.TemplateDB, data=resp.output, truncate=True)
         return resp
 
-
     async def update_template_db(
             self,
             data: Dict[str, str] | List[Dict[str, str]] = None,
@@ -2726,22 +2714,6 @@ class Cache:
             log.exception(f"Exception during update of TemplateDB\n{e}")
 
         return resp
-
-        #         if True:
-        #             ...
-        #         elif update:
-        #             update = utils.listify(update)
-        #             db_res = [self.TemplateDB.upsert(Document(template.data, doc_id=template.doc_id)) for template in update]  # FIXME combine existing with updated dict like others, upsert is slow
-        #             db_res = utils.unlistify(db_res)
-        #             self.verify_db_action('template', expected=len(update), response=db_res)
-        #         else: # add
-        #             add = utils.listify(add)
-        #             db_res = self.TemplateDB.insert_multiple(add)
-        #             self.verify_db_action('template', expected=len(add), response=db_res)
-        #     except Exception as e:
-        #             log.error(f"Tiny DB Exception during TemplateDB update {e.__class__.__name__}.  See logs", show=True, caption=True, log=True)
-        #             log.exception(e)
-        # return
 
     async def refresh_client_db(
         self,
@@ -3187,7 +3159,7 @@ class Cache:
         if dev_type:
             dev_type = utils.listify(dev_type)
             if "switch" in dev_type:
-                dev_type = set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"]))
+                dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
 
         Model = CacheDevice
         if isinstance(query_str, (list, tuple)):
