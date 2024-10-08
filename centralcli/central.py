@@ -4524,6 +4524,8 @@ class CentralApi(Session):
     ) -> Response:
         """Delete devices using Serial number.  Only applies to CoP deployments.
 
+        Device can not be archived in CoP inventoryI
+
         Args:
             devices (list, optional): List of devices to be deleted from
                 GreenLake inventory.  Only applies to CoP
@@ -5427,15 +5429,13 @@ class CentralApi(Session):
     async def get_archived_devices(
         self,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 50,
     ) -> Response:
         """Get Archived devices from device inventory.
 
-        // Used by show archived //
-
         Args:
             offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of devices to get Defaults to 100.
+            limit (int, optional): Number of devices to get Defaults to 50 (which is also the max).
 
         Returns:
             Response: CentralAPI Response object
