@@ -3595,7 +3595,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    async def delete_site(self, site_id: int | List[int]) -> Response:
+    async def delete_site(self, site_id: int | List[int]) -> Response | List[Response]:
         """Delete Site.
 
         Args:
