@@ -220,6 +220,8 @@ class ImportSites(RootModel):
         def auto_usa(data: Dict[str, str | int | float]) -> str:
             if not data.get("country") and data.get("state") and data["state"] in state_abbrev_to_pretty.values():
                 return "United States"
+            if data.get("country", "").upper() in ["USA", "US"]:
+                return "United States"
 
             return data.get("country")
 
