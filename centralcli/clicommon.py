@@ -879,7 +879,7 @@ class CLICommon:
             if import_type == "devices" and all([isinstance(s, str) for s in data]):   # all(utils.is_serial(s) for s in data):
                 data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
             if import_type == "labels":
-                data = [{"name": label} for label in data]
+                data = [{"name": label} for label in data if not label.lower().startswith("label")]
 
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         data = [d for d in data if not d.get("retired", d.get("ignore"))]
