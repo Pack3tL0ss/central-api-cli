@@ -60,7 +60,7 @@ def test_blink_wrong_dev_type():
         ]
     )
     assert result.exit_code == 1
-    assert "Unable to gather" in result.stdout
+    assert "No Match found" in result.stdout
     assert "excluded" in result.stdout
 
 
