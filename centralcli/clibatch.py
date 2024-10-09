@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 from time import sleep
@@ -36,7 +35,7 @@ from centralcli.constants import (
 )
 
 from centralcli.strings import ImportExamples
-from centralcli.models import Groups, ImportSites
+from centralcli.models import Groups, ImportSites, Labels
 from centralcli.cache import CentralObject
 
 # from centralcli.models import GroupImport
@@ -366,6 +365,18 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     except Exception as e:
         cli.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{repr(e)}")
 
+    for idx in range(2):
+        already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in [s["name"] for s in cli.cache.sites]]
+        if already_exists:
+            if idx == 0:
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] sites from import already exist according to the cache, ensuring cache is current.")
+                _ = cli.central.request(cli.cache.refresh_site_db)
+            else:
+                cache_exists = [cli.cache.get_site_identifier(s[0]) for s in already_exists]
+                skip_txt = utils.summarize_list([s.summary_text for s in cache_exists], color=None)
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  The Following Sites will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                verified_sites = [site for idx, site in enumerate(verified_sites) if idx not in [s[1] for s in already_exists]]
+
     if not verified_sites:
         cli.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
 
@@ -482,7 +493,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
 
     names_from_import = [g.name for g in groups]
     if any([name in cli.cache.groups_by_name for name in names_from_import]):
-        cli.econsole.print(":warning:  Import includes groups that already exist according to local cache.  Updating local group cache.")
+        cli.econsole.print("[dark_orange3]:warning:[/]  Import includes groups that already exist according to local cache.  Updating local group cache.")
         _ = cli.central.request(cli.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
         # TODO maybe split batch_verify into the command and the function that does the validation, then send the data from import for groups that already exist to the validation func.
 
@@ -502,7 +513,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                     ap_reqs += [pc.request]
 
         if g.name in cli.cache.groups_by_name:
-            cli.econsole.print(f":warning:  Group [cyan]{g.name}[/] already exists. [red]Skipping Group Add...[/]")
+            cli.econsole.print(f"[dark_orange3]:warning:[/]  Group [cyan]{g.name}[/] already exists. [red]Skipping Group Add...[/]")
             skip += [g.name]
             continue
 
@@ -715,25 +726,37 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     elif not data:
         cli.exit("No import file provided")
 
+    for idx in range(2):
+        already_exists = [d["name"] for d in data if d["name"] in cli.cache.label_names]
+        if already_exists:
+            if idx == 0:
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
+                _ = cli.central.request(cli.cache.refresh_label_db)
+            else:
+                skip_txt = utils.summarize_list(already_exists)
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                data = [label for label in data if label["name"] not in cli.cache.label_names]
+
+    if not data:
+        cli.exit("[italic dark_olive_green2]No Labels remain after validation[/].")
+
     # TODO common func for this type of multi-element confirmation, we do this a lot.
     _msg = "\n".join([f"  [cyan]{inner['name']}[/]" for inner in data])
     _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
     _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
-    print(_msg)
+    cli.console.print(_msg, emoji=False)
 
-    resp = None
     if cli.confirm(yes):
         reqs = [BatchRequest(cli.central.create_label, label_name=inner['name']) for inner in data]
         resp = cli.central.batch_request(reqs)
-        # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
         try:
-            _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
-            asyncio.run(cli.cache.update_label_db(data=_data))
+            cache_data = Labels([r.output for r in resp if r.ok])
+            _  = cli.central.request(cli.cache.update_label_db, data=cache_data.model_dump())
         except Exception as e:
             log.exception(f'Exception during label cache update in batch_add_labels]n{e}')
-            print(f'[bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
+            cli.econsole.print(f'[dark_orange3]:warning:[/]  [bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
-    return resp or Response(error="No labels were added")
+        return resp
 
 
 def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
@@ -750,23 +773,24 @@ def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: 
     return resp
 
 
-# TODO TEST and complete.
 def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
-    print("Batch Deploy is new, and has not been completely tested yet.")
-    if cli.confirm(yes=False):  # TODO not honoring -Y until tested further
-        data = cli._get_import_file(import_file)
-        if "groups" in data:
-            resp = batch_add_groups(data=data["groups"], yes=yes)
-            cli.display_results(resp)
-        if "sites" in data:
-            resp = batch_add_sites(data=data["sites"], yes=yes)
-            cli.display_results(resp)
-        if "labels" in data:
-            resp = batch_add_labels(data=data["labels"], yes=yes)
-            cli.display_results(resp, tablefmt="action")
-        if "devices" in data:
-            resp = batch_add_devices(data=data["devices"], yes=yes)
-            cli.display_results(resp, tablefmt="action")
+    data = cli._get_import_file(import_file)
+    if "groups" in data:
+        resp = batch_add_groups(import_file, yes=bool(yes))
+        yes = yes if not yes else yes - 1
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+    if "sites" in data:
+        resp = batch_add_sites(import_file, yes=bool(yes))
+        cli.display_results(resp)
+        yes = yes if not yes else yes - 1
+    if "labels" in data:
+        resp = batch_add_labels(import_file, yes=bool(yes))
+        cli.display_results(resp, tablefmt="action")
+        yes = yes if not yes else yes - 1
+    if "devices" in data:
+        resp = batch_add_devices(import_file, yes=bool(yes))
+        cli.display_results(resp, tablefmt="action")
+
 
 
 @app.command()
@@ -899,7 +923,7 @@ def verify(
 def deploy(
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
-    yes: bool = cli.options.yes,
+    yes: int = typer.Option(False, "-Y", "-y", count=True, help="Bypass confirmation prompts - Assume Yes.  Use multiples i.e. -yy -yyy to bypass each prompt in the deploy process (groups, sites, labels, devices).",),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
@@ -926,8 +950,7 @@ def deploy(
             "",
             "Error: One of 'IMPORT_FILE' or --example should be provided.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
 
     batch_deploy(import_file, yes)
     # cli.display_results(resp, tablefmt="action")
