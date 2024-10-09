@@ -1071,7 +1071,7 @@ def delete(
     what: BatchDelArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
+    cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
