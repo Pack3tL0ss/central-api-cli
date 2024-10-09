@@ -2930,7 +2930,7 @@ class CentralApi(Session):
         wlan_tg: bool = False,
         aos10: bool = False,
         microbranch: bool = False,
-        gw_role: constants.BranchGwRoleTypes = "branch",
+        gw_role: constants.BranchGwRoleTypes = None,
         monitor_only_sw: bool = False,
         monitor_only_cx: bool = False,
         cnx: bool = False,
@@ -2951,7 +2951,7 @@ class CentralApi(Session):
                 default False (Instant)
             microbranch (bool): True to enable Microbranch network role for APs is applicable only for AOS10 architecture.
             gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
-                Default: "branch"
+                Defaults to None.  Results in "branch" unless "sdwan" is in allowed_types otherwise "vpnc".
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
             monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
             cnx (bool, optional): Make group compatible with cnx (New Central)
@@ -3025,9 +3025,9 @@ class CentralApi(Session):
         }
         if "SD_WAN_Gateway" in allowed_types:
             # SD_WAN_Gateway requires Architecture and GwNetworkRole (VPNConcentrator)
-            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
+            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = "VPNConcentrator"
             json_data["group_attributes"]["group_properties"]["Architecture"] = "SD_WAN_Gateway"
-        elif gw_role and "Gateways" in allowed_types:
+        elif "Gateways" in allowed_types:
             json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
             json_data["group_attributes"]["group_properties"]["Architecture"] = \
                 "Instant" if not aos10 else "AOS10"
