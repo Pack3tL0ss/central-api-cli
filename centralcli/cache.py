@@ -2328,7 +2328,7 @@ class Cache:
             with econsole.status(f":arrows_clockwise:  Updating [dark_olive_green2]{db.name}[/] Cache: [cyan]{len(data)}[/] records."):
                 if truncate:
                     db.truncate()
-                db_res = db.insert_multiple(data)
+                db_res = db.insert_multiple([dict(d) for d in data])  # Converts any TinyDB.Documents to dict as that has unexpected results.
                 return self.verify_db_action(db, expected=len(data), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
 
         doc_ids = utils.listify(doc_ids)
