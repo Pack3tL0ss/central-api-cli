@@ -853,7 +853,7 @@ class CLICommon:
 
         return md5.hexdigest()
 
-    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
@@ -861,7 +861,6 @@ class CLICommon:
             except UserWarning as e:
                 log.exception(e)
                 self.exit(e)
-
 
         if not data:
             self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -875,14 +874,18 @@ class CLICommon:
                 data = [{"name": k, **v} for k, v in data.items()]
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                 data = [{"serial": k, **v} for k, v in data.items()]
-        elif isinstance(data, list) and text_ok:
-            if import_type == "devices" and all([isinstance(s, str) for s in data]):   # all(utils.is_serial(s) for s in data):
+        elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
+            if import_type == "devices" and utils.is_serial(data[0].keys()[-1]):  # spot check the last key to ensure it looks like a serial
                 data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
             if import_type == "labels":
                 data = [{"name": label} for label in data if not label.lower().startswith("label")]
 
+        data = clean.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
+                                                            # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
+
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
-        data = [d for d in data if not d.get("retired", d.get("ignore"))]
+        if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
+            data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
         return data
 
