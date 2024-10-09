@@ -869,7 +869,7 @@ class CLICommon:
             data = data[import_type]
 
 
-        if isinstance(data, dict):
+        if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
             if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
                 data = [{"name": k, **v} for k, v in data.items()]
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
@@ -1253,8 +1253,8 @@ class CLICommon:
         # If any groups appear to not exist according to local cache, update local cache
         not_in_cache = [name for name in names_from_import if name not in self.cache.groups_by_name]
         if not_in_cache:
-            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local group cache.  :arrows_clockwise: [bright_green]Updating local group cache[/].")
-            _ = self.central.request(self.cache.update_group_db)  # This updates cli.cache.groups_by_name
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local group cache.\n:arrows_clockwise: [bright_green]Updating local group cache[/].")
+            _ = self.central.request(self.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
 
         # notify and remove any groups that don't exist after cache update
         cache_by_name: Dict[str, CacheGroup] = {name: self.cache.groups_by_name.get(name) for name in names_from_import}
@@ -1264,6 +1264,9 @@ class CLICommon:
 
         groups: List[CacheGroup] = [g for g in cache_by_name.values() if g is not None]
         reqs = [self.central.BatchRequest(self.central.delete_group, g.name) for g in groups]
+
+        if not reqs:
+            self.exit("No groups remain to process after validation.")
 
         if len(groups) == 1:
             pre = ''
