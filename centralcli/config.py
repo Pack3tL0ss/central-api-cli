@@ -202,18 +202,23 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
         sites: !include sites.yaml
 
     """
-    fname = Path(loader.name).parent / node.value
+    fname: Path = Path(loader.name).parent / node.value
     try:
         if fname.suffix in ['.csv', '.tsv', '.dbf']:
             csv_data = "".join([line for line in fname.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
             try:
-                ds = tablib.Dataset().load(csv_data)
+                ds = tablib.Dataset().load(csv_data, format="csv")
             except UnsupportedFormat:
                 print(f'Unable to import data from {fname.name} verify formatting commas/headers/etc.')
-                sys.Exit(1)
+                sys.exit(1)
             return yaml.load(ds.yaml, Loader=SafeLineLoader) or {}
         else:
-            return load_yaml(fname)
+            yaml_out = load_yaml(fname)
+            text_out = fname.read_text()
+            if isinstance(yaml_out, str) and "\n" not in yaml_out and "\n" in text_out:
+                return [line.rstrip() for line in text_out.splitlines()]
+            else:
+                return yaml_out
     except FileNotFoundError as exc:
         print(f"{node.start_mark}: Unable to read file {fname}.")
         raise exc
