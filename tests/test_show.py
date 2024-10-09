@@ -323,13 +323,13 @@ def test_show_clients_wired():
 
 
 def test_show_client_by_mac():
-    test_data["client_mac"] = test_data.get("client", {}).get("wireless", {}).get("mac", test_data["wlan_client_mac"])
-    result = runner.invoke(app, ["show", "clients", test_data["client_mac"]],)
+    mac = test_data["client"]["wireless"]["mac"]
+    result = runner.invoke(app, ["show", "clients", mac],)
     print(result.stdout)
-    print(test_data["client_mac"])
+    print(mac)
     assert result.exit_code == 0
     assert "role" in result.stdout
-    assert f'mac {clean_mac(test_data["client_mac"])}' in clean_mac(result.stdout)
+    assert f'mac {clean_mac(mac)}' in clean_mac(result.stdout)
 
 
 def test_show_group_level_config():
