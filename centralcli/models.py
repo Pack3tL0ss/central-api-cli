@@ -261,6 +261,7 @@ class Group(BaseModel):
     gw_vars: Optional[Path] = Field(None, exclude=True)
     ap_vars: Optional[Path] = Field(None, exclude=True)
 
+
 class Groups(RootModel):
     root: List[Group]
 
@@ -277,11 +278,15 @@ class Groups(RootModel):
     def __len__(self) -> int:
         return len(self.model_dump())
 
-
     @staticmethod
     def format_data(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def str_to_list(v: DevTypes | List[DevTypes]) -> List[DevTypes]:
+            if isinstance(v, str) and " " in v:  # csv import we allow space separted for types on csv
+                return v.split()
+            return v if isinstance(v, list) else [v]
+
         if not data or "properties" not in data[0]:
-            return [{k.replace("-", "_"): v for k, v in inner.items()} for inner in data]  # from batch import file
+            return [{k.replace("-", "_"): v if k not in ["types", "allowed_types"] else str_to_list(v) for k, v in inner.items()} for inner in data]  # from batch import file
 
         # from central.get_all_groups response
         aos_version_map = {"AOS_10X": "AOS10", "AOS_8X": "AOS8", "NA": "NA"}
@@ -360,7 +365,7 @@ class Templates(RootModel):
 class Label(BaseModel):
     id: int = Field(alias="label_id")
     name: str = Field(alias="label_name")
-    devices: int = Field(alias=AliasChoices("devices", "associated_device_count"))
+    devices: Optional[int] = Field(0, alias=AliasChoices("devices", "associated_device_count"))
 
 class Labels(RootModel):
     root: List[Label]
