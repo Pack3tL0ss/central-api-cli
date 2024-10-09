@@ -474,6 +474,7 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     """
     # TODO if multiple groups are being added and the first one fails, the remaining groups do not get added (due to logic in _batch_request)
     # either need to set continue_on_fail or strip any group actions for groups that fail (i.e. upload group config.)
+    # TODO convert yes to int with count, allow -yy to skip config confirmation and main confirmation
     console = Console(emoji=False)
     br = cli.central.BatchRequest
     if import_file is not None:
