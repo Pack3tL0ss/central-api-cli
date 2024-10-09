@@ -2,18 +2,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Dict, List, Tuple, Union, Literal
+from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
-from pydantic import BaseModel, Extra, Field, ValidationError, validator
+from pydantic import BaseModel, ValidationError, ConfigDict
 from rich import print
 from rich.console import Console
 from rich.progress import track
-from tinydb.table import Document
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -28,70 +26,27 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import (
-    AllDevTypes,
     BatchAddArgs,
     BatchDelArgs,
     BatchRenameArgs,
-    CloudAuthUploadType,
-    GatewayRole,
     IdenMetaVars,
-    SendConfigDevIdens,
-    SiteStates,
-    state_abbrev_to_pretty,
+    SendConfigTypes,
+    CloudAuthUploadTypes,
 )
-from centralcli.exceptions import DevException, ImportException, MissingFieldException
+
 from centralcli.strings import ImportExamples
+from centralcli.models import Groups, ImportSites, Labels
+from centralcli.cache import CentralObject
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
-from centralcli.cache import CentralObject  # NoQA
+
+if TYPE_CHECKING:
+    from .cache import CacheSite
 
 iden = IdenMetaVars()
 tty = utils.tty
 app = typer.Typer()
-
-
-# TODO template upload based on j2 support
-class GroupImport(BaseModel):
-    group: str
-    allowed_types: List[AllDevTypes] = Field(["ap", "gw", "cx", "sw"], alias="types")
-    gw_role: GatewayRole = Field("branch",)  # alias="gw-role")
-    aos10: bool = False
-    microbranch: bool = False
-    wlan_tg: bool = Field(False,)  # alias="wlan-tg")
-    wired_tg: bool = Field(False,)  # alias="wired-tg")
-    monitor_only_sw: bool = Field(False,)  # alias="monitor-only-sw")
-    monitor_only_cx: bool = Field(False,)  # alias="monitor-only-cx")
-    gw_config: Path = Field(None,)  # alias="gw-config")
-    ap_config: Path = Field(None,)  # alias="ap-config")
-    gw_vars: Path = Field(None,)  # alias="gw-vars")
-    ap_vars: Path = Field(None,)  # alias="ap-vars")
-
-    class Config:
-        use_enum_values = True
-
-# TODO move to models.py
-class SiteImport(BaseModel):
-    site_name: str
-    address: str = None
-    city: str = None
-    state: str = None
-    country: str = Field(None, min_length=3)
-    zipcode: str = Field(None, min_length=5, alias="zip")
-    latitude: str = Field(None, min_length=5, alias="lat")
-    longitude: str = Field(None, min_length=5, alias="lon")
-
-    class Config:
-        extra = Extra.allow
-        use_enum_values = True
-        allow_population_by_alias = True
-
-    @validator("state")
-    def short_to_long(cls, v: str) -> str:
-        try:
-            return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
-        except ValueError:
-            return SiteStates(v).value
 
 
 class FstrInt:
@@ -372,32 +327,6 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
 
     return data
 
-# TODO DEPRECATED This now lives in clicommon re-point references then remove
-def _get_import_file(import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict] | Dict:
-    data = None
-    if import_file is not None:
-        data = config.get_file_data(import_file, text_ok=text_ok)
-
-    if not data:
-        cli.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
-
-    if isinstance(data, dict) and import_type and import_type in data:
-        data = data[import_type]
-
-    if data:
-        if isinstance(data, dict):  # accept yaml/json keyed by serial #
-            if utils.is_serial(list(data.keys())[0]):
-                data = [{"serial": k, **v} for k, v in data.items()]
-        elif isinstance(data, list) and text_ok:
-            if import_type == "devices" and all(utils.is_serial(s) for s in data):
-                data = [{"serial": s} for s in data]
-            if import_type == "labels":
-                data = [{"name": label} for label in data]
-
-    # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
-    data = [d for d in data if not d.get("retired", d.get("ignore"))]
-
-    return data
 
 def _convert_site_key(_data: dict) -> dict:
     _site_aliases = {
@@ -423,62 +352,62 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
 
     central = cli.central
-    if import_file is not None:
-        data = config.get_file_data(import_file)
-
-    if isinstance(data, dict) and "sites" in data:
-        data = data["sites"]
-
-    resp = None
-    verified_sites: List[SiteImport] = []
     # We allow a list of flat dicts or a list of dicts where loc info is under
     # "site_address" or "geo_location"
-    # can be keyed on name or flat.
-    for i in data:
-        if isinstance(i, str) and isinstance(data[i], dict):
-            out_dict = _convert_site_key(
-                {"site_name": i, **data[i]}
-            )
-        else:
-            out_dict = _convert_site_key(i)
+    # can be keyed by name or flat.
+    if import_file is not None:
+        data = cli._get_import_file(import_file, "sites")
+    elif isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):  # Data keyed by site name
+        data = [{"site_name": k, **data[k]} for k in data]  # deploy is the only one that passed raw data in.
 
-        verified_sites += [SiteImport(**out_dict)]
+    try:
+        verified_sites = ImportSites(data)
+    except Exception as e:
+        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{repr(e)}")
 
-    site_names = [
-        f"  [cyan]{s.site_name}[/]" for s in verified_sites
-    ]
-    if len(site_names) > 7:
-        site_names = [*site_names[0:3], "  ...", *site_names[-3:]]
+    for idx in range(2):
+        already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in [s["name"] for s in cli.cache.sites]]
+        if already_exists:
+            if idx == 0:
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] sites from import already exist according to the cache, ensuring cache is current.")
+                _ = cli.central.request(cli.cache.refresh_site_db)
+            else:
+                cache_exists = [cli.cache.get_site_identifier(s[0]) for s in already_exists]
+                skip_txt = utils.summarize_list([s.summary_text for s in cache_exists], color=None)
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  The Following Sites will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                verified_sites = [site for idx, site in enumerate(verified_sites) if idx not in [s[1] for s in already_exists]]
 
-    print("\n[bright_green]The Following Sites will be created:[/]")
-    _ = [print(s) for s in site_names]
+    if not verified_sites:
+        cli.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
 
+    resp = None
+    site_names = utils.summarize_list([s.site_name for s in verified_sites], max=7)
+    cli.console.print("\n[bright_green]The Following Sites will be created:[/]")
+    cli.console.print(site_names, emoji=False)
     if cli.confirm(yes):
         reqs = [
-            BatchRequest(central.create_site, **site.dict())
+            BatchRequest(central.create_site, **site.model_dump())
             for site in verified_sites
         ]
         resp = central.batch_request(reqs)
-        if all([r.ok for r in resp]):
-            resp[-1].output = [r.output for r in resp]
-            resp = resp[-1]
-            cli.central.request(cli.cache.update_site_db, data=resp.output)
+        passed = list(sorted([r for r in resp if r.ok], key=lambda r: r.rl))
+        failed = [r for r in resp if not r.ok]
+        if passed:
+            cache_data = [r.output for r in passed]
+            cli.central.request(cli.cache.update_site_db, data=cache_data)  # TODO need an add function, this update combines old with new then truncates and re-writes all sites.
+            # we combine the passing responses into 1.
+            passed[0].output = cache_data
+            resp = passed[0] if not failed else [passed[0], *failed]
 
-        return resp or Response(error="No Sites were added")
-
-# TODO REMOVE NOT USED (keeping for now in case I change my mind)
-# class BatchRequest(BaseModel):
-#     func: Callable
-#     args: Tuple = ()
-#     kwargs: Dict[str, Any] = {}
+        return resp
 
 class PreConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     name: str
+    dev_type: Literal["ap", "gw"]
     config: str
     request: BatchRequest
 
-    class Config:
-        arbitrary_types_allowed = True
 
 # TODO finish extraction of uplink commands from commands sent to gw
 # so they can be sent in 2nd request as gw always errors interface doesn't
@@ -497,12 +426,12 @@ def _extract_uplink_commands(commands: List[str]) -> Tuple[List[str], List[str]]
     non_uplk_lines = [cmd for idx, cmd in enumerate(commands) if idx not in idx_list]
     return uplk_lines, non_uplk_lines
 
-def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, var_file: Path = None) -> PreConfig:
+def _build_pre_config(node: str, dev_type: SendConfigTypes, cfg_file: Path, var_file: Path = None) -> PreConfig:
     """Build Configuration from raw config or jinja2 template/variable file.
 
     Args:
         node (str): The name of the central node (group name or device MAC for gw)
-        dev_type (str): Type of device being pre-provisioned.  One of 'gw' or 'ap'.
+        dev_type (Literal["gw", "ap"]): Type of device being pre-provisioned.  One of 'gw' or 'ap'.
         cfg_file (Path): Path of the config file.
         var_file (Path, optional): Path of the variable file. Defaults to None.
 
@@ -514,18 +443,19 @@ def _build_pre_config(node: str, dev_type: SendConfigDevIdens, cfg_file: Path, v
         PreConfig: PreConfig object
     """
     if not cfg_file.exists():
-        print(f":warning: [cyan]{node}[/] {cfg_file} not found.  Unable to generate config.")
-        raise typer.Exit(1)
+        cli.exit(f"[cyan]{node}[/] specified config: {cfg_file} [red]not found[/].  [red italic]Unable to generate config[/].")
 
     br = cli.central.BatchRequest
     caasapi = caas.CaasAPI(central=cli.central)
     config_out = utils.generate_template(cfg_file, var_file=var_file)
     commands = utils.validate_config(config_out)
 
-    if dev_type == "gw":
-        return PreConfig(name=node, config=config_out, request=br(caasapi.send_commands, node, cli_cmds=commands))
-    elif dev_type == "ap":
-        return PreConfig(name=node, config=config_out, request=br(cli.central.replace_ap_config, node, clis=commands))
+    this_req = br(caasapi.send_commands, node, cli_cmds=commands) if dev_type == "gw" else br(cli.central.replace_ap_config, node, clis=commands)
+    return PreConfig(name=node, config=config_out, dev_type=dev_type, request=this_req)
+
+
+def _build_group_add_reqs():
+    ...
 
 
 def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
@@ -540,40 +470,58 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
         typer.Exit: Exit if data is not in correct format.
 
     Returns:
-        List[Response]: List[CentralApi.Response Object]
+        List[Response]: List of Response objects.
     """
+    # TODO if multiple groups are being added and the first one fails, the remaining groups do not get added (due to logic in _batch_request)
+    # either need to set continue_on_fail or strip any group actions for groups that fail (i.e. upload group config.)
+    # TODO convert yes to int with count, allow -yy to skip config confirmation and main confirmation
     console = Console(emoji=False)
     br = cli.central.BatchRequest
     if import_file is not None:
-        data = config.get_file_data(import_file)
+        data = cli._get_import_file(import_file, import_type="groups")
     elif not data:
-        print("[red]Error!![/] No import file provided")
-        raise typer.Exit(1)
-
-    if isinstance(data, dict) and "groups" in data:
-        data = data["groups"]
+        cli.exit("No import file provided")
 
     reqs, gw_reqs, ap_reqs = [], [], []
     pre_cfgs = []
-    _pre_config_msg = ""
+    confirm_msg = ""
     cache_data = []
-    for group in data:
-        # we allow fields as wired_tg or wired-tg
-        _data = {k.replace("-", "_"): v for k, v in data[group].items()}
-        # if "allowed-types" in data[group]:
-        #     data[group]["allowed_types"] = data[group]["allowed-types"]
-        #     del data[group]["allowed-types"]
 
-        try:
-            # g = GroupImport(**{"group": group, **data[group]})
-            g = GroupImport(**{"group": group, **_data})
-        except ValidationError as e:
-            print(e)
-            raise typer.Exit(1)
+    try:
+        groups = Groups(data)
+    except (ValidationError, KeyError) as e:
+        cli.exit(repr(e))
+
+    names_from_import = [g.name for g in groups]
+    if any([name in cli.cache.groups_by_name for name in names_from_import]):
+        cli.econsole.print("[dark_orange3]:warning:[/]  Import includes groups that already exist according to local cache.  Updating local group cache.")
+        _ = cli.central.request(cli.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
+        # TODO maybe split batch_verify into the command and the function that does the validation, then send the data from import for groups that already exist to the validation func.
+
+    skip = []
+    for g in groups:
+        for dev_type, cfg_file, var_file in zip(["gw", "ap"], [g.gw_config, g.ap_config], [g.gw_vars, g.ap_vars]):
+            if cfg_file is not None:
+                pc = _build_pre_config(g.name, dev_type=dev_type, cfg_file=cfg_file, var_file=var_file)
+                pre_cfgs += [pc]
+                confirm_msg += (
+                    f"  [bright_green]{len(pre_cfgs)}[/]. [cyan]{g.name}[/] {'Gateway' if dev_type == 'gw' else 'AP'} "
+                    f"group level will be configured based on [cyan]{cfg_file.name}[/]\n"
+                )
+                if dev_type == "gw":
+                    gw_reqs += [pc.request]
+                else:
+                    ap_reqs += [pc.request]
+
+        if g.name in cli.cache.groups_by_name:
+            cli.econsole.print(f"[dark_orange3]:warning:[/]  Group [cyan]{g.name}[/] already exists. [red]Skipping Group Add...[/]")
+            skip += [g.name]
+            continue
+
         reqs += [
             br(
                 cli.central.create_group,
-                g.group,
+                g.name,
                 allowed_types=g.allowed_types,
                 wired_tg=g.wired_tg,
                 wlan_tg=g.wlan_tg,
@@ -582,44 +530,40 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 gw_role=g.gw_role,
                 monitor_only_sw=g.monitor_only_sw,
                 monitor_only_cx=g.monitor_only_cx,
+                cnx=g.cnx,
             )
         ]
-        cache_data += [
-            {"name": g.group, "template group": {"Wired": g.wired_tg, "Wireless": g.wlan_tg}}
-        ]
-        for dev_type, cfg_file, var_file in zip(["gw", "ap"], [g.gw_config, g.ap_config], [g.gw_vars, g.ap_vars]):
-            if cfg_file is not None:
-                pc = _build_pre_config(g.group, dev_type=dev_type, cfg_file=cfg_file, var_file=var_file)
-                pre_cfgs += [pc]
-                _pre_config_msg += (
-                    f"  [bright_green]{len(pre_cfgs)}[/]. [cyan]{g.group}[/] {'gateways' if dev_type == 'gw' else 'AP'} "
-                    f"group level will be configured based on [cyan]{cfg_file.name}[/]\n"
-                )
-                if dev_type == "gw":
-                    gw_reqs += [pc.request]
-                else:
-                    ap_reqs += [pc.request]
+        cache_data += [g.model_dump()]
+
+    groups_cnt = len(groups) - len(skip)
+    reqs_cnt = len(reqs) + len(gw_reqs) + len(ap_reqs)
 
     if pre_cfgs:
-        _pre_config_msg = (
+        confirm_msg = (
             "\n[bright_green]Group level configurations will be sent:[/]\n"
-            f"{_pre_config_msg}"
+            f"{confirm_msg}"
         )
-    _pre_config_msg = (
-        f"{_pre_config_msg}\n"
-        f"[italic dark_olive_green2]{len(reqs) + len(gw_reqs) + len(ap_reqs)} API calls will be performed.[/]\n"
-    )
 
-    print("[bright_green]The following groups will be created:[/]")
-    _ = [print(f"  [cyan]{g}[/]") for g in data]
+    if cache_data:
+        _groups_text = utils.color([g.name for g in groups if g.name not in skip], "cyan", pad_len=4, sep="\n")
+        confirm_msg = (
+            f"[bright_green]The following {f'[cyan]{groups_cnt}[/] groups' if groups_cnt > 1 else 'group'} will be created[/]:\n{_groups_text}\n"
+            f"{confirm_msg}"
+        )
 
-    print(_pre_config_msg)
+    if len(reqs) + len(gw_reqs) + len(ap_reqs) > 1:
+        confirm_msg = f"{confirm_msg}\n[italic dark_olive_green2]{reqs_cnt} API calls will be performed.[/]\n"
 
+    if not reqs_cnt:
+        cli.exit("No Updates to perform...", code=0)
+
+    console.print(confirm_msg)
     if pre_cfgs:
-        for idx in range(len(pre_cfgs) + 1):
+        idx = 0
+        while True:
             if idx > 0:
-                print(_pre_config_msg)
-            print("Select [bright_green]#[/] to display config to be sent or [bright_green]go[/] to continue.")
+                console.print(confirm_msg)
+            console.print("Select [bright_green]#[/] to display config to be sent, [bright_green]go[/] to continue or [red]abort[/] to abort.")
             ch = utils.ask(
                 ">",
                 console=console,
@@ -630,119 +574,147 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
                 break
             else:
                 pc: PreConfig = pre_cfgs[int(ch) - 1]
-                console.rule(f"Config to be sent to {pc.name}")
+                pretty_type = 'Gateway' if pc.dev_type == 'gw' else pc.dev_type.upper()
+                console.rule(f"{pc.name} {pretty_type} config")
                 with console.pager():
                     console.print(pc.config)
-                console.rule(f" End {pc.name} config ")
+                console.rule(f"End {pc.name} {pretty_type} config")
+            idx += 1
 
-    resp = None
-    if reqs and yes or typer.confirm("Proceed?", abort=True):
+    resp = []
+    if reqs and cli.confirm(yes):
         resp = cli.central.batch_request(reqs)
-        if all(r.ok for r in resp):
-            cache_resp = asyncio.run(cli.cache.update_group_db(cache_data))
-            log.debug(f"batch add group cache resp: {cache_resp}")
-        # cli.display_results(resp)
+
+        # -- Update group cache --
+        cache_update_data = [group_data for res, group_data in zip(resp, cache_data) if res.ok]
+        cli.central.request(cli.cache.update_group_db, data=cache_update_data)
+
+    if [*ap_reqs, *gw_reqs]:
+        if not reqs:
+            cli.econsole.print("[dark_orange3]:warning:[/]  Updating Group level config for group(s) that [dark_olive_green2]already exists[/][red]![/]  [dark_orange3]:warning:[/]")
+            if not cli.confirm():
+                ...  # cli.confirm aborts
+
         config_reqs = []
         if gw_reqs:
-            print("\n[bright_green]Sending Group level gateway config (CLI commands)[/]")
-            print("\n  [italic]This can take some time.[/]")
+            print("\n[bright_green]About to send group level gateway config (CLI commands)[/]")
+            print("  [italic blink]This can take some time.[/]")
             config_reqs += gw_reqs
-        #     resp = cli.central.batch_request(gw_reqs)
-        #     cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         if ap_reqs:
-            print("\n[bright_green]Sending Group level AP config (Replaces entire group level)[/]\n")
+            print("\n[bright_green]About to send group level AP config (Replaces entire group level)[/]\n")
             config_reqs += ap_reqs
-            # resp = cli.central.batch_request(ap_reqs)
-            # cli.display_results(resp,  tablefmt="action")
         if config_reqs:
-            for _ in track(range(10), description="Pausing to ensure groups are ready to accept configs."):
+            for _ in track(range(10), description="Delay to ensure groups are ready to accept configs."):
                 sleep(1)
             resp += cli.central.batch_request(config_reqs, retry_failed=True)
 
     return resp or Response(error="No Groups were added")
 
+def verify_required_fields(data: List[Dict[str, Any]], required: List[str], optional: List[str] | None = None, example_text: str | None = None, exit_on_fail: bool = True):
+    ok = True
+    if not all([len(required) == len([k for k in d.keys() if k in required]) for d in data]):
+        ok = False
+        print("[bright_red]:warning:  !![/] Missing at least 1 required field")
+        print("\nThe following fields are [bold]required[/]:")
+        print(utils.color(required, pad_len=4, sep="\n"))
+        if optional:
+            print("\nThe following fields are optional:")
+            print(utils.color(optional, color_str="cyan", pad_len=4, sep="\n"))
+        if example_text:
+            print(f"\nUse [cyan]{example_text}[/] to see valid import file formats.")
+        # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
+        if exit_on_fail:
+            raise typer.Exit(1)
+    return ok
 
 
+def validate_license_type(data: List[Dict[str, Any]]):
+    """validate device add import data for valid subscription name.
+
+    Args:
+        data (List[Dict[str, Any]]): The data from the import
+
+    Returns:
+        Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
+            The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
+    """
+    sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
+    sub_key = None if not sub_key else sub_key[0]
+    warn = False
+    if not sub_key:
+        return data, warn
+
+    already_warned = []
+    for d in data:
+        if d.get(sub_key):
+            for idx in range(2):
+                try:
+                    d["license"] = cli.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
+                    if sub_key != "license":
+                        del d[sub_key]
+                    break
+                except ValueError:
+                    if idx == 0 and cli.cache.responses.license is None:
+                        cli.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["license"]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
+                        resp = cli.central.request(cli.cache.refresh_license_db)
+                        if not resp:
+                            cli.display_results(resp, exit_on_fail=True)
+                    else:
+                        warn = True
+                        if d['license'] not in already_warned:
+                            already_warned += [d['license']]
+                            cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d['license']}[/] does not appear to be a valid license type.")
+    return data, warn
 
 
 def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
     # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-    data = data or _get_import_file(import_file, import_type="devices")
+    data: List[Dict[str, Any]] = data or cli._get_import_file(import_file, import_type="devices")
     if not data:
         cli.exit("No data/import file")
 
-    warn = False
     _reqd_cols = ["serial", "mac"]
-    if not all([len(_reqd_cols) == len([k for k in d.keys() if k in _reqd_cols]) for d in data]):
-        print("[reset]:warning: [bright_red] !![/]Missing Required [cyan]serial[/] or [cyan]mac[/] for at least 1 entry")
-        print("\nImport file must have the following keys for each device:")
-        print("[cyan]serial[/], [cyan]mac[/]")
-        print("\nThe following headers/columns are optional:")
-        print("[cyan]group[/], [cyan]license[reset]")
-        print("Use [cyan]cencli batch add devices --show-example[/] to see valid import file formats.")
-        # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
-        raise typer.Exit(1)
-
-    sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
-    sub_key = None if not sub_key else sub_key[0]
-    if sub_key:
-        # Validate license types
-        for d in data:
-            if d.get(sub_key):
-                for idx in range(2):
-                    try:
-                        d["license"] = cli.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
-                        if sub_key != "license":
-                            del d[sub_key]
-                        break
-                    except ValueError:
-                        if idx == 0:
-                            print(f'[bright_red]!![/] [cyan]{d["license"]}[/] not found in list of valid licenses.  Refreshing list/updating license cache.')
-                            resp = cli.central.request(cli.cache.update_license_db)
-                            if not resp:
-                                cli.display_results(resp, exit_on_fail=True)
-                        else:
-                            print(f"[bright_red]!![/] [cyan]{d['license']}[/] does not appear to be a valid license type")
-                            warn = True
-
+    verify_required_fields(
+        data, required=_reqd_cols, optional=['group', 'license'], example_text='cencli batch add devices --show-example'
+    )
+    data, warn = validate_license_type(data)
     word = "Adding" if not warn and yes else "Add"
-    confirm_devices = ['|'.join([f'{k}:{v}' for k, v in d.items()]) for d in data]
-    if len(confirm_devices) > 6:
-        confirm_str = '\n'.join([*confirm_devices[0:3], "...", *confirm_devices[-3:]])
-    else:
-        confirm_str = '\n'.join(confirm_devices)
 
-    console = Console(emoji=False, no_color=True)
-    print(f'{len(data)} [cyan]Devices found in {"import file" if not import_file else import_file.name}[/]')
-    console.print(confirm_str)
-    print(f'\n{word} {len(data)} devices found in {"import file" if not import_file else import_file.name}')
+    confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
+    confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
+    file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
+    print(f'{len(data)} Devices found in {file_str}')
+    cli.console.print(confirm_str, emoji=False)
+    print(f'\n{word} {len(data)} devices found in {file_str}')
     if warn:
         msg = ":warning:  Warnings exist"
         msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
         cli.econsole.print(msg)
+
     resp = None
     if cli.confirm(yes=not warn and yes):
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
+        update_func = cli.cache.refresh_inv_db
+        kwargs = {}
         if _data:
             try:
-                _data = [models.Inventory(**d).dict() for d in _data]
+                _data = models.Inventory(_data).model_dump()
+                update_func = cli.cache.update_inv_db
+                kwargs = {"data": _data}
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e}")
                 _data = None
 
-        # always perform full dev_db update as we don't know the other fields.
         console = Console()
-        with console.status(f'Performing{" full" if _data else ""} inventory cache update after device edition.') as spin:
-            spin.stop()
-            cache_res = [cli.central.request(cli.cache.update_inv_db, data=_data)]
-            spin.update("Allowing time for devices to populate before updating dev cache.")
-            spin.start()
+        cache_res = [cli.central.request(update_func, **kwargs)]  # This starts it's own spinner
+        with console.status("Allowing time for devices to populate before updating dev cache.") as spin:
             sleep(3)
             spin.update('Performing full device cache update after device edition.')
             sleep(2)
-        cache_res += [cli.central.request(cli.cache.update_dev_db)]
+        # always perform full dev_db update as we don't know the other fields.
+        cache_res += [cli.central.request(cli.cache.refresh_dev_db)]  # This starts it's own spinner
 
     return resp or Response(error="No Devices were added")
 
@@ -751,63 +723,75 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
 # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
 def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool = False) -> List[Response]:
     if import_file is not None:
-        data = _get_import_file(import_file, "labels", text_ok=True)
+        data = cli._get_import_file(import_file, "labels", text_ok=True)
     elif not data:
         cli.exit("No import file provided")
+
+    for idx in range(2):
+        already_exists = [d["name"] for d in data if d["name"] in cli.cache.label_names]
+        if already_exists:
+            if idx == 0:
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
+                _ = cli.central.request(cli.cache.refresh_label_db)
+            else:
+                skip_txt = utils.summarize_list(already_exists)
+                cli.econsole.print(f"[dark_orange3]:warning:[/]  The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                data = [label for label in data if label["name"] not in cli.cache.label_names]
+
+    if not data:
+        cli.exit("[italic dark_olive_green2]No Labels remain after validation[/].")
 
     # TODO common func for this type of multi-element confirmation, we do this a lot.
     _msg = "\n".join([f"  [cyan]{inner['name']}[/]" for inner in data])
     _msg = _msg.lstrip() if len(data) == 1 else f"\n{_msg}"
     _msg = f"[bright_green]Create[/] {'label ' if len(data) == 1 else f'{len(data)} labels:'}{_msg}"
-    print(_msg)
+    cli.console.print(_msg, emoji=False)
 
-    resp = None
     if cli.confirm(yes):
         reqs = [BatchRequest(cli.central.create_label, label_name=inner['name']) for inner in data]
         resp = cli.central.batch_request(reqs)
-        # if any failures occured don't pass data into update_label_db.  Results in API call to get labels from Central
         try:
-            _data = None if not all([r.ok for r in resp]) else cleaner.get_labels([r.output for r in resp])
-            asyncio.run(cli.cache.update_label_db(data=_data))
+            cache_data = Labels([r.output for r in resp if r.ok])
+            _  = cli.central.request(cli.cache.update_label_db, data=cache_data.model_dump())
         except Exception as e:
             log.exception(f'Exception during label cache update in batch_add_labels]n{e}')
-            print(f'[bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
+            cli.econsole.print(f'[dark_orange3]:warning:[/]  [bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
-    return resp or Response(error="No labels were added")
+        return resp
 
 
-def batch_add_cloudauth(upload_type: CloudAuthUploadType = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
+def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
     if import_file is not None:
-        data = config.get_file_data(import_file)
+        data = cli._get_import_file(import_file, "macs")
     elif not data:
         cli.exit("[red]Error!![/] No import file provided")
 
-    print(f"Upload{'' if not yes else 'ing'} [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid}[/]' if upload_type == 'mpsk' else ''}")
+    print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid}[/]' if upload_type == 'mpsk' else ''}")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=import_file, ssid=ssid)
 
     return resp
 
 
-# TODO TEST and complete.
 def batch_deploy(import_file: Path, yes: bool = False) -> List[Response]:
-    print("Batch Deploy is new, and has not been completely tested yet.")
-    if typer.confirm("Proceed?"):
-        data = config.get_file_data(import_file)
-        if "groups" in data:
-            resp = batch_add_groups(data=data["groups"], yes=yes)
-            cli.display_results(resp)
-        if "sites" in data:
-            resp = batch_add_sites(data=data["sites"], yes=yes)
-            cli.display_results(resp)
-        if "labels" in data:
-            print("[bright_red]WARNING!![/]: batch add labels not tested yet.  Still here as there is no real risk if it fails.")
-            resp = batch_add_labels(data=data["labels"], yes=yes)
-            cli.display_results(resp, tablefmt="action")
-        if "devices" in data:
-            resp = batch_add_devices(data=data["devices"], yes=yes)
-            cli.display_results(resp, tablefmt="action")
+    data = cli._get_import_file(import_file)
+    if "groups" in data:
+        resp = batch_add_groups(import_file, yes=bool(yes))
+        yes = yes if not yes else yes - 1
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+    if "sites" in data:
+        resp = batch_add_sites(import_file, yes=bool(yes))
+        cli.display_results(resp)
+        yes = yes if not yes else yes - 1
+    if "labels" in data:
+        resp = batch_add_labels(import_file, yes=bool(yes))
+        cli.display_results(resp, tablefmt="action")
+        yes = yes if not yes else yes - 1
+    if "devices" in data:
+        resp = batch_add_devices(import_file, yes=bool(yes))
+        cli.display_results(resp, tablefmt="action")
+
 
 
 @app.command()
@@ -833,14 +817,14 @@ def verify(
 ) -> None:
     """Validate batch Add operations using import data from file.
 
-    The same file used to import can be used to validate.
+    The same import file used to add/move can be used to validate.
     """
     if what != "devices":
         cli.exit("Only devices and device assignments are supported at this time.")
 
-    data = _get_import_file(import_file, import_type=what)
+    data = cli._get_import_file(import_file, import_type=what)
 
-    resp = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
+    resp: Response = cli.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         cli.display_results(resp, stash=False, exit_on_fail=True)
     resp.output = cleaner.simple_kv_formatter(resp.output)
@@ -940,7 +924,7 @@ def verify(
 def deploy(
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
-    yes: bool = cli.options.yes,
+    yes: int = typer.Option(False, "-Y", "-y", count=True, help="Bypass confirmation prompts - Assume Yes.  Use multiples i.e. -yy -yyy to bypass each prompt in the deploy process (groups, sites, labels, devices).",),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
@@ -967,8 +951,7 @@ def deploy(
             "",
             "Error: One of 'IMPORT_FILE' or --example should be provided.",
         ]
-        print("\n".join(_msg))
-        raise typer.Exit(1)
+        cli.exit("\n".join(_msg))
 
     batch_deploy(import_file, yes)
     # cli.display_results(resp, tablefmt="action")
@@ -1001,13 +984,12 @@ def add(
         ]
         cli.exit("\n".join(_msg))
 
-    caption, cleaner, tablefmt = None, None, "action"
+    caption, tablefmt = None, "action"
     if what == "sites":
         resp = batch_add_sites(import_file, yes=yes)
         tablefmt = "rich"
     elif what == "groups":
         resp = batch_add_groups(import_file, yes=yes)
-        cleaner = cleaner.parse_caas_response
     elif what == "devices":
         resp = batch_add_devices(import_file, yes=yes)
         if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:
@@ -1018,9 +1000,14 @@ def add(
     elif what == "macs":
         resp = batch_add_cloudauth("mac", import_file, yes=yes)
         caption = (
-            "Use [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
+            "\nUse [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
             "Use [cyan]cencli show cloud-auth registered-macs[/] to see all registered macs."
         )
+        if resp.ok:
+            try:
+                resp.output = cleaner.cloudauth_upload_status(resp.output)
+            except Exception as e:
+                log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}", caption=True, log=True)
     elif what == "mpsk":
         if not ssid:
             cli.exit("[cyan]--ssid[/] option is required when uploading mpsk")
@@ -1029,7 +1016,7 @@ def add(
             "Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import."
         )
 
-    cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what}", caption=caption, cleaner=cleaner)
+    cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what}", caption=caption)
 
 
 # TODO archive and unarchive have the same block this is used by batch delete
@@ -1047,364 +1034,45 @@ def show_archive_results(res: Response) -> None:
         cli.display_results(data=data, title=title, caption=caption)
 
 
-def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_devs: List[CentralObject], devs_in_monitoring: List[CentralObject], inv_del_serials: List[str], ui_only: bool = False) -> None:
-    br = BatchRequest
-    all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
-    cache_update_reqs = []
-    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}device cache update...'):
-        if cache_devs and all_ok:
-            cache_update_reqs += [br(cli.cache.update_dev_db, ([d.data for d in devs_in_monitoring],), remove=True)]
-        else:
-            cache_update_reqs += [br(cli.cache.update_dev_db)]
-
-    with console.status(f'Performing {"[bright_green]full[/] " if not all_ok else ""}inventory cache update...'):
-        if cache_devs or inv_del_serials and not ui_only:
-            if all_ok:
-                cache_update_reqs += [
-                    br(
-                        cli.cache.update_inv_db,
-                        (list(set([*inv_del_serials, *[d.serial for d in devs_in_monitoring]])),),
-                        remove=True
-                    )
-                ]
-            else:
-                cache_update_reqs += [br(cli.cache.update_inv_db)]
-
-    # Update cache remove deleted items
-    if cache_update_reqs:
-        _ = cli.central.batch_request(cache_update_reqs)
-
-
-# TODO DELME temporary debug testing
-def batch_delete_devices_dry_run(data: Union[list, dict], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False) -> List[Response]:
-    console = Console(emoji=False)
-
-    if not data:
-        print("[dark_orange]:warning:[/] [bright_red]Error[/] No data resulted from parsing of import file.")
-        raise typer.Exit(1)
-
-    serials_in = [dev["serial"].upper() for dev in data]
-
-    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
-    not_in_inventory: List[str] = [d for d, c in zip(serials_in, cache_devs) if c is None]
-    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
-    _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
-    inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
-
-    # Devices in monitoring (have a status), If only in inventory they lack status
-    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    for dev in cache_devs:
-        if not dev.status:
-            continue
-        elif dev.generic_type == "ap":
-            aps += [dev]
-        elif dev.generic_type == "gw":
-            gws += [dev]
-        elif dev.generic_type == "switch":
-            if dev.swack_id is None:
-                switches += [dev]
-            elif dev.swack_id in _stack_ids:
-                continue
-            else:
-                _stack_ids += [dev.swack_id]
-                stacks += [dev]
-        else:
-            raise DevException(f'Unexpected device type {dev.generic_type}')
-
-    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
-
-    console.rule(f"{len(cache_devs)} cache_devs")
-    console.print("\ncache_devs=")
-    _ = [console.print(c.rich_help_text) for c in cache_devs]
-    console.rule("")
-    console.print(f"\n{not_in_inventory=}\n\n_all_in_inventory (keys)={list(_all_in_inventory.keys())}\n\n{inv_del_serials=}")
-    console.rule(f"{len(devs_in_monitoring)} devs_in_monitoring")
-    _ = [console.print(c.rich_help_text) for c in devs_in_monitoring]
-    console.rule("")
-    console.print(f"Size of Inventory DB: {len(cli.cache.inventory)}")
-    console.print(f"Size of Device DB: {len(cli.cache.devices)}")
-    # inspect(cli.cache, console=console)
-
-
-def batch_delete_devices(data: list | dict, *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
-    br = cli.central.BatchRequest
-    console = Console(emoji=False)
-
-    if not data:
-        cli.exit("[bright_red]Error[/]: Parsing of import file resulted in [bright_red italic bold]no[/] data.")
-
-    serials_in = [dev["serial"].upper() for dev in data]
-
-    # TODO Literally copy/paste from clidel.py (then modified)... maybe move some things to clishared or clicommon
-    # to avoid duplication ... # FIXME update clidel with corrections made below
-    cache_devs: List[CentralObject | None] = [cli.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False) for d in serials_in]  # returns None if device not found in cache after update
-    if len(serials_in) != len(cache_devs):
-        log.warning(f"DEV NOTE: Error len(serials_in) ({len(serials_in)}) != len(cache_devs) ({len(cache_devs)})", show=True)
-
-    not_in_inventory: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
-    inv_del_serials: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is not None]
-    cache_devs: List[CentralObject] = [c for c in cache_devs if c]
-    # _all_in_inventory: Dict[str, Document] = cli.cache.inventory_by_serial
-    # inv_del_serials: List[str] = [s for s in serials_in if s in _all_in_inventory]
-
-    # Devices in monitoring (have a status), If only in inventory they lack status
-    aps, switches, stacks, gws, _stack_ids = [], [], [], [], []
-    for dev in cache_devs:
-        if not dev.status:
-            continue
-        elif dev.generic_type == "ap":
-            aps += [dev]
-        elif dev.generic_type == "gw":
-            gws += [dev]
-        elif dev.generic_type == "switch":
-            if dev.swack_id is None:
-                switches += [dev]
-            elif dev.swack_id in _stack_ids:
-                continue
-            else:
-                _stack_ids += [dev.swack_id]
-                stacks += [dev]
-        else:
-            raise DevException(f'Unexpected device type {dev.generic_type}')
-
-    devs_in_monitoring = [*aps, *switches, *stacks, *gws]
-    log.debug(f"{devs_in_monitoring=}, {inv_del_serials=}")
-
-    _serials = inv_del_serials if not force else serials_in
-    # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
-    # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
-    arch_reqs = [] if ui_only or not _serials else [
-        br(cli.central.archive_devices, (_serials,)),
-        br(cli.central.unarchive_devices, (_serials,)),
-    ]
-
-    # cop only delete devices from GreenLake inventory
-    cop_del_reqs = [] if not _serials or not config.is_cop else [
-        br(cli.central.cop_delete_device_from_inventory, (_serials,))
-    ]
-
-    # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-    mon_del_reqs, delayed_mon_del_reqs = [], []
-    for dev_type, _devs in zip(["ap", "switch", "stack", "gateway"], [aps, switches, stacks, gws]):
-        if _devs:
-            down_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "down"]
-            up_now =  [d.serial if dev_type != "stack" else d.swack_id for d in _devs if d.status.lower() == "up"]
-            if [*down_now, *up_now]:
-                func = getattr(cli.central, f"delete_{dev_type}")
-                if down_now:
-                    mon_del_reqs += [br(func, s) for s in down_now]
-                if up_now:
-                    delayed_mon_del_reqs += [br(func, s) for s in up_now]
-
-    # warn about devices that were not found
-    if not_in_inventory:
-        console.print("\n[dark_orange]Warning[/]: The following provided devices were not found in the inventory.")
-        _ = [console.print(f"    [cyan]{d}[/]") for d in not_in_inventory]
-        print(f"{'[bright_green italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
-
-    # None of the provided devices were found in cache or inventory
-    if not [*arch_reqs, *mon_del_reqs, *delayed_mon_del_reqs, *cop_del_reqs]:
-        cli.exit("Everything is as it should be, nothing to do.", code=0)
-
-    # construnct confirmation msg
-    if force:
-        _msg = f"[bright_red]Delete[/] [cyan]{serials_in[0]}[/]\n"
-        if len(serials_in) > 1:
-            _msg += "\n".join([f"       [cyan]{d}[/]" for d in serials_in[1:]])
-    else:
-        _msg = f"[bright_red]Delete[/] {cache_devs[0].summary_text}\n"
-        if len(cache_devs) > 1:
-            _msg += "\n".join([f"       {d.summary_text}" for d in cache_devs[1:]])
-
-    if ui_only:
-        _total_reqs = len(mon_del_reqs)
-    elif cop_inv_only:
-        _total_reqs = len(cop_del_reqs)
-    else:
-        _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
-
-    if ui_only:
-        if delayed_mon_del_reqs:
-            print(f"{len(delayed_mon_del_reqs)} of the {len(serials_in)} provided are currently online, devices can only be removed from UI if they are offline.")
-            delayed_mon_del_reqs = []
-        if not mon_del_reqs:
-            cli.exit("No devices found to remove from UI... Exiting")
-        else:
-            _msg += "\n[italic cyan]devices will be removed from UI only, Will appear again once they connect to Central.[/]"
-
-    _msg += f"\n\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."
-
-    # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
-    console.print(_msg)
-    batch_resp = []
-    if cli.confirm(yes, abort=True):
-        if not cop_inv_only:
-            batch_resp = cli.central.batch_request([*arch_reqs, *mon_del_reqs])
-            if arch_reqs and len(batch_resp) >= 2:
-                # if archive requests all pass we summarize the result.
-                if all([r.ok for r in batch_resp[0:2]]) and all([not r.get("failed_devices") for r in batch_resp[0:2]]):
-                    batch_resp[0].output = batch_resp[0].output.get("message")
-                    batch_resp[1].output =  f'  {batch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(batch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
-                else:
-                    show_archive_results(batch_resp[0])  # archive
-                    show_archive_results(batch_resp[1])  # unarchive
-                    batch_resp = batch_resp[2:]
-
-            if not force and not all([r.ok for r in batch_resp]):  # EARLY EXIT ON FAILURE (archive failures alone will proceed as they are removed from batch_resp)
-                log.warning("[bright_red]A Failure occured aborting remaining actions.[/]", caption=True)
-                update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-                cli.display_results(batch_resp, exit_on_fail=True, caption="A Failure occured, Re-run command to perform remaining actions.", tablefmt="action")
-
-    if not delayed_mon_del_reqs and not cop_del_reqs:
-        # if all reqs OK cache is updated by deleting specific items, otherwise it's a full cache refresh
-        update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-        if batch_resp:  # Can occur if archive/unarchive has failures batch_resp[2:] could be an empty list.
-            cli.display_results(batch_resp, tablefmt="action")
-        cli.exit("[green italic]No more calls to perform[/]", code=0)
-
-    elif delayed_mon_del_reqs and not cop_inv_only:
-        del_resp = []
-        del_reqs_try = delayed_mon_del_reqs.copy()
-        _delay = 10 if not switches else 30  # switches take longer to drop off
-        for _try in range(4):
-            _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
-            _delay -= (5 * _try) # reduce delay by 5 secs for each request
-            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
-                sleep(1)
-
-            _del_resp = cli.central.batch_request(del_reqs_try, continue_on_fail=True)
-            if _try == 3:
-                if not all([r.ok for r in _del_resp]):
-                    print("\n[dark_orange]:warning:[/] Retries exceeded. Devices still remain Up in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
-                del_resp += _del_resp
-            else:
-                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
-
-            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
-            if del_reqs_try:
-                print(f"{len(del_reqs_try)} out of {len([*mon_del_reqs, *delayed_mon_del_reqs])} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
-            else:
-                break
-
-        batch_resp += del_resp or _del_resp
-
-        if batch_resp:
-            update_dev_inv_cache(console, batch_resp=batch_resp, cache_devs=cache_devs, devs_in_monitoring=devs_in_monitoring, inv_del_serials=inv_del_serials, ui_only=ui_only)
-
-    # On COP delete devices from GreenLake inventory (only available on CoP)
-    # TODO test against a cop system
-    # TODO add to cencli delete device ...
-    cop_del_resp = []
-    if cop_del_reqs:
-        cop_del_resp = cli.central.batch_request(cop_del_reqs)
-        if not all(r.ok for r in cop_del_resp):
-            log.error("[bright_red]Errors occured during CoP GreenLake delete", caption=True)
-
-    if cop_del_resp:
-        batch_resp += cop_del_resp
-    elif cop_inv_only and cop_del_resp:
-        batch_resp = cop_del_resp
-
-    if batch_resp:
-        cli.display_results(batch_resp, tablefmt="action")
-
-
-def batch_delete_sites(data: Union[list, dict], *, yes: bool = False) -> List[Response]:
+def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response]:
     central = cli.central
     del_list = []
-    verified_sites: List[SiteImport] = []
-    for i in data:
-        if isinstance(i, str) and isinstance(data[i], dict):
-            out_dict = _convert_site_key(
-                {"site_name": i, **data[i]}
-            )
-        else:
-            out_dict = _convert_site_key(i)
+    if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
+        data = [{"site_name": k, **data[k]} for k in data]
 
-        verified_sites += [SiteImport(**out_dict)]
+    try:
+        verified_sites = ImportSites(data)
+    except Exception as e:
+        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch delete sites --example[/] for example formats.\n{repr(e)}")
 
-    site_names = [
-        f"  [cyan]{s.site_name}[/]" for s in verified_sites
-    ]
-    if len(site_names) > 7:
-        site_names = [*site_names[0:3], "  ...", *site_names[-3:]]
+    cache_sites: List[CacheSite | None] = [cli.cache.get_site_identifier(s.site_name, silent=True, exit_on_fail=False) for s in verified_sites]
+    not_in_central = [name for name, data in zip(verified_sites, cache_sites) if data is None]
 
-    for site in verified_sites:
-        cache_site = cli.cache.get_site_identifier(site.site_name)
-        del_list += [cache_site.id]
+    if not_in_central:
+        cli.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]site{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
-    print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:")
-    _ = [print(s) for s in site_names]
+    sites: List[CacheSite] = [s for s in cache_sites if s is not None]
+    del_list = [s.id for s in sites]
+    if not del_list:
+        cli.exit("[italic dark_olive_green2]No sites remain after validation.[/]")
+
+    site_names = utils.summarize_list([s.summary_text for s in sites], max=7)
+    cli.console.print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:\n{site_names}", emoji=False)
     if cli.confirm(yes):
-        resp = central.request(central.delete_site, del_list)
-        if resp:
-            cli.central.request(cli.cache.update_site_db, data=del_list, remove=True)
+        resp: List[Response] = central.request(central.delete_site, del_list)
+        if len(resp) == len(sites):
+            doc_ids = [s.doc_id for s, r in zip(sites, resp) if r.ok]
+            cli.central.request(cli.cache.update_site_db, data=doc_ids, remove=True)
         return resp
 
-# TODO copy/paste logic from clidel.py groups()
-def batch_delete_groups_or_labels(data: Union[list, dict], *, yes: bool = False, del_groups: bool = None, del_labels: bool = None) -> List[Response]:
-    if all([not arg for arg in [del_groups, del_labels]]):
-        del_groups = True  # Default to group delete
-    group_name_aliases = ["name", "group_name", "group"]
-    label_name_aliases = ["name", "label_name", "label"]
-    name_aliases = group_name_aliases if del_groups else label_name_aliases
-    cache_func = cli.cache.get_group_identifier if del_groups else cli.cache.get_label_identifier
-    del_func = cli.central.delete_group if del_groups else cli.central.delete_label
-    cache_del_func = cli.cache.update_group_db if del_groups else cli.cache.update_label_db
-    word = "group" if del_groups else "label"
 
-    _names = None
-    if isinstance(data, list):
-        if isinstance(data[0], dict):
-            _names = [g.get(name_aliases[0], g.get(name_aliases[1], g.get(name_aliases[2]))) for g in data]
-            # We allow simply using "labels" header for labels. With csv this is converted to List[dict] where each label has "labels" as key
-            if del_labels and all([x is None for x in _names]):
-                _names = [label.get("labels") for label in data]
-            if None in _names:
-                raise MissingFieldException("Data is missing 'name' field")
-        elif all([isinstance(item, str) for item in data]):
-            _names = data
-    if isinstance(data, dict):
-        _names = list(data.keys())
-
-    if _names is None:
-        raise ImportException(f'Unable to get {word} names from provided import data')
-
-    cache_objs = [cache_func(g) for g in _names]
-    reqs = [cli.central.BatchRequest(del_func, (g.name if del_groups else g.id, )) for g in cache_objs]
-
-    _msg = "\n".join([f"  [cyan]{g.name}[/]" for g in cache_objs])
-    _msg = _msg.lstrip() if len(cache_objs) == 1 else f"\n{_msg}"
-    if del_groups:
-        _msg = f"[bright_red]Delete[/] {'group ' if len(cache_objs) == 1 else f'{len(reqs)} groups:'}{_msg}"
-    elif del_labels:
-        _msg = f"[bright_red]Delete[/] {'label ' if len(cache_objs) == 1 else f'{len(reqs)} labels:'}{_msg}"
-    print(_msg)
-
-    if len(reqs) > 1:
-        print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
-
-    if yes or typer.confirm("\nProceed?", abort=True):
-        resp = cli.central.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action")
-        if resp:
-            upd_res = asyncio.run(cache_del_func(data=[{"name": g.name} for g in cache_objs], remove=True))
-            log.debug(f"cache update to remove deleted {'groups' if del_groups else 'labels'} returns {upd_res}")
-
-
-# FIXME The Loop logic keeps trying if a delete fails despite the device being offline, validate the error check logic
-# TODO batch delete sites does a call for each site, not multi-site endpoint?
 # TODO make sub-command clibatchdelete.py seperate out sites devices...
 @app.command()
 def delete(
     what: BatchDelArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    cop_inv_only: bool = typer.Option(False, "--inv-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Testing/Debug Option", hidden=True),  # TODO REMOVE THIS IS FOR TESTING ONLY
+    cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
@@ -1413,7 +1081,7 @@ def delete(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Perform batch Delete operations using import data from file.
+    """Perform batch delete operations using import data from file.
 
     [cyan]cencli delete sites <IMPORT_FILE>[/] and
     [cyan]cencli delte groups <IMPORT_FILE>[/]
@@ -1429,8 +1097,7 @@ def delete(
         print(getattr(examples, f"delete_{what}"))
         return
 
-    # TODO common string helpers... started strings.py
-    elif not import_file:
+    if not import_file:
         _msg = [
             "Invalid combination of arguments / options.",
             "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]",
@@ -1440,30 +1107,16 @@ def delete(
         ]
         cli.exit("\n".join(_msg))
 
-    data = _get_import_file(import_file, import_type=what, text_ok=what == "labels")
+    data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
     if what == "devices":
-        if isinstance(data, dict) and "devices" in data:
-            data = data["devices"]
-        if not dry_run:
-            resp = batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
-        else:
-            resp = batch_delete_devices_dry_run(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
     elif what == "sites":
-        if isinstance(data, dict) and "sites" in data:
-            data = data["sites"]
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
-        if isinstance(data, dict) and "groups" in data:
-            data = data["groups"]
-        resp = batch_delete_groups_or_labels(data, yes=yes, del_groups=True)
+        resp = cli.batch_delete_groups(data, yes=yes)
     elif what == "labels":
-        if isinstance(data, dict) and "labels" in data:
-            data = data["labels"]
-        elif isinstance(data, list) and all([isinstance(item, str) for item in data]):
-            if data[0] == "labels":
-                data = data[1:]
-        resp = batch_delete_groups_or_labels(data, yes=yes, del_labels=True)
+        resp = cli.batch_delete_labels(data, yes=yes)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -1522,7 +1175,7 @@ def subscribe(
         ]
         cli.exit("\n".join(_msg))
 
-    devices = _get_import_file(import_file, "devices")
+    devices = cli._get_import_file(import_file, "devices")
     sub_reqs = _build_sub_requests(devices)
 
     cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
@@ -1560,13 +1213,13 @@ def unsubscribe(
         else:
             devices = [d for d in resp.output if d.get("status") is None and d["services"]]
             if dis_cen:
-                resp = batch_delete_devices(devices, yes=yes)
+                resp = cli.batch_delete_devices(devices, yes=yes)
             else:
                 unsub_reqs = _build_sub_requests(devices, unsub=True)
 
                 cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
                 print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
-                if yes or typer.confirm("\nProceed?", abort=True):
+                if cli.confirm(yes):
                     resp = cli.central.batch_request(unsub_reqs)
     elif not import_file:
         _msg = [
@@ -1578,7 +1231,7 @@ def unsubscribe(
         ]
         cli.exit("\n".join(_msg))
     elif import_file:
-        devices = _get_import_file(import_file, "devices")
+        devices = cli._get_import_file(import_file, "devices")
         unsub_reqs = _build_sub_requests(devices, unsub=True)
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
@@ -1636,7 +1289,7 @@ def rename(
         cli.exit("Missing required parameter \[IMPORT_FILE|'lldp']")
 
     if import_file:
-        data = _get_import_file(import_file)
+        data = cli._get_import_file(import_file)
         conf_msg: list = ["\n[bright_green]Names gathered from import[/]:"]
     elif lldp:
         kwargs = {}
@@ -1677,19 +1330,16 @@ def rename(
     if ap not in cli.cache.devices_by_serial:
         print("\n:warning:  [italic]Device must be checked into Central to assign/change hostname.[/]")
 
-    if yes or typer.confirm("\nProceed with AP rename?", abort=True):
+    if cli.confirm(yes, prompt="\nProceed with AP rename?"):
         resp = cli.central.batch_request(calls)
 
 
     cli.display_results(resp, tablefmt="action")
     # cache update
     if import_file:
-        for r in resp:
-            if r.ok and r.status != 299:  # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
-                dev = cli.cache.get_dev_identifier(r.output)
-                dev.data["name"] = data[r.output]["hostname"]
-                # TODO upsert is very slow at scale, can grab cli.cache.devices_by_serial update then update_dev_db with data
-                cli.cache.DevDB.upsert(dev.data, cli.cache.Q.serial == dev.data["serial"])
+        cache_data = [cli.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
+        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]                                              # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
+        cli.central.request(cli.cache.update_dev_db, data=cache_data)
 
 
 @app.command()
@@ -1715,11 +1365,14 @@ def move(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Perform batch Move devices to any or all of group / site / label based on import data from file.
+    """Batch move devices to any or all of group / site / label based on import data from file.
 
     By default group/site/label assignment will be processed if found in the import file.
     Use -G|--group, -S|--site, -L|--label flags to only process specified moves, and ignore
     others even if found in the import.
+
+    If a device has not connected to Central, and has a group assoicated with it in the import
+    data. It will be pre-provisioned to the group in Central.
 
     i.e. if import includes a definition for group, site, and label, and you only want to
     process the site move. Use the -S|--site flag, to ignore the other columns.
@@ -1773,7 +1426,7 @@ def archive(
         ]
         cli.exit("\n".join(_msg))
     else:
-        data = _get_import_file(import_file, "devices", text_ok=True)
+        data = cli._get_import_file(import_file, "devices", text_ok=True)
         if data and isinstance(data, list):
             if all([isinstance(x, dict) for x in data]):
                 serials = [x.get("serial") or x.get("serial_num") for x in data]
@@ -1826,7 +1479,7 @@ def unarchive(
         ]
         cli.exit("\n".join(_msg))
     else:
-        data = _get_import_file(import_file, import_type="devices", text_ok=True)
+        data = cli._get_import_file(import_file, import_type="devices", text_ok=True)
 
     if not data:
         cli.exit("No data extracted from import file")

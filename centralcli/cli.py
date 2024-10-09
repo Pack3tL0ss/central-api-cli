@@ -187,7 +187,7 @@ def bounce(
     if len(ports) > 1:
         print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if cli.confirm(yes):
-        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, (dev.serial, command, p,)) for p in ports])
+        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
 
@@ -256,7 +256,7 @@ def remove(
             ) for dev_type, serials in devs_by_type.items()
         ]
         resp = cli.central.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
         # central will show the stack_id and all member serials in the success output.  So we strip the stack id
         swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
         update_data = [{**dict(cli.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
@@ -297,7 +297,7 @@ def reboot(
                 arg = dev.swack_id
                 conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
-        batch_reqs += [BatchRequest(func, (arg, 'reboot',))]
+        batch_reqs += [BatchRequest(func, arg, 'reboot')]
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
@@ -631,7 +631,7 @@ def unarchive(
     else:
         _dev_msg = '\n    '.join(serials)
         _msg = f"{_msg}\n    {_dev_msg}\n"
-    print(_msg)
+    cli.console.print(_msg, emoji=False)
 
     resp = cli.central.request(cli.central.unarchive_devices, serials)
     cli.display_results(resp, tablefmt="action")
@@ -701,6 +701,45 @@ def disable(
 
         resp = cli.central.request(cli.central.disable_auto_subscribe, services=services)
         cli.display_results(resp, tablefmt="action")
+
+@app.command(hidden=True)
+def renew_license(
+    device: List[str] = cli.arguments.devices,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Renew-Licenses on devices.
+
+    :warning: Device may go offline briefly.
+    This command will unnassign then reassign the subscription currently applied to the device,
+
+    [italic]This is useful when the subscription currently applied is approaching expiration, and other subscription
+    keys exist with expiration further out.  When reassigned central will use the subscription with the longest
+    duration remianing.[/]
+    """
+    def normalize_sub(subscription: str) -> str:
+        return subscription.lower().replace(" ", "_").replace("/", "_")
+
+    raise NotImplementedError()
+    from centralcli.cache import CacheInvDevice
+    devices = [cli.cache.get_dev_identifier(d) for d in device]
+    inv_data = [CacheInvDevice(cli.cache.inventory_by_serial[s]) for s in [s.serial for s in devices]]
+    calls_by_sub = {}
+    dev_types = []
+    for idx, dev in enumerate(set(inv_data)):
+        if not dev.services:
+            skipped = inv_data.pop(idx)
+            cli.econsole.print(f":warning: Skipping {skipped} as it does not have any subscriptions assigned.  Use [cyan]cencli assign license <device(s)>[/] to assign licenses.")
+            continue
+        dev_types += ["switch" if dev.type in ["cx", "sw"] else dev.type]
+        for sub in dev.services:
+            calls_by_sub = utils.update_dict(calls_by_sub, normalize_sub(sub), dev.serial)
+    # subs_resp = cli.central.request(cli.central.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
+    # subs_by_name = {f'{normalize_sub(sub["license_type"])}_{sub["subscription_key"]}': sub["end_date"] / 1000 for sub in subs_resp.output if sub["available"] and sub["status"] != "EXPIRED"}
+    # Gave up on this for now, the names from the inventory don't map well with the names from get_subscriptions.  Would need to build a map
+    # i.e. Foundation-90/70xx vs foundation_70xx
 
 
 @app.command(short_help="convert j2 templates")

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "7.0.1"
+version = "7.1.1"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -46,7 +46,7 @@ asyncio = ">=3"
 rich = ">=10"
 tablib = ">=3"
 jinja2 = "*"
-pydantic = ">=1.9.0,<2.0.0"
+pydantic = ">=2.0.0"
 ipaddress = "*"
 fuzzywuzzy = "*"
 levenshtein = "*"

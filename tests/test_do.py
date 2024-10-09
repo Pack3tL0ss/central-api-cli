@@ -2,9 +2,8 @@ from typer.testing import CliRunner
 import pytest
 
 from cli import app  # type: ignore # NoQA
+from centralcli import cache
 from . import test_data
-import json
-
 
 runner = CliRunner()
 
@@ -18,8 +17,7 @@ def cleanup():
     # Will be executed before the first test
     yield do_nothing()
     # executed after test is run
-    result = runner.invoke(app, ["show", "cache", "groups", "--json"])
-    del_groups = [g["name"] for g in json.loads(result.stdout) if g["name"].startswith("cencli_test_")]
+    del_groups = [g.name for g in cache.groups_by_name if g.name.startswith("cencli_test_")]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
         assert "Success" in result.stdout
@@ -60,7 +58,7 @@ def test_blink_wrong_dev_type():
         ]
     )
     assert result.exit_code == 1
-    assert "Unable to gather" in result.stdout
+    assert "No Match found" in result.stdout
     assert "excluded" in result.stdout
 
 

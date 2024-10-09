@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import typer
 import sys
-from typing import List, Literal, Union, Tuple, Dict, Any
+from typing import List, Literal, Union, Tuple, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 from rich.console import Console
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
+from rich.text import Text
+from rich.progress import track
 from rich import print
 import json
 import pkg_resources
@@ -33,7 +35,10 @@ from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
-from centralcli.cache import CentralObject
+
+if TYPE_CHECKING:
+    from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
+    from .typedefs import CacheTableName
 
 
 tty = utils.tty
@@ -58,7 +63,7 @@ class MoveData:
         ) -> None:
         self._move_type = move_type
         self.cache_devs = cache_devs
-        self.reqs: List[BatchRequest] = mv_reqs or []
+        self.reqs: Tuple[BatchRequest] = mv_reqs or []
         self.msgs: List[str] = self._build_msg_list(mv_msgs=mv_msgs, action_word=action_word, move_type=move_type, retain_config=retain_config)
 
     def __bool__(self) -> bool:
@@ -109,15 +114,20 @@ class CLICommon:
         self.arguments = CLIArgs(cache)
         self.econsole = Console(stderr=True)
         self.console = Console()
-        self._confirm = Confirm(prompt="\nProceed?", console=self.econsole,)
 
-    def confirm(self, yes: bool = False, *, abort: bool = True) -> bool:
-        result = yes or self._confirm()
+    def confirm(self, yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True,) -> bool:
+        confirm = Confirm(prompt=prompt, console=self.econsole,)
+        result = yes or confirm()
         if not result and abort:
             self.econsole.print("[red]Aborted[/]")
             self.exit(code=0)
 
         return result
+
+    def pause(self, prompt="Press Enter to Continue", *, console: Console = None) -> None:
+        console = console or self.econsole
+        ask = Prompt(prompt, console=console, password=True, show_default=False, show_choices=False)
+        _ = ask()
 
     class AcctMsg:
         def __init__(self, account: str = None, msg: MsgType = None) -> None:
@@ -416,10 +426,20 @@ class CLICommon:
         """Print msg text and exit.
 
         Prepends warning emoji to msg if code indicates an error.
+            emoji arg has not impact on this behavior.
+            Nothing is displayed if msg is not provided.
+
+        Args:
+            msg (str, optional): The msg to display (supports rich markup). Defaults to None.
+            code (int, optional): The exit status. Defaults to 1 (indicating error).
+            emoji (bool, optional): Set to false to disable emoji. Defaults to True.
+
+        Raises:
+            typer.Exit: Exit
         """
         console = Console(emoji=emoji)
         if code != 0:
-            msg = f"\u26a0  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
+            msg = f"[dark_orange3]\u26a0[/]  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
         if msg:
             console.print(msg)
@@ -457,7 +477,7 @@ class CLICommon:
                     sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
 
             if sort_msg:
-                _caption = "\n".join([f"  {m}" for m in sort_msg])
+                _caption = "\n".join([f" {m}" for m in sort_msg])
                 _caption = _caption if tablefmt != "rich" else render.rich_capture(_caption, emoji=True)
                 if caption:
                     c = caption.splitlines()
@@ -550,6 +570,7 @@ class CLICommon:
         stash: bool = True,
         output_by_key: str | List[str] = "name",
         exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
+        cache_update_pending: bool = False,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -581,6 +602,9 @@ class CLICommon:
                 show last.  Default: True
             output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
                 the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
+            exit_on_fail: (bool, optional): If provided resp indicates a failure exit after display.  Defaults to False
+            cache_update_pending: (bool, optional): If a cache update is to be performed if resp is success.
+                Results in a warning before exit if failure. Defaults to False
             set_width_cols (Dict[str: Dict[str, int]]): Passed to output function defines cols with min/max width
                 example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}.  Applies to tablefmt=rich.
             full_cols (list): columns to ensure are displayed at full length (no wrap no truncate). Applies to tablfmt=rich. Defaults to [].
@@ -588,7 +612,7 @@ class CLICommon:
             cleaner (callable, optional): The Cleaner function to use.
         """
         if isinstance(caption, list):
-            caption = "\n  ".join(caption)
+            caption = "\n ".join(caption)
         if resp is not None:
             resp = utils.listify(resp)
 
@@ -600,7 +624,7 @@ class CLICommon:
                 last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
                 if last_rl:
                     rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
-                    caption = f"{caption}\n  {rl_str}" if caption else f"  {rl_str}"
+                    caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
             except Exception as e:
                 rl_str = ""
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
@@ -608,13 +632,22 @@ class CLICommon:
             caption = caption or ""
             if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
                 # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
+                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
                 if len(resp) > 1 and ":warning:" in log.caption:
                     caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
                 else:
                     caption = f'{caption}\n{_log_caption}'
 
             for idx, r in enumerate(resp):
+                try:
+                    if config.capture_raw and r.method == "GET":
+                        with clean_console.status("Capturing raw response"):
+                            raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
+                            with config.capture_file.open("a") as f:
+                                f.write(json.dumps(raw))
+                except Exception as e:
+                    log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
+
                 # Multi request url line (example below)
                 # Request 1 [POST: /platform/device_inventory/v1/devices]
                 #  Response:
@@ -626,6 +659,7 @@ class CLICommon:
                     "POST": "dark_orange3"
                 }
                 fg = "bright_green" if r else "red"
+
                 conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
                 if any(conditions):
                     if isinstance(title, list) and len(title) == len(resp):
@@ -636,24 +670,9 @@ class CLICommon:
                         print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
                         print(f" [{fg}]Response[reset]:")
 
-                if config.capture_raw:
-                    with clean_console.status("Capturing raw response"):
-                        raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
-                        with config.capture_file.open("a") as f:
-                            f.write(json.dumps(raw))
 
-                # Nothing returned in response payload
-                # if not r.output:
-                #     print(f"  Status Code: [{fg}]{r.status}[/]")
-                #     print("  :warning: Empty Response.  This may be normal.")
-
-                #     if log.caption:
-                #         print(log.caption)  # TODO verify this doesn't cause duplicate print, clean up so caption is only printed for non rich in one place.
-                if not cleaner and r.url and r.url.path == "/caasapi/v1/exec/cmd":
-                    cleaner = clean.parse_caas_response
-
-                if not r or tablefmt in ["action", "raw", "clean"]:
-
+                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
+                if any(conditions):
                     # raw output (unformatted response from Aruba Central API GW)
                     if tablefmt in ["raw", "clean"]:
                         status_code = f"[{fg}]status code: {r.status}[/{fg}]"
@@ -681,15 +700,19 @@ class CLICommon:
                     # status code: 201
                     # Success
                     else:
-                        clean_console.print(r)
-                        # TODO make __rich__ renderable method in Response object with markups
-                        # clean_console.print(str(r).replace("failed:", "[red]failed[/]:").replace("success:", "[bright_green]success[/]:"))
-                        # console.print(f"[{fg}]{r}[/]")
+                        if not r.url.path == "/caasapi/v1/exec/cmd":
+                            clean_console.print(r)
+                        else:
+                            clean_console.print(Text.from_ansi(clean.parse_caas_response(r.output)))  # TODO still need to covert everything from cleaners to rich MarkUp so we can use rich print consistently vs typer.echo
+                            # TODO make __rich__ renderable method in Response object with markups
 
                     if idx + 1 == len(resp):
-                        if caption:
-                            print(caption.replace(rl_str, ""))
-                        clean_console.print(f"\n{rl_str}")
+                        if caption.replace(rl_str, "").lstrip():
+                            _caption = caption.replace(rl_str, "") if r.output else f'  {render.unstyle(caption.replace(rl_str, "")).strip()}'
+                            if not r.output:  # Formats any caption directly under Empty Response msg
+                                _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[grey42 italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
+                            self.econsole.print(_caption)
+                        self.econsole.print(f"\n{rl_str}")
 
                 # response to single request are sent to _display_results for full output formatting. (rich, json, yaml, csv)
                 else:
@@ -711,11 +734,9 @@ class CLICommon:
                         **cleaner_kwargs
                     )
 
-            # TODO make elegant caas send-cmds uses this logic
-            if cleaner and cleaner.__name__ == "parse_caas_response":
-                print(caption)
-
             if exit_on_fail and not all([r.ok for r in resp]):
+                if cache_update_pending:
+                    self.econsole.print(":warning:  [italic]Cache update skipped due to failed API response(s)[/].")
                 raise typer.Exit(1)
 
         elif data:
@@ -824,43 +845,56 @@ class CLICommon:
                 while chunk := f.read(4096):
                     md5.update(chunk)
         elif string:
-            md5.update(string.encode("utf-8"))
+            if isinstance(string, bytes):
+                md5.update(string)
+            else:
+                md5.update(string.encode("utf-8"))
         else:
             raise ValueError("One of file or string argument is required")
 
         return md5.hexdigest()
 
-
-    def _get_import_file(self, import_file: Path, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
-            data = config.get_file_data(import_file, text_ok=text_ok)
+            try:
+                data = config.get_file_data(import_file, text_ok=text_ok)
+            except UserWarning as e:
+                log.exception(e)
+                self.exit(e)
 
         if not data:
-            self.exit(f":warning:  [bright_red]ERROR[/] {import_file.name} not found or empty.")
+            self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
 
-        if import_type and import_type in data:
+        if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
-        if data:
-            if isinstance(data, dict):  # accept yaml/json keyed by serial #
-                if utils.is_serial(list(data.keys())[0]):
-                    data = [{"serial": k, **v} for k, v in data.items()]
-            if isinstance(data, list) and text_ok:
-                if import_type == "devices" and all(utils.is_serial(s) for s in data):
-                    data = [{"serial": s} for s in data]
-                if import_type == "labels":
-                    data = [{"name": label} for label in data]
+
+        if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
+            if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
+                data = [{"name": k, **v} for k, v in data.items()]
+            elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
+                data = [{"serial": k, **v} for k, v in data.items()]
+        elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
+            if import_type == "devices" and utils.is_serial(data[0].keys()[-1]):  # spot check the last key to ensure it looks like a serial
+                data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
+            if import_type == "labels":
+                data = [{"name": label} for label in data if not label.lower().startswith("label")]
+
+        data = clean.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
+                                                            # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
 
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
-        data = [d for d in data if not d.get("retired", d.get("ignore"))]
+        if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
+            data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
         return data
 
-
-    def _check_update_dev_db(self, device: CentralObject) -> CentralObject:
-        if self.central.get_all_devices not in self.cache.updated:  # TODO Use cli.cache.responses.  have check_fresh bypass API call if cli.cache.responses.dev has value
-            _ = self.central.request(self.cache.update_dev_db, dev_type=device.type)
+    def _check_update_dev_db(self, device: CacheDevice) -> CacheDevice:
+        if self.cache.responses.dev:  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
+            log.warning(f"_check_update_dev_db called for {device} devices have already been fetched this session. Skipping.")
+        else:
+            _ = self.central.request(self.cache.refresh_dev_db, dev_type=device.type)
             device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
 
         return device
@@ -888,8 +922,7 @@ class CLICommon:
         def serials_by_site_id(self) -> Dict[str, List[str]]:
             out = {}
             for req in self.move.reqs:
-                site_id = req.kwargs["site_id"]
-                serials = req.kwargs["serials"]
+                site_id, serials = (req.kwargs["site_id"], req.kwargs["serials"].copy())
                 out = utils.update_dict(out, key=site_id, value=serials)
 
             return out
@@ -928,19 +961,20 @@ class CLICommon:
             out = {}
             for req in [*self.move.reqs, *self.move_keep_config.reqs]:
                 group = req.kwargs["group"]
-                serials = req.kwargs["serials"]
+                serials = req.kwargs["serials"].copy()
                 out = utils.update_dict(out, key=group, value=serials)
 
             return out
 
 
-    def _check_group(self, cache_devs: List[CentralObject], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
+    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
+        req_dict, msg_dict = {}, {}
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
         _skip = False
         for cache_dev, mv_data in zip(cache_devs, import_data):
-            has_connected = True if cache_dev.get("status") else False
+            has_connected = True if cache_dev.db.name == "devices" else False
             for idx in range(0, 2):
                 to_group = mv_data.get("group")
                 if cx_retain_force is not None:
@@ -962,7 +996,7 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.rich_help_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
                             _skip = True
 
                     # Determine if device is in inventory only determines use of pre-provision group vs move to group
@@ -970,7 +1004,7 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.rich_help_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                             err_console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
                             err_console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
@@ -1001,11 +1035,11 @@ class CLICommon:
         )
 
 
-    def _check_site(self, cache_devs: List[CentralObject], import_data: dict) -> SiteMoves:
+    def _check_site(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict) -> SiteMoves:
         site_rm_reqs, site_rm_msgs = {}, {}
         site_mv_reqs, site_mv_msgs = {}, {}
         for cache_dev, mv_data in zip(cache_devs, import_data):
-            has_connected = True if cache_dev.get("status") else False
+            has_connected = True if cache_dev.db.name == "devices" else False
             for idx in range(0, 2):
                 to_site = mv_data.get("site")
                 now_site = cache_dev.get("site")
@@ -1017,12 +1051,12 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         elif now_site == to_site.name:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
                     elif not has_connected:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.rich_help_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
+                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
                     elif idx != 0:
                         site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
@@ -1030,7 +1064,7 @@ class CLICommon:
                     if now_site:
                         now_site = self.cache.get_site_identifier(now_site)
                         if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
-                            clean_console.print(f'{cache_dev.rich_help_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                            clean_console.print(f'{cache_dev.summary_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
                             site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                             site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
 
@@ -1038,13 +1072,13 @@ class CLICommon:
         if site_rm_reqs:
             for k, v in site_rm_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                rm_reqs += [self.central.BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                rm_reqs += [BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         mv_reqs = []
         if site_mv_reqs:
             for k, v in site_mv_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                mv_reqs += [self.central.BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                mv_reqs += [BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         return self.SiteMoves(
             cache_devs=cache_devs,
@@ -1096,11 +1130,11 @@ class CLICommon:
         }
         cache_by_serial = {k: self.cache.devices_by_serial.get(k, self.cache.inventory_by_serial[k]) for k in [*self.cache.inventory_by_serial, *self.cache.devices_by_serial] if k in serials}
         for r, (move_type, name, serials) in zip(mv_resp, [(move_type, name, serials) for move_type, v in moves_by_type.items() for name, serials in v.items()]):
-            if move_type == "site":
-                site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
-                cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
-            if move_type == "group":  # All or none here as far as the rresponse.
-                if r.ok:
+            if r.ok:
+                if move_type == "site":
+                    site_success_serials = [s["device_id"] for s in r.raw["success"] if s["device_id"] in serials]  # if .... in serials stips out stack_id, success will have all member serials + the stack_id
+                    cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
+                if move_type == "group":  # All or none here as far as the rresponse.
                     cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
 
         self.central.request(
@@ -1159,7 +1193,17 @@ class CLICommon:
             err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
 
         # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
-        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True) for d in dev_idens]
+        cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True, silent=True, exit_on_fail=False) for d in dev_idens]
+        not_found_devs: List[str] = [s for s, c in zip(dev_idens, cache_devs) if c is None]
+        cache_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+
+        if not_found_devs:
+            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
+            self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            self.econsole.print("[grey42 italic]They will be skipped[/]\n")
+            if not cache_devs:
+                self.exit("No devices found")
+
 
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
         if do_site:
@@ -1182,10 +1226,10 @@ class CLICommon:
         if not _tot_req:
             self.exit("[italic dark_olive_green2]Nothing to do[/]", code=0)
         if _tot_req > 1:
-            confirm_msgs += [f'\n{_tot_req} API calls will be performed.']
+            confirm_msgs += [f"\n[italic dark_olive_green2]Will result in {_tot_req} additional API Calls."]
 
         clean_console.print("\n".join(confirm_msgs))
-        if yes or typer.confirm("\nProceed?", abort=True):
+        if self.confirm(yes):
             site_rm_res = []
             if site_rm_reqs:
                 site_rm_res = self.central.batch_request(site_rm_reqs)
@@ -1196,6 +1240,330 @@ class CLICommon:
             self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
 
             return [*site_rm_res, *batch_res]
+
+    def batch_delete_groups(
+            self,
+            data: list | dict,
+            *,
+            yes: bool = False,
+        ) -> None:
+        data = utils.listify(data)
+        names_from_import = [g["name"] for g in data if "name" in g]
+        if not names_from_import:
+            self.exit("Unable to extract group names from import data.  Refer to [cyan]cencli batch delete groups --example[/] for import data format.")
+
+        # If any groups appear to not exist according to local cache, update local cache
+        not_in_cache = [name for name in names_from_import if name not in self.cache.groups_by_name]
+        if not_in_cache:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {len(not_in_cache)} group{'s' if len(not_in_cache) > 1 else ''} that do [red bold]not exist[/] according to local group cache.\n:arrows_clockwise: [bright_green]Updating[/] local [cyan]group[/] cache.")
+            _ = self.central.request(self.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
+
+        # notify and remove any groups that don't exist after cache update
+        cache_by_name: Dict[str, CacheGroup] = {name: self.cache.groups_by_name.get(name) for name in names_from_import}
+        not_in_central = [name for name, data in cache_by_name.items() if data is None]
+        if not_in_central:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]group{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
+
+        groups: List[CacheGroup] = [g for g in cache_by_name.values() if g is not None]
+        reqs = [self.central.BatchRequest(self.central.delete_group, g.name) for g in groups]
+
+        if not reqs:
+            self.exit("No groups remain to process after validation.")
+
+        if len(groups) == 1:
+            pre = ''
+            pad = 0
+            sep = ", "
+        else:
+            pre = sep = '\n'
+            pad = 4
+
+        group_msg = f'{pre}{utils.color([g.name for g in groups], "cyan", pad_len=pad, sep=sep)}'
+        _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'group ' if len(groups) == 1 else f'{len(reqs)} groups:'}{group_msg}"
+        print(_msg)
+
+        if len(reqs) > 1 and not yes:
+            print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+        if self.confirm(yes):
+            resp = self.central.batch_request(reqs)
+            self.display_results(resp, tablefmt="action")
+            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+            if doc_ids:
+                self.central.request(self.cache.update_group_db, data=doc_ids, remove=True)
+
+    def batch_delete_labels(
+            self,
+            data: list | dict,
+            *,
+            yes: bool = False,
+        ) -> None:
+        names_from_import = [g["name"] for g in data if "name" in g]
+        if not names_from_import:
+            self.exit("Unable to extract label names from import data.  Refer to [cyan]cencli batch delete labels --example[/] for import data format.")
+
+        # If any labels appear to not exist according to local cache, update local cache
+        not_in_cache = [name for name in names_from_import if name not in self.cache.labels_by_name]
+        if not_in_cache:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local label cache.  :arrows_clockwise: [bright_green]Updating local label cache[/].")
+            _ = self.central.request(self.cache.refresh_label_db)  # This updates cli.cache.labels
+
+        # notify and remove any labels that don't exist after cache update
+        cache_by_name: Dict[str, CacheLabel] = {name: self.cache.labels_by_name.get(name) for name in names_from_import}
+        not_in_central = [name for name, data in cache_by_name.items() if data is None]
+        if not_in_central:
+            self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]label{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
+
+        labels: List[CacheLabel] = [label for label in cache_by_name.values() if label is not None]
+        reqs = [self.central.BatchRequest(self.central.delete_label, g.id) for g in labels]
+
+        if len(labels) == 1:
+            pre = ''
+            pad = 0
+            sep = ", "
+        else:
+            pre = sep = '\n'
+            pad = 4
+
+        label_msg = f'{pre}{utils.color([g.name for g in labels], "cyan", pad_len=pad, sep=sep)}'
+        _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'label ' if len(labels) == 1 else f'{len(reqs)} labels:'}{label_msg}"
+        print(_msg)
+
+        if len(reqs) > 1 and not yes:
+            print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
+
+        if self.confirm(yes):
+            resp = self.central.batch_request(reqs)
+            self.display_results(resp, tablefmt="action")
+            doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
+            if doc_ids:
+                self.central.request(self.cache.update_label_db, data=doc_ids, remove=True)
+
+    def show_archive_results(self, arch_resp: List[Response]) -> None:
+        def summarize_arch_res(arch_resp: List[Response]) -> None:
+            for res in arch_resp:
+                caption = res.output.get("message")
+                action = res.url.name
+                if res.get("succeeded_devices"):
+                    title = f"Devices successfully {action}d."
+                    data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+                    self.display_results(data=data, title=title, caption=caption)
+                if res.get("failed_devices"):
+                    title = f"Devices that [bright_red]failed[/] to {action}d."
+                    data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+                    self.display_results(data=data, title=title, caption=caption)
+
+        if all([r.ok for r in arch_resp[0:2]]) and all([not r.get("failed_devices") for r in arch_resp[0:2]]):
+            arch_resp[0].output = arch_resp[0].output.get("message")
+            arch_resp[1].output =  f'  {arch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(arch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
+            self.display_results(arch_resp[0:2], tablefmt="action")
+        else:
+            summarize_arch_res(arch_resp[0:2])
+
+    def update_dev_inv_cache(self, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
+        br = BatchRequest
+        all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
+        inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
+        cache_update_reqs = []
+        if cache_devs and all_ok:
+            cache_update_reqs += [br(self.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
+        else:
+            cache_update_reqs += [br(self.cache.refresh_dev_db)]
+
+        if cache_devs or inv_del_serials and not ui_only:
+            if all_ok:  # TODO Update to pass Inv doc_ids
+                cache_update_reqs += [
+                    br(
+                        self.cache.update_inv_db,
+                        [d.doc_id for d in inventory_devs],
+                        remove=True
+                    )
+                ]
+            else:
+                cache_update_reqs += [br(self.cache.refresh_inv_db)]
+        # Update cache remove deleted items
+        if cache_update_reqs:
+            _ = self.central.batch_request(cache_update_reqs)
+
+    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
+        mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
+        for dev in set(cache_devs):
+            if dev.generic_type == "switch" and dev.swack_id is not None:
+                dev_type = "stack"
+                if dev.swack_id in _stack_ids:
+                    continue
+                else:
+                    _stack_ids += [dev.swack_id]
+            else:
+                dev_type = dev.generic_type if dev.generic_type != "gw" else "gateway"
+
+            func = getattr(self.central, f"delete_{dev_type}")
+            update_list = mon_del_reqs if dev.status.lower() == "down" else delayed_mon_del_reqs
+            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id)]
+
+        return mon_del_reqs, delayed_mon_del_reqs
+
+    def _process_delayed_mon_deletes(self, reqs: List[BatchRequest]) -> Tuple[List[Response], List[int]]:
+        del_resp: List[Response] = []
+        del_reqs_try = reqs.copy()
+
+        _delay = 30
+        for _try in range(4):
+            _word = "more " if _try > 0 else ""
+            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+            _delay -= (5 * _try) # reduce delay by 5 secs for each loop
+            for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
+                time.sleep(1)
+
+            _del_resp: List[Response] = self.central.batch_request(del_reqs_try, continue_on_fail=True)
+
+            if _try == 3:
+                if not all([r.ok for r in _del_resp]):
+                    self.econsole.print("\n[dark_orange]:warning:[/]  Retries exceeded. Devices still remain [bright_green]Up[/] in central and cannot be deleted.  This command can be re-ran once they have disconnected.")
+                del_resp += _del_resp
+            else:
+                del_resp += [r for r in _del_resp if r.ok or isinstance(r.output, dict) and r.output.get("error_code", "") != "0007"]
+
+            del_reqs_try = [del_reqs_try[idx] for idx, r in enumerate(_del_resp) if not r.ok and isinstance(r.output, dict) and r.output.get("error_code", "") == "0007"]
+            if del_reqs_try:
+                print(f"{len(del_reqs_try)} device{'s are' if len(del_reqs_try) > 1 else ' is'} still [bright_green]Up[/] in Central")
+            else:
+                break
+
+        return del_resp
+
+    def _get_inv_doc_ids(self, batch_resp: List[Response]) -> List[int] | None:
+        if not batch_resp[1].url.name == "unarchive":
+            return
+
+        if isinstance(batch_resp[1].raw, dict) and "succeeded_devices" in batch_resp[1].raw:
+            try:
+                cache_inv_to_del = [self.cache.inventory_by_serial.get(d["serial_number"]) for d in batch_resp[1].raw["succeeded_devices"]]
+                inv_doc_ids = [dev.doc_id for dev in cache_inv_to_del]
+            except Exception as e:
+                log.exception(f"Exception while attempting to extract unarchive results for Inv Cache Update.\n{e}")
+                return
+            return inv_doc_ids
+
+    def _get_mon_doc_ids(self, del_resp: List[Response]) -> List[int]:
+        doc_ids = []
+        try:
+            doc_ids = [self.cache.devices_by_serial[r.url.name].doc_id for r in del_resp if r.ok and "switch_stacks" not in r.url.parts]
+            stack_ids = [r.url.name for r in del_resp if r.ok and "switch_stacks" in r.url.parts]
+            for stack_id in stack_ids:
+                doc_ids += [d.doc_id for d in self.cache.DevDB.search(self.cache.Q.swack_id == stack_id) if d is not None]
+        except Exception as e:
+            log.error(f"Error: {e.__class__.__name__} occured fetching doc_ids for local cache update after delete.  Use [cyan]cencli show all[/] to ensure device cache is current.", caption=True, log=True)
+
+        return doc_ids
+
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+        BR = BatchRequest
+        confirm_msg = []
+
+        try:
+            serials_in = [dev["serial"].upper() for dev in data]
+        except KeyError:
+            self.exit("Missing required field: [cyan]serial[/].")
+
+        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False,) for d in serials_in]  # returns None if device not found in cache after update
+        not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
+        cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+        cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
+        # cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
+        _serials = [d.serial for d in cache_found_devs] if not force else serials_in  # Should no longer be necessary
+
+        # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
+        # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
+        arch_reqs = [] if ui_only or not _serials else [
+            BR(self.central.archive_devices, _serials),
+            BR(self.central.unarchive_devices, _serials),
+        ]
+
+        # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
+        mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+
+        # cop only delete devices from GreenLake inventory
+        cop_del_reqs = [] if not config.is_cop or not _serials else [
+            BR(self.central.cop_delete_device_from_inventory, _serials)
+        ]
+
+        # warn about devices that were not found
+        if not_found_devs:
+            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
+            self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            self.econsole.print(f"{'[grey42 italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
+
+        if ui_only:
+            _total_reqs = len(mon_del_reqs)
+        elif cop_inv_only:
+            _total_reqs = len(cop_del_reqs)
+        else:
+            _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
+
+        if not _total_reqs:
+            self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
+
+        sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
+        confirm_msg += [f"\n[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [grey42 italic]monitoring UI only[/]'}:"]
+        if ui_only:
+            confirmation_devs = utils.summarize_list([c.summary_text for c in cache_mon_devs if c.status.lower() == 'down'], max=40, color=None)
+            if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
+                self.econsole.print(
+                    f"[cyan]{len([c for c in cache_mon_devs if c.status.lower() == 'up'])}[/] of the [cyan]{len(cache_mon_devs)}[/] found devices are currently [bright_green]online[/]. [grey42 italic]They will be skipped.[/]\n"
+                    "Devices can only be removed from UI if they are [red]offline[/]."
+                )
+                delayed_mon_del_reqs = []
+            if not mon_del_reqs:
+                self.exit("No devices found to remove from UI. [red]Exiting[/]...")
+            else:
+                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
+        else:
+            confirmation_list = serials_in if force else [d.summary_text for d in cache_found_devs]
+            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
+
+        if _total_reqs > 1:
+            confirm_msg += [f"\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."]
+
+        # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
+        self.console.print("\n".join(confirm_msg), emoji=False)
+        batch_resp = []
+        mon_doc_ids = []
+        inv_doc_ids = []
+        if self.confirm(yes):
+            ...  # We abort if they don't confirm.
+
+        if not cop_inv_only:
+            # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
+            # Also monitoring UI delete for any devices currently offline.
+            batch_resp = self.central.batch_request([*arch_reqs, *mon_del_reqs])
+            if arch_reqs and len(batch_resp) >= 2:
+                inv_doc_ids = self._get_inv_doc_ids(batch_resp)
+                self.show_archive_results(batch_resp[:2])
+                batch_resp = batch_resp[2:]
+
+            if batch_resp:  # Now represents responses associated with mon_del_reqs
+                mon_doc_ids += self._get_mon_doc_ids(batch_resp)
+                # Any that failed with device currently online error, append to back of delayed_mon_reqs (possible if dev status in cache was stale)
+                delayed_mon_del_reqs += [req for req, resp in zip(mon_del_reqs, batch_resp) if not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007"]
+
+            if delayed_mon_del_reqs:
+                delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_reqs)
+                batch_resp += delayed_mon_resp
+                mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
+
+        if cop_del_reqs:
+            batch_resp += self.central.batch_request(cop_del_reqs)
+
+        if batch_resp:
+            self.display_results(batch_resp, tablefmt="action")
+
+        # Cache Updates
+        if mon_doc_ids:
+            self.central.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
+        if inv_doc_ids:
+            self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+
 
 if __name__ == "__main__":
     pass

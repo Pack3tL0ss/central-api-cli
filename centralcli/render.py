@@ -10,7 +10,7 @@ render.py (this file) takes the normalized data, and displays it (various format
 from __future__ import annotations
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union, TYPE_CHECKING
 
 from tabulate import tabulate
 import typer
@@ -42,9 +42,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli import constants, Response
+from centralcli import constants
 from centralcli.config import Config
 from centralcli.objects import Encoder, DateTime
+
+if TYPE_CHECKING:
+    from . import Response
+    from .config import Config
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
@@ -57,8 +61,8 @@ console = Console(emoji=False)
 
 CUST_KEYS = ["customer_id", "customer_name", "cid", "cust_id"]
 
-class Output:
-    def __init__(self, rawdata: str = "", prettydata: str = "", config=None):
+class Output():
+    def __init__(self, rawdata: str = "", prettydata: str = "", config: Config = None):
         self.config = config
         self._file = rawdata  # found typer.unstyle AFTER I built this
         self.tty = prettydata
@@ -67,12 +71,20 @@ class Output:
         return len(str(self).splitlines())
 
     def __str__(self):
-        pretty_up = typer.style("Up\n", fg="green")
-        pretty_down = typer.style("Down\n", fg="red")
         if self.tty:
+            pretty_up = typer.style("Up\n", fg="green")
+            pretty_down = typer.style("Down\n", fg="red")
             out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
         else:
             out = self.file
+
+        out = self.sanitize_strings(out)
+        return out if out else "\u26a0  No Data.  This may be normal."
+
+    def __rich__(self):
+        pretty_up = "[green]Up[/]\n"
+        pretty_down = "[red]Down[/]\n"
+        out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
 
         out = self.sanitize_strings(out)
         return out if out else "\u26a0  No Data.  This may be normal."
@@ -177,7 +189,8 @@ def _do_subtables(data: List[dict], tablefmt: str = "rich") -> List[dict]:
                         inner_dict[key] = typer.style(val.title(), fg=color)
                 else:
                     if tablefmt == 'rich':
-                        inner_dict[key] = Text.from_markup(str(val), style=None, emoji=False)
+                        txt = str(val) if not hasattr(val, "__rich__") else val.__rich__()  # HACK For Custom DateTime object.  There is no doubt a more elegant mechanism within rich
+                        inner_dict[key] = Text.from_markup(txt, style=None, emoji=False)
                     else:
                         inner_dict[key] = str(val)
             else:
@@ -334,7 +347,7 @@ def rich_output(
     return outdata, outdata
 
 def output(
-    outdata: Union[List[str], Dict[str, Any]],
+    outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any],
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
     title: str = None,
     caption: str = None,
@@ -356,9 +369,13 @@ def output(
     if tablefmt != "simple" and outdata and all(isinstance(x, str) for x in outdata):
         tablefmt = "simple"
 
-    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
     if tablefmt in ['json', 'yaml', 'yml']:
+        # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
         outdata = utils.listify(outdata)
+        if isinstance(outdata[0], dict) and all([isinstance(k, str) for k in list(outdata[0].keys())]):
+            outdata = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in data.items()} for data in outdata]
+
+        # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
         if output_by_key and outdata and isinstance(outdata[0], dict):
             if len(output_by_key) == 1 and "+" in output_by_key[0]:
                 found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
@@ -399,6 +416,10 @@ def output(
                 return str(value.original)
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
+        def normalize_key_for_csv(key: str) -> str:
+            if not isinstance(key, str):
+                return key
+            return key.replace(" ", "_").replace("\n", "_")
 
         csv_data = "\n".join(
                         [
@@ -410,7 +431,7 @@ def output(
                             for d in outdata
                         ]
         )
-        raw_data = table_data = csv_data if not outdata else f"{','.join([k for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
+        raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
@@ -472,6 +493,26 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     console.print(text)
     out = console.end_capture()
     return out if len(out.splitlines()) > 1 else out.rstrip("\n")
+
+def unstyle(text: str | List[str], emoji: bool = False, **kwargs) -> str:
+    """Accept text or list of text.  Removes any markups or ascii color codes from text
+
+    Args:
+        text (str | List[str]): The text or list of text to capture.
+            If provided as list it will be converted to string (joined with \n)
+        emoji: (bool, Optional): Allow emoji placeholders.  Default: False
+        kwargs: additional kwargs passed to rich Console.
+
+    Returns:
+        str: text with markups converted to ascii control chars
+    """
+    kwargs = {**{"force_terminal": False}, **kwargs}
+    console = Console(emoji=emoji, **kwargs)
+    with console.capture() as cap:
+        console.print(text)
+    return cap.get()
+    # text = rich_capture(text=text, emoji=emoji, **kwargs)
+    # return typer.unstyle(text)
 
 
 def bandwidth_graph(resp: Response, title: str = "Bandwidth Usage") -> None:

@@ -57,7 +57,7 @@ def license(
     else:
         dev = devices[0]
         _msg = f"{_msg} {dev.summary_text}"
-    cli.econsole.print(_msg)
+    cli.console.print(_msg, emoji=False)
 
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license.name)

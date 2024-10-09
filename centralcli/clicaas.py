@@ -359,7 +359,7 @@ def send_cmds(
         console.print(f"Sending the following to [cyan]{action}[/]")
         _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         caasapi = caas.CaasAPI(central=cli.central)
         _reqs = [
             cli.central.BatchRequest(

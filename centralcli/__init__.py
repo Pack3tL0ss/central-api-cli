@@ -144,9 +144,9 @@ from .utils import Utils
 utils = Utils()
 from .response import Response, BatchRequest
 from .central import CentralApi
-from .cache import Cache, CentralObject
+from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheClient, CacheMpskNetwork
 from .clicommon import CLICommon
-from . import cleaner
+from . import cleaner, render
 
 # if no environ vars set for LESS command line options
 # set -X to retain scroll-back after quitting less
@@ -179,15 +179,30 @@ if "--debugv" in sys.argv:
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
 if "--again" in sys.argv:
-    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "--out", "-d", "--debug", "--account"]
-    args = [arg for arg in sys.argv if arg in valid_options]
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug", "--account"]
+    out_args = []
+    if "--out" in sys.argv:
+        outfile = sys.argv[sys.argv.index("--out") + 1]
+        out_args = ["--out", outfile]
+
+    args = [*[arg for arg in sys.argv if arg in valid_options], *out_args]
     sys.argv = [sys.argv[0], "show", "last", *args]
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
     config.capture_raw = True
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 
 central = CentralApi(config.account)
+Cache.set_config(config)
 cache = Cache(central)
+CacheDevice.set_db(cache.DevDB)
+CacheInvDevice.set_db(cache.InvDB)
+CacheGroup.set_db(cache.GroupDB)
+CacheSite.set_db(cache.SiteDB)
+CacheClient.set_db(cache.ClientDB, cache=cache)
+CacheLabel.set_db(cache.LabelDB)
+CachePortal.set_db(cache.PortalDB)
+CacheTemplate.set_db(cache.TemplateDB)
+CacheMpskNetwork.set_db(cache.MpskDB)
 cli = CLICommon(config.account, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands

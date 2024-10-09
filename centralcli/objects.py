@@ -17,9 +17,9 @@ class DateTime():
         """DateTime constructor.
 
         Args:
-            timestamp (int | float): Epoch timestamp, int representing duration in seconds or iso formatted date string.
+            timestamp (int | float): Epoch timestamp, int representing duration in seconds or iso formatted date string, TimeZone is expected to by UTC.
             format (TimeFormat, optional): Format assigned to the pretty attribute. Defaults to "day-datetime".
-            tz (str, optional): TimeZone of the timestamp. Defaults to "local".
+            tz (str, optional): TimeZone of the desired output timestamp. Defaults to "local".
             pad_hour (bool, optional): If True mdyt and log formats will zero pad the hour. Defaults to False.
             round_to_minute (bool, optional): If True durwords-short will strip the seconds and round to the nearest minute. Defaults to False.
             format_expiration (bool, optional): Applies when format is timediff. If True rich renderable will be color formatted based on # of months remaining.
@@ -34,20 +34,10 @@ class DateTime():
         self.pretty = getattr(self, format.replace("-", "_"))
 
     def __str__(self):
-        if self.format_expiration:
-            if pendulum.from_timestamp(self.ts).subtract(months=3).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
-                return f"[red]{self.pretty}[/]"  # TODO need to sort out how to have line 180 in render.py take a rich renderable
-                # return f"\x1b[31m{self.pretty}\x1b[0m"  # Doing it this way messes up column spacing.
-            elif pendulum.from_timestamp(self.ts).subtract(months=6).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
-                return f"[dark_orange3]{self.pretty}[/]"
-                # return f"\x1b[38;5;166m{self.pretty}\x1b[0m"
         return self.pretty
 
     def __rich__(self):
-        if not self.format_expiration:
-            return f"_rich_{self.pretty}"
-        else:
-            return f"_rich_{self.pretty}"
+        return self.pretty if not self.format_expiration else self.expiration
 
     def __bool__(self):
         return bool(self.ts and self.ts > 0)
@@ -87,6 +77,25 @@ class DateTime():
             timestamp = timestamp / 1000
 
         return timestamp if not str(timestamp).endswith(".0") else int(timestamp)
+
+    @property
+    def expiration(self) -> str:
+        """Render date/time in format provided during instantiation colorized to indicate how near expiration the date is.
+
+        return is colorized:
+          - orange: if expiration within 6 months
+          - red: if expiration within 3 months
+
+        Returns:
+            str: Potentially colorized date str.
+        """
+        if pendulum.from_timestamp(self.ts).subtract(months=3).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
+            return f"[red]{self.pretty}[/]"  # TODO need to sort out how to have line 180 in render.py take a rich renderable
+                                             # return f"\x1b[31m{self.pretty}\x1b[0m"  # Doing it this way messes up column spacing.
+        elif pendulum.from_timestamp(self.ts).subtract(months=6).int_timestamp < pendulum.now(tz="UTC").int_timestamp:
+            return f"[dark_orange3]{self.pretty}[/]"
+        else:
+            return self.pretty
 
     @property
     def day_datetime(self) -> str:

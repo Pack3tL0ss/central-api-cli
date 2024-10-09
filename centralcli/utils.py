@@ -17,6 +17,8 @@ import logging
 
 import yaml
 from pygments import formatters, highlight, lexers
+from random import choice
+from rich.color import ANSI_COLOR_NAMES
 from tabulate import tabulate
 from rich import print_json
 from rich.console import Console
@@ -24,6 +26,9 @@ from rich.prompt import Prompt
 from rich.pretty import pprint
 from jinja2 import FileSystemLoader, Environment
 from datetime import datetime
+import pendulum
+
+
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -42,6 +47,9 @@ class ToBool:
             return False
         elif value.lower() in ["true", "yes", "1"]:
             return True
+
+    def __bool__(self) -> bool:
+        return self.value
 
     @property
     def ok(self) -> bool:
@@ -244,24 +252,24 @@ class Utils:
     def get_multiline_input(
         prompt: str = None,
         return_type: Literal["str", "dict", "list"] = "str",
-        abort_str: str = "exit",
+        abort_str: str = "EXIT",
         **kwargs
     ) -> List[str] | dict | str:
         console = Console(emoji=True)
         exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
-        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]exit[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
+        exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]{abort_str}[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
         def _get_multiline_sub(prompt: str = prompt, **kwargs):
             prompt = f"{prompt}\n\n{exit_prompt_text}" if prompt else f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
             console.print(prompt, **kwargs)
             contents, line = [], ''
-            while line.strip().lower() != abort_str:
+            while line != abort_str:
                 try:
                     line = input()
                     contents.append(line)
                 except EOFError:
                     break
 
-            if line.strip().lower() == abort_str:
+            if line == abort_str:
                 console.print("[bright_red]Aborted[/]")
                 sys.exit()
 
@@ -620,8 +628,9 @@ class Utils:
 
     @staticmethod
     def color(
-        text: Union[str, bool, List[str]],
+        text: str | bool | List[str],
         color_str: str = "bright_green",
+        pad_len: int = 0,
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
@@ -636,7 +645,10 @@ class Utils:
                 it is converted to string and italics applied.  If list of strings
                 is provided it is converted to str and formatted.
             color_str (str, optional): Text is formatted with this color.
+                'random' will pick a random color.  If text is a list, it will pick a random
+                color for each item in the list.
                 Default: bright_green
+            pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
             italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
             bold (bool, optional): Wheather to apply bold to text. Default None/False
@@ -648,14 +660,25 @@ class Utils:
             italic = True if italic is None else italic
             text = str(text)
 
-        color_str = color_str if not italic else f"italic {color_str}"
-        color_str = color_str if not bold else f"bold {color_str}"
-        color_str = color_str if not blink else f"blink {color_str}"
+        def get_color_str(color: str):
+            if color == "random":
+                color = choice(list(ANSI_COLOR_NAMES.keys()))
+
+            if not any([italic, bold, blink]):
+                return color
+
+            _color = color if not italic else f"italic {color}"
+            _color = color if not bold else f"bold {color}"
+            _color = color if not blink else f"blink {color}"
+
+            return _color
 
         if isinstance(text, str):
-            return f"[{color_str}]{text}[/{color_str}]"
+            color = get_color_str(color_str)
+            return f"{' ' if pad_len else '':{pad_len}}[{color}]{text}[/{color}]"
         elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
-            text = [f"[{color_str}]{t}[/{color_str}]" for t in text]
+            colors = [get_color_str(color_str) for _ in range(len(text))]
+            text = [f"{' ' if pad_len else '':{pad_len}}[{c}]{t}[/{c}]" for t, c in zip(text, colors)]
             return sep.join(text)
         else:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
@@ -664,7 +687,6 @@ class Utils:
     def chunker(seq, size):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
-    # TODO decorator func
     @staticmethod
     def ask(
         prompt: str = "",
@@ -678,11 +700,11 @@ class Utils:
     ) -> str:
         """wrapper function for rich.Prompt().ask()
 
-        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort"
-
+        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
         """
+        console = console or Console()
         def abort():
-            print("Aborted")
+            console.print(":warning:  [red]Aborted[/]", emoji=True)
             sys.exit()
 
         choices = choices if choices is not None and "abort" in choices else ["abort", *choices]
@@ -700,7 +722,7 @@ class Utils:
         except (KeyboardInterrupt, EOFError):
             abort()
 
-        if choice.lower() == "abort":
+        if choice == "abort":
             abort()
 
         return choice
@@ -863,3 +885,30 @@ class Utils:
         #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
 
         return from_time, to_time
+
+    @staticmethod
+    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False):
+        bot = int(max / 2)
+        top = max - bot
+        if any([bold, italic, color is not None]):
+            fmt = f'[{"" if not bold else "bold "}{"" if not italic else "italic "}{color or ""}]'.replace(' ]', ']')
+            item_sep = f'{"" if not pad else " " * pad}[dark_orange3]...[/]'
+        else:
+            fmt = ""
+            item_sep = "...".rjust(pad + 3)
+
+        items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
+
+        if len(items) > max:
+            confirm_str = sep.join([*items[0:top], item_sep, *items[-bot:]])
+        else:
+            confirm_str = sep.join(items)
+
+        return confirm_str
+
+    @staticmethod
+    def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:
+        dt = ts if isinstance(ts, datetime) else pendulum.from_timestamp(ts, tz=tz)
+        diff = pendulum.now(tz=tz) - dt
+        return getattr(diff, f'in_{unit}')() > time_frame
+

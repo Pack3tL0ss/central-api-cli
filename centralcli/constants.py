@@ -6,15 +6,19 @@ from enum import Enum
 from typing import Literal, Union
 
 # ------ // Central API Consistent Device Types \\ ------
-lib_dev_idens = ["ap", "cx", "sw", "switch", "gw"]
-generic_lib_dev_idens = ["ap","gw", "switch"]
-LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw"]
-GenericDeviceTypes = Literal["ap", "gw", "switch"]  # strEnum ok for CLI completion but doesn't enable ide to complete
-DeviceTypes = Literal["ap", "cx", "sw", "gw"]
+lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
+generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
+LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
+LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
+GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete
+DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
 EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
+SendConfigTypes = Literal["ap", "gw"]
+CloudAuthUploadTypes = Literal["mpsk", "mac"]
+BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 
 
 class AllDevTypes(str, Enum):
@@ -23,12 +27,14 @@ class AllDevTypes(str, Enum):
     cx = "cx"
     gw = "gw"
     switch = "switch"
+    sdwan = "sdwan"
 
 
 class GenericDevTypes(str, Enum):
     ap = "ap"
     gw = "gw"
     switch = "switch"
+    sdwan = "sdwan"
 
 
 class DevTypes(str, Enum):
@@ -36,6 +42,7 @@ class DevTypes(str, Enum):
     sw = "sw"
     cx = "cx"
     gw = "gw"
+    sdwan = "sdwan"
 
 
 class TSDevTypes(str, Enum):
@@ -46,13 +53,6 @@ class TSDevTypes(str, Enum):
     gateway = "gateway"
     gw = "gw"
     mas = "mas"
-
-
-class SendConfigDevIdens(str, Enum):
-    ap = "ap"
-    gw = "gw"
-    # sw = "sw"  # hopefully some day
-    # cx = "cx"
 
 class PoEDetectionStatus(Enum):
     NA = 0
@@ -101,8 +101,6 @@ class ShowInventoryArgs(str, Enum):
     ap = "ap"
     gw = "gw"
     vgw = "vgw"
-    # sw = "sw"
-    # cx = "cx"
     switch = "switch"
 
 
@@ -127,12 +125,23 @@ class SortWebHookOptions(str, Enum):
 
 
 class SortInventoryOptions(str, Enum):
+    serial = "serial"
+    mac = "mac"
     type = "type"
     model = "model"
     sku = "sku"
-    mac = "mac"
-    serial = "serial"
     services = "services"
+    subscription_key = "subscription-key"
+    expires_in = "expires-in"
+
+
+class SortPortalOptions(str, Enum):
+    name = "name"
+    id = "id"
+    auth = "auth"
+    url = "url"
+    reg_by_email = "reg-by-email"
+    reg_by_phone = "reg-by-phone"
 
 class GatewayRole(str, Enum):
     branch = "branch"
@@ -324,6 +333,7 @@ class LogLevel(str, Enum):
     LOG_ERR = "error"
 
 class CacheArgs(str, Enum):
+    all = "all"
     devices = "devices"
     inventory = "inventory"
     sites = "sites"
@@ -339,6 +349,7 @@ class CacheArgs(str, Enum):
     hook_active = "hook_active"
     mpsk = "mpsk"
     portals = "portals"
+    tables = "tables"
 
 
 class KickArgs(str, Enum):
@@ -359,10 +370,11 @@ class BatchAddArgs(str, Enum):
     macs = "macs"
     mpsk = "mpsk"
 
-# CloudAuthUploadType = Literal["mpsk", "mac"]
+
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
+
 
 class BatchDelArgs(str, Enum):
     sites = "sites"
@@ -492,7 +504,7 @@ class ArgToWhat:
         self.routes = self.route = "routes"
         self.webhooks = self.webhook = "webhooks"
         self.token = self.tokens = "token"
-        self.subscription = self.subscriptions = "subscription"
+        self.subscriptions = self.subscription = "subscriptions"
         self.portal = self.portals = "portals"
         self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
@@ -522,6 +534,7 @@ class ArgToWhat:
         self.template = self.templates = "template"
         self.device = self.devices = self.dev = "device"
         self.label = self.labels = "label"
+        self.portal = self.portals = "portal"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"

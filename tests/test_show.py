@@ -44,32 +44,16 @@ def test_show_all():
     assert "serial" in result.stdout
 
 
-# This fails when all discovered tests are ran in the same session.  It's failing on this line in cleaner.sort_result_keys()
-# if inner["mem_total"] and inner["mem_free"]:
-#     mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)  # <-- fails here
-# ValueError: could not convert string to float: '--'
-# can't reproduce if ran by itself.  Only raw data should hit the cleaner.  This exception would occur if you cleaned already cleaned data
-# seems like there is some collision re-used data when running all tests
-# Disabling as this is the most common command I use... daily.  If show all breaks, I'll know it pretty quickly
-# def test_show_all_rich():
-#     result = runner.invoke(app, ["show", "all"],)
-#     print(result.stdout)
-#     if result.exception:
-#         traceback.print_exception(result.exception)
-#     assert result.exit_code == 0
-#     assert "mac" in result.stdout
-#     assert "ip" in result.stdout
-
-
 def test_show_all_verbose():
     cache.updated = []
+    cache.responses.dev = None  # Necessary as pytest treats all this as one session, so cache is already populated with clean data
     result = runner.invoke(app, ["show", "all", "-v"],)
     print(result.stdout)
-    if result.exception:
-        traceback.print_exception(result.exception)
     assert result.exit_code == 0
     assert "serial" in result.stdout
-    assert "cpu %" in result.stdout
+    assert "uptime" in result.stdout
+    if result.exception:
+        traceback.print_exception(result.exception)
 
 
 def test_show_switch_by_name():
@@ -261,14 +245,14 @@ def test_show_cx_switch_lldp_neighbors():
     print(result.stdout)
     assert result.exit_code == 0
     assert "chassis" in result.stdout
-    assert "remote port" in result.stdout
+    assert "remote port" in result.stdout.replace("_", " ")
 
 
 def test_show_groups():
     result = runner.invoke(app, ["show", "groups", "--csv"],)
     assert result.exit_code == 0
     assert "name" in result.stdout
-    assert "AOSVersion" in result.stdout
+    assert "aos10" in result.stdout
 
 
 def test_show_certs():
@@ -339,13 +323,13 @@ def test_show_clients_wired():
 
 
 def test_show_client_by_mac():
-    test_data["client_mac"] = test_data.get("client", {}).get("wireless", {}).get("mac", test_data["wlan_client_mac"])
-    result = runner.invoke(app, ["show", "clients", test_data["client_mac"]],)
+    mac = test_data["client"]["wireless"]["mac"]
+    result = runner.invoke(app, ["show", "clients", mac],)
     print(result.stdout)
-    print(test_data["client_mac"])
+    print(mac)
     assert result.exit_code == 0
     assert "role" in result.stdout
-    assert f'mac {clean_mac(test_data["client_mac"])}' in clean_mac(result.stdout)
+    assert f'mac {clean_mac(mac)}' in clean_mac(result.stdout)
 
 
 def test_show_group_level_config():

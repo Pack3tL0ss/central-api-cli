@@ -13,7 +13,7 @@ from typing import Any, List, Dict, Union, TypeVar, TextIO, Tuple, Optional
 from rich import print
 from rich.prompt import Prompt, Confirm
 from rich.console import Console
-from pydantic import BaseModel, Field, HttpUrl, ValidationError
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, AliasChoices
 from yarl import URL
 # from pydantic import ConfigDict  # pydantic 2 not supported yet
 
@@ -44,7 +44,7 @@ class WebHook(BaseModel):
 class ServiceNow(BaseModel):
     # model_config = ConfigDict(arbitrary_types_allowed=True) pydantic 2 / not supported yet
     id: str
-    base_url: HttpUrl = Field(..., alias="url")
+    base_url: HttpUrl = Field(..., alias=AliasChoices("base_url", "url"))
     port: int = None
     incident_path: str
     refresh_path: str = "oauth_token.do"
@@ -62,7 +62,19 @@ class ServiceNow(BaseModel):
     def refresh_url(self) -> URL:
         return URL(f"{self.base_url.rstrip('/')}:{self.port or self.base_url.port}/{self.refresh_path.lstrip('/')}")
 
+class AccountModel(BaseModel):
+    base_url: HttpUrl = Field(..., alias=AliasChoices("base_url", "url"))
+    client_id: str
+    client_secret: str
+    customer_id: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    token: Optional[Token] = None
 
+
+# class ConfigModel(RootModel):
+#     central_info: AccountModel = Field(alias=AliasChoices("central_info", "default"))
+#     ... # TODO finish Config Model use pydantic for config validation
 
 clear = Console().clear
 class ClusterName(str, Enum):
@@ -104,6 +116,8 @@ NOT_ACCOUNT_KEYS = [
     "no_pager",  # deprecated key kept in for older configs that might be using it
     "sanitize",
     "webclient_info",
+    "capture_raw",
+    "cache_client_days",
 ]
 
 JSON_TYPE = Union[List, Dict, str]  # pylint: disable=invalid-name
@@ -188,18 +202,23 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
         sites: !include sites.yaml
 
     """
-    fname = Path(loader.name).parent / node.value
+    fname: Path = Path(loader.name).parent / node.value
     try:
         if fname.suffix in ['.csv', '.tsv', '.dbf']:
             csv_data = "".join([line for line in fname.read_text(encoding="utf-8").splitlines(keepends=True) if line and not line.startswith("#")])
             try:
-                ds = tablib.Dataset().load(csv_data)
+                ds = tablib.Dataset().load(csv_data, format="csv")
             except UnsupportedFormat:
                 print(f'Unable to import data from {fname.name} verify formatting commas/headers/etc.')
-                sys.Exit(1)
+                sys.exit(1)
             return yaml.load(ds.yaml, Loader=SafeLineLoader) or {}
         else:
-            return load_yaml(fname)
+            yaml_out = load_yaml(fname)
+            text_out = fname.read_text()
+            if isinstance(yaml_out, str) and "\n" not in yaml_out and "\n" in text_out:
+                return [line.rstrip() for line in text_out.splitlines()]
+            else:
+                return yaml_out
     except FileNotFoundError as exc:
         print(f"{node.start_mark}: Unable to read file {fname}.")
         raise exc
@@ -213,7 +232,11 @@ class Config:
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)
         self.base_dir = base_dir or Path(__file__).parent.parent
-        self.cwd = Path().cwd()
+        try:
+            self.cwd = Path.cwd()
+        except FileNotFoundError:
+            self.cwd = Path.home()  # In the very rare event the user launches a command from a directory that they've deleted in another session.
+
         self.file = _get_config_file(
             [
                 Path().home() / ".config" / "centralcli",
@@ -277,8 +300,9 @@ class Config:
         self.default_account: str = "default" if "default" in self.data else "central_info"
         self.last_account, self.last_cmd_ts, self.last_account_msg_shown, self.last_account_expired = self.get_last_account()
         self.account = self.get_account_from_args()
-        self.base_url = self.data.get(self.account, {}).get("base_url")
+        self.base_url: str = self.data.get(self.account, {}).get("base_url")
         self.limit: int | None = self.data.get("limit")  # Allows override of paging limit for pagination testing
+        self.cache_client_days: int = self.data.get("cache_client_days", 90)
         try:
             self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
@@ -590,7 +614,7 @@ class Config:
             else:
                 config_data = f"{yaml.safe_dump(config_data)}{config_comments}"
                 Console().rule("\n\n[bold cyan]Resulting Configuration File Content")
-                print(config_data)
+                print(config_data.replace(password, "*********"))
                 Console().rule()
                 if Confirm.ask("\nContinue?"):
                     print(f"\n\n[cyan]Writing to {self.file}")

@@ -18,8 +18,9 @@ import tablib
 import yaml
 from pycentral.base_utils import tokenLocalStoreUtil
 from yarl import URL
+from copy import deepcopy
 
-from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, models, utils
+from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, utils
 from .exceptions import CentralCliException
 from .response import CombinedResponse, Response, Session
 from .utils import Mac
@@ -785,9 +786,6 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
-        template = template if isinstance(template, Path) else Path(str(template))
-        if not template.exists():
-            raise FileNotFoundError
 
         if device_type:
             device_type = constants.lib_to_api(device_type, "template")
@@ -799,32 +797,40 @@ class CentralApi(Session):
             'model': model
         }
 
-        if template and template.is_file() and template.stat().st_size > 0:
-            template_data: bytes = template.read_bytes()
+        if template:
+            template = template if isinstance(template, Path) else Path(str(template))
+            if not template.exists():
+                raise FileNotFoundError
+            if template.is_file() and template.stat().st_size > 0:
+                template_data: bytes = template.read_bytes()
         elif payload:
+            payload = payload if isinstance(payload, bytes) else payload.encode("utf-8")
             template_data: bytes = payload
         else:
-            raise FileNotFoundError(f"{template.name} not found or empty.  No template data to send.")
+            raise ValueError("One of template or payload is required")
 
-        if isinstance(template_data, bytes):
-            files = {'template': ('template.txt', template_data)}
-        else:
-            files = {'template': ('template.txt', template.read_bytes())}
+        files = {'template': ('template.txt', template_data)}
 
         # HACK aiohttp has issue here similar to add_template
-        import requests
-        headers = {
-            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
-            'Accept': 'application/json'
-        }
-        url=f"{self.auth.central_info['base_url']}{url}"
+        import requests  # TODO MOVE to Session until aiohttp has file types sorted.
+        full_url=f"{self.auth.central_info['base_url']}{url}"
         for _ in range(2):
-            resp = requests.request("PATCH", url=url, params=params, files=files, headers=headers)
-            if "[\n" in resp.text and "\n]" in resp.text:
-                output = "\n".join(json.loads(resp.text))
-            else:
-                output = resp.text.strip('"\n')
-            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+            headers = {
+                "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+                'Accept': 'application/json'
+            }
+            resp = requests.request("PATCH", url=full_url, params=params, files=files, headers=headers)
+            _log = log.info if resp.ok else log.error
+            _log(f"[PATCH] {resp.url} | {resp.status_code} | {'OK' if resp.ok else 'FAILED'} | {resp.reason}")
+            try:
+                output = resp.json()
+            except json.JSONDecodeError:
+                if "[\n" in resp.text and "\n]" in resp.text:
+                    output = "\n".join(json.loads(resp.text))
+                else:
+                    output = resp.text.strip('"\n')
+            resp.status, resp.method, resp.url = resp.status_code, "PATCH", URL(resp.url)
+            resp = Response(resp, output=output, raw=output, elapsed=round(resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
             else:
@@ -842,7 +848,11 @@ class CentralApi(Session):
         params = {"offset": 0, "limit": 100}  # 100 is the max
         resp = await self.get(url, params=params,)
         if resp.ok:
-            resp.output = cleaner.get_group_names(resp.output)
+            # convert list of single item lists to a single list, remove unprovisioned group, move default group to front of list.
+            resp.output = [g for _ in resp.output for g in _ if g != "unprovisioned"]
+            if "default" in resp.output:
+                resp.output.insert(0, resp.output.pop(resp.output.index("default")))
+
         return resp
 
     async def delete_template(
@@ -887,25 +897,28 @@ class CentralApi(Session):
 
         groups = resp.output
 
-        template_resp, props_resp = await self._batch_request(
+        batch_resp = await self._batch_request(
             [
-                self.BatchRequest(self.get_groups_template_status, (groups,)),
-                self.BatchRequest(self.get_groups_properties, (groups,))
+                self.BatchRequest(self.get_groups_template_status, groups),
+                self.BatchRequest(self.get_groups_properties, groups)
             ]
         )
+        if all([not r.ok for r in batch_resp]):  # if first call fails possible to only have 1 call returned.
+            return batch_resp
+        template_resp, props_resp = batch_resp
 
-        template_by_group = {d["group"]: d["template_details"] for d in template_resp.output}
-        props_by_group = {d["group"]: d["properties"] for d in props_resp.output}
+        template_by_group = {d["group"]: d["template_details"] for d in deepcopy(template_resp.output)}
+        props_by_group = {d["group"]: d["properties"] for d in deepcopy(props_resp.output)}
 
         combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
         if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
             raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
 
-        resp = props_resp
-        resp.output = [{"group": k, **v} for k, v in combined.items()]
-        resp.raw = {"properties": resp.raw, "template_info": template_resp.raw}
+        combined_resp = Response(props_resp._response)
+        combined_resp.output = [{"group": k, **v} for k, v in combined.items()]
+        combined_resp.raw = {"properties": props_resp.raw, "template_info": template_resp.raw}
 
-        return resp
+        return combined_resp
 
 
     async def get_groups_template_status(self, groups: List[str] | str = None) -> Response:
@@ -948,15 +961,32 @@ class CentralApi(Session):
         return resp
 
 
-    async def get_all_templates(self, groups: List[dict] | List[str ]= None, **params) -> Response:
+    async def get_all_templates(
+        self, groups: List[dict] | List[str ] = None,
+        template: str = None,
+        device_type: constants.DeviceTypes = None,
+        version: str = None,
+        model: str = None,
+        query: str = None,
+    ) -> Response:
         """Get data for all defined templates from Aruba Central
 
         Args:
             groups (List[dict] | List[str], optional): List of groups.  If provided additional API
                 calls to get group names for all template groups are not performed).
                 If a list of str (group names) is provided all are queried for templates
-                If a list of dicts is provided:  It should look like: [{"name": "group_name", "template group": {"Wired": True, "Wireless": False}}]
+                If a list of dicts is provided:  It should look like: [{"name": "group_name", "wired_tg": True, "wlan_tg": False}]
                 Defaults to None.
+            template (str, optional): Filter on provided name as template.
+            device_type (Literal['ap', 'gw', 'cx', 'sw'], optional): Filter on device_type.  Valid Values: ap|gw|cx|sw.
+            version (str, optional): Filter on version property of template.
+                Example: ALL, 6.5.4 etc.
+            model (str, optional): Filter on model property of template.
+                For 'ArubaSwitch' device_type, part number (J number) can be used for the model
+                parameter.
+                Example: ALL, 2920, J9727A etc.
+            query (str, optional): Search for template OR version OR model, query will be ignored if any of
+                filter parameters are provided.
 
         Returns:
             Response: centralcli Response Object
@@ -970,7 +1000,7 @@ class CentralApi(Session):
         elif isinstance(groups, list) and all([isinstance(g, str) for g in groups]):
                 template_groups = groups
         else:
-            template_groups = [g["name"] for g in groups if True in g["template group"].values()]
+            template_groups = [g["name"] for g in groups if True in [g["wired_tg"], g["wlan_tg"]]]
 
         if not template_groups:
             return Response(
@@ -980,6 +1010,14 @@ class CentralApi(Session):
                 raw=[],
                 error="None of the configured groups are Template Groups.",
             )
+
+        params = {
+            'name': template,
+            'device_type': device_type,
+            'version': version,
+            'model': model,
+            'query': query,
+        }
 
         reqs = [self.BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
         # TODO maybe call the aggregator from _bath_request
@@ -1053,11 +1091,31 @@ class CentralApi(Session):
             fields: list = None,
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
-        ) -> CombinedResponse:
-        """Get all devices from Aruba Central
+        ) -> CombinedResponse | List[Response]:
+        """Get all devices from Aruba Central.
+
+        Args:
+            dev_type (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
+            group (str, optional): Filter by devices in a Group. Defaults to None.
+            site (str, optional): Filter by devices in a Site. Defaults to None.
+            label (str, optional): Filter by devices with a label assigned. Defaults to None.
+            serial (str, optional): Filter by Serial. Defaults to None.
+            mac (str, optional): Filter by mac. Defaults to None.
+            model (str, optional): Filter by model. Defaults to None.
+            stack_id (str, optional): Filter by stack id (switches). Defaults to None.
+            swarm_id (str, optional): Filter by swarm id (APs). Defaults to None.
+            cluster_id (str, optional): Filter by cluster id. Defaults to None.
+            public_ip_address (str, optional): Filter by public ip. Defaults to None.
+            status (constants.DeviceStatus, optional): Filter by status. Defaults to None.
+            show_resource_details (bool, optional): Show device resource utilization details. Defaults to True.
+            calculate_client_count (bool, optional): Calculate client count. Defaults to True.
+            calculate_ssid_count (bool, optional): Calculate SSID count. Defaults to False.
+            fields (list, optional): fields to return. Defaults to None.
+            offset (int, optional): pagination offset. Defaults to 0.
+            limit (int, optional): pagination limit max 1000. Defaults to 1000.
 
         Returns:
-            CombinedResponse: CentralAPI Response object
+            CombinedResponse: CombinedResponse object.
         """
 
         dev_types = ["aps", "switches", "gateways"]  if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
@@ -1089,12 +1147,12 @@ class CentralApi(Session):
             for dev_type in dev_types
         ]
         batch_resp = await self._batch_request(reqs)
+        if all([not r.ok for r in batch_resp]):
+            return utils.unlistify(batch_resp)
+
         combined = CombinedResponse(batch_resp)
 
-        # if not combined.passed:
-        #     return batch_resp
-        # elif combined.failed:
-        if combined.failed:
+        if combined.ok and combined.failed:  # combined.ok indicates at least 1 call was ok, if None are ok no need for Partial failure msg
             for r in combined.failed:
                 log.error(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True)
 
@@ -2719,10 +2777,10 @@ class CentralApi(Session):
         city: str = None,
         state: str = None,
         country: str = None,
-        zipcode: str = None,
-        latitude: int = None,
-        longitude: int = None,
-        site_list: List[Dict[str, str | dict]] = None,
+        zipcode: int | str = None,
+        latitude: float = None,
+        longitude: float = None,
+        site_list: List[Dict[str, str | dict]] = None,  # TODO TypedDict
     ) -> Response:
         """Create Site
 
@@ -2736,15 +2794,18 @@ class CentralApi(Session):
             city (str, optional): City. Defaults to None.
             state (str, optional): State. Defaults to None.
             country (str, optional): Country Name. Defaults to None.
-            zipcode (str, optional): Zipcode. Defaults to None.
-            latitude (int, optional): Latitude (in the range of -90 and 90). Defaults to None.
-            longitude (int, optional): Longitude (in the range of -100 and 180). Defaults to None.
+            zipcode (int | str, optional): Zipcode. Defaults to None.
+            latitude (float, optional): Latitude (in the range of -90 and 90). Defaults to None.
+            longitude (float, optional): Longitude (in the range of -100 and 180). Defaults to None.
             site_list (List[Dict[str, str | dict]], optional): A list of sites to be created. Defaults to None.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v2/sites"
+        zipcode = None if not zipcode else str(zipcode)
+        latitude = None if not latitude else str(latitude)
+        longitude = None if not longitude else str(longitude)
 
         address_dict = utils.strip_none({"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode})
         geo_dict = utils.strip_none({"latitude": latitude, "longitude": longitude})
@@ -2762,7 +2823,7 @@ class CentralApi(Session):
             if len(site_list) > 1:
                 ret = await self._batch_request(
                     [
-                        self.BatchRequest(self.post, (url,), json_data=_json, callback=cleaner._unlist)
+                        self.BatchRequest(self.post, url, json_data=_json, callback=cleaner._unlist)
                         for _json in site_list[1:]
                     ]
                 )
@@ -2864,22 +2925,24 @@ class CentralApi(Session):
     async def create_group(
         self,
         group: str,
-        allowed_types: constants.AllDevTypes | List[constants.AllDevTypes] = ["ap", "gw", "cx", "sw"],
+        allowed_types: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = ["ap", "gw", "cx", "sw"],
         wired_tg: bool = False,
         wlan_tg: bool = False,
         aos10: bool = False,
         microbranch: bool = False,
-        gw_role: constants.GatewayRole = "branch",
+        gw_role: constants.BranchGwRoleTypes = None,
         monitor_only_sw: bool = False,
         monitor_only_cx: bool = False,
+        cnx: bool = False,
     ) -> Response:
         """Create new group with specified properties. v3
 
         Args:
             group (str): Group Name
             allowed_types (str, List[str]): Allowed Device Types in the group. Tabs for devices not allowed
-                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch"
+                won't display in UI.  valid values "ap", "gw", "cx", "sw", "switch", "sdwan"
                 ("switch" is generic, will enable both cx and sw)
+                When sdwan (EdgeConnect SD-WAN) is allowed, it has to be the only type allowed.
             wired_tg (bool, optional): Set to true if wired(Switch) configuration in a group is managed
                 using templates.
             wlan_tg (bool, optional): Set to true if wireless(IAP, Gateways) configuration in a
@@ -2888,9 +2951,10 @@ class CentralApi(Session):
                 default False (Instant)
             microbranch (bool): True to enable Microbranch network role for APs is applicable only for AOS10 architecture.
             gw_role (GatewayRole): Gateway role valid values "branch", "vpnc", "wlan" ("wlan" only valid on AOS10 group)
-                Default: "branch"
+                Defaults to None.  Results in "branch" unless "sdwan" is in allowed_types otherwise "vpnc".
             monitor_only_sw: Monitor only ArubaOS-SW switches, applies to UI group only
             monitor_only_cx: Monitor only ArubaOS-CX switches, applies to UI group only
+            cnx (bool, optional): Make group compatible with cnx (New Central)
 
         Returns:
             Response: CentralAPI Response object
@@ -2901,6 +2965,7 @@ class CentralApi(Session):
             "branch": "BranchGateway",
             "vpnc": "VPNConcentrator",
             "wlan": "WLANGateway",
+            "sdwan": "VPNConcentrator"
         }
         dev_type_dict = {
             "ap": "AccessPoints",
@@ -2908,6 +2973,7 @@ class CentralApi(Session):
             "switch": "Switches",
             "cx": "Switches",
             "sw": "Switches",
+            "sdwan": "SD_WAN_Gateway",
         }
 
         gw_role = gw_role_dict.get(gw_role, "BranchGateway")
@@ -2933,9 +2999,14 @@ class CentralApi(Session):
             log.warning("ignoring monitor only switch setting as no switches were specified as being allowed in group", show=True)
 
         if None in allowed_types:
-            raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"')
-        if microbranch and not aos10:
-            raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
+            raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch", "sdwan')
+        elif "sdwan" in allowed_types and len(allowed_types) > 1:
+            raise ValueError('Invalid value for allowed_types.  When sdwan device type is allowed, it must be the only type allowed for the group')
+        if microbranch:
+            if not aos10:
+                raise ValueError("Invalid combination, Group must be configured as AOS10 group to support Microbranch")
+            if "Gateways" in allowed_types:
+                raise ValueError("Gateways cannot be present in a group with microbranch network role set for Access points")
         if wired_tg and (monitor_only_sw or monitor_only_cx):
             raise ValueError("Invalid combination, Monitor Only is not valid for Template Group")
 
@@ -2948,10 +3019,15 @@ class CentralApi(Session):
                 },
                 "group_properties": {
                     "AllowedDevTypes": allowed_types,
+                    "NewCentral": cnx,
                 }
             }
         }
-        if gw_role and "Gateways" in allowed_types:
+        if "SD_WAN_Gateway" in allowed_types:
+            # SD_WAN_Gateway requires Architecture and GwNetworkRole (VPNConcentrator)
+            json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = "VPNConcentrator"
+            json_data["group_attributes"]["group_properties"]["Architecture"] = "SD_WAN_Gateway"
+        elif "Gateways" in allowed_types:
             json_data["group_attributes"]["group_properties"]["GwNetworkRole"] = gw_role
             json_data["group_attributes"]["group_properties"]["Architecture"] = \
                 "Instant" if not aos10 else "AOS10"
@@ -3296,7 +3372,7 @@ class CentralApi(Session):
             'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
-            resp = await self._request(self.get_ap_settings, serial)
+            resp: Response = await self._request(self.get_ap_settings, serial)
             if not resp:
                 log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
                 return resp
@@ -3519,7 +3595,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    async def delete_site(self, site_id: int | List[int]) -> Response:
+    async def delete_site(self, site_id: int | List[int]) -> Response | List[Response]:
         """Delete Site.
 
         Args:
@@ -3532,7 +3608,7 @@ class CentralApi(Session):
         if isinstance(site_id, list):
             return await self._batch_request(
                 [
-                    self.BatchRequest(self.delete, (f"{b_url}/{_id}",))
+                    self.BatchRequest(self.delete, f"{b_url}/{_id}")
                     for _id in site_id
                 ]
             )
@@ -3745,7 +3821,7 @@ class CentralApi(Session):
         if not resp and resp.status == 500:
             match_str = "group move has been initiated, please check audit trail for details"
             if match_str in resp.output.get("description", ""):
-                resp.ok = True
+                resp._ok = True
 
         return resp
 
@@ -4304,6 +4380,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
     # TODO make add_device actual func sep and make this an aggregator that calls it and anything else based on params
+    # TODO TypeDict for device_list
     async def add_devices(
         self,
         mac: str = None,
@@ -4378,21 +4455,21 @@ class CentralApi(Session):
 
                 json_data += [_this_dict]
 
-            to_group = {d.get("group"): [] for d in device_list if "group" in d}
+            to_group = {d.get("group"): [] for d in device_list if "group" in d and d["group"]}
             for d in device_list:
-                if "group" in d:
+                if "group" in d and d["group"]:
                     to_group[d["group"]].append(d.get("serial", d.get("serial_num")))
 
-            # to_site = {d.get("site"): [] for d in device_list if "site" in d}
+            # to_site = {d.get("site"): [] for d in device_list if "site" in d and d["site"]}
             # for d in device_list:
-            #     if "site" in d:
+            #     if "site" in d and d["site"]:
             #         to_site[d["site"]].append(d.get("serial", d.get("serial_num")))
 
             # Gather all serials for each license combination from device_list
             # TODO this needs to be tested
             _lic_kwargs = {}
             for d in device_list:
-                if "license" not in d:
+                if "license" not in d or not d["license"]:
                     continue
 
                 d["license"] = utils.listify(d["license"])
@@ -4410,14 +4487,10 @@ class CentralApi(Session):
                     }
             license_kwargs = list(_lic_kwargs.values())
 
-            # TODO most efficient pairing of possible lic/dev for fewest call
-            # TODO license via list not implemented yet.
-
         else:
             raise ValueError("mac and serial or device_list is required")
 
         # Perform API call(s) to Central API GW
-        # TODO break out the add device call into it's own method.
         if to_group or license_kwargs:
             # Add devices to central.  1 API call for 1 or many devices.
             br = self.BatchRequest
@@ -4425,14 +4498,13 @@ class CentralApi(Session):
                 br(self.post, url, json_data=json_data),
             ]
             # Assign devices to pre-provisioned group.  1 API call per group
-            # TODO test that this is 1 API call per group.
             if to_group:
-                group_reqs = [br(self.preprovision_device_to_group, (g, devs)) for g, devs in to_group.items()]
+                group_reqs = [br(self.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
 
-            # TODO You can add the device to a site after it's been pre-assigned
+            # TODO You can add the device to a site after it's been pre-assigned (gateways only)
             # if to_site:
-            #     site_reqs = [br(self.move_devices_to_site, (s, devs, "gw")) for s, devs in to_site.items()]
+            #     site_reqs = [br(self.move_devices_to_site, s, devs, "gw") for s, devs in to_site.items()]
             #     reqs = [*reqs, *site_reqs]
 
             # Assign license to devices.  1 API call for all devices with same combination of licenses
@@ -4451,6 +4523,8 @@ class CentralApi(Session):
         devices: List[str] = None,
     ) -> Response:
         """Delete devices using Serial number.  Only applies to CoP deployments.
+
+        Device can not be archived in CoP inventoryI
 
         Args:
             devices (list, optional): List of devices to be deleted from
@@ -5080,10 +5154,11 @@ class CentralApi(Session):
                 resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
                 resp.output = [*resp.output, *batch_res[idx].output]
 
-        try:
-            resp.output = [models.WIDS(**d).dict() for d in resp.output]
-        except Exception as e:
-            log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
+        # try:
+        #     wids_model = models.Wids(resp.output)
+        #     resp.output = wids_model.model_dump()
+        # except Exception as e:
+        #     log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
 
         return resp
 
@@ -5354,15 +5429,13 @@ class CentralApi(Session):
     async def get_archived_devices(
         self,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 50,
     ) -> Response:
         """Get Archived devices from device inventory.
 
-        // Used by show archived //
-
         Args:
             offset (int, optional): offset or page number Defaults to 0.
-            limit (int, optional): Number of devices to get Defaults to 100.
+            limit (int, optional): Number of devices to get Defaults to 50 (which is also the max).
 
         Returns:
             Response: CentralAPI Response object
@@ -5419,14 +5492,15 @@ class CentralApi(Session):
 
     async def get_portals(
         self,
-        sort: str = '+name',
+        sort: str = None,
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
         """Get all portals with limited data.
 
         Args:
-            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.  Defaults to +name.
+            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.
+                Defaults to None.  Which results in use of API default +name.
             offset (int, optional): Starting index of element for a paginated query Defaults to 0.
             limit (int, optional): Number of items required per query Defaults to 100.
 
@@ -5458,6 +5532,22 @@ class CentralApi(Session):
         url = f"/guest/v1/portals/{portal_id}"
 
         return await self.get(url)
+
+    async def delete_portal_profile(
+        self,
+        portal_id: str,
+    ) -> Response:
+        """Delete guest portal profile.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}"
+
+        return await self.delete(url)
 
     async def get_visitors(
         self,
@@ -6020,7 +6110,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_fixme(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -6057,7 +6147,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -6080,20 +6170,26 @@ class CentralApi(Session):
 
         # HACK need to make the above async function work
         import requests
+
+        files = { "file": (file.name, file.open("rb"), "text/csv") }
+        full_url=f"{self.auth.central_info['base_url']}{url}"
         headers = {
             "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
             'Accept': 'application/json'
         }
 
-        files = { "file": (file.name, file.open("rb"), "text/csv") }
-        url=f"{self.auth.central_info['base_url']}{url}"
-
         for _ in range(2):
-            _resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+            _resp = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
+            _log = log.info if _resp.ok else log.error
+            _log(f"[PATCH] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
+            try:
+                output = _resp.json()
+            except Exception:
+                output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
+
             # Make requests Response look like aiohttp.ClientResponse
             _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
-            resp = Response(_resp, output=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2), status_code=_resp.status_code, rl_str="-")
+            resp = Response(_resp, output=output, raw=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
                 self.refresh_token()
                 headers["Authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
@@ -6103,7 +6199,7 @@ class CentralApi(Session):
 
     async def cloudauth_upload_status(
         self,
-        upload_type: constants.CloudAuthUploadType,
+        upload_type: constants.CloudAuthUploadTypes,
         ssid: str = None,
     ) -> Response:
         """Read upload status of last file upload.

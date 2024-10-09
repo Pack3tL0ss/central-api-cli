@@ -25,6 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import iden_meta  # noqa
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
+from centralcli.models import Wids
 
 app = typer.Typer()
 
@@ -32,6 +33,9 @@ app = typer.Typer()
 class WidsResponse:
     def __init__(self, wids_cat: Literal["rogue", "interfering", "suspect", "all"], response: Response, start: None | datetime = None, end: None | datetime = None,) -> None:
         self.response = response
+        if response.ok:
+            wids_model = Wids(response.output)
+            self.response.output = wids_model.model_dump()
         if wids_cat == "all":
             self.caption = self.all_caption()
         else:
@@ -89,7 +93,7 @@ def get_wids_response(
     else:
         func = getattr(cli.central, f"wids_get_{wids_cat}_aps")
 
-    return WidsResponse(wids_cat, cli.central.request(func, **kwargs), start=start, end=end)
+    return WidsResponse(wids_cat, response=cli.central.request(func, **kwargs), start=start, end=end)
 
 
 # Default Time-Range for all wids Endpoints is past 3 hours.
@@ -174,7 +178,7 @@ def interfering(
 
 
 @app.command()
-def neighbor(
+def neighbors(
     device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
@@ -289,15 +293,41 @@ def all(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        cleaner=cleaner.wids,
     )
 
 
-@app.callback()
-def callback():
+@app.callback(invoke_without_command=True)
+def callback(ctx: typer.Context):
     """
     Show Wireless Intrusion Detection data
     """
-    pass
+    # We run show wids all if they don't provide a subcommand.
+    if not ctx.invoked_subcommand:
+        ctx.invoked_subcommand = "all"
+        kwargs = {
+            "device": None,
+            "group": None,
+            "site": None,
+            "label": None,
+            "verbose": 0,
+            "start": None,
+            "end": None,
+            "past": None,
+            "sort_by": None,
+            "reverse": None,
+            "do_json": None,
+            "do_yaml": None,
+            "do_csv": None,
+            "do_table": None,
+            "raw": False,
+            "outfile": None,
+            "pager": False,
+            "debug": False,
+            "default": None,
+            "account": cli.account,
+        }
+        ctx.invoke(all, **kwargs)
 
 
 if __name__ == "__main__":

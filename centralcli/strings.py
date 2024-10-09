@@ -4,25 +4,21 @@ from __future__ import annotations
 
 from typing import Literal, List, Dict, Any
 from rich.console import Console
-from rich.json import JSON
+from rich.syntax import Syntax
+from pygments.lexers.data import JsonLexer, YamlLexer
 from centralcli import log, utils
+from centralcli.vendored.csvlexer.csv import CsvLexer
 import tablib
 import yaml
 import json
 console = Console(emoji=False)
 
 # [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]  # TODO implement this device del
-# TODO document examples and uncomment below.  provide examples for all format/types
-# print("See https://central-api-cli.readthedocs.io for full examples.
-
 
 # TODO build examples for json yaml a master import for all make example the same for add and delete
 # (noting that delete only requires 1 field)
 # provide estimate on number of API calls.
 
-# TODO pass examples through lexer
-
-# TODO build csv examples for all the below, send through tablib and use .json .yaml .csv methods of tablib to generate examples for each
 # TODO These Examples run on import need to make properties of class or something to avoid running on import
 
 
@@ -30,23 +26,42 @@ TabLibFormats = Literal['json', 'yaml', 'csv', 'tsv', 'dbf', 'html', 'jira', 'la
 ExampleType = Literal["devices", "sites", "groups", "labels", "macs", "mpsk"]
 Action = Literal["add", "delete", "move", "rename", "other"]
 
+_pad = " " * 6
 ADD_FIELDS = {
-     "devices": {
-          "required": ["serial", "mac"],
-          "optional": {
-              "group": "(pre-provision device to group)",
-              "license": "(apply license to device)"
-          }
+    "devices": {
+        "required": ["serial", "mac"],
+        "optional": {
+            "group": "Pre-provision device to group",
+            "license": "Apply license to device"
+        }
+    },
+    "groups": {
+        "required": ["name"],
+        "optional": {
+            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [grey42]\[default: All but sdwan allowed][/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or "\[cx,ap,gw]',
+            "wired-tg": "Set to true to make the group a template group for switches. [grey42]\[default: False][/]",
+            "wlan-tg": "Set to true to make the group a template group for APs.  [grey42]\[default: False][/]",
+            "gw-role": '[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [grey42]\[default: branch][/]',
+            "aos10": "Set to true to enable group as aos10 group (APs).  [grey42]\[default: AOS8 IAP][/]",
+            "microbranch": "Set to true to configure APs in the group as micro-branch APs (implies aos_10). [grey42]\[default: False][/]",
+            "monitor-only-cx": "Set to true to enable CX switches as monitor only.",
+            "monitor-only-sw": "Set to true to enable AOS-SW switches as monitor only.",
+            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [grey42]\[default: False][/]",
+            "gw-config": "Path to file containing gw group level config or jinja2 template.",
+            "ap-config": "Path to file containing ap group level config or jinja2 template.",
+            "gw-vars": "Path to variables used if gw-config is a j2 template.",
+            "ap-vars": "Path to variables used if ap-config is a j2 template.",
+        }
     }
 }
 MOVE_FIELDS = {
      "devices": {
           "required": ["serial", "mac"],
           "optional": {
-              "group": "(move device to group)",
-              "site": "(move device to site)",
-              "label": "(assign label to device)",
-              "retain_config": "Retain devices current configuration during group move. [grey42](Applies to CX switches Only)[/]"
+              "group": "Move device to group",
+              "site": "Move device to site",
+              "label": "Assign label to device",
+              "retain_config": "Retain devices current configuration as device level override. [grey42](Applies to CX switches Only)[/]"
           }
     }
 }
@@ -55,9 +70,50 @@ COMMAND_TEXT = {
         "add": "[italic cyan]cencli batch add devices IMPORT_FILE[/]",
         "delete": "[italic cyan]cencli batch delete devices IMPORT_FILE[/]",
         "move": "[italic cyan]cencli batch move devices IMPORT_FILE[/]"
+    },
+    "groups": {
+        "add": "[italic cyan]cencli batch add groups IMPORT_FILE[/]"
     }
 }
 
+
+LEXERS = {
+        "csv":  CsvLexer(ensurenl=False),
+        "json": JsonLexer(ensurenl=False),
+        "yaml": YamlLexer(ensurenl=False)
+}
+class ExampleSegment:
+    def __init__(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = "csv", example_title: str = None) -> None:
+        self.original = example_text
+        self.example_type = example_type
+        self.example_text = self._format_example_text(example_text, example_type)
+        example_title = None if not example_title else f" {example_title.strip()} "
+        self.title = example_title or f" .{example_type} example "
+        max_len = max([len(line.strip()) for line in example_text.splitlines()])
+        self.max_len = max_len if max_len >= 57 else 57
+
+
+    def __str__(self):
+        return "\n".join(self.list)
+
+    def __rich__(self):
+        return str(self)
+
+    def _format_example_text(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = None) -> Syntax:
+        example_type = example_type or self.example_type
+        out = Syntax(code=example_text, lexer=LEXERS[self.example_type], theme="native")
+
+        return out.highlight(out.code.rstrip()).markup
+
+    @property
+    def list(self):
+        return [
+            f'[reset]{self.title:{"-"}^{self.max_len}s}'.replace("- ", "- [bright_green]").replace(" -", "[/] -"),
+            self.example_text,
+            "-" * self.max_len,
+            "",
+            # f"{len(self.title)=} {self.first_half=} {self.second_half=} {self.max_len=} {self.end_len=} {[len(line) for line in self.original.splitlines()]}",  # DEBUG
+        ]
 
 class Example:
     """
@@ -68,28 +124,18 @@ class Example:
         self.type = type or "devices"
         self.action = action or "add"
         self.ds = tablib.Dataset().load(self.data, format=data_format)
+        self.clean = self._get_clean_data(self.ds)
         self.json = self.get_json()
         self.yaml = self.get_yaml()
         self.csv = self.get_csv()
         self.mac_text = "[italic]:information:  MAC Address can be nearly any format imaginable.[/]"
-        self.ignore_text = f"[italic]:information:  {self.type.capitalize()} with the either [cyan]ignore[/], or [cyan]retired[/] keys set to true are ignored.[/]"
+        self.ignore_text = f"[italic]:information:  {self.type.capitalize()} with either [cyan]ignore[/], or [cyan]retired[/] keys set to true are ignored.[/]"
 
     def __str__(self):
-        ret = [
-                f'{"-":{"-"}<21}[bright_green] .csv example[reset]: {"-":{"-"}<21}',
-                self.csv,
-                "-" * 57,
-                "",
-                f'{"-":{"-"}<21}[bright_green] .json example[reset]: {"-":{"-"}<20}',
-                self.json,
-                "-" * 57,
-                "",
-                f'{"-":{"-"}<21}[bright_green] .yaml example[reset]: {"-":{"-"}<20}',
-                self.yaml,
-                "-" * 57
-        ]
-        if self.type == "devices" and self.action not in ["delete", "other"]:
-            ret += [self.by_serial]
+        ret = [*ExampleSegment(self.csv, "csv").list, *ExampleSegment(self.json, "json").list, *ExampleSegment(self.yaml, "yaml").list,]
+        _by_key = self.by_parent_key
+        if _by_key:
+            ret += [_by_key]
 
         return "\n".join(ret)
 
@@ -102,18 +148,33 @@ class Example:
             "",
             self.mac_text,
             self.ignore_text,
+            "",
             str(self),
             "",
             self.parent_key_text,
-            common_add_delete_end
+            common_add_delete_end if self.action in ["add", "delete"] else generic_end
         ]
         return "\n".join(ret)
 
+    def _get_clean_data(self, data: tablib.Dataset = None) -> List[Dict[str, Any]]:
+        data = data or self.ds
+        out = self._handle_bools(data)
+        return [utils.strip_none(inner) for inner in out]
+
     def _handle_bools(self, data: tablib.Dataset) -> List[Dict[str, Any]]:
         bool_strings = ["true", "false", "yes", "no"]
-        def _convert_bool(value: str) -> str | bool | int:
-            if value in bool_strings:
-                return bool(value)
+        def _convert_bool(value: str, expecting_list: bool = False) -> str | bool | int | list:
+            if expecting_list:
+                if " " in value:
+                    return value.split()
+                elif "," in value:  # csv should only support space seperated, but leaving this in for now.
+                    return value.lstrip("[").rstrip("]").split(",")
+                elif value == "":
+                    return None
+                else:
+                    return [value]
+            elif value.lower() in bool_strings:
+                return True if value.lower() in ["true", "yes"] else False
             elif value.isdigit():
                 return int(value)
             elif value == "":
@@ -121,14 +182,13 @@ class Example:
             else:
                 return value
 
-        return [{k: _convert_bool(v) for k, v in inner_dict.items()} for inner_dict in data.dict]
+        return [{k: _convert_bool(v, expecting_list=k in ["types"]) for k, v in inner_dict.items()} for inner_dict in data.dict]
 
     def get_json(self):
-        data = json.dumps(self._handle_bools(self.ds))
-        return JSON(data).text.markup
+        return json.dumps(self.clean, indent=4)
 
     def get_yaml(self):
-        return yaml.safe_dump(self._handle_bools(self.ds)).rstrip()
+        return yaml.safe_dump(self.clean).rstrip()
 
     def get_csv(self):
         return self.ds.csv.rstrip()
@@ -137,24 +197,22 @@ class Example:
     def header(self):
         header =  ["Accepts the following keys (include as header row for csv import):"]
         field_dict = ADD_FIELDS if self.action == "add" else MOVE_FIELDS
-        # all_fields = [*field_dict[self.type]["required"], *field_dict[self.type].get("optional", {}).keys()]  # Only setup for add devices
         required_strings =  utils.color(field_dict[self.type]["required"], "red")
-        # header += [f'    {utils.color(all_fields, color_str="cyan")}']
         header += [f'    {required_strings}']
         if field_dict[self.type].get("optional"):
             header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
-            # cnt = len(field_dict[self.type]["optional"])
-            # {' and' if idx == 1 and idx != cnt else ''}{' are optional.' if idx == cnt else ''}
+            if self.action == "move":
+                header += [f'    [italic]At least one of {utils.color(["group", "site", "label"], "cyan")} is also required[/]']
             header += [""]
             for idx, (field, description) in enumerate(field_dict[self.type]["optional"].items(), start=1):
-                header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/] [italic dark_olive_green2]{description}[/]"]
+                header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/]: [italic dark_olive_green2]{description}[/]"]
 
         return "\n".join(header)
 
     @property
     def parent_key_text(self) -> str:
         return (
-            f"[italic]:information:  The examples above can also be under a parent [cyan]{self.type}[/] key ([dark_olive_green2]json[/] and [dark_olive_green2]yaml[/]).\n"
+            f"[italic]:information:  The examples above can also be under a parent [cyan]{self.type}[/] key ([dark_olive_green2]json[/] or [dark_olive_green2]yaml[/]).\n"
             "   This allows one import file with [cyan]devices[/], [cyan]groups[/], [cyan]labels[/], and [cyan]sites[/] to be used for multiple batch operations.[/italic]"
         )
 
@@ -162,37 +220,40 @@ class Example:
     def command_text(self) -> str:
         return COMMAND_TEXT[self.type][self.action]
 
-    @property  # TODO just check if self.ds has "serial" and use first item as example
-    def by_serial(self) -> str:
-        by_serial = [
-            '\n[italic]:information:  Devices keyed by [cyan]serial[/] is also acceptable ([dark_olive_green2]json[/] and [dark_olive_green2]yaml[/]).[/italic]',
-            f'{"-":{"-"}<16}[bright_green] .yaml by serial example[reset]: {"-":{"-"}<15}',
-            'USABC1234:',
-        ]
-        if self.action != "rename":
-            by_serial += [
-                '  mac: aabb.ccdd.eeff',
-                '  group: SNANTX',
-                '  licence: advanced_ap',
-            ]
+    @property
+    def by_parent_key(self) -> str:
+        if "serial" in self.ds.headers:
+            key = "serial"
+        elif "name" in self.ds.headers and self.action not in ["delete", "other"]:
+            key = "name"
         else:
-            by_serial += [
-                '  hostname: barn.615.ab12'
-            ]
-        by_serial += [f'{"-" * 57}']
-        return "\n".join(by_serial)
+            return
+
+        _by_key = {self.clean[-1].get(key, "err"): {k: v for k, v in self.clean[-1].items() if k != key and v}}
+        segment = ExampleSegment(yaml.safe_dump(_by_key), example_type="yaml", example_title=f".yaml by {key} example")
+        segment_title = f"[italic]:information:  {self.type.capitalize()} keyed by [cyan]{key}[/] is also acceptable ([dark_olive_green2]json[/] or [dark_olive_green2]yaml[/]).[/italic]"
+
+        return f"{segment_title}\n{segment}"
 
 
 common_add_delete_end = """
 [italic]:information:  Batch add and batch delete operations are designed so the same import file can be used.[/]
-[italic]   The delete operation does not require as many fields, the cli will ignore the fields it does not need.[/]"""
+[italic]   The delete operation does not require as many fields, the cli will ignore the fields it does not need.[/]
+"""
 
+generic_end = """
+[italic]:information:  Most batch operations are designed so the same file can be used for multiple automations
+   the fields not required for a particular automation will be ignored.[/]
+"""
 
+# -- // ADD DEVICES \\ --  NOT USED
+# This uses example.full_text property, retaining for reference
 device_add_data = """
 serial,mac,group,license
 CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
 CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
 """
+
 example = Example(device_add_data, type="devices", action="add")
 clibatch_add_devices = f"""{example.command_text}
 
@@ -215,6 +276,7 @@ USABC1234:
 {common_add_delete_end}
 """
 
+# -- // MOVE DEVICES \\ --
 device_move_data="""
 serial,mac,group,site,label,retain_config
 CN12345678,aabbccddeeff,phl-access,snantx-1201,,false
@@ -235,6 +297,7 @@ clibatch_move_devices = f"""{example.command_text}
 {common_add_delete_end}
 """
 
+# -- // RENAME DEVICES \\ --
 data="""
 serial,hostname
 CN12345678,barn.615.ab12
@@ -254,12 +317,9 @@ Where [cyan]serial[/] The serial of the AP to be renamedd
 {example}
 
 {example.parent_key_text}
+{generic_end}"""
 
-[italic]Note: Most imports use a common format, so the same import file can be leveraged for multiple batch operations.
-      i.e. The same file can be used to batch add the APs, then to batch rename the APs (once they've checked in).
-      Fields not required for a specific batch operation are ignored.[/]
-"""
-
+# -- // DELETE DEVICES \\ --
 data = """
 serial,license
 CN12345678,foundation_switch_6300
@@ -280,6 +340,7 @@ Accepts the following keys (include as header row for csv import):
 {common_add_delete_end}
 """
 
+# -- // ADD SITES \\ --
 data = """
 name,address,city,state,zipcode,country
 site1,123 Privacy Dr,Anytown,TN,37066,US
@@ -290,10 +351,9 @@ example = Example(data, type="sites", action="add")
 clibatch_add_sites = f"""[italic cyan]cencli batch add sites IMPORT_FILE[/]:
 
 Accepts the following keys (include as header row for csv import):
-    {utils.color(['name', 'address', 'city', 'state', 'zipcode', 'country', 'longitude', 'latitude'], "cyan")}
+    {utils.color(['name'], "red")}, {utils.color(['address', 'city', 'state', 'zipcode', 'country', 'longitude', 'latitude'], "cyan")} [italic red](red=required)[/]
 
-[italic]:information:  [red]name[/] is required.
-[italic]   Provide address fields, or geo-location ({utils.color(['longitude' ,'latitude'])}) [red]not both[/].
+[italic]:information:   Provide address fields, or geo-location ({utils.color(['longitude' ,'latitude'])}) [red]not both[/].
 [italic]   Central will calc long/lat if address is provided,[/]
 [italic]   but does not determine address from long/lat
 
@@ -304,6 +364,8 @@ Accepts the following keys (include as header row for csv import):
 {example.parent_key_text}
 {common_add_delete_end}
 """
+
+# -- // DELETE DEVICES \\ --
 data = """
 name
 site1
@@ -356,42 +418,53 @@ example3
 
 clibatch_delete_labels = clibatch_add_labels.replace('batch add labels', 'batch delete labels')
 
+# -- // ADD GROUPS \\ --
+data = """
+name,types,wired-tg,wlan-tg,gw-role,aos10,cnx,gw-config,ap-config,gw-vars,ap-vars
+main,,,,vpnc,true,true,,,,
+san-branch,gw ap cx,,,,true,,/home/wade/san-branch-group-gw.j2,/home/wade/san-branch-group-gw.j2,,
+"""
+example = Example(data=data, type="groups", action="add")
+
 # TODO verify aos10 default. make functional only tested with deploy yaml file need to make work for csv
-clibatch_add_groups = f"""
+    # [red]name[/],[cyan]types[/],[cyan]wired-tg[/],[cyan]wlan-tg[/],[cyan]gw-role[/],[cyan]aos10[/],[cyan]gw-config[/],[cyan]ap-config[/],[cyan]gw-vars[/],[cyan]ap-vars[/] [italic red](red=required)[/]
+clibatch_add_groups = f"""{example.command_text}
 
-THIS COMMAND IS CURRENTLY DISABLED AS MORE WORK/TESTING NEEDS TO BE DONE.
-
-[italic cyan]cencli batch add groups IMPORT_FILE[/]:
 Accepts the following keys (include as header row for csv import):
-If importing yaml or json the following fields can optionally be under a 'groups' key
-[cyan]name[/],[cyan]types[/],[cyan]wired-tg[/],[cyan]wlan-tg[/],[cyan]gw-role[/],[cyan]aos10[/],[cyan]gw-config[/],[cyan]ap-config[/],[cyan]gw-vars[/],[cyan]ap-vars[/]
-Where '[cyan]name[/](str)' is the only required field.
-      '[cyan]types[/](str or list)' defines what type of devices are allowed in the group.
-            All types are allowed if not provided.
-            Valid values: ["ap", "gw", "cx", "sw"]
-            For csv leave the field blank of populate with "cx" or "[cx,ap,sw]"
-      '[cyan]wired-tg[/](bool)' Set to true to make the group a template group for switches false be default.
-      '[cyan]wlan-tg[/](bool)' Set to true to make the group a template group for APs false be default.
-      '[cyan]gw-role[/](str)' "branch" or "vpnc" only valid if gw type is allowed. Defaults to "branch" if not provided.
-      '[cyan]aos10[/](bool)' set to true to enable group as aos10 group, defaults to aos8 IAP
-      '[cyan]gw-config[/](Path)' Path to file containing gw group level config or jinja2 template.
-      '[cyan]ap-config[/](Path)' Path to file containing ap group level config or jinja2 template.
-      '[cyan]gw-vars[/](Path)' Path to variables used if gw-config is a j2 template.
-      '[cyan]ap-vars[/](Path)' Path to variables used if ap-config is a j2 template.
-            [italic]Use ap-config and gw-config with caution
-            If gw-config or ap-config is a j2 file and the associated **-vars key is not provided
-            the cli will look for a yaml/json/csv with the same name as the j2 file.
+    {utils.color(ADD_FIELDS['groups']["required"], color_str="red")}, {utils.color(list(ADD_FIELDS['groups']["optional"].keys()))} [italic red](red=required)[/]
 
-[blink]:warning:[/] USE **-config variables with caution. Best to be familiar with these and the caveats before using.
+Where [cyan]name[/]\[str]: The name of the group. [red italic]required[/]
+      [cyan]types[/]\[str | list]: defines what type of devices are allowed in the group.
+            Valid values: ["ap", "gw", "cx", "sw" "sdwan"] [grey42]\[default: ap, gw, cx, sw][/]
+            :information:  For csv the field can be blank \[use default: ap, gw, cx, sw]: or a space seperated list of device types.
+            :information: "sdwan" is for EdgeConnect SD-WAN portfolio (SilverPeak), when allowed it has to be the only type allowed.
+      [cyan]wired-tg[/]\[bool]: Set to true to make the group a template group for switches. [grey42]\[default: False][/]
+      [cyan]wlan-tg[/]\[bool]: Set to true to make the group a template group for APs.  [grey42]\[default: False][/]
+      [cyan]gw-role[/]\[str]: [cyan]branch[/], [cyan]vpnc[/], or [cyan]wlan[/] only valid if gw type is allowed. [grey42]\[default: branch][/]
+      [cyan]aos10[/]\[bool]: set to true to enable group as aos10 group.  [grey42]\[default: AOS8 IAP][/]
+      [cyan]microbranch[/]\[bool]: Set to true to configure APs in the group as micro-branch APs [grey42]\[default: False][/]
+      [cyan]monitor-only-cx[/]\[bool]: Set to true to enable CX switches as monitor only [grey42]\[default: False][/]
+      [cyan]monitor-only-sw[/]\[bool]: Set to true to enable AOS-SW switches as monitor only [grey42]\[default: False][/]
+      [cyan]cnx[/]\[bool]: Make group compatible with New Central (cnx).
+            :warning:  All configurations will be pushed from New Central configuration model. [grey42]\[default: False][/]
+      [cyan]gw-config[/]\[Path]: Path to file containing gw group level config or jinja2 template.
+      [cyan]ap-config[/]\[Path]: Path to file containing ap group level config or jinja2 template.
+      [cyan]gw-vars[/]\[Path]: Path to variables used if gw-config is a j2 template.
+      [cyan]ap-vars[/]\[Path]: Path to variables used if ap-config is a j2 template.
 
-[bright_green].csv example[reset]:
--------------- csv --------------
-name,types,wired-tg,wlan-tg,gw-role,aos10,gw-config,ap-config,gw-vars,ap-vars
-main,,,,vpnc,true,,,,
-san-branch,"[gw,ap,cx]",,,,true,/home/wade/san-branch-group-gw.j2,/home/wade/san-branch-group-gw.j2,,
----------------------------------
+:warning:  USE [cyan]ap-config[/] / [cyan]gw-config[/] variables with caution. Best to be familiar with these and the caveats before using.
+If [cyan]gw-config[/] or [cyan]ap-config[/] is a j2 file and the associated [cyan]gw-vars[/] / [cyan]ap-vars[/] key is not provided
+the cli will look for a yaml/json/csv with the same name as the j2 file.
+
+{example.ignore_text}
+
+{example}
+
+{example.parent_key_text}
 {common_add_delete_end}
 """
+
+# -- // DELETE GROUPS \\ --
 data = "name\nphl-access\nsan-dc-tor\ncom-branches"
 example = Example(data=data, type="groups", action="delete")
 
@@ -402,10 +475,11 @@ Accepts the following keys (include as header row for csv import):
 
 {example}
 {example.parent_key_text}
+
 {common_add_delete_end}
 """
 
-
+# -- // DEPLOY \\ --
 clibatch_deploy = """
 [bright_green]Batch Deploy[/]
 
@@ -413,12 +487,13 @@ This is a placeholder
 TODO add deploy example
 """
 
+# -- // SUBSCRIBE DEVICES \\ --
 data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_subscribe = f"""[italic cyan]cencli batch subscribe devices IMPORT_FILE[/]:
+clibatch_subscribe = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]license[/] [italic](both are required)[/]
@@ -427,10 +502,10 @@ Requires the following keys (include as header row for csv import):
 
 {example}
 {example.parent_key_text}
-
-NOTE: Most batch operations are designed so the same file can be used for multiple automations
-      the fields not required for a particular automation will be ignored.
+{generic_end}
 """
+
+# -- // UNSUBSCRIBE DEVICES \\ --
 data = """
 serial
 CN12345678
@@ -448,11 +523,10 @@ any subscriptions associated with the serial will be removed.
 
 {example}
 {example.parent_key_text}
-
-NOTE: Most batch operations are designed so the same file can be used for multiple automations
-      the fields not required for a particular automation will be ignored.
+{generic_end}
 """
 
+# -- // ADD MACS (cloud-auth) \\ --
 data="""Mac Address,Client Name
 00:09:B0:75:65:D1,Integra
 00:1B:4F:23:8A:3E,Avaya VoIP
@@ -468,10 +542,12 @@ Optional keys:
 {Example(data, type="macs", action="add")}
 """
 
+# -- // ADD MPSK (cloud-auth) \\ --
 data="""Name,MPSK,Client Role,Status
 wade@example.com,chant chemo domain lugged,admin_users,enabled
 jerry@example.com,quick dumpster offset jack,dia,enabled
 stephanie@example.com,random here words go,general_users,enabled"""
+example = Example(data, type="mpsk", action="add")
 
 clibatch_add_mpsk = f"""[italic cyan]cencli batch add mpsk IMPORT_FILE --ssid <SSID>[/]:
 
@@ -483,14 +559,16 @@ Requires the following keys (include as header row for csv import):
 :information:  [cyan]--ssid[/] Option is required when uploading Named MPSKs.
 
 
-{Example(data, type="mpsk", action="add")}
+{example}
+
+{example.ignore_text.replace("Mpsk", "MPSKs")}
 """
 
 
 class ImportExamples:
     def __init__(self):
         self.add_devices = Example(device_add_data, type="devices", action="add").full_text
-        self.add_sites = clibatch_add_sites
+        self.add_sites = self.add_site = clibatch_add_sites
         self.add_groups = clibatch_add_groups
         self.add_labels = clibatch_add_labels
         self.add_macs = clibatch_add_macs
@@ -499,7 +577,6 @@ class ImportExamples:
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
         self.delete_labels = clibatch_delete_labels
-        self.add_site = clibatch_add_sites
         self.deploy = clibatch_deploy
         self.subscribe = clibatch_subscribe
         self.unsubscribe = clibatch_unsubscribe

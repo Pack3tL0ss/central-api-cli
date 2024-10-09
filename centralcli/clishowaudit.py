@@ -9,6 +9,7 @@ import pendulum
 from pathlib import Path
 from rich import print
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -24,6 +25,9 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, LogAppArgs, LogSortBy
+
+if TYPE_CHECKING:
+    from .cache import CacheGroup, CacheDevice
 
 app = typer.Typer()
 
@@ -204,7 +208,7 @@ def logs(
             dev_id = device
             title = f"{title} related to device with serial [cyan]{device}[/]"
         else:
-            dev = cli.cache.get_dev_identifier(device)
+            dev: CacheDevice = cli.cache.get_dev_identifier(device)
             dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
             title = f"{title} related to {dev.summary_text}"
 
@@ -212,7 +216,7 @@ def logs(
             log.warning(f"[cyan]--group[/] [bright_green]{group}[/] ignored as it doesn't make sense with [cyan]--device[/] [bright_green]{device}[/]", caption=True)
             group = None
     elif group:
-        group = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
         title = f"{title} associated with group {group.name}"
 
     kwargs = {
@@ -239,7 +243,7 @@ def logs(
             pager=pager,
             outfile=outfile,
             sort_by=sort_by,
-            reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
+            reverse=not reverse,  # API returns newest on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs if not verbose else None,
             cache_update_func=cli.cache.update_log_db if not verbose else None,
             caption="Use [cyan]show audit logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",

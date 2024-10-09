@@ -1,18 +1,18 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 from __future__ import annotations
 import typer
 import pendulum
-import asyncio
 import sys
 import json
 import os
 from datetime import datetime
-from typing import List, Iterable, Literal, Dict, Any, Tuple
+from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
 from rich import print
 from rich.console import Console
+
 
 
 try:
@@ -43,11 +43,15 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, DeviceStatus, DeviceTypes,
-    lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, DeviceStatus,
+    DeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
+
+if TYPE_CHECKING:
+    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
+    from tinydb.table import Document
 
 
 app = typer.Typer()
@@ -55,7 +59,8 @@ app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
 app.add_typer(clishowbranch.app, name="branch")
 app.add_typer(clishowospf.app, name="ospf")
-app.add_typer(clishowtshoot.app, name="tshoot")
+app.add_typer(clishowtshoot.app, name="tshoot", deprecated=True, help="Deprecated, use [cyan]cencli show ts ...[/]")
+app.add_typer(clishowtshoot.app, name="ts")
 app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
 app.add_typer(clishowcloudauth.app, name="cloud-auth")
@@ -230,13 +235,14 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
+# TODO expand params into available kwargs
 def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
     if include_inventory:
         resp = cli.cache.get_devices_with_inventory(status=status)
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
     elif not cli.cache.responses.dev:
-        resp = cli.central.request(cli.cache.update_dev_db, **params)
-        caption = None if not resp.ok else _build_device_caption(resp, status=status)
+        resp = cli.central.request(cli.cache.refresh_dev_db, **params)
+        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
         resp, caption = cli.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
@@ -245,21 +251,25 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
 
 def _get_details_for_specific_devices(
         devices: List[CentralObject],
-        dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+        dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
         do_table: bool = False
     ) -> Tuple[Response | List[Response], str]:
         caption = None
-        dev_type = None if not dev_type else lib_to_api(dev_type)  # convert show command "what" to Generic lib dev_type ap, gw, switch
 
         # Build requests
         br = cli.central.BatchRequest
         devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [br(cli.central.get_dev_details, (dev.type, dev.serial,)) for dev in devs]
+        reqs = [br(cli.central.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
         batch_res = cli.central.batch_request(reqs)
+        if include_inventory:  # Combine results with inventory results
+            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
+            for r, dev in zip(batch_res, devs):
+                r.output = {**r.output, **cli.cache.inventory_by_serial.get(dev.serial, {})}
+
 
         if do_table and len(dev_types) > 1:
             _output = [r.output for r in batch_res]
@@ -302,14 +312,14 @@ def show_devices(
 ) -> None:
     # include subscription implies include_inventory
     if update_cache:
-        cli.central.request(cli.cache.update_dev_db)
+        cli.central.request(cli.cache.refresh_dev_db)
 
     if group:
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
     if site:
-        site: CentralObject = cli.cache.get_site_identifier(site)
+        site: CacheSite = cli.cache.get_site_identifier(site)
     if label:
-        label: CentralObject = cli.cache.get_label_identifier(label)
+        label: CacheLabel = cli.cache.get_label_identifier(label)
 
     resp = None
     status = status or state
@@ -336,16 +346,16 @@ def show_devices(
     if devices:  # cencli show devices <device iden>
         verbosity = verbosity or 99  # specific device implies verbose output vertically
         default_tablefmt = "yaml"
-        resp, caption = _get_details_for_specific_devices(devices, include_inventory=include_inventory, do_table=do_table)
+        resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
-    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params)
-        resp = cli.central.request(cli.cache.update_dev_db, dev_type=dev_type, **params)
+    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
+        resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type)
+            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
-        caption = _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+        caption = None if not resp.ok else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
@@ -792,7 +802,7 @@ def inventory(
         cli.exit(code=0)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(cli.cache.update_inv_db, dev_type=dev_type, sub=sub)
+    resp = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
 
     cli.display_results(
         resp,
@@ -811,7 +821,7 @@ def inventory(
 
 # TODO break into seperate command group if we can still all show subscription without an arg to default to details
 @app.command()
-def subscription(
+def subscriptions(
     what: SubscriptionArgs = typer.Argument("details"),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
     service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
@@ -849,7 +859,7 @@ def subscription(
         _cleaner = None
         set_width_cols = None
     elif what == "names":
-        resp = cli.central.request(cli.cache.update_license_db)
+        resp = cli.central.request(cli.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         _cleaner = None
         set_width_cols = {"name": {"min": 39}}
@@ -1202,9 +1212,11 @@ def upgrade(
     )
 
 
-@app.command("cache", help="Show contents of Identifier Cache.", hidden=True)
+@app.command("cache", hidden=True)
 def cache_(
-    args: List[CacheArgs] = typer.Argument(None, show_default=False),
+    args: List[CacheArgs] = typer.Argument(None, help="[cyan]all[/] Shows data in [italic bright_green]the most pertinent[/] tables", show_default=False),
+    all: bool = typer.Option(False, "--all", help="This is the Super [cyan]all[/] option, shows data in [bright_green italic]every[/] table.", show_choices=False),
+    no_page: bool = typer.Option(False, "--no-page", help="For [cyan]all[/] | [cyan]--all[/] options, you hit Enter to see the next table.  This option disables that behavior.", show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -1218,33 +1230,92 @@ def cache_(
     account: str = cli.options.account,
     update_cache = cli.options.update_cache,
 ):
+    """Show contents/size/record-count in Local Cache.
+
+    By default (or with [cyan]all[/] as argument) the command shows the data in the most frequently used tables:
+        devices, inventory, sites, groups, templates, labels, licenses, clients
+        Use [cyan]--all[/] flag to see data for all tables.
+
+    Use [cyan]tables[/] as argument to see summary and headers for all tables.
+    """
+    def get_fields(data: List[Dict[str, Any]], name: str = None) -> List[str]:
+        data = [] if not data else data[0].keys()
+        pfx = ">>" if not name else f">> {name}"
+        return f"[bright_green]{pfx} fields[/]:\n{utils.color(list(data), 'cyan')}".splitlines()
+
+    def sort_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        # make device order from cache match device order from other show device commands
+        return sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+
     args = ('all',) if not args else args
-    for arg in args:
-        cache_out = getattr(cli.cache, arg)
-        arg = arg if not hasattr(arg, "value") else arg.value
+    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
 
-        # sort devices so output matches cencli show all
-        if  arg == "all":
-            if "devices" in cache_out:
-                cache_out["devices"] = sorted(cache_out["devices"], key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+    if all or "all" in args:
+        tables = cli.cache.all_tables if all else cli.cache.key_tables
+        length = len(cli.cache) if all else len(cli.cache._tables)
+        for idx, t in enumerate(tables, start=1):
+            data = t.all()
+            if t.name == "devices":
+                data = sort_devices(data)
 
-        caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
-        tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich" if "all" not in args else "yaml")
-        cli.display_results(
-            data=cache_out,
-            tablefmt=tablefmt,
-            title=f'Cache {arg.title().replace("_", " ")}',
-            pager=pager,
-            outfile=outfile,
-            sort_by=sort_by,
-            reverse=reverse,
-            output_by_key=None,
-            stash=False,
-            caption=caption,
-        )
+            cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            if not no_page and cli.econsole.is_terminal and not idx == length:
+                cli.pause()
 
+    elif "tables" in args:
+        tables = cli.cache.all_tables
+        data = [f"[dark_olive_green2]{t.name}[/]: records: [cyan]{len(t)}[/]\n    {' '.join(get_fields(t.all()))}" for t in tables]
+        cli.display_results(data=data, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
 
-@app.command(short_help="Show groups/details")
+    else:
+        for idx, arg in enumerate(args, start=1):
+            cache_out: List[Document] = getattr(cli.cache, arg)
+            arg = arg if not hasattr(arg, "value") else arg.value
+            if arg == "devices":
+                cache_out = sort_devices(cache_out)
+
+            caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
+            cli.display_results(
+                data=cache_out,
+                tablefmt=tablefmt,
+                title=f'Cache {arg.title().replace("_", " ")}',
+                pager=pager,
+                outfile=outfile,
+                sort_by=sort_by,
+                reverse=reverse,
+                output_by_key=None,
+                stash=False,
+                caption=caption,
+            )
+            if not no_page and cli.econsole.is_terminal and not idx == len(args):
+                cli.pause()
+
+    account_msg = "" if config.account in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.account}[/] "
+    cli.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(cli.cache)}[/], Cache File Size: [cyan]{cli.cache.size}[reset]')
+
+def _build_groups_caption(data: List[dict]) -> List[str]:
+    if not data:
+        return
+
+    total = ("Total", len(data),)
+    template = ("Template", len(list(filter(lambda g: any([g.get("wired_tg"), g.get("wlan_tg")]), data))),)
+    mon_only = ("Monitor Only (cx or sw)", len(list(filter(lambda g: any([g.get("monitor_only_cx"), g.get("monitor_only_sw")]), data))),)
+    aos10 = ("AOS10", len(list(filter(lambda g: g.get("aos10") is True, data))),)
+    mb = ("MicroBranch", len(list(filter(lambda g: g.get("microbranch") is True, data))),)
+    sdwan = ("EdgeConnect SD-WAN", len(list(filter(lambda g: "sdwan" in g.get("allowed_types"), data))),)
+    counts = [total, template, mon_only, aos10, mb, sdwan]
+
+    caption, _caption = [], []
+    for text, count in counts:
+        if count:
+            _caption += [f'[bright_green]{text}[/] Groups: [cyan]{count}[/]']
+    if len(_caption) > 3:
+        for chunk in utils.chunker(_caption, 3):
+            caption += [", ".join(chunk)]
+
+    return caption or _caption
+
+@app.command(help="Show groups/details")
 def groups(
     sort_by: SortGroupOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -1259,16 +1330,11 @@ def groups(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    central = cli.central
-    if central.get_all_groups not in cli.cache.updated:
-        resp = asyncio.run(cli.cache.update_group_db())
-    else:
-        resp = cli.cache.responses.group
-
-    caption = f'Total Groups: [cyan]{len(resp.output)}[/], Template Groups: [cyan]{len(list(filter(lambda g: any(g.get("template group", {}).values()), resp.output)))}[/]'
+    resp = cli.central.request(cli.cache.refresh_group_db)
+    caption = _build_groups_caption(resp.output)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
 
 
 @app.command()
@@ -1287,25 +1353,27 @@ def labels(
     account: str = cli.options.account,
 ) -> None:
     """Show labels/details"""
-    resp = cli.central.request(cli.cache.update_label_db)
+    resp = cli.central.request(cli.cache.refresh_label_db)
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
     cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
 
 def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
-    caption = "" if not resp.ok else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
-    counts, count_caption = {}, None
-    if resp.ok:
-        for do, field in zip([count_state, count_country], ["state", "country"]):
-            if do:
-                _cnt_list = [site[field] for site in resp.output if site[field]]
-                _cnt_dict = {
-                    item: _cnt_list.count(item) for item in set(_cnt_list)
-                }
-                counts = {**counts, **_cnt_dict}
+    if not resp.ok:
+        return
 
-            if counts:
-                count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    caption = f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    for do, field in zip([count_state, count_country], ["state", "country"]):
+        if do:
+            _cnt_list = [site[field] for site in resp.output if site[field]]
+            _cnt_dict = {
+                item: _cnt_list.count(item) for item in set(_cnt_list)
+            }
+            counts = {**counts, **_cnt_dict}
+
+        if counts:
+            count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
     if count_caption:
         caption = f'[reset]{caption}, {count_caption}[reset][/]'
 
@@ -1335,10 +1403,10 @@ def sites(
 
     site = None if site and site.lower() == "all" else site
     if not site:
-        resp = cli.central.request(cli.cache.update_site_db)
+        resp = cli.central.request(cli.cache.refresh_site_db)
         cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
-        site = cli.cache.get_site_identifier(site)
+        site: CacheSite = cli.cache.get_site_identifier(site)
         resp = central.request(central.get_site_details, site.id)
         cleaner_func = cleaner.sites
 
@@ -1373,7 +1441,7 @@ def templates(
         None, "--group",
         help="Get Templates for Group",
         hidden=False,
-        autocompletion=cli.cache.group_completion,
+        autocompletion=cli.cache.group_completion,  # TODO add group completion specific to template_groups only
         show_default=False,
     ),
     device_type: DevTypes = typer.Option(
@@ -1435,7 +1503,7 @@ def templates(
     else:
         title = "All Templates"
         if central.get_all_templates not in cli.cache.updated:
-            resp = cli.central.request(cli.cache.update_template_db)
+            resp = cli.central.request(cli.cache.refresh_template_db)
         else:
             resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
@@ -1524,10 +1592,10 @@ def lldp(
     central = cli.central
 
     devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
-    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, (dev.serial,)) for dev in devs if dev.type == "ap"]
-    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, (dev.serial,)) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
+    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"]
+    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
     unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
-    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, (swack_id,)) for swack_id in unique_stack_ids]
+    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, swack_id) for swack_id in unique_stack_ids]
     batch_resp = central.batch_request(batch_reqs)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
@@ -1663,6 +1731,7 @@ def config_(
         hidden=True,
     ),
     # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
+    file: bool = typer.Option(False, "-f", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1685,12 +1754,15 @@ def config_(
     \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
     """
     if group_dev == "cencli":  # Hidden show cencli config
+        if file:
+            cli.display_results(data=config.file.read_text())
+            cli.exit(code=0)
         return _get_cencli_config()
 
-    group_dev: CentralObject = cli.cache.get_identifier(group_dev, ["group", "dev"],)
+    group_dev: CacheGroup | CacheDevice = cli.cache.get_identifier(group_dev, ["group", "dev"],)
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
-        _group = cli.cache.get_group_identifier(group_dev.group)
-        if _group.data["template group"]["Wired"]:
+        _group: CacheGroup = cli.cache.get_group_identifier(group_dev.group)
+        if _group.wired_tg:
             return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
         else:
             return run(group_dev.serial, outfile=outfile, pager=pager)
@@ -1708,7 +1780,7 @@ def config_(
                 devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "gw" and d["group"] == group_dev.name]
                 caasapi = caas.CaasAPI(central=cli.central)
 
-                reqs = [br(caasapi.show_config, (group_dev.name, d.mac)) for d in devs]
+                reqs = [br(caasapi.show_config, group_dev.name, d.mac) for d in devs]
                 res = cli.central.batch_request(reqs)
 
                 outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_gw_configs"
@@ -2169,7 +2241,7 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = central.request(cli.cache.update_client_db, **kwargs)
+        resp = central.request(cli.cache.refresh_client_db, **kwargs)
     else:
         resp = central.request(cli.central.get_denylist_clients, **kwargs)
 
@@ -2300,7 +2372,7 @@ def roaming(
     title = "Roaming history"
 
     if refresh or drop:
-        resp = cli.central.request(cli.cache.update_client_db, "wireless", truncate=drop)
+        resp = cli.central.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
@@ -2760,7 +2832,7 @@ def portals(
         show_default = False,
         writable=True,
     ),
-    sort_by: str = cli.options.sort_by,
+    sort_by: SortPortalOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2787,7 +2859,7 @@ def portals(
         portal = portal[0]
 
     if portal is None:
-        resp: Response = cli.central.request(cli.cache.update_portal_db)
+        resp: Response = cli.central.request(cli.cache.refresh_portal_db)
         _cleaner = cleaner.get_portals
     else:
         p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
@@ -2833,27 +2905,7 @@ def version(
     cli.version_callback()
 
 
-def _get_cencli_config(
-    default: bool = typer.Option(
-        False, "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        envvar="ARUBACLI_DEBUG",
-        help="Enable Additional Debug Logging",
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-) -> None:
-
+def _get_cencli_config() -> None:
     try:
         from centralcli import config
     except (ImportError, ModuleNotFoundError):
@@ -2862,10 +2914,10 @@ def _get_cencli_config(
             sys.path.insert(0, str(pkg_dir.parent))
             from centralcli import config
 
-    omit = ["deprecation_warning", "webhook", "snow"]
+    omit = ["deprecation_warning", "webhook", "snow", "valid_suffix", "is_completion", "forget", "default_scache_file"]
     out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
-    out["webhook"] = None if not config.webhook else config.webhook.dict()
-    out["snow"] = None if not config.snow else config.snow.dict()
+    out["webhook"] = None if not config.webhook else config.webhook.model_dump()
+    out["snow"] = None if not config.snow else config.snow.model_dump()
 
     resp = Response(output=out)
 

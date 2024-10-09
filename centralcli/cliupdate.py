@@ -10,7 +10,6 @@ from rich import print
 from rich.console import Console
 from jinja2 import FileSystemLoader, Environment
 import yaml
-import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -26,6 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
 from centralcli import CentralObject
+from .cache import CacheTemplate
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -38,8 +38,7 @@ app = typer.Typer()
 
 
 # TODO add support for j2 / variable conversion as with cencli update config
-# FIXME pushing template via API returned 200 but template was not updated??
-@app.command(short_help="Update an existing template")
+@app.command(help="Update an existing template")
 def template(
     name: str = typer.Argument(
         ...,
@@ -88,32 +87,30 @@ def template(
         if len(_tmplt) != 1:
             cli.exit(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
 
-        obj = CentralObject("template", _tmplt[0])
+        cache_template = CacheTemplate(_tmplt[0])
 
     kwargs = {
-        "name": obj.name,
-        "group": group or obj.group,
-        "device_type": device_type or obj.device_type,
-        "version": version or obj.version,
-        "model": model or obj.model
+        "name": cache_template.name,
+        "group": group or cache_template.group,
+        "device_type": device_type or cache_template.device_type,
+        "version": version or cache_template.version,
+        "model": model or cache_template.model
     }
 
     payload = None
     if not template:
         payload = utils.get_multiline_input(prompt="Paste in new template contents.")
-        payload = "\n".join(payload).encode()
+        payload = payload.encode("utf-8")
 
-    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{obj.name}[/] in group [cyan]{kwargs['group']}[/]")
+    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{cache_template.name}[/] in group [cyan]{kwargs['group']}[/]")
     print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
     print(f"    Model: [cyan]{kwargs['model']}[/]")
     print(f"    Version: [cyan]{kwargs['version']}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
-        cli.display_results(resp, tablefmt="action")
-        if resp.ok:
-            # TODO need attribute setter/getters so obj.template_data = newval will update the dict in the data attribute
-            obj.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
-            _ = cli.central.request(cli.cache.update_template_db, update=obj)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        cache_template.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
+        _ = cli.central.request(cli.cache.update_template_db, data=cache_template)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")
@@ -373,7 +370,7 @@ def site(
         ],
         show_default=False
     ),
-    zipcode: int = typer.Argument(None, show_default=False),
+    zip: int = typer.Argument(None, help="zipcode", show_default=False),
     country: str = typer.Argument(None, show_default=False),
     new_name: str = typer.Option(None, show_default=False, help="Change Site Name"),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False),
@@ -411,7 +408,7 @@ def site(
         "address": address,
         "city": city,
         "state": state,
-        "zipcode": zipcode if zipcode is None else str(zipcode),
+        "zipcode": zip if zip is None else str(zip),
         "country": country,
         "latitude": lat,
         "longitude": lon
@@ -419,9 +416,7 @@ def site(
     address_fields = {k: v for k, v in kwargs.items() if v}
 
     if not address_fields and not new_name:
-        print(" [red]No Update data provided[/]")
-        print(" [italic]Must provide address data and/or --new-name.")
-        raise typer.Exit(1)
+        cli.exit("[red]No Update data provided[/]\n[italic]Must provide address data and/or --new-name.")
 
     print(f"Updating Site: {site_now.summary_text}")
     print(f" [bright_green]Send{'ing' if yes else ''} the following updates:[reset]")
@@ -439,11 +434,11 @@ def site(
     if rename_only:
         print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:
-            asyncio.run(cli.cache.update_site_db(data={"name": new_name or site_now.name, "id": site_now.id, **address_fields}))
+            cli.central.request(cli.cache.update_site_db, data={"name": new_name or site_now.name, "id": site_now.id, **address_fields})
 
 
 @app.command()
