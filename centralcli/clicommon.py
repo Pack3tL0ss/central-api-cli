@@ -1247,6 +1247,7 @@ class CLICommon:
             *,
             yes: bool = False,
         ) -> None:
+        data = utils.listify(data)
         names_from_import = [g["name"] for g in data if "name" in g]
         if not names_from_import:
             self.exit("Unable to extract group names from import data.  Refer to [cyan]cencli batch delete groups --example[/] for import data format.")
