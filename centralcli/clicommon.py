@@ -38,6 +38,7 @@ from centralcli.clioptions import CLIOptions, CLIArgs
 
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
+    from .typedefs import CacheTableName
 
 
 tty = utils.tty
@@ -853,7 +854,7 @@ class CLICommon:
 
         return md5.hexdigest()
 
-    def _get_import_file(self, import_file: Path = None, import_type: Literal["devices", "sites", "groups", "labels", "macs", "mpsk"] = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, text_ok: bool = False,) -> List[Dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
@@ -1253,7 +1254,7 @@ class CLICommon:
         # If any groups appear to not exist according to local cache, update local cache
         not_in_cache = [name for name in names_from_import if name not in self.cache.groups_by_name]
         if not_in_cache:
-            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local group cache.\n:arrows_clockwise: [bright_green]Updating local group cache[/].")
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {len(not_in_cache)} group{'s' if len(not_in_cache) > 1 else ''} that do [red bold]not exist[/] according to local group cache.\n:arrows_clockwise: [bright_green]Updating[/] local [cyan]group[/] cache.")
             _ = self.central.request(self.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
 
         # notify and remove any groups that don't exist after cache update
@@ -1561,9 +1562,7 @@ class CLICommon:
             self.central.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
         if inv_doc_ids:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
-        # elif arch_reqs and cache_inv_devs:  # Full cache update as arch/unarchive had failures.
-        #     self.econsole.print("[dark_orange3]:warning:[/]  Errors occured during Archive/Unarchive.  Inventory Cache update will not occur.  Cache may be out of date.  Use [cyan]show inventory[/] to update inventory cache.")
-            # self.central.request(self.cache.refresh_inv_db)
+
 
 if __name__ == "__main__":
     pass
