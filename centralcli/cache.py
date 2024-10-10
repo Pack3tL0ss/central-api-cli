@@ -2324,14 +2324,14 @@ class Cache:
             bool: _description_
         """
         _start_time = time.perf_counter()
-        if data:
+        if data is not None:
             with econsole.status(f":arrows_clockwise:  Updating [dark_olive_green2]{db.name}[/] Cache: [cyan]{len(data)}[/] records."):
                 if truncate:
                     db.truncate()
                 db_res = db.insert_multiple([dict(d) for d in data])  # Converts any TinyDB.Documents to dict as that has unexpected results.
                 return self.verify_db_action(db, expected=len(data), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
 
-        doc_ids = utils.listify(doc_ids)
+        doc_ids = utils.listify(doc_ids) or []
         with econsole.status(f":wastebasket:  [red]Removing[/]] [cyan]{len(doc_ids)}[/] records from [dark_olive_green2]{db.name}[/] cache."):
             db_res = db.remove(doc_ids=doc_ids)
             return self.verify_db_action(db, expected=len(doc_ids), response=db_res, remove=True, elapsed=round(time.perf_counter() - _start_time, 2))
