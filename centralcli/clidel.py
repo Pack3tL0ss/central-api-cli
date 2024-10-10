@@ -271,12 +271,6 @@ def device(
     devices: List[str] = cli.arguments.devices,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  App assignment and subscriptions remain intact."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=not config.is_cop,),
-    force: bool = typer.Option(
-        False,
-        "-F",
-        "--force",
-        help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"
-    ),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -297,7 +291,7 @@ def device(
     # The provided input does not have to be the serial number batch_del_devices will use get_dev_identifier to look the dev
     # up.  It just validates the import has the `serial` field.
     data = [{"serial": d} for d in devices]
-    cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+    cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
 
 
 @app.callback()

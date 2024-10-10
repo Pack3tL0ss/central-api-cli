@@ -1466,38 +1466,40 @@ class CLICommon:
         except KeyError:
             self.exit("Missing required field: [cyan]serial[/].")
 
-        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False,) for d in serials_in]  # returns None if device not found in cache after update
+        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for d in serials_in]  # returns None if device not found in cache after update
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
-        # cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
-        _serials = [d.serial for d in cache_found_devs] if not force else serials_in  # Should no longer be necessary
+
 
         # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
         # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
-        arch_reqs = [] if ui_only or not _serials else [
-            BR(self.central.archive_devices, _serials),
-            BR(self.central.unarchive_devices, _serials),
+        # We always use serials with import without validation for arch/unarchive as device will not show in inventory if it's already archved
+        arch_reqs = [] if ui_only or not serials_in else [
+            BR(self.central.archive_devices, serials_in),
+            BR(self.central.unarchive_devices, serials_in),
         ]
 
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-        mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+        mon_del_reqs = delayed_mon_del_reqs = []
+        if not cop_inv_only:
+            mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
 
         # cop only delete devices from GreenLake inventory
-        cop_del_reqs = [] if not config.is_cop or not _serials else [
-            BR(self.central.cop_delete_device_from_inventory, _serials)
+        cop_del_reqs = [] if not config.is_cop or not serials_in else [
+            BR(self.central.cop_delete_device_from_inventory, serials_in)
         ]
 
         # warn about devices that were not found
-        if not_found_devs:
+        if (mon_del_reqs or delayed_mon_del_reqs) and not_found_devs:
             not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
             self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
-            self.econsole.print(f"{'[grey42 italic]They will be skipped[/]' if not force else '[cyan]-F[/]|[cyan]--force[/] option provided, [bright_green italic]Will send call to delete anyway[/]'}\n")
+            self.econsole.print("[grey42 italic]They will be skipped[/]\n")
 
         if ui_only:
             _total_reqs = len(mon_del_reqs)
         elif cop_inv_only:
-            _total_reqs = len(cop_del_reqs)
+            _total_reqs = len([*arch_reqs, *cop_del_reqs])
         else:
             _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
 
@@ -1519,7 +1521,7 @@ class CLICommon:
             else:
                 confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
-            confirmation_list = serials_in if force else [d.summary_text for d in cache_found_devs]
+            confirmation_list = serials_in if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
             confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
 
         if _total_reqs > 1:
@@ -1533,24 +1535,23 @@ class CLICommon:
         if self.confirm(yes):
             ...  # We abort if they don't confirm.
 
-        if not cop_inv_only:
-            # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
-            # Also monitoring UI delete for any devices currently offline.
-            batch_resp = self.central.batch_request([*arch_reqs, *mon_del_reqs])
-            if arch_reqs and len(batch_resp) >= 2:
-                inv_doc_ids = self._get_inv_doc_ids(batch_resp)
-                self.show_archive_results(batch_resp[:2])
-                batch_resp = batch_resp[2:]
+        # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
+        # Also monitoring UI delete for any devices currently offline.
+        batch_resp = self.central.batch_request([*arch_reqs, *mon_del_reqs])  # mon_del_reqs will be empty list if cop_inv_only
+        if arch_reqs and len(batch_resp) >= 2:
+            inv_doc_ids = self._get_inv_doc_ids(batch_resp)
+            self.show_archive_results(batch_resp[:2])
+            batch_resp = batch_resp[2:]
 
-            if batch_resp:  # Now represents responses associated with mon_del_reqs
-                mon_doc_ids += self._get_mon_doc_ids(batch_resp)
-                # Any that failed with device currently online error, append to back of delayed_mon_reqs (possible if dev status in cache was stale)
-                delayed_mon_del_reqs += [req for req, resp in zip(mon_del_reqs, batch_resp) if not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007"]
+        if batch_resp:  # Now represents responses associated with mon_del_reqs, will be empty if cop_inv_only
+            mon_doc_ids += self._get_mon_doc_ids(batch_resp)
+            # Any that failed with device currently online error, append to back of delayed_mon_reqs (possible if dev status in cache was stale)
+            delayed_mon_del_reqs += [req for req, resp in zip(mon_del_reqs, batch_resp) if not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007"]
 
-            if delayed_mon_del_reqs:
-                delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_reqs)
-                batch_resp += delayed_mon_resp
-                mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
+        if delayed_mon_del_reqs:
+            delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_reqs)
+            batch_resp += delayed_mon_resp
+            mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
 
         if cop_del_reqs:
             batch_resp += self.central.batch_request(cop_del_reqs)
