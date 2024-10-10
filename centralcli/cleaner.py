@@ -250,6 +250,7 @@ _short_value = {
     "rx_data_bytes": lambda v: utils.convert_bytes_to_human(v),
     "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
     "device_claim_type": lambda v: None if v and v == "UNKNOWN" else v,
+    "radio_name": lambda v: v.removeprefix("Radio "),
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -2015,3 +2016,16 @@ def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any
     _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
 
     return simple_kv_formatter(data, key_order=key_order)
+
+def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
+    def by_name_blocks(name: str, exist_names=[]) -> str:
+        if name not in exist_names:
+            exist_names += [name]
+            return name
+        return ''
+
+    key_order = ["name", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
+    data = [{k: v if k != "name" else by_name_blocks(v) for k, v in inner.items()} for inner in data]
+    data = simple_kv_formatter(data, key_order=key_order)
+
+    return data

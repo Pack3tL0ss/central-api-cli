@@ -2895,6 +2895,119 @@ def guests(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
+def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
+    try:
+        two_four_cnt, five_cnt, six_cnt, ap_names = 0, 0, 0, []
+        two_four_up_cnt, five_up_cnt, six_up_cnt = 0, 0, 0
+        for ap in data:
+            ap_names += [ap["name"]]
+            if "2.4" in ap["radio_name"]:
+                two_four_cnt += 1
+                if ap["status"] == "Up":
+                    two_four_up_cnt += 1
+            elif "5 GHz" in ap["radio_name"]:
+                five_cnt += 1
+                if ap["status"] == "Up":
+                    five_up_cnt += 1
+            elif "6 GHz" in ap["radio_name"]:
+                six_cnt += 1
+                if ap["status"] == "Up":
+                    six_up_cnt += 1
+        radio_cnt = len(ap_names)
+        ap_cnt = len(list(set(ap_names)))
+        caption = ''.join(
+            [
+                f"Counts [grey42 italic](in this output)[/]: Total APs [cyan]{ap_cnt}[/], Total Radios: [cyan]{radio_cnt}[/], ",
+                f"2.4Ghz: [cyan]{two_four_cnt}[/] ([bright_green]{two_four_up_cnt}[/], [red]{two_four_cnt - two_four_up_cnt}[/]) ",
+                f"5Ghz: [cyan]{five_cnt}[/] ([bright_green]{five_up_cnt}[/], [red]{five_cnt - five_up_cnt}[/]) ",
+                f"6Ghz: [cyan]{six_cnt}[/] ([bright_green]{six_cnt}[/], [red]{six_cnt - six_up_cnt}[/])",
+            ]
+        )
+    except Exception as e:
+        log.error(f"Unable to build caption for show radios due to {e.__class__.__name__}")
+        return
+
+    return caption
+
+
+@app.command()
+def radios(
+    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Show details for Radios
+    """
+    if up and down:
+        ...  # They used both flags.  ignore
+    elif up or down:
+        status = "Down" if down else "Up"
+
+    status = None if not status else status.title()
+    group: CacheGroup = None if not group else cli.cache.get_group_identifier(group)
+    site: CacheSite = None if not site else cli.cache.get_site_identifier(site)
+    label: CacheLabel = None if not label else cli.cache.get_label_identifier(label)
+
+    params = {
+        "group": None if not group else group.name,
+        "site": None if not site else site.name,
+        "status": status,
+        "label": None if not label else label.name,
+        "public_ip_address": pub_ip
+    }
+    default_params = {
+        "calculate_client_count": True,
+        "show_resource_details": True,
+        "calculate_ssid_count": True,
+    }
+
+    params = {k: v for k, v in params.items() if v is not None}
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+    if aps:
+        aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+        resp = cli.central.batch_request([BatchRequest(cli.central.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
+        passed = [r for r in resp if r.ok]
+        failed = [r for r in resp if not r.ok]
+        if passed:
+            combined = [ap for r in passed for ap in r.output]
+            resp = sorted(passed, key=lambda ap: ap.rl)[0]
+            resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
+        if failed:
+            cli.display_results(failed)
+    else:
+        resp = cli.central.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
+        if resp.ok:
+            resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
+
+    if resp.ok:
+        if sort_by and resp.output and sort_by in resp.output[0].keys():
+            resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap[sort_by])))
+        else:
+            resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap["radio_name"])))
+        if status:
+            resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
+        caption = _build_radio_caption(resp.output)
+
+    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, cleaner=cleaner.show_radios)
+
 
 @app.command()
 def version(
