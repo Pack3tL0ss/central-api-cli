@@ -1073,7 +1073,6 @@ def delete(
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
-    force: bool = typer.Option(False, "-F", "--force", help="Perform API calls based on input file without validating current states (valid for devices).  [grey42 italic]Does not impact deletion from monitoring UI, which still requires cache.[/]"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1110,7 +1109,7 @@ def delete(
     data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
     if what == "devices":
-        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
