@@ -560,6 +560,12 @@ class CacheClient(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s[green_yellow]{self.site})[/]'
 
+    @property
+    def help_text(self) -> str:
+        return render.rich_capture(
+            f"[bright_green]{self.name}[/]|[cyan]{self.mac}[/]|[bright_green]{self.ip}[/]|[cyan]{f's:{self.site}' if self.site else f'g:{self.group}'}[/]|[dark_olive_green2]{self.connected_name}[/]"
+        )
+
 
 class CacheMpskNetwork(CentralObject):
     db: Table | None = None
@@ -1959,19 +1965,18 @@ class Cache:
             # remove clients that are already on the command line
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
-                if c.name.startswith(incomplete):
-                    out += c.help_text
+                if c.name.lower().startswith(incomplete.lower()):
+                    out += [(c.name, c.help_text)]
                 elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
-                    out += c.help_text
+                    out += [(c.mac.replace(":", "-"), c.help_text)]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
                 elif c.ip.startswith(incomplete):
-                    out += c.help_text
+                    out += [(c.ip, c.help_text)]
                 else:
                     # failsafe, shouldn't hit
-                    out += (c.help_text[0], f'{c.help_text[1]} FailSafe Match')
+                    out += [(c.name, f'{c.help_text} FailSafe Match')]
 
-
-        for c in out:  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
-            yield c[0].replace(":", "-"), c[1]
+        for c in out:
+            yield c
 
     def event_log_completion(
         self,

@@ -66,3 +66,8 @@ def test_group_dev_completion_partial_name(incomplete: str = test_data["switch"]
     result = list(cache.group_dev_completion(ctx=ctx, incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_client_completion_partial_name(incomplete: str = test_data["client"]["wireless"]["name"].capitalize()[0:-2]):
+    result = list(cache.client_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
