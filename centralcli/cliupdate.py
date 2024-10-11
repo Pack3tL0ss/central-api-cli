@@ -14,20 +14,20 @@ import yaml
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import utils, cli, caas, cleaner, BatchRequest, log
+    from centralcli import utils, cli, cleaner, BatchRequest, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli, caas, cleaner, BatchRequest, log
+        from centralcli import utils, cli, cleaner, BatchRequest, log
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
-# from centralcli import CentralObject
+from .constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
 from . import render
 from .cache import CacheTemplate
+from .caas import CaasAPI
 
 if TYPE_CHECKING:
     from .cache import CacheDevice, CacheGroup
@@ -311,7 +311,7 @@ def config_(
         if device and device.generic_type != "gw":
             cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
         use_caas = True
-        caasapi = caas.CaasAPI(central=cli.central)  # XXX Burried import
+        caasapi = CaasAPI(central=cli.central)
         node_iden = group_dev.name if group_dev.is_group else group_dev.mac
     elif do_ap or (device and device.generic_type == "ap"):
         if device and device.generic_type != "ap":
