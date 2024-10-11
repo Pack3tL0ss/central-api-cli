@@ -3,11 +3,12 @@
 
 from pathlib import Path
 import sys
-from typing import List, Union
+from typing import TYPE_CHECKING, List, Union
 # from typing import List
 import typer
 from rich import print
 from rich.console import Console
+from rich.text import Text
 from jinja2 import FileSystemLoader, Environment
 import yaml
 
@@ -24,8 +25,12 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
-from centralcli import CentralObject
+# from centralcli import CentralObject
+from . import render
 from .cache import CacheTemplate
+
+if TYPE_CHECKING:
+    from .cache import CacheDevice, CacheGroup
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -277,7 +282,6 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
 @app.command("config")
 def config_(
     group_dev: str = cli.arguments.group_dev,
-    # TODO collect multi-line input as option to paste in config
     cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
     do_gw: bool = typer.Option(None, "--gw", help="Update group level config for gateways."),
@@ -289,18 +293,12 @@ def config_(
 ) -> None:
     """Update group or device level config (ap or gw).
     """
-    group_dev: CentralObject = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
+    group_dev: CacheDevice | CacheGroup = cli.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
 
-    # TODO render.py module with helper function to return styled rule/line
-    console = Console(record=True, emoji=False)
-    console.begin_capture()
-    console.rule("Configuration to be sent")
-    console.print("\n".join([f"[green]{line}[/green]" for line in cli_cmds]))
-    console.rule()
-    console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
-    _msg = console.end_capture()
+    output = render.output(cli_cmds)
+    output = Text.from_ansi(output.tty)
 
     if group_dev.is_group:
         device = None
@@ -321,7 +319,10 @@ def config_(
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.serial
 
-    typer.echo(_msg)
+    cli.console.rule("Configuration to be sent")
+    cli.console.print(output, emoji=False)
+    cli.console.rule()
+    cli.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     if cli.confirm(yes):
         if use_caas:
             resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
@@ -329,8 +330,7 @@ def config_(
         else:
             # FIXME this is OK for group level ap config , for AP this method is not valid
             if group_dev.is_dev:
-                print("Not Implemented yet for AP device level updates")
-                raise typer.Exit(1)
+                cli.exit("Not Implemented yet for AP device level updates")
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
