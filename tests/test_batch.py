@@ -5,14 +5,14 @@ from . import test_site_file, test_group_file, test_data, test_batch_device_file
 import traceback
 from rich.traceback import Traceback
 from rich import print
-from centralcli import cache
+
 
 runner = CliRunner()
 
 def test_batch_add_groups():
     result = runner.invoke(app, ["batch", "add",  "groups", str(test_group_file), "-Y"])
     assert result.exit_code == 0
-    assert len([g for g in cache.groups_by_name.keys() if g.startswith("cencli_test_group")]) == len(test_data["batch"]["groups_by_name"])
+    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"])
 
 
 def test_batch_del_groups():
