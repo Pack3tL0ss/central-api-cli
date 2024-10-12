@@ -464,6 +464,10 @@ class CachePortal(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Portal Profile[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
 
+    @property
+    def help_text(self):
+        return render.rich_capture(self.__rich__())
+
 
 class CacheTemplate(CentralObject):
     db: Table | None = None
@@ -1355,9 +1359,9 @@ class Cache:
             match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
-                    out += [tuple([m.name, m.id])]
+                    out += [tuple([m.name, m.help_text])]
                 elif m.id.startswith(incomplete):
-                    out += [tuple([m.id, m.name])]
+                    out += [tuple([m.id, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
@@ -1968,7 +1972,7 @@ class Cache:
                 if c.name.lower().startswith(incomplete.lower()):
                     out += [(c.name, c.help_text)]
                 elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
-                    out += [(c.mac.replace(":", "-"), c.help_text)]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
+                    out += [(c.mac, c.help_text)]
                 elif c.ip.startswith(incomplete):
                     out += [(c.ip, c.help_text)]
                 else:
@@ -1976,7 +1980,7 @@ class Cache:
                     out += [(c.name, f'{c.help_text} FailSafe Match')]
 
         for c in out:
-            yield c
+            yield c[0].replace(":", "-"), c[1]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
 
     def event_log_completion(
         self,
