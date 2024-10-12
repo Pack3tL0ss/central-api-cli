@@ -1968,7 +1968,7 @@ class Cache:
                 if c.name.lower().startswith(incomplete.lower()):
                     out += [(c.name, c.help_text)]
                 elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
-                    out += [(c.mac.replace(":", "-"), c.help_text)]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
+                    out += [(c.mac, c.help_text)]
                 elif c.ip.startswith(incomplete):
                     out += [(c.ip, c.help_text)]
                 else:
@@ -1976,7 +1976,7 @@ class Cache:
                     out += [(c.name, f'{c.help_text} FailSafe Match')]
 
         for c in out:
-            yield c
+            yield c[0].replace(":", "-"), c[1]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
 
     def event_log_completion(
         self,
