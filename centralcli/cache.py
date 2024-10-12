@@ -464,6 +464,10 @@ class CachePortal(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Portal Profile[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
 
+    @property
+    def help_text(self):
+        return render.rich_capture(self.__rich__())
+
 
 class CacheTemplate(CentralObject):
     db: Table | None = None
@@ -1355,9 +1359,9 @@ class Cache:
             match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
-                    out += [tuple([m.name, m.id])]
+                    out += [tuple([m.name, m.help_text])]
                 elif m.id.startswith(incomplete):
-                    out += [tuple([m.id, m.name])]
+                    out += [tuple([m.id, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
