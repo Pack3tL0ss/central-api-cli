@@ -10,6 +10,8 @@ import os
 from datetime import datetime
 from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
+import getpass
+from jinja2 import Template
 from rich import print
 from rich.console import Console
 
@@ -48,6 +50,7 @@ from centralcli.constants import (
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
+from .strings import cron_weekly
 
 if TYPE_CHECKING:
     from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
@@ -3016,6 +3019,42 @@ def version(
     """Show current cencli version, and latest available version.
     """
     cli.version_callback()
+
+@app.command(hidden=os.name != "posix")
+def cron(
+    accounts: List[str] = typer.Argument(None,),
+) -> None:
+    """Show contents of cron file that can be used to automate token refresh weekly.
+
+    This will keep the tokens valid, even if cencli is not used.
+    """
+    if os.name != "posix":
+        cli.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
+
+    user = getpass.getuser()
+    exec_path = sys.argv[0]
+    py_path = sys.executable
+
+    config_data = {
+        "user": user,
+        "py_path": py_path,
+        "exec_path": exec_path,
+        "accounts": "" if not accounts else " ".join(accounts)
+    }
+
+    template = Template(cron_weekly)
+    config_out = template.render(config_data)
+
+    cli.econsole.rule("/etc/cron.weekly/cencli file contents")
+    cli.console.print(config_out)
+    cli.econsole.rule()
+
+    cli.econsole.print(
+        "Place the above contents into a file: /etc/cron.weekly/cencli [grey42 italic](requires sudo)[/]\n"
+        f"Alternatively you can pipe the output directly [cyan]cencli show cron {'' if not accounts else ' '.join(accounts)} | sudo tee /etc/cron.weekly/cencli[/]"
+        "\nThen make it executable: [cyan]sudo chmod +x /etc/cron.weekly/cencli[/]"
+        "\n\n[cyan]cencli refresh token[/] [dark_olive_green2 italic]command will always update the tokens for the default workspace (that's the -d flag)[/]"
+    )
 
 
 def _get_cencli_config() -> None:
