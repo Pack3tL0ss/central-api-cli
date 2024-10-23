@@ -383,8 +383,7 @@ class CLICommon:
         else:
             return default
 
-    @staticmethod
-    def write_file(outfile: Path, outdata: str) -> None:
+    def write_file(self, outfile: Path, outdata: str) -> None:
         """Output data to file
 
         Args:
@@ -407,19 +406,22 @@ class CLICommon:
 
             print(f"\n[cyan]Writing output to {outfile}... ", end="")
 
-            out_msg = None
-            try:
-                if isinstance(outdata, (dict, list)):
-                    outdata = json.dumps(outdata, indent=4)
-                outfile.write_text(outdata)  # typer.unstyle(outdata) also works
-            except Exception as e:
-                outfile.write_text(f"{outdata}")
-                out_msg = f"Error ({e.__class__.__name__}) occurred during attempt to output to file.  " \
-                    "Used simple string conversion"
+            if not outfile.parent.is_dir():
+                self.econsole.print(f"[red]Directory Not Found[/]\n[dark_orange3]:warning:[/]  Unable to write output to [cyan]{outfile.name}[/].\nDirectory [cyan]{str(outfile.parent.absolute())}[/] [red]does not exist[/].")
+            else:
+                out_msg = None
+                try:
+                    if isinstance(outdata, (dict, list)):
+                        outdata = json.dumps(outdata, indent=4)
+                    outfile.write_text(outdata)  # typer.unstyle(outdata) also works
+                except Exception as e:
+                    outfile.write_text(f"{outdata}")
+                    out_msg = f"Error ({e.__class__.__name__}) occurred during attempt to output to file.  " \
+                        "Used simple string conversion"
 
-            print("[italic green]Done")
-            if out_msg:
-                log.warning(out_msg, show=True)
+                print("[italic green]Done")
+                if out_msg:
+                    log.warning(out_msg, show=True)
 
     @staticmethod
     def exit(msg: str = None, code: int = 1, emoji: bool = True) -> None:
