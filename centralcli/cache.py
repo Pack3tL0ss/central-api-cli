@@ -3227,27 +3227,30 @@ class Cache:
 
 
             # no match found initiate cache update
-            if retry and not match and ((dev_type and not cache_updated) or self.responses.dev is None):
-                dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
-                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/]{dev_type_sfx}.")
-                if FUZZ:
-                    if dev_type:
-                        fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if d["type"] in dev_type], limit=1)[0]
-                    else:
-                        fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
-                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.DevDB.search(self.Q.name == fuzz_match)
-                if not match:
-                    kwargs = {"dev_db": True}
-                    if include_inventory:
-                        _word = " & Inventory "
-                        kwargs["inv_db"] = True
-                    else:
-                        _word = " "
-                    econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
-                    self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
-                    cache_updated = True  # Need this for scenario when dev_type is the only thing refreshed, as that does not update self.responses.dev
+            if retry and not match and self.responses.dev is None:
+                if dev_type and cache_updated:
+                    ...  # self.responses.dev is not currently updated if dev_type provided, but cache update may have already occured in this session.
+                else:
+                    dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                    econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/]{dev_type_sfx}.")
+                    if FUZZ:
+                        if dev_type:
+                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if d["type"] in dev_type], limit=1)[0]
+                        else:
+                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
+                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                            match = self.DevDB.search(self.Q.name == fuzz_match)
+                    if not match:
+                        kwargs = {"dev_db": True}
+                        if include_inventory:
+                            _word = " & Inventory "
+                            kwargs["inv_db"] = True
+                        else:
+                            _word = " "
+                        econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
+                        self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
+                        cache_updated = True  # Need this for scenario when dev_type is the only thing refreshed, as that does not update self.responses.dev
 
             if match:
                 match = [Model(dev) for dev in match]
