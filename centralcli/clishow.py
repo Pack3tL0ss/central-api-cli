@@ -2879,7 +2879,7 @@ def portals(
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(..., help="portal name", show_default=False,),
+    portal: str = typer.Argument(..., help="portal name", autocompletion=cli.cache.portal_completion, show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
