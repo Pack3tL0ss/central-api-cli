@@ -166,7 +166,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
 
     # Put together counts caption string
     if status:
-        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{status.capitalize()} {t if t != "ap" else "APs"}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
     elif inventory:
         _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
         _cnt_str = _cnt_str + ", ".join(
@@ -561,7 +561,7 @@ def aps(
         if up and down:
             ...  # They used both flags.  ignore
         elif up or down:
-            status = "Down" if down else "Up"
+            status = "down" if down else "up"
 
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
