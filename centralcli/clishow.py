@@ -2012,6 +2012,7 @@ def wlans(
         "calculate_client_count": True,
     }
 
+    # TODO specifying WLAN name ... is ignored if verbose
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = central.request(central.get_full_wlan_list, group)
@@ -2035,7 +2036,7 @@ def wlans(
     else:
         resp = central.request(central.get_wlans, **params)
         caption = None
-        if resp:
+        if resp and not name:
             caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
             caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
         cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
