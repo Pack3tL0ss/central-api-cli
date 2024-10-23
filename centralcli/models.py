@@ -411,7 +411,7 @@ class Client(BaseModel):
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         if dt is None:  # TODO all with potential for there not to be a value need this
-            return None
+            return DateTime(None, "timediff")  # resolves PydanticSerializationError when model_dump_json is called on client with None for last_connected (Failed)
 
         return DateTime(dt.timestamp(), "timediff")
 
