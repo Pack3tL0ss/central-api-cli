@@ -1626,7 +1626,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         key_order = verbosity_keys[verbosity]
         # send all key/value pairs through formatters
         data = [
-            dict(short_value(k, d.get(k),) for k in key_order) for d in data
+            dict(short_value(k, d[k],) for k in key_order if k in d) for d in data
         ]
     else:
         key_order = [*key_order, *data[-1].keys()]
