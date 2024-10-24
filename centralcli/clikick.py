@@ -8,7 +8,6 @@ from rich import print
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
-# TODO should be able to do this in __init__
 try:
     from centralcli import cli
 except (ImportError, ModuleNotFoundError) as e:
@@ -19,16 +18,18 @@ except (ImportError, ModuleNotFoundError) as e:
     else:
         print(pkg_dir.parts)
         raise e
-from centralcli.constants import IdenMetaVars
 
-iden = IdenMetaVars()
+from centralcli.constants import iden_meta
+from .cache import CacheClient
+from .models import Clients
+
 app = typer.Typer()
 
 @app.command(short_help="Disconnect all WLAN clients from an AP optionally for a specific SSID",)
 def all(
     device: str = typer.Argument(
         ...,
-        metavar=iden.dev,
+        metavar=iden_meta.dev,
         help="The AP to disconnect clients from",
         autocompletion=cli.cache.dev_ap_completion,
         show_default=False,
@@ -46,7 +47,7 @@ def all(
     dev = cli.cache.get_dev_identifier(device)
     _ssid_msg = "" if not ssid else f" on SSID [cyan]{ssid}[/]"
     print(f'Kick [bright_red]ALL[/] users connected to [cyan]{dev.name}[/]{_ssid_msg}')
-    if yes or typer.confirm("\nproceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.kick_users,
             dev.serial,
@@ -56,12 +57,10 @@ def all(
         cli.display_results(resp, tablefmt="action")
 
 
-# TODO rather than drop option have cache remove users with last_connected > 30 days
 @app.command(short_help="Disconnect a WLAN client",)
 def client(
-    client: str = typer.Argument(..., metavar=iden.client, autocompletion=cli.cache.client_completion, show_default=False),
+    client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False),
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine what AP the client is connected to, which could be [red]stale[/]. This forces a cache update."),
-    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache."),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -75,15 +74,31 @@ def client(
 
     The [cyan]-R[/] flag can be used to force a cache refresh prior to performing the disconnect.
     """
-    if refresh or drop:
-        resp = cli.central.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
+    if refresh:
+        resp = cli.central.request(cli.cache.refresh_client_db, client_type="wireless")
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
-    client = cli.cache.get_client_identifier(client, exit_on_fail=True)
+    client: CacheClient = cli.cache.get_client_identifier(client, exit_on_fail=True)
+    if not client.last_connected:
+        if refresh:
+            cli.exit(f"Client {client} is not connected.")
+        else:
+            client_resp = cli.central.request(cli.cache.refresh_client_db, mac=client.mac)
+            if not client_resp:
+                cli.econsole.print(f"client {client} is not online according to cache, Failure occured attempting to fetch client details from API.")
+                cli.display_results(client_resp, exit_on_fail=True)
+
+            _clients = [CacheClient(c) for c in Clients(client_resp.output)]
+            online_client =  [c for c in _clients if c.last_connected is not None]
+            if online_client:
+                client = online_client[-1]
+            else:
+                client = _clients[-1]
+                cli.exit(f"Client {client} is not online: Failure Stage: {client_resp.output[-1].get('failure_stage', '')}, Reason: {client_resp.output[-1].get('failure_reason', '')}")
 
     print(f'Kick client [cyan]{client.name}[/], currently connected to [cyan]{client.connected_name}[/]')
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.kick_users,
             client.connected_serial,

@@ -589,3 +589,10 @@ class ImportExamples:
         if key not in self.__dict__.keys():
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
+
+cron_weekly = """#!/usr/bin/env bash
+
+/bin/su -c "{{py_path}} {{exec_path}} refresh token -d {{accounts}}" {{user}} &&
+    logger -t centralcli "Token Refreshed via cron" ||
+    logger -t centralcli "Token Refresh returned error"
+"""

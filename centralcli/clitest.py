@@ -167,7 +167,7 @@ def method(
         resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
 
     attrs = {
-        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw"] and (log.DEBUG or not k.startswith("_"))
+        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw", "data_key"] and (log.DEBUG or not k.startswith("_"))
     }
 
     req = (

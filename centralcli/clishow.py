@@ -10,6 +10,8 @@ import os
 from datetime import datetime
 from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
+import getpass
+from jinja2 import Template
 from rich import print
 from rich.console import Console
 
@@ -48,6 +50,7 @@ from centralcli.constants import (
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
+from .strings import cron_weekly
 
 if TYPE_CHECKING:
     from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
@@ -163,7 +166,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
 
     # Put together counts caption string
     if status:
-        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{status.capitalize()} {t if t != "ap" else "APs"}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
     elif inventory:
         _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
         _cnt_str = _cnt_str + ", ".join(
@@ -558,7 +561,7 @@ def aps(
         if up and down:
             ...  # They used both flags.  ignore
         elif up or down:
-            status = "Down" if down else "Up"
+            status = "down" if down else "up"
 
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
@@ -2009,6 +2012,7 @@ def wlans(
         "calculate_client_count": True,
     }
 
+    # TODO specifying WLAN name ... is ignored if verbose
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = central.request(central.get_full_wlan_list, group)
@@ -2032,7 +2036,7 @@ def wlans(
     else:
         resp = central.request(central.get_wlans, **params)
         caption = None
-        if resp:
+        if resp and not name:
             caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
             caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
         cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
@@ -2875,7 +2879,7 @@ def portals(
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(..., help="portal name", show_default=False,),
+    portal: str = typer.Argument(..., help="portal name", autocompletion=cli.cache.portal_completion, show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -3016,6 +3020,42 @@ def version(
     """Show current cencli version, and latest available version.
     """
     cli.version_callback()
+
+@app.command(hidden=os.name != "posix")
+def cron(
+    accounts: List[str] = typer.Argument(None,),
+) -> None:
+    """Show contents of cron file that can be used to automate token refresh weekly.
+
+    This will keep the tokens valid, even if cencli is not used.
+    """
+    if os.name != "posix":
+        cli.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
+
+    user = getpass.getuser()
+    exec_path = sys.argv[0]
+    py_path = sys.executable
+
+    config_data = {
+        "user": user,
+        "py_path": py_path,
+        "exec_path": exec_path,
+        "accounts": "" if not accounts else " ".join(accounts)
+    }
+
+    template = Template(cron_weekly)
+    config_out = template.render(config_data)
+
+    cli.econsole.rule("/etc/cron.weekly/cencli file contents")
+    cli.console.print(config_out)
+    cli.econsole.rule()
+
+    cli.econsole.print(
+        "Place the above contents into a file: /etc/cron.weekly/cencli [grey42 italic](requires sudo)[/]\n"
+        f"Alternatively you can pipe the output directly [cyan]cencli show cron {'' if not accounts else ' '.join(accounts)} | sudo tee /etc/cron.weekly/cencli[/]"
+        "\nThen make it executable: [cyan]sudo chmod +x /etc/cron.weekly/cencli[/]"
+        "\n\n[cyan]cencli refresh token[/] [dark_olive_green2 italic]command will always update the tokens for the default workspace (that's the -d flag)[/]"
+    )
 
 
 def _get_cencli_config() -> None:
