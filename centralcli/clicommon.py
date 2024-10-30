@@ -1472,6 +1472,7 @@ class CLICommon:
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
+        cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
 
 
         # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
@@ -1488,12 +1489,12 @@ class CLICommon:
             mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
 
         # cop only delete devices from GreenLake inventory
-        cop_del_reqs = [] if not config.is_cop or not serials_in else [
-            BR(self.central.cop_delete_device_from_inventory, serials_in)
+        cop_del_reqs = [] if not config.is_cop or not cache_inv_devs else [
+            BR(self.central.cop_delete_device_from_inventory, [dev.serial for dev in cache_inv_devs])
         ]
 
         # warn about devices that were not found
-        if (mon_del_reqs or delayed_mon_del_reqs) and not_found_devs:
+        if (mon_del_reqs or delayed_mon_del_reqs or cop_del_reqs) and not_found_devs:
             not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
             self.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
             self.econsole.print("[grey42 italic]They will be skipped[/]\n")
