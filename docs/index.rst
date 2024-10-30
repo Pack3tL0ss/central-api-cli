@@ -1,18 +1,17 @@
-Aruba Central API CLI (cencli)
-========================================================
+.. toctree::
+   :maxdepth: 3
+
+.. include:: ../README.md
+   :parser: myst_parser.sphinx_
 
 .. toctree::
-   :maxdepth: 2
-
-   readme
-   .. project_structure
-
-.. toctree::
-   :caption: CLI Reference
+   :maxdepth: 3
+   :caption: CLI Reference Guide
 
    cli
 
 .. toctree::
+   :maxdepth: 1
    :caption: Module Documentation
 
    modules
@@ -20,3 +19,6 @@ Aruba Central API CLI (cencli)
 .. * :ref:`genindex`
 .. * :ref:`modindex`
 .. * :ref:`search`
+
+.. .. include:: ../README.md
+..    :parser: myst_parser.sphinx_

@@ -18,11 +18,10 @@ import sys
 sys.path.insert(0, os.path.abspath(".."))
 
 # Make README the index
-index_master = True
+# index_master = True
 
 # -- Project information -----------------------------------------------------
-
-project = "cencli Aruba Central API CLI"
+project = "Aruba Central API CLI (cencli)"
 copyright = "2024, Wade Wells ~ Pack3tL0ss"
 author = "Wade Wells ~ Pack3tL0ss"
 
@@ -33,7 +32,7 @@ author = "Wade Wells ~ Pack3tL0ss"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx_rtd_theme",
+    # "sphinx_rtd_theme",
     # "sphinx_material",
     # "sphinx_book_theme",
     "sphinx.ext.autodoc",
@@ -65,14 +64,49 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # a list of builtin themes.
 #
 # html_theme = 'alabaster'
-html_theme = "sphinx_rtd_theme"
+# html_theme = "sphinx_rtd_theme"
 # html_theme = "sphinx_book_theme"
-# html_theme = "sphinx_material"
+html_theme = "sphinx_material"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+html_sidebars = {
+    "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
+}
+html_show_sourcelink = False
+
+if html_theme == "sphinx_material":
+    html_theme_options = {
+
+        # Set the name of the project to appear in the navigation.
+        'nav_title': 'Aruba Central API CLI',
+        'logo_icon': '&#xe2bd;',
+
+
+        # Specify a base_url used to generate sitemap.xml. If not
+        # specified, then no sitemap will be built.
+        # 'base_url': 'file://wsl.localhost/Ubuntu/home/wade/cencli-docs-build',
+
+        # Set the color and the accent color
+        # 'color_primary': 'deep-purple',
+        # 'color_accent': 'indigo',
+        'color_primary': 'blue',
+        'color_accent': 'light-blue',
+
+        # Set the repo location to get a badge with stats
+        'repo_url': 'https://github.com/Pack3tL0ss/central-api-cli',
+        'repo_name': 'central-api-cli',
+
+        # Visible levels of the global TOC; -1 means unlimited
+        'globaltoc_depth': 3,
+        # If False, expand all TOC entries
+        'globaltoc_collapse': True,
+        # If True, show hidden TOC entries
+        'globaltoc_includehidden': False,
+    }
 
 # Napoleon settings
 napoleon_google_docstring = True
