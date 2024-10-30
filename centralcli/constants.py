@@ -280,6 +280,11 @@ class RefreshWhat(str, Enum):
     token = "token"
     tokens = "tokens"
 
+class CancelWhat(str, Enum):
+    device = "device"
+    group = "group"
+    swarm = "swarm"
+
 
 class FirmwareDeviceType(str, Enum):
     cx = "cx"
@@ -511,6 +516,11 @@ class ArgToWhat:
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
+
+    def _init_cancel(self):
+        self.device = self.devices = "device"
+        self.swarm = self.swarms = "swarm"
+        self.group = self.groups = "group"
 
     def _init_update(self):
         self.template = self.templates = "template"
