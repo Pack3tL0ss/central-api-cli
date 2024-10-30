@@ -4524,7 +4524,7 @@ class CentralApi(Session):
     ) -> Response:
         """Delete devices using Serial number.  Only applies to CoP deployments.
 
-        Device can not be archived in CoP inventoryI
+        Device can not be archived in CoP inventory.
 
         Args:
             devices (list, optional): List of devices to be deleted from
