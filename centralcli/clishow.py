@@ -1211,7 +1211,8 @@ def upgrade(
         tablefmt=tablefmt,
         title="Upgrade Status",
         pager=pager,
-        outfile=outfile
+        outfile=outfile,
+        cleaner=cleaner.simple_kv_formatter,
     )
 
 
