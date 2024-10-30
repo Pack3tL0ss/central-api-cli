@@ -28,7 +28,7 @@ try:
                             clibatch, clicaas, cliclone, clidel, clikick, cliset,
                             clirefresh, clirename, clishow, clitest, clitshoot,
                             cliunassign, cliupdate, cliupgrade, cliexport, clicheck,
-                            config, log, utils)
+                            clicancel, config, log, utils)
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
@@ -37,13 +37,12 @@ except (ImportError, ModuleNotFoundError) as e:
                                 clibatch, clicaas, cliclone, clidel, clikick,
                                 cliset, clirefresh, clirename, clishow, clitest,
                                 clitshoot, cliunassign, cliupdate, cliupgrade,
-                                cliexport, clicheck, config, log, utils)
+                                clicancel, cliexport, clicheck, config, log, utils)
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.cache import CentralObject  # noqa
-from centralcli.central import CentralApi  # noqa
 from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
 
 iden = IdenMetaVars()
@@ -73,6 +72,7 @@ app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
 app.add_typer(cliexport.app, name="export", hidden=True)  # TODO remove once implemented
 app.add_typer(clicheck.app, name="check",)
+app.add_typer(clicancel.app, name="cancel",)
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
@@ -190,31 +190,6 @@ def bounce(
         resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
-
-
-@app.command()
-def cancel(
-    device: List[str] = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_completion),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    account: str = cli.options.account,
-) -> None:
-    """Cancel previously initiated firmware upgrade
-    """
-    devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in device if dev.lower() != "upgrade"]
-    if not devs:
-        cli.exit("Missing require argument [red]DEVICE[/]")
-
-    print(f'Cancel [cyan]Upgrade[/] on [cyan]{utils.color([d.name for d in devs], "cyan")}[/]')
-    if cli.confirm(yes):
-        batch_resp = cli.central.batch_request(
-            [
-                BatchRequest(cli.central.cancel_upgrade, serial=dev.serial)
-                for dev in devs
-            ]
-        )
-        cli.display_results(batch_resp, tablefmt="action")
 
 
 @app.command()
