@@ -562,7 +562,7 @@ class CacheClient(CentralObject):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
-        return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s[green_yellow]{self.site})[/]'
+        return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s:[green_yellow]{self.site})[/]'
 
     @property
     def help_text(self) -> str:
