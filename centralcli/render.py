@@ -22,6 +22,8 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from rich.syntax import Syntax
+from centralcli.vendored.csvlexer.csv import CsvLexer
 from rich import print
 from datetime import datetime
 
@@ -432,6 +434,9 @@ def output(
                         ]
         )
         raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
+        out = Syntax(code=raw_data, lexer=CsvLexer(ensurenl=False), theme="native")
+        table_data = out.highlight(out.code.rstrip()).markup
+        table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
