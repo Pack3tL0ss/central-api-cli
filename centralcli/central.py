@@ -4524,7 +4524,7 @@ class CentralApi(Session):
     ) -> Response:
         """Delete devices using Serial number.  Only applies to CoP deployments.
 
-        Device can not be archived in CoP inventoryI
+        Device can not be archived in CoP inventory.
 
         Args:
             devices (list, optional): List of devices to be deleted from
@@ -5378,7 +5378,7 @@ class CentralApi(Session):
     async def get_brach_health(
         self,
         name: str = None,
-        column: int = None,
+        column: int = None,  # NEXT-MAJOR remove or make consistent with other parameters (sort)
         reverse: bool = False,
         filters: dict = {},
         offset: int = 0,

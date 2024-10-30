@@ -585,21 +585,24 @@ def archive(
 
     Just use cencli deleve device ... or cencli batch delete devices
     """
-    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True) for dev in devices]
-
-    # TODO add confirmation method builder to output class
+    _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
-    if len(devices) > 1:
-        _dev_msg = '\n    '.join([dev.rich_help_text for dev in devices])
-        _msg = f"{_msg}\n    {_dev_msg}\n"
-    else:
-        dev = devices[0]
-        _msg = f"{_msg} {dev.rich_help_text}"
+    serials = []
+    cache_devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    for dev_in, cache_dev in zip(devices, cache_devs):
+        if cache_dev:
+            _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
+            serials += [cache_dev.serial]
+        elif cache_dev is None and not utils.is_serial(dev_in):
+            _emsg = f"{_emsg}\n    [dark_orange3]\u26a0[/]  [red]Skipping[/] [cyan]{dev_in}[/].  Not found in Cache and does not appear to be a serial number."
+        else:
+            _msg = f"{_msg}\n    {dev_in}"
+            serials += [dev_in]
 
     console = Console(emoji=False)
-    console.print(_msg)
+    console.print(_msg, _emsg, sep="\n")
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.archive_devices, [d.serial for d in devices])
+        resp = cli.central.request(cli.central.archive_devices, serials)
         cli.display_results(resp, tablefmt="action")
 
 

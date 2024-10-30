@@ -384,7 +384,7 @@ class Response:
 
         r = r.replace("failed:", "[red]failed[/]:").replace("FAILED", "[red]FAILED[/red]").replace("failed_devices", "[red]failed_devices[/]").replace("INVALID", "[red]INVALID[/]")
         r = r.replace("SUCCESS", "[bright_green]SUCCESS[/]").replace("Success", "[bright_green]Success[/]").replace("Success[/]fully", "Successfully[/]")
-        r = r.replace("Success", "[bright_green]Success[/]").replace("success", "[bright_green]success[/]").replace("succeeded_devices", "[bright_green]succeeded_devices[/]")
+        r = r.replace("Success", "[bright_green]Success[/]").replace("success", "[bright_green]success[/]").replace("success[/]fully", "successfully[/]").replace("succeeded_devices", "[bright_green]succeeded_devices[/]")
         r = r.replace("invalid_device", "[red]invalid_device[/]").replace("blocked_device", "[red]blocked_device[/red]").replace("ATHENA_ERROR_DEVICE_ALREADY_EXIST", "[italic dark_orange3]Device already exists[/]")
 
         # sanitize sensitive data for demos
