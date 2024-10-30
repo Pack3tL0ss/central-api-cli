@@ -2356,9 +2356,10 @@ class Cache:
         """Update Device Database (local cache).
 
         If data is provided it's asumed to be a partial update.  No devices will be removed from the cache unless remove=True.
+
         Args:
-            data (List[Dict[str, Any]] | Dict[str, Any] | List[int] | int): Device data to update cache with.  Existing devices are
-                retained and updated with any changes from the new data provided.
+            data (List[Dict[str, Any]] | Dict[str, Any] | List[int] | int): Device data to update cache with.
+                Existing devices are retained and updated with any changes from the new data provided.
             remove (bool, optional): Set True to remove devices from cache, data should be a list of doc_ids (int).
 
         Returns:

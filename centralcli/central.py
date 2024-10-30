@@ -5499,7 +5499,7 @@ class CentralApi(Session):
         """Get all portals with limited data.
 
         Args:
-            sort (str, optional): + is for ascending  and - for descending order, Valid Values: name prepended with + or - i.e. +name.
+            sort (str, optional): `+` is for ascending  and `-` for descending order, Valid Values: name prepended with `+` or `-` i.e. +name.
                 Defaults to None.  Which results in use of API default +name.
             offset (int, optional): Starting index of element for a paginated query Defaults to 0.
             limit (int, optional): Number of items required per query Defaults to 100.
