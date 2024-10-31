@@ -11693,6 +11693,9 @@ class AllCalls(CentralApi):
     ) -> Response:
         """Get preview url of guest portal profile.
 
+        THIS API ENDPOINT IS NOT IMPLEMENTED YET.  DOES NOT WORK
+        500: {'description': "preview_api_portal() got an unexpected keyword argument 'portal_id'", 'error_code': 500, 'service': 'Guest'}
+
         Args:
             portal_id (str): Portal ID of the splash page
 
