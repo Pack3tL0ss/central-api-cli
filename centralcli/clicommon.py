@@ -1353,7 +1353,7 @@ class CLICommon:
                     data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
                     self.display_results(data=data, title=title, caption=caption)
                 if res.get("failed_devices"):
-                    title = f"Devices that [bright_red]failed[/] to {action}d."
+                    title = f"Devices that [bright_red]failed[/] to {action}."
                     data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
                     self.display_results(data=data, title=title, caption=caption)
 
