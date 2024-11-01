@@ -389,7 +389,7 @@ class Response:
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
-            r = utils.Output(config=config).sanitize_strings(r)
+            r = utils.Output().sanitize_strings(r)
 
         return f"{status_code}{r}"
 

@@ -93,8 +93,8 @@ class Output():
 
     def __iter__(self):
         out = self.tty or self.file
-        out = out.splitlines(keepends=True)
         out = self.sanitize_strings(out)
+        out = out.splitlines(keepends=True)
         for line in out:
             yield line
 
@@ -115,7 +115,10 @@ class Output():
         if config and config.sanitize and config.sanitize_file.is_file():
             sanitize_data = config.get_file_data(config.sanitize_file)
             for s in sanitize_data.get("redact_strings", {}):
-                strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
+                if len(s) > len("--redacted--"):
+                    strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
+                else:
+                    strings = strings.replace(s, f"{'--redacted--'[1:len(s) + 1]}")
             for s in sanitize_data.get("replace_strings", []):
                 if s:
                     for old, new in s.items():
@@ -151,6 +154,7 @@ class Output():
     def file(self):
         if not self._file:
             return self.tty  # this should not happen
+
         try:
             return typer.unstyle(self._file)
         except TypeError:

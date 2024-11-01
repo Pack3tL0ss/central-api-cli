@@ -688,6 +688,8 @@ class CLICommon:
                         else:
                             print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                             plain_console = Console(color_system=None, emoji=False)
+                            if config.sanitize:
+                                r.raw = json.loads(render.Output().sanitize_strings(json.dumps(r.raw), config=config))
                             if pager:
                                 with plain_console.pager:
                                     plain_console.print(r.raw)
