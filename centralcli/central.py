@@ -5662,6 +5662,100 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # NEXT-MAJOR Change all _visitor_ methods to _guest_ methods for consistency
+    async def update_visitor(
+        self,
+        portal_id: str,
+        visitor_id: str,
+        name: str,
+        company_name: str = None,
+        phone: str = None,
+        email: str = None,
+        is_enabled: bool = None,
+        valid_till_no_limit: bool = None,
+        valid_till_days: int = None,
+        valid_till_hours: int = None,
+        valid_till_minutes: int = None,
+        notify: bool = None,
+        notify_to: Literal["email", "phone"] = None,
+        password: str = None,
+    ) -> Response:
+        """Update guest visitor account.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            visitor_id (str): Visitor ID of the portal
+            name (str): Visitor account name
+            company_name (str): Company name of the visitor
+            phone (str): Phone number of the visitor; Format [+CountryCode][PhoneNumber]
+            email (str): Email address of the visitor
+            is_enabled (bool): Enable or disable the visitor account
+            valid_till_no_limit (bool): Visitor account will not expire when this is set to true
+            valid_till_days (int): Account validity in days
+            valid_till_hours (int): Account validity in hours
+            valid_till_minutes (int): Account validity in minutes
+            notify (bool): Flag to notify the password via email or number
+            notify_to (str): Notify to email or phone. Defualt is phone when it is provided
+                otherwise email.  Valid Values: email, phone
+            password (str): Password
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
+
+        json_data = {
+            'name': name,
+            'company_name': company_name,
+            'is_enabled': is_enabled,
+            'valid_till_no_limit': valid_till_no_limit,
+            'valid_till_days': valid_till_days,
+            'valid_till_hours': valid_till_hours,
+            'valid_till_minutes': valid_till_minutes,
+            'notify': notify,
+            'notify_to': notify_to,
+            'password': password
+        }
+        if any([phone, email]):
+            json_data["user"] = {
+                'phone': phone,
+                'email': email,
+            }
+
+        return await self.put(url, json_data=json_data)
+
+    # TODO build command
+    async def get_guest_summary(
+        self,
+        ssids: List[str] | str,
+        days: int = 28,
+    ) -> Response:
+        """Get summary statistics.
+
+        Args:
+            ssid (str): A comma separated list of SSIDs for which session data is required
+            days (optional, int): Num of days for which session data is required  Valid Values: 1, 7, 28
+                Default: 28
+
+        Raises:
+            ValueError: If days is not valid (1, 7, 28).
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/guest/v1/summary"
+        ssids = utils.listify(ssids)
+        ssids = ",".join(ssids)
+        if days and days not in [1, 7, 28]:
+            return ValueError(f"days must be one of 1, 7, or 28.  {days} is invalid")
+
+        params = {
+            'days': days,
+            'ssid': ssids
+        }
+
+        return await self.get(url, params=params)
+
     # TODO validate IP address format / Not used by CLI yet
     async def update_cx_properties(
         self,

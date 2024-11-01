@@ -24,13 +24,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .constants import IdenMetaVars, DevTypes, GatewayRole, state_abbrev_to_pretty
+from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty
 from . import render
 from .cache import CacheTemplate
 from .caas import CaasAPI
 
 if TYPE_CHECKING:
-    from .cache import CacheDevice, CacheGroup
+    from .cache import CacheDevice, CacheGroup, CachePortal
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -536,6 +536,89 @@ def wlan(
     if yes or typer.confirm("\nProceed?", abort=True):
         update_res = cli.central.batch_request(update_req)
         cli.display_results(update_res)
+
+def get_guest_id(portal_id: str, name: str) -> str:
+    guest_resp = cli.central.request(cli.central.get_visitors, portal_id)
+    if not guest_resp:
+        log.error(f"Unable to Update details for {name}, request to fetch visitor_id failed.", caption=True, log=True)
+        cli.display_results(guest_resp, tablefmt="action", exit_on_fail=True)
+
+    guests = [g for g in guest_resp.output if g["name"] == name]
+    if not guests:
+        cli.exit(f"Unable to update details for {name}, no match found while fetching visitor_id.")
+    elif len(guests) > 1:
+        guest_resp.output = guests
+        cli.display_results(guest_resp, caption=f"Guests matching user {name}", tablefmt="yaml")
+        cli.exit(f"Too many matches for {name} while fetching visitor_id.")
+    else:
+        return guests[0]["id"]
+
+@app.command()
+def guest(
+    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
+    name: str = typer.Argument(..., show_default=False,),
+    password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    company: str = typer.Option(None, help="Company Name", show_default=False,),
+    phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
+    email: str = typer.Option(None, help="email of guest", show_default=False,),
+    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'", show_default=False,),
+    disable: bool = typer.Option(None, "-D", "--disable", help="disable the account", show_default=False,),
+    enable: bool = typer.Option(None, "-E", "--enable", help="enable the account", show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Update a previously created guest account"""
+    if disable and enable:
+        cli.exit("Invalid combination of options.  Using both [cyan]-E[/]|[cyan]--enable[/] and [cyan]-D[/]|[cyan]--disable[/] does not make sense.")
+    elif disable:
+        is_enabled = False
+    elif enable:
+        is_enabled = True
+    else:
+        is_enabled = None
+    notify = True if notify_to is not None else None
+
+    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+    visitor_id = get_guest_id(portal.id, name)
+
+    # TODO move to utils used by add and update.
+    _phone_strip = list("()-. ")
+    if phone:
+        phone_orig = phone
+        phone = "".join([p for p in list(phone) if p not in _phone_strip])
+        if not phone.startswith("+"):
+            if not len(phone) == 10:
+                cli.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
+            phone = f"+1{phone}"
+
+    # TODO Add options for expire after / valid forever
+    payload = {
+        "portal_id": portal.id,
+        "visitor_id": visitor_id,
+        "name": name,
+        "company_name": company,
+        "phone": phone,
+        "email": email,
+        "notify": notify,
+        "notify_to": None if not notify_to else notify_to.value,
+        "is_enabled": is_enabled,
+    }
+    payload = utils.strip_none(payload)
+    options = "\n  ".join(yaml.safe_dump(payload).splitlines())
+    if password:
+        payload["password"] = password
+
+    _msg = f"[bright_green]Update[/] Guest: [cyan]{name}[/] with the following options:\n  {options}\n"
+    if password:
+        _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
+    print(_msg)
+    if cli.confirm(yes):
+        resp = cli.central.request(cli.central.add_visitor, **payload)
+        password = None
+        payload = None
+        cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

@@ -529,6 +529,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhook"
         self.sites = self.site = "site"
         self.wlan = self.wlans = "wlan"
+        self.guest = self.guests = "guest"
 
     def _init_rename(self):
         self.group = self.groups = "group"
@@ -558,6 +559,7 @@ class ArgToWhat:
         self.device = self.devices = self.dev = "device"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
+        self.guest = self.guests = "guest"
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"
