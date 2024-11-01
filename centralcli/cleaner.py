@@ -352,6 +352,7 @@ _short_key = {
     "device_model": "model",
     "part_number": "sku",
     "serial_number": "serial",
+    "radio_name": "band",
 }
 
 
@@ -2026,7 +2027,7 @@ def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
             return name
         return ''
 
-    key_order = ["name", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
+    key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
     data = [{k: v if k != "name" else by_name_blocks(v) for k, v in inner.items()} for inner in data]
     data = simple_kv_formatter(data, key_order=key_order)
 
