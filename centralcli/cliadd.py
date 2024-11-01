@@ -154,7 +154,7 @@ def device(
     console = Console(emoji=False)
     console.print("".join(_msg))
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
@@ -324,7 +324,7 @@ def wlan(
         cli.exit("psk/passphrase is currently required for this command")
 
     print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.create_wlan, group.name, name, **kwargs)
         cli.display_results(resp, tablefmt="action")
 
@@ -384,7 +384,7 @@ def site(
 
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         cli.central.request(cli.cache.update_site_db, data=resp.raw)
@@ -417,7 +417,7 @@ def label(
                 cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, label/site names must be unique (sites included)")
 
     batch_reqs = [BatchRequest(cli.central.create_label, label) for label in labels]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         batch_resp = cli.central.batch_request(batch_reqs)
         cli.display_results(batch_resp, tablefmt="action")
         update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"]} for resp in batch_resp if resp.ok]
@@ -496,7 +496,7 @@ def certificate(
         print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
         if k not in  ["passphrase", "cert_data"]
         ]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.upload_certificate, **kwargs)
         cli.display_results(resp, tablefmt="action")
 
@@ -511,7 +511,7 @@ def webhook(
     account: str = cli.options.account,
 ) -> None:
     print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.add_webhook, name, urls)
 
         cli.display_results(resp, tablefmt="action")
@@ -545,7 +545,7 @@ def template(
     print(f"    Device Type: [cyan]{dev_type}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         template_hash, resp = cli.central.batch_request(
             [
                 BatchRequest(cli.get_file_hash, template),
@@ -567,7 +567,6 @@ def template(
             )
 
 
-# TODO cache for portal name/id
 # TODO config option for different random pass formats
 @app.command()
 def guest(
@@ -620,7 +619,7 @@ def guest(
     if password:
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.request(cli.central.add_visitor, **payload)
         password = None
         payload = None
