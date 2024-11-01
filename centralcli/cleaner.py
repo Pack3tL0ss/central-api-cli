@@ -1771,7 +1771,7 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0, format
         if k == "rf_band":
             _band = v.replace("all", "2.4, 5").replace("5.0", "5")
             if wlan.get("rf_band_6ghz", {}).get("value"):
-                _band = f"{_band}, 6"
+                _band = "6" if _band == "none" else f"{_band}, 6"
             return "all" if _band.count(",") == 2 else _band
 
         return v if not isinstance(v, dict) or "value" not in v else v["value"]
