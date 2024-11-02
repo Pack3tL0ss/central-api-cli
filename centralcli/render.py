@@ -22,6 +22,8 @@ from rich.box import HORIZONTALS, SIMPLE
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from rich.syntax import Syntax
+from centralcli.vendored.csvlexer.csv import CsvLexer
 from rich import print
 from datetime import datetime
 
@@ -91,8 +93,8 @@ class Output():
 
     def __iter__(self):
         out = self.tty or self.file
-        out = out.splitlines(keepends=True)
         out = self.sanitize_strings(out)
+        out = out.splitlines(keepends=True)
         for line in out:
             yield line
 
@@ -113,7 +115,10 @@ class Output():
         if config and config.sanitize and config.sanitize_file.is_file():
             sanitize_data = config.get_file_data(config.sanitize_file)
             for s in sanitize_data.get("redact_strings", {}):
-                strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
+                if len(s) > len("--redacted--"):
+                    strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
+                else:
+                    strings = strings.replace(s, f"{'--redacted--'[1:len(s) + 1]}")
             for s in sanitize_data.get("replace_strings", []):
                 if s:
                     for old, new in s.items():
@@ -149,6 +154,7 @@ class Output():
     def file(self):
         if not self._file:
             return self.tty  # this should not happen
+
         try:
             return typer.unstyle(self._file)
         except TypeError:
@@ -432,6 +438,9 @@ def output(
                         ]
         )
         raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
+        out = Syntax(code=raw_data, lexer=CsvLexer(ensurenl=False), theme="native")
+        table_data = out.highlight(out.code.rstrip()).markup
+        table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)

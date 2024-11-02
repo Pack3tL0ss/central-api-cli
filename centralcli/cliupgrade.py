@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import typer
 from rich import print
+from typing import TYPE_CHECKING
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -22,6 +23,9 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural, iden_meta # noqa
 from centralcli.objects import DateTime
+
+if TYPE_CHECKING:
+    from .cache import CacheGroup
 
 app = typer.Typer()
 
@@ -129,30 +133,31 @@ def group(
 
     Device type must be provided.  For AOS-SW switches you can filter to a specific model via the --model flag.
     """
-    group = cli.cache.get_group_identifier(group)
+    group: CacheGroup = cli.cache.get_group_identifier(group)
     at = None if not at else round(at.timestamp())
     if in_:
         at = cli.delta_to_start(in_, past=False).int_timestamp
 
-    ver_msg = [typer.style("Upgrade", fg="cyan")]
+    ver_msg = ["[cyan]Upgrade[/]"] if not at else [f'Schedule [cyan]Upgrade[/] @ [italic cornflower_blue]{DateTime(at, "mdyt")}[/] for']
+
     if dev_type:
         if dev_type == "ap":
             reboot = True
         ver_msg += [lib_to_gen_plural(dev_type)]
 
     if model:
-        if "sw" not in group.AllowedDevTypes:
+        if "sw" not in group.allowed_types:
             cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] AOS-SW is not configured as an allowed device type for this group.")
         elif "sw" not in [d["type"] for d in cli.cache.devices if d["group"] == group.name]:
             cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\nIf local cache is stale, run command again with hidden [cyan]-U[/] option to update the cache.")
-        ver_msg += [f"model {typer.style(f'{model}', fg='bright_green')}"]
+        ver_msg += [f"model [bright_green]{model}[/]"]
 
-    ver_msg += [f"in group {typer.style(f'{group.name}', fg='bright_green')}"]
+    ver_msg += [f"in group [bright_green]{group.name}[/]"]
 
     if version:
-        _version = [f"to {typer.style(version, fg='bright_green')}"]
+        _version = [f"to [bright_green]{version}[/]"]
     else:
-        _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
+        _version = ["to [bright_green]Recommended version[/]"]
     ver_msg += _version
     ver_msg = " ".join(ver_msg)
 
@@ -161,7 +166,8 @@ def group(
     else:
         ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
-    if yes or typer.confirm(f"{ver_msg}?",abort=True,):
+    print(ver_msg)
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.upgrade_firmware,
             scheduled_at=at,

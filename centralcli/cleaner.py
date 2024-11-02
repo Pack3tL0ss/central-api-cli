@@ -207,6 +207,7 @@ _short_value = {
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
     "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
+    "firmware_scheduled_at": lambda x: DateTime(x, "mdyt"),
     "Unknown": "?",
     "HPPC": "SW",
     "labels": _extract_names_from_id_name_dict,
@@ -259,6 +260,7 @@ _short_key = {
     "interface_port": "interface",
     "firmware_version": "version",
     "firmware_backup_version": "backup version",
+    "firmware_scheduled_at": "scheduled_at",
     "group_name": "group",
     "public_ip_address": "public ip",
     "ip_address": "ip",
@@ -350,6 +352,7 @@ _short_key = {
     "device_model": "model",
     "part_number": "sku",
     "serial_number": "serial",
+    "radio_name": "band",
 }
 
 
@@ -1768,7 +1771,7 @@ def get_full_wlan_list(data: List[dict] | str | Dict, verbosity: int = 0, format
         if k == "rf_band":
             _band = v.replace("all", "2.4, 5").replace("5.0", "5")
             if wlan.get("rf_band_6ghz", {}).get("value"):
-                _band = f"{_band}, 6"
+                _band = "6" if _band == "none" else f"{_band}, 6"
             return "all" if _band.count(",") == 2 else _band
 
         return v if not isinstance(v, dict) or "value" not in v else v["value"]
@@ -2024,7 +2027,7 @@ def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
             return name
         return ''
 
-    key_order = ["name", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
+    key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
     data = [{k: v if k != "name" else by_name_blocks(v) for k, v in inner.items()} for inner in data]
     data = simple_kv_formatter(data, key_order=key_order)
 

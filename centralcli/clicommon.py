@@ -688,6 +688,8 @@ class CLICommon:
                         else:
                             print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                             plain_console = Console(color_system=None, emoji=False)
+                            if config.sanitize:
+                                r.raw = json.loads(render.Output().sanitize_strings(json.dumps(r.raw), config=config))
                             if pager:
                                 with plain_console.pager:
                                     plain_console.print(r.raw)
@@ -1351,7 +1353,7 @@ class CLICommon:
                     data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
                     self.display_results(data=data, title=title, caption=caption)
                 if res.get("failed_devices"):
-                    title = f"Devices that [bright_red]failed[/] to {action}d."
+                    title = f"Devices that [bright_red]failed[/] to {action}."
                     data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
                     self.display_results(data=data, title=title, caption=caption)
 

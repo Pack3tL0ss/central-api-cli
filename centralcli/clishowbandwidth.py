@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from rich import print
 from datetime import datetime
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -23,8 +23,9 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, RadioBandOptions  # noqa
-from centralcli.cache import CentralObject
-from centralcli.models import Client
+
+if TYPE_CHECKING:
+    from .cache import CacheClient, CacheLabel, CacheGroup, CacheDevice
 
 iden_meta = IdenMetaVars()
 app = typer.Typer()
@@ -216,10 +217,10 @@ def client(
     The larger the time-frame the more unreadable the graph will be.
     """
     # start and end datetime opjects are in UTC
-    dev: CentralObject | None = None if not device else cli.cache.get_dev_identifier(device, conductor_only=True)
-    group: CentralObject | None = None if not group else cli.cache.get_group_identifier(group)
-    label: CentralObject | None = None if not label else cli.cache.get_label_identifier(label)
-    client: Client | None = None if not client else cli.cache.get_client_identifier(client, exit_on_fail=True)
+    dev: CacheDevice | None = None if not device else cli.cache.get_dev_identifier(device, conductor_only=True)
+    group: CacheGroup | None = None if not group else cli.cache.get_group_identifier(group)
+    label: CacheLabel | None = None if not label else cli.cache.get_label_identifier(label)
+    client: CacheClient | None = None if not client else cli.cache.get_client_identifier(client, exit_on_fail=True)
     start, end = cli.verify_time_range(start, end=end, past=past)
 
     kwargs = {}
@@ -227,7 +228,9 @@ def client(
 
     if client:
         kwargs["mac"] = client.mac
-        title = f"{title} for client {client.summary_text}"
+        title = f'{title} for Client: {client.name}|{client.ip}|{client.mac}|{client.connected_name}'
+        if client.site:
+            title = f'{title}|s:{client.site}'
         if swarm_or_stack:
             log.warning(f"[cyan]-s[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored as client was specified.  Output is for client {client.summary_text}", caption=True)
         if dev:

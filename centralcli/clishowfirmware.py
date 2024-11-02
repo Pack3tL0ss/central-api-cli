@@ -183,21 +183,20 @@ def compliance(
     """Show firmware compliance details for a group/device type
     """
     central = cli.central
+    group = group or utils.listify(group_name)
+    group = None if not group else group
 
-    # Allows user to add unnecessary "group" keyword before the group
-    if len(group) > 2:
-        typer.echo(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
-        raise typer.Exit(1)
-    group = None if not group else group[-1]
-    group = group or group_name
     if group:
+        if len(group) > 2:  # Allows user to add unnecessary "group" keyword before the group
+            cli.exit(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
+        group = group[-1]
         group: CentralObject = cli.cache.get_group_identifier(group)
 
     # TODO make device_type optional add 'all' keyword and implied 'all' if no device_type
     #      add macro method to get compliance for all device_types.
     kwargs = {
         'device_type': device_type,
-        'group': group.name
+        'group': None if not group else group.name
     }
 
     resp = central.request(central.get_firmware_compliance, **kwargs)

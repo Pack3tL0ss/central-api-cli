@@ -232,6 +232,11 @@ def logs(
     resp = cli.central.request(cli.central.get_audit_event_logs, **kwargs)
 
     if log_id is not None:
+        if resp and "body" in resp.output:
+            body = utils.unlistify(resp.output["body"]).replace("\t", "  ")
+            body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'
+            other = "\n".join([f"{k}: {str(v)}" for k, v in resp.output.items() if k != "body"])
+            resp.output = f"{other}\n{body}"
         cli.display_results(resp, tablefmt="action")
     else:
         tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
