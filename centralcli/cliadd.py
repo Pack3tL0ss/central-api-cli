@@ -572,11 +572,11 @@ def template(
 def guest(
     portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
-    password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    password: str = typer.Option(None, help="Should generally be provided, wrap in single quotes", show_default=False,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
     phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
     email: str = typer.Option(None, help="email of guest", show_default=False,),
-    notify_to: NotifyToArgs = typer.Option(None, help="Notify to 'phone' or 'email'", show_default=False,),
+    notify_to: NotifyToArgs = typer.Option(None, help="Send password via 'phone' or 'email'", show_default=False,),
     disable: bool = typer.Option(False, "--disable", is_flag=True, help="add account, but set to disabled", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -588,6 +588,11 @@ def guest(
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
+    if notify and not password:
+        cli.exit(f"[cyan]--notify-to[/] {notify_to} sends a notification to the user with thier password.  This option is only valid when [cyan]--password[/] is provided.")
+        # TODO API allows password not to be sent, but don't think there is any logical scenario where we wouldn't need it.  Don't think you can get any auto-generated password
+        # and notify-to does not send pass to user if pass is not part of payload.
+
     _phone_strip = list("()-. ")
     if phone:
         phone_orig = phone
@@ -598,7 +603,7 @@ def guest(
             phone = f"+1{phone}"
 
     # TODO Add options for expire after / valid forever
-    payload = {
+    kwargs = {
         "portal_id": portal,
         "name": name,
         "company_name": company,
@@ -608,11 +613,10 @@ def guest(
         "notify_to": None if not notify_to else notify_to.value,
         "is_enabled": is_enabled,
     }
-    payload = utils.strip_none(payload)
-    options = "\n  ".join(yaml.safe_dump(payload).splitlines())
+    kwargs = utils.strip_none(kwargs)
+    options = "\n  ".join(yaml.safe_dump(kwargs).splitlines())
     if password:
-        payload["password"] = password
-
+        kwargs["password"] = password
 
     _msg = f"[bright_green]Add[/] Guest: [cyan]{name}[/] with the following options:\n"
     _msg += f"  {options}\n"
@@ -620,9 +624,8 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_visitor, **payload)
-        password = None
-        payload = None
+        resp = cli.central.request(cli.central.add_visitor, **kwargs)
+        password = kwargs = None
         cli.display_results(resp, tablefmt="action")
 
 
