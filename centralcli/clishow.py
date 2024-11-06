@@ -2046,7 +2046,7 @@ def wlans(
 @app.command()
 def cluster(
     group: str = typer.Argument(..., autocompletion=cli.cache.group_completion, show_default=False,),
-    ssid: str = typer.Argument(..., autocompletion=cli.cache.label_completion, show_default=False,),
+    ssid: str = typer.Argument(..., help="SSIDs are not cached.  Ensure text/case is accurate.", show_default=False,),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -2062,16 +2062,24 @@ def cluster(
 ) -> None:
     """Show Cluster mapped to a given group/SSID
     """
-    group = cli.cache.get_group_identifier(group)
+    caption = None
+    group: CacheGroup = cli.cache.get_group_identifier(group)
     resp = cli.central.request(cli.central.get_wlan_cluster_by_group, group.name, ssid)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    if tablefmt == "rich":
+    if resp and not resp.output:
+        caption = [
+            ":information:  This API will return 200 if the SSID does not exist in the group / or the SSID is bridge mode.",
+            f"Ensure {ssid} is accurate, as WLANs/SSIDs are not cached.",
+            f"Use 'show wlans -v' to see details for all SSIDs or 'show wlans --group {group.name}' to see details for SSIDs in group {group.name}",
+        ]
+    elif tablefmt == "rich":
         resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]",
         pager=pager,
+        caption=caption,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
