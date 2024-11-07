@@ -5641,8 +5641,7 @@ class CentralApi(Session):
             'phone': phone,
             'email': email
         }
-        # API requires phone and email, but allows None/null as value depending on how portal is configured
-        # user_data = utils.strip_none(user_data)
+        # API requires *both* phone and email, when either is provided, but they can be None/null
 
         json_data = {
             'name': name,
@@ -5657,7 +5656,7 @@ class CentralApi(Session):
             'password': password
         }
         json_data = utils.strip_none(json_data)
-        if user_data:
+        if phone or email:
             json_data["user"] = user_data
 
         return await self.post(url, json_data=json_data)
