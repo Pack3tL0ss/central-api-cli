@@ -81,7 +81,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
             except Exception as e:
                 log.warning(f"Unable to extract sku after inventory update ({e}), value will be omitted from inv cache.")
 
-    cli.cache.update_inv_db(data=inv_data)
+    cli.central.request(cli.cache.update_inv_db, data=inv_data)
 
 
 # TODO update completion with mac serial partial completion
@@ -129,7 +129,7 @@ def device(
                 kwargs["mac"] = dev.mac
             else:
                 cli.exit(f"[bright_red]Error[/]: {name} is invalid")
-        else:
+        elif name is not None:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
@@ -144,7 +144,7 @@ def device(
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
-        _lic_msg = [lic._value_ for lic in kwargs["license"]]
+        _lic_msg = [lic.value for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
         _msg += [
             f"\n  Assign License{'s' if len(kwargs['license']) > 1 else ''}: [bright_green]{_lic_msg}[/bright_green]"
