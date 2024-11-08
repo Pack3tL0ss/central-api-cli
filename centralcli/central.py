@@ -896,6 +896,10 @@ class CentralApi(Session):
             return resp
 
         groups = resp.output
+        groups_with_comma_in_name = list(filter(lambda g: "," in g, groups))
+        if groups_with_comma_in_name:
+            log.error(f"Ignoring group(s): {'|'.join(groups_with_comma_in_name)}.  Group APIs do not support groups with commas in name", show=True, caption=True, log=True)
+            _ = [groups.pop(groups.index(g)) for g in groups_with_comma_in_name]
 
         batch_resp = await self._batch_request(
             [
@@ -950,8 +954,16 @@ class CentralApi(Session):
             batch_reqs += [self.BatchRequest(self.get, url, params=params)]
 
         batch_resp = await self._batch_request(batch_reqs)
-        output = [r for res in batch_resp for r in res.output]
-        resp = batch_resp[-1]
+        failed = [r for r in batch_resp if not r.ok]
+        passed = batch_resp if not failed else [r for r in batch_resp if r.ok]
+        if failed:
+            log.error(f"{len(failed)} of {len(batch_reqs)} API requests to {url} have failed.", show=True, caption=True)
+            fail_msgs = list(set([r.output.get("description", str(r.output)) for r in failed]))
+            for msg in fail_msgs:
+                log.error(f"Failure description: {msg}", show=True, caption=True)
+
+        output = [r for res in passed for r in res.output]
+        resp = batch_resp[-1] if not passed else passed[-1]
         resp.output = output
         if "data" in resp.raw:
             resp.raw["data"] = output
@@ -3442,9 +3454,17 @@ class CentralApi(Session):
             params = {"groups": ",".join(_groups)}
             batch_reqs += [self.BatchRequest(self.get, url, params=params)]
         batch_resp = await self._batch_request(batch_reqs)
+        failed = [r for r in batch_resp if not r.ok]
+        passed = batch_resp if not failed else [r for r in batch_resp if r.ok]
+        if failed:
+            log.error(f"{len(failed)} of {len(batch_reqs)} API requests to {url} have failed.", show=True, caption=True)
+            fail_msgs = list(set([r.output.get("description", str(r.output)) for r in failed]))
+            for msg in fail_msgs:
+                log.error(f"Failure description: {msg}", show=True, caption=True)
+
         # TODO method to combine raw and output attrs of all responses into last resp
-        output = [r for res in batch_resp for r in res.output]
-        resp = batch_resp[-1]
+        output = [r for res in passed for r in res.output]
+        resp = batch_resp[-1] if not passed else passed[-1]
         resp.output = output
         if "data" in resp.raw:
             resp.raw["data"] = output
