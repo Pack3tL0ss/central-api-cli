@@ -507,18 +507,18 @@ Requires the following keys (include as header row for csv import):
 
 # -- // UNSUBSCRIBE DEVICES \\ --
 data = """
-serial
-CN12345678
-CN12345679
-CN12345680
+serial,license
+CN12345678,foundation_switch_6300
+CN12345679,foundation_switch_6200
+CN12345680,advanced_switch_6300
 """
 example = Example(data, type="devices", action="other")
 clibatch_unsubscribe = f"""[italic cyan]cencli batch unsubscribe IMPORT_FILE[/]:
 
 Accepts the following keys (include as header row for csv import):
-    [cyan]serial[/]
+    [cyan]serial[/], [cyan]license[/]
 
-[italic]Other fields can be included, but only serial, is evaluated
+[italic]Other fields can be included, but only serial, and license are evaluated
 any subscriptions associated with the serial will be removed.
 
 {example}
