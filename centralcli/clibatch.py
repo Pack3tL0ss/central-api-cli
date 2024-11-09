@@ -1238,8 +1238,8 @@ def unsubscribe(
         if cli.confirm(yes):
             resp = cli.central.batch_request(unsub_reqs)
 
-    if not dis_cen and all([r.ok for r in resp]):
-        inv_devs = [{**d, "services": None} for d in devices]
+    if not dis_cen:
+        inv_devs = [{**d, "services": None} for r, d in zip(resp, devices) if r.ok]
         cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
         if len(inv_devs) != len(cache_resp):
             log.warning(
