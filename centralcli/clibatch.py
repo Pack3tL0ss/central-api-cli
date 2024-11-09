@@ -1235,7 +1235,7 @@ def unsubscribe(
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
         print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
-        if yes or typer.confirm("\nProceed?", abort=True):
+        if cli.confirm(yes):
             resp = cli.central.batch_request(unsub_reqs)
 
     if not dis_cen and all([r.ok for r in resp]):
