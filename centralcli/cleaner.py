@@ -1441,7 +1441,7 @@ def get_client_roaming_history(data: List[dict]) -> List[dict]:
 
     return data
 
-def get_fw_version_list(data: List[dict], format: TableFormat = "rich") -> List[dict]:
+def get_fw_version_list(data: List[dict], format: TableFormat = "rich", verbose: bool = False) -> List[dict]:
     # Override default behavior of k, v formatter (default which implies rich will use unicode check mark for beta)
     if format != "rich" and "release_status" in data[-1].keys():
         _short_value["release_status"] = lambda v: "True" if "beta" in v.lower() else "False"
@@ -1450,6 +1450,9 @@ def get_fw_version_list(data: List[dict], format: TableFormat = "rich") -> List[
         dict(short_value(k, d[k]) for k in d) for d in data
     ]
     data = strip_no_value(data)
+
+    if format == "rich" and not verbose and utils.tty:
+        data = data[0:utils.tty.rows - 12]
 
     return data
 
