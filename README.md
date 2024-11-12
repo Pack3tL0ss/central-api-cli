@@ -61,7 +61,7 @@ pip install centralcli[speedups]
   pipx install centralcli --include-deps
 
   # optional install speedups for centralcli (this pulls in additional optional dependencies, that can improve performance.)  Minimal impact in most scenarios.
-  pipx install centralcli[speedups]
+  pipx install centralcli[speedups] --force  # force if centralcli was already installed and you are just adding speedups
   ```
 
 **Option 2 manual installation in a venv:**
