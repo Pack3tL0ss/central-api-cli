@@ -2540,7 +2540,7 @@ class Cache:
             return batch_resp
 
         inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
-        _inv_by_ser = {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
+        _inv_by_ser = {} if not inv_resp.ok else {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
 
         if not batch_resp[1].ok:
             log.error(f"Call to fetch subscription details failed.  {batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)
