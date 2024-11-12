@@ -358,7 +358,7 @@ def show_devices(
             _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
 
-        caption = None if not resp.ok else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [

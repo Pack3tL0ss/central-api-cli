@@ -1235,11 +1235,11 @@ def unsubscribe(
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
         print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
-        if yes or typer.confirm("\nProceed?", abort=True):
+        if cli.confirm(yes):
             resp = cli.central.batch_request(unsub_reqs)
 
-    if not dis_cen and all([r.ok for r in resp]):
-        inv_devs = [{**d, "services": None} for d in devices]
+    if not dis_cen:
+        inv_devs = [{**d, "services": None} for r, d in zip(resp, devices) if r.ok]
         cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
         if len(inv_devs) != len(cache_resp):
             log.warning(

@@ -265,8 +265,8 @@ class CacheInvDevice(CentralObject):
         self.model: str = data["model"]
         self.sku: str = data["sku"]
         self.services: str | None = data["services"]
-        self.subscription_key: str = data["subscription_key"]
-        self.subscription_expires: int | float = data["subscription_expires"]
+        self.subscription_key: str = data.get("subscription_key")
+        self.subscription_expires: int | float = data.get("subscription_expires")
 
     @classmethod
     def set_db(cls, db: Table):
@@ -1403,7 +1403,7 @@ class Cache:
                 yield m
 
         elif args and args[-1].lower() == "site":
-            out = [m for m in self.site_completion(incomplete, args)]
+            out = [m for m in self.site_completion(ctx, incomplete, args)]
             for m in out:
                 ##  This was required for completion to work in click 8.x when case doesn't match
                 ##  i.e. site: WadeLab incomplete: wade in click 7 completes wade -> WadeLab
@@ -2066,7 +2066,7 @@ class Cache:
 
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
-        match = self.get_site_identifier(
+        match: CacheSite = self.get_site_identifier(
             incomplete.replace('"', "").replace("'", ""),
             completion=True,
         )
@@ -2074,7 +2074,7 @@ class Cache:
         out = []
         if match:
             for m in sorted(match, key=lambda i: i.name):
-                match_attrs = [a for a in [m.name, m.id, m.address, m.city, m.state, m.zipcode] if a]
+                match_attrs = [a for a in [m.name, m.id, m.address, m.city, m.state, m.zip] if a]
                 if all([attr not in args for attr in match_attrs]):
                     matched_attribute = [attr for attr in match_attrs if str(attr).startswith(incomplete)]
                     # err_console.print(f"\n{match_attrs=}, {matched_attribute=}, {incomplete=}")  # DEBUG completion
@@ -2540,7 +2540,7 @@ class Cache:
             return batch_resp
 
         inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
-        _inv_by_ser = {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
+        _inv_by_ser = {} if not inv_resp.ok else {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
 
         if not batch_resp[1].ok:
             log.error(f"Call to fetch subscription details failed.  {batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)

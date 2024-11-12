@@ -223,6 +223,7 @@ def _list(
     dev_type: DevTypes = typer.Option(None, help="Get firmware list for a device type", show_default=False,),
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Get available firmware for IAP cluster associated with provided device", show_default=False,),
     swarm_id: str = typer.Option(None, help="Get available firmware for specified IAP cluster", show_default=False,),
+    verbose: int = cli.options.verbose,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
     do_csv: bool = cli.options.do_csv,
@@ -236,6 +237,8 @@ def _list(
 ):
     """Show available firmware list for a specific device or a type of device
     """
+    caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
+
     dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
@@ -269,7 +272,9 @@ def _list(
 
 
     resp = cli.central.request(cli.central.get_firmware_version_list, **kwargs)
-    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_fw_version_list, format=tablefmt)
+    cli.display_results(
+        resp,
+        tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, set_width_cols={"version": {"min": 25}}, cleaner=cleaner.get_fw_version_list, format=tablefmt, verbose=bool(verbose))
 
 
 @app.callback()
