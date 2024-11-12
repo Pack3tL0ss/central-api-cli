@@ -6096,6 +6096,7 @@ class CentralApi(Session):
         return await self.get(url)
 
 
+    # API-FLAW none of the auto_subscribe endpoints work
     async def get_auto_subscribe(
         self,
     ) -> Response:
