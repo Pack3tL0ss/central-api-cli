@@ -12,7 +12,7 @@ runner = CliRunner()
 def test_batch_add_groups():
     result = runner.invoke(app, ["batch", "add",  "groups", str(test_group_file), "-Y"])
     assert result.exit_code == 0
-    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"])
+    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"]) + 1  # Plus 1 as confirmation prompt includes "created"
 
 
 def test_batch_del_groups():
@@ -38,6 +38,14 @@ def test_batch_del_sites():
     assert result.exit_code == 0
     assert "success" in result.stdout
     assert result.stdout.count("success") == len(test_data["batch"]["sites"])
+
+def test_batch_unarchive_devices():
+    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_batch_device_file)}'])
+    assert result.exit_code == 0
+    assert "uccess" in result.stdout
+    if result.exception:
+        print(Traceback())
+        traceback.print_exception(result.exception)
 
 def test_batch_add_devices():
     result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_batch_device_file)}', "-Y"])
