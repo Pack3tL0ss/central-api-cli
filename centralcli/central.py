@@ -3858,6 +3858,7 @@ class CentralApi(Session):
         firmware_version: str = None,
         model: str = None,
         reboot: bool = False,
+        forced: bool = False,
     ) -> Response:
         """Initiate firmware upgrade on device(s).
 
@@ -3875,6 +3876,7 @@ class CentralApi(Session):
             model (str, optional): To initiate upgrade at group level for specific model family. Applicable
                 only for Aruba switches. Defaults to None.
             reboot (bool, optional): Automatically reboot device after firmware download. Defaults to False.
+            forced (bool, optional): Use True for forcing the upgrade of a gateway which is part of a cluster. Defaults to False.
 
         Returns:
             Response: CentralAPI Response object
@@ -3889,7 +3891,8 @@ class CentralApi(Session):
             'device_type': None if not device_type else constants.lib_to_api(device_type, "firmware"),
             'firmware_version': firmware_version,
             'reboot': reboot,
-            'model': model
+            'model': model,
+            'forced': forced
         }
 
         return await self.post(url, json_data=json_data)
