@@ -1920,8 +1920,8 @@ def routes(
     if "summary" in resp.raw:
         s = resp.raw["summary"]
         caption = (
-            f'max: {s.get("maximum")} total: {s.get("total")} default: {s.get("default")} connected: {s.get("connected")} '
-            f'static: {s.get("static")} dynamic: {s.get("dynamic")} overlay: {s.get("overlay")} '
+            f'max: {s.get("maximum")}, total: {s.get("total")}, default: {s.get("default")}, connected: {s.get("connected")}, '
+            f'static: {s.get("static")}, dynamic: {s.get("dynamic")}, overlay: {s.get("overlay")} '
         )
 
 
