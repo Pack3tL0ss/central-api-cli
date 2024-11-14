@@ -150,6 +150,10 @@ def group(
     if dev_type:
         if dev_type == "ap":
             reboot = True
+            if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+                needless_prefix = version.split("-")[0]
+                if not version.count(needless_prefix) == 2:
+                    version = f"{needless_prefix}-{version}"
         ver_msg += [lib_to_gen_plural(dev_type)]
 
     if model:
@@ -213,6 +217,10 @@ def swarm(
 
     ver_msg = [typer.style("Upgrade APs in swarm", fg="cyan")]
     if version:
+        if "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+            needless_prefix = version.split("-")[0]
+            if not version.count(needless_prefix) == 2:
+                version = f"{needless_prefix}-{version}"
         _version = [f"to {typer.style(version, fg='bright_green')}"]
     else:
         _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]
