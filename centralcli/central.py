@@ -5246,7 +5246,7 @@ class CentralApi(Session):
             'search': search,
             # 'calculate_total': str(calculate_total),
             'type': type,
-            'ack': ack,
+            'ack': None if ack is None else str(ack),
             'fields': fields,
             'offset': offset,
             'limit': limit,
