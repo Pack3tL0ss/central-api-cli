@@ -1953,6 +1953,9 @@ def _combine_wlan_properties_responses(groups: List[str], responses: List[Respon
     else:
         resp: List[Response] = failed
 
+    if failed and passed:
+        _ = [log.warning(f'Partial Failure [cyan]{f.url.name}[/] [red]{f.error}[/]: {f.output.get("description", f.output)}', caption=True) for f in failed]
+
     return resp
 
 
