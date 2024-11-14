@@ -470,7 +470,7 @@ class CLICommon:
                 ]
             else:
                 try:
-                    if sort_by == "ip" or " ip" in sort_by:
+                    if sort_by == "ip" or sort_by.endswith(" ip"):
                         data = sorted(data, key=lambda d: ipaddress.IPv4Address("0.0.0.0") if not d[sort_by] or d[sort_by] == "-" else ipaddress.ip_address(d[sort_by]))
                     else:
                         type_ = str
