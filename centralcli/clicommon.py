@@ -18,6 +18,7 @@ import os
 import pendulum
 from datetime import datetime
 import time
+import ipaddress
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -469,12 +470,15 @@ class CLICommon:
                 ]
             else:
                 try:
-                    type_ = str
-                    for d in data:
-                        if d[sort_by] is not None:
-                            type_ = type(d[sort_by])
-                            break
-                    data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] is not None and d[sort_by] != "-" else 0 if type_ in [int, DateTime] else "")
+                    if sort_by == "ip" or " ip" in sort_by:
+                        data = sorted(data, key=lambda d: ipaddress.IPv4Address("0.0.0.0") if not d[sort_by] or d[sort_by] == "-" else ipaddress.ip_address(d[sort_by]))
+                    else:
+                        type_ = str
+                        for d in data:
+                            if d[sort_by] is not None:
+                                type_ = type(d[sort_by])
+                                break
+                        data = sorted(data, key=lambda d: d[sort_by] if d[sort_by] is not None and d[sort_by] != "-" else 0 if type_ in [int, DateTime] else "")
                 except TypeError as e:
                     sort_msg = [f":warning:  Unable to sort by [cyan]{sort_by}.\n   {e.__class__.__name__}: {e} "]
 
