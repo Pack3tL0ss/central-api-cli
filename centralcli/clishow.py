@@ -2595,7 +2595,17 @@ def alerts(
     :information:  Notification must be Configured.
     """
     if device:
-        device: CentralObject = cli.cache.get_dev_identifier(device)
+        device: CacheDevice = cli.cache.get_dev_identifier(device)
+    if group:
+        group: CacheGroup = cli.cache.get_group_identifier(group)
+    if site:
+        site: CacheSite = cli.cache.get_site_identifier(site)
+    if label:
+        if group:
+            log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
+            label = None
+        else:
+            label: CacheLabel = cli.cache.get_label_identifier(label)
 
     if alert_type:
         alert_type = "user_management" if alert_type == "user" else alert_type
@@ -2607,12 +2617,12 @@ def alerts(
     start, end = cli.verify_time_range(start=start, end=end, past=past)
 
     kwargs = {
-        "group": group,
-        "label": label,
+        "group": None if not group else group.name,
+        "label": None if not label else label.name,
         "from_time": start,
         "to_time": end,
         "serial": None if not device else device.serial,
-        "site": site,
+        "site": None if not site else site.name,
         'severity': severity,
         "search": search,
         "type": alert_type,
@@ -2634,6 +2644,14 @@ def alerts(
     title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
         title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
+    if group or site or label:
+        title = f"{title} [bright_green]filtered by[/]"
+        if group:
+            title = f"{title} group: [cyan]{group.name}[/]"
+        if site:
+            title = f"{title} site: [cyan]{site.name}[/]"
+        if label:
+            title = f"{title} label: [cyan]{site.name}[/]"
 
     cli.display_results(
         resp,
