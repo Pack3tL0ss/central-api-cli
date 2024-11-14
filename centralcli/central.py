@@ -5234,14 +5234,6 @@ class CentralApi(Session):
         url = "/central/v1/notifications"
         from_time, to_time = utils.parse_time_options(from_time, to_time)
 
-        # if not from_time:
-        #     from_time = int(datetime.timestamp(datetime.today() - timedelta(days=1)))
-        # if ack in [True, False]:
-        #     ack = str(ack).lower()
-
-        # if to_time and to_time <= from_time:
-        #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
-
         params = {
             'customer_id': customer_id,
             'group': group,
