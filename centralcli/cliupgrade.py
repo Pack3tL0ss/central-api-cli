@@ -69,6 +69,10 @@ def device(
     dev = cli.cache.get_dev_identifier(device, conductor_only=True)
     if dev.generic_type == "ap":
         reboot = True
+        if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+            needless_prefix = version.split("-")[0]
+            if not version.count(needless_prefix) == 2:
+                version = f"{needless_prefix}-{version}"
     elif dev.type == "gw":
         forced = True
     at = None if not at else round(at.timestamp())
