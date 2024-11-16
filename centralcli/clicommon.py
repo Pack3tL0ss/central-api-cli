@@ -13,7 +13,7 @@ from rich.text import Text
 from rich.progress import track
 from rich import print
 import json
-import pkg_resources
+from importlib.metadata import version
 import os
 import pendulum
 from datetime import datetime
@@ -298,10 +298,7 @@ class CLICommon:
         if ctx is not None and ctx.resilient_parsing:  # tab completion, return without validating
             return
 
-        try:
-            current = pkg_resources.get_distribution('centralcli').version
-        except pkg_resources.DistributionNotFound:
-            current = "0.0.0  !! Unable to gather version"
+        current = version("centralcli")
         resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
         if not resp:
             print(current)
@@ -310,7 +307,6 @@ class CLICommon:
             minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major])
             patch = max([int(str(k).split(".")[2]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major and int(str(k).split(".")[1]) == minor])
             latest = f'{major}.{minor}.{patch}'
-            # latest = max(resp.output["releases"])
             msg = "[bold bright_green]centralcli[/] "
             msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
             msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'
