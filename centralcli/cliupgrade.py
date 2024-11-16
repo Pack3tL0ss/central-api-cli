@@ -65,9 +65,16 @@ def device(
 ) -> None:
     """Upgrade firmware on a device
     """
+    forced = None
     dev = cli.cache.get_dev_identifier(device, conductor_only=True)
     if dev.generic_type == "ap":
         reboot = True
+        if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+            needless_prefix = version.split("-")[0]
+            if not version.count(needless_prefix) == 2:
+                version = f"{needless_prefix}-{version}"
+    elif dev.type == "gw":
+        forced = True
     at = None if not at else round(at.timestamp())
     if in_:
         at = cli.delta_to_start(in_, past=False).int_timestamp
@@ -86,7 +93,7 @@ def device(
         if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
             if not dev.swack_id:
                 print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
-                if yes > 1 or typer.confirm("\nRefresh cache now to check if it's populated", abort=True):
+                if yes > 1 or cli.confirm(prompt="\nRefresh cache now to check if it's populated"):
                     cli.central.request(cli.cache.refresh_dev_db, dev_type="ap")
                     dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
 
@@ -95,7 +102,7 @@ def device(
             else:
                 cli.exit(f"Unable to perform Upgrade on {dev.summary_text}.  [cyan]swarm_id[/] is required for APs and the API is not returning a value for it yet.")
         else:
-            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot)
+            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot, forced=forced)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -143,6 +150,10 @@ def group(
     if dev_type:
         if dev_type == "ap":
             reboot = True
+            if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+                needless_prefix = version.split("-")[0]
+                if not version.count(needless_prefix) == 2:
+                    version = f"{needless_prefix}-{version}"
         ver_msg += [lib_to_gen_plural(dev_type)]
 
     if model:
@@ -206,6 +217,10 @@ def swarm(
 
     ver_msg = [typer.style("Upgrade APs in swarm", fg="cyan")]
     if version:
+        if "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+            needless_prefix = version.split("-")[0]
+            if not version.count(needless_prefix) == 2:
+                version = f"{needless_prefix}-{version}"
         _version = [f"to {typer.style(version, fg='bright_green')}"]
     else:
         _version = [f"to {typer.style('Recommended version', fg='bright_green')}"]

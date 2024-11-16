@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "7.2.9"
+version = "7.3.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -58,9 +58,9 @@ uniplot = ">=0.13.0"
 fastapi = {version = "*", optional = true}
 uvicorn = {version = "*", optional = true}
 psutil = {version = "*", optional = true}
-cchardet = {version = ">=2.1", markers = "platform_system != 'Windows'", optional=true}
-aiodns = {version = ">=1.1", optional = true}
-Brotli = {version = "*", optional = true}
+aiodns = {version = ">=3.2.0", markers = "platform_system != 'Windows'", optional = true}
+Brotli = {version = "*", markers = "platform_python_implementation == 'CPython'", optional = true}
+brotlicffi = {version = "*", markers = "platform_python_implementation != 'CPython'", optional = true}
 
 [tool.poetry.dev-dependencies]
 pyflakes = ">=2"
@@ -89,7 +89,7 @@ hook-proxy = [
     "psutil",
 ]
 speedups = [
-    "cchardet",
     "aiodns",
     "Brotli",
+    "brotlicffi",
 ]

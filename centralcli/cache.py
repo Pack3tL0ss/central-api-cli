@@ -1326,10 +1326,12 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
                     out += [tuple([m.name, m.id])]
+                elif m.name.lower().startswith(incomplete.lower()):
+                    out += [tuple([m.name, m.id])]
                 elif m.id.startswith(incomplete):
                     out += [tuple([m.id, m.name])]
                 else:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+                    out += [tuple([m.name, f"{m.help_text} FS match".lstrip()])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m

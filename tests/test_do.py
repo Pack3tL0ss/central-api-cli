@@ -17,7 +17,7 @@ def cleanup():
     # Will be executed before the first test
     yield do_nothing()
     # executed after test is run
-    del_groups = [g.name for g in cache.groups_by_name if g.name.startswith("cencli_test_")]
+    del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
         assert "Success" in result.stdout
@@ -58,7 +58,7 @@ def test_blink_wrong_dev_type():
         ]
     )
     assert result.exit_code == 1
-    assert "No Match found" in result.stdout
+    assert "Unable to gather" in result.stdout
     assert "excluded" in result.stdout
 
 

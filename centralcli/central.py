@@ -3858,6 +3858,7 @@ class CentralApi(Session):
         firmware_version: str = None,
         model: str = None,
         reboot: bool = False,
+        forced: bool = False,
     ) -> Response:
         """Initiate firmware upgrade on device(s).
 
@@ -3875,6 +3876,7 @@ class CentralApi(Session):
             model (str, optional): To initiate upgrade at group level for specific model family. Applicable
                 only for Aruba switches. Defaults to None.
             reboot (bool, optional): Automatically reboot device after firmware download. Defaults to False.
+            forced (bool, optional): Use True for forcing the upgrade of a gateway which is part of a cluster. Defaults to False.
 
         Returns:
             Response: CentralAPI Response object
@@ -3889,7 +3891,8 @@ class CentralApi(Session):
             'device_type': None if not device_type else constants.lib_to_api(device_type, "firmware"),
             'firmware_version': firmware_version,
             'reboot': reboot,
-            'model': model
+            'model': model,
+            'forced': forced
         }
 
         return await self.post(url, json_data=json_data)
@@ -5231,14 +5234,6 @@ class CentralApi(Session):
         url = "/central/v1/notifications"
         from_time, to_time = utils.parse_time_options(from_time, to_time)
 
-        # if not from_time:
-        #     from_time = int(datetime.timestamp(datetime.today() - timedelta(days=1)))
-        # if ack in [True, False]:
-        #     ack = str(ack).lower()
-
-        # if to_time and to_time <= from_time:
-        #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
-
         params = {
             'customer_id': customer_id,
             'group': group,
@@ -5251,7 +5246,7 @@ class CentralApi(Session):
             'search': search,
             # 'calculate_total': str(calculate_total),
             'type': type,
-            'ack': ack,
+            'ack': None if ack is None else str(ack),
             'fields': fields,
             'offset': offset,
             'limit': limit,
