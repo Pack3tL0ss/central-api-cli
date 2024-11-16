@@ -59,8 +59,8 @@ fastapi = {version = "*", optional = true}
 uvicorn = {version = "*", optional = true}
 psutil = {version = "*", optional = true}
 aiodns = {version = ">=3.2.0", markers = "platform_system != 'Windows'", optional = true}
-Brotli = {version = "*", "platform_python_implementation == 'CPython'", optional = true}
-brotlicffi = {version = "*", "platform_python_implementation != 'CPython'", optional = true}
+Brotli = {version = "*", markers = "platform_python_implementation == 'CPython'", optional = true}
+brotlicffi = {version = "*", markers = "platform_python_implementation != 'CPython'", optional = true}
 
 [tool.poetry.dev-dependencies]
 pyflakes = ">=2"
