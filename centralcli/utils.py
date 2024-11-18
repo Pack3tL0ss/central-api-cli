@@ -908,6 +908,8 @@ class Utils:
 
     @staticmethod
     def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:
+        if str(ts).isdigit() and len(str(int(ts))) > 10:  # if ts in milliseconds convert to seconds
+            ts = ts / 1000
         dt = ts if isinstance(ts, datetime) else pendulum.from_timestamp(ts, tz=tz)
         diff = pendulum.now(tz=tz) - dt
         return getattr(diff, f'in_{unit}')() > time_frame
