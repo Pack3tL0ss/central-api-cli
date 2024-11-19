@@ -5,27 +5,27 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterator
+from copy import deepcopy
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Literal, Sequence, Set, Union, Generator, Tuple, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 import typer
 from rich import print
 from rich.console import Console
 from tinydb import Query, TinyDB
-from copy import deepcopy
+from tinydb.table import Document
+from yarl import URL
 
 from centralcli import CentralApi, Response, config, constants, log, models, render, utils
 from centralcli.response import CombinedResponse
-from .typedefs import SiteData
-from tinydb.table import Document
-from yarl import URL
+
 
 if TYPE_CHECKING:
     from tinydb.table import Table
     from .config import Config
-    from .typedefs import PortalAuthTypes
-
+    from .typedefs import PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -771,7 +771,8 @@ class Cache:
         if refresh:
             self.check_fresh(refresh)
 
-    def __iter__(self) -> Generator[Tuple[str, List[Document]], None, None]:
+    # def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
+    def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
         yield from self.all_tables
 
     def __len__(self) -> int:
@@ -816,12 +817,12 @@ class Cache:
             return human_size(db_stats.st_size)
 
     @property
-    def all_tables(self) -> Generator[Table, None, None]:
+    def all_tables(self) -> Iterator[Table, None, None]:
         for table in self.DevDB.tables():
             yield self.DevDB.table(table)
 
     @property
-    def key_tables(self) -> Generator[Table, None, None]:
+    def key_tables(self) -> Iterator[Table, None, None]:
         for table in self._tables:
             yield table
 
@@ -1194,7 +1195,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion for returning matches that are switches (AOS-SW or CX)
 
         Args:
@@ -1202,7 +1203,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1227,7 +1228,7 @@ class Cache:
         incomplete: str,
         args: List[str] = [],
         dev_type: Literal["cx", "sw"] = "cx",
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion for returning matches that are of specific switch type (cx by default)
 
         Args:
@@ -1235,7 +1236,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1259,7 +1260,7 @@ class Cache:
             self,
             incomplete: str,
             args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
             yield match
 
@@ -1267,7 +1268,7 @@ class Cache:
             self,
             incomplete: str,
             args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
             yield match
 
@@ -1275,7 +1276,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion for returning matches that are ap, gw, or AOS-SW
 
         Args:
@@ -1283,7 +1284,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1376,7 +1377,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for commands that allow a list of devices followed by group/site.
 
         i.e. cencli move dev1 dev2 dev3 site site_name group group_name
@@ -1387,7 +1388,7 @@ class Cache:
             args (List[str], optional): The prev args passed into the command.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Matching completion string, help text, or
+            Iterator[Tuple[str, str]]: Matching completion string, help text, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1446,7 +1447,7 @@ class Cache:
         # ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument where only APs are valid.
 
         Args:
@@ -1454,7 +1455,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1491,7 +1492,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for client output.
 
         Returns only devices that apply based on filter provided in command, defaults to clients
@@ -1503,7 +1504,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Tuple with completion and help text, or
+            Iterator[Tuple[str, str]]: Tuple with completion and help text, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1527,7 +1528,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion for returning matches that are either switch or AP
 
         Args:
@@ -1535,7 +1536,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Yields Tuple with completion and help text, or
+            Iterator[Tuple[str, str]]: Yields Tuple with completion and help text, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1560,7 +1561,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion that returns only ap and gw.
 
         Args:
@@ -1568,7 +1569,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Yields Tuple with completion and help text, or
+            Iterator[Tuple[str, str]]: Yields Tuple with completion and help text, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1602,7 +1603,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Device completion that returns only switches and gateways.
 
         Args:
@@ -1610,7 +1611,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1634,7 +1635,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for device idens where only gateways are valid.
 
         Args:
@@ -1642,7 +1643,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1669,7 +1670,7 @@ class Cache:
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
         conductor_only: bool = False,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group or device.
 
         Args:
@@ -1681,7 +1682,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1727,7 +1728,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group or device.
 
         Args:
@@ -1736,7 +1737,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None] | None: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1751,7 +1752,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group or device.
 
         Args:
@@ -1759,7 +1760,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1795,7 +1796,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group or a gateway.
 
         Args:
@@ -1803,7 +1804,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1828,7 +1829,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group, site, or a gateway or keyword "commands".
 
         Args:
@@ -1836,7 +1837,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the device, or
+            Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1874,7 +1875,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for groups (by name).
 
         Args:
@@ -1882,7 +1883,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the group, or
+            Iterator[Tuple[str, str]]: Name and help_text for the group, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1910,7 +1911,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for labels.
 
         Args:
@@ -1918,7 +1919,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]:  Name and help_text for the label, or
+            Iterator[Tuple[str, str]]:  Name and help_text for the label, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1945,7 +1946,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for clients.
 
         Args:
@@ -1953,7 +1954,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the client, or
+            Iterator[Tuple[str, str]]: Name and help_text for the client, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -1988,7 +1989,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for events.
 
         Args:
@@ -1996,7 +1997,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Value and help_text for the event, or
+            Iterator[Tuple[str, str]]: Value and help_text for the event, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -2020,7 +2021,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for audit event logs.
 
         Args:
@@ -2028,7 +2029,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Value and help_text for the event, or
+            Iterator[Tuple[str, str]]: Value and help_text for the event, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -2050,7 +2051,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         """Completion for sites.
 
         Args:
@@ -2058,7 +2059,7 @@ class Cache:
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
-            Generator[Tuple[str, str], None, None]: Name and help_text for the site, or
+            Iterator[Tuple[str, str]]: Name and help_text for the site, or
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
@@ -2090,7 +2091,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
@@ -2113,7 +2114,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
@@ -2153,7 +2154,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
@@ -2184,7 +2185,7 @@ class Cache:
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
@@ -2214,7 +2215,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
@@ -2243,7 +2244,7 @@ class Cache:
         self,
         incomplete: str,
         args: List[str],
-    ) -> Generator[Tuple[str, str], None, None] | None:
+    ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
         if not config.valid:
             econsole.print(":warning:  Invalid config")
