@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "7.3.3"
+version = "7.3.4"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -52,6 +52,7 @@ fuzzywuzzy = "*"
 levenshtein = "*"
 click = "<=7.1.2"
 uniplot = ">=0.13.0"
+eval_type_backport = { version = "*", python = "<3.10" }
 
 
 # Optional dependencies see tool.poetry.extras
