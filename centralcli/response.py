@@ -1158,9 +1158,9 @@ class CombinedResponse(Response):
                 raw = {r.url.path: this_raw}
             else:
                 raw[r.url.path] = this_raw
-                if output_type == list:
+                if output_type is list:
                     output += this_output
-                elif output_type == dict:
+                elif output_type is dict:
                     output = {**output, **this_output}
                 else:
                     raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")
