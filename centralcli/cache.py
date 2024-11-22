@@ -2337,6 +2337,7 @@ class Cache:
         """
         _start_time = time.perf_counter()
         if data is not None:
+            data = utils.listify(data)
             with econsole.status(f":arrows_clockwise:  Updating [dark_olive_green2]{db.name}[/] Cache: [cyan]{len(data)}[/] records."):
                 if truncate:
                     db.truncate()
@@ -2719,12 +2720,14 @@ class Cache:
                 cache_data = self.templates_by_name_group
                 data = {f'{t["name"]}_{t["group"]}': t for t in data}
                 update_data = list({**cache_data, **data}.values())
+                resp = await self.update_db(self.TemplateDB, data=update_data, truncate=True)
             else:
                 update_data = data
+                resp = await self.update_db(self.TemplateDB, data=update_data, truncate=False)
 
-            resp = await self.update_db(self.TemplateDB, data=update_data, truncate=not add)
         except Exception as e:
             log.exception(f"Exception during update of TemplateDB\n{e}")
+            return
 
         return resp
 
@@ -3619,10 +3622,14 @@ class Cache:
             if not match:
                 match = self.TemplateDB.search(self.Q.name.test(lambda v: v.lower().startswith(query_str.lower())))
 
+            if match and group:
+                all_match: List[Document] = match.copy()
+                match = [d for d in all_match if d.get("group", "") == group]
+
             if retry and not match and self.responses.template is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates], limit=1)[0]
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates if group is None or t["group"] == group], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.TemplateDB.search(self.Q.name == fuzz_match)
@@ -3638,11 +3645,6 @@ class Cache:
                 return match
 
             if len(match) > 1:
-                if group:
-                    groups = utils.listify(group)
-                    match = [d for d in match if d.group in groups]
-
-            if len(match) > 1:
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
@@ -3652,7 +3654,14 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Unable to gather template from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather template from provided identifier {query_str}", show=not silent, log=silent)
+            if all_match:
+                first_five = [f"[bright_green]{m['name']}[/] from group [cyan]{m['group']}[/]" for m in all_match[0:5]]
+                all_match_msg = f"{', '.join(first_five)}{', ...' if len(all_match) > 5 else ''}"
+                log.error(
+                    f"The Following templates matched: {all_match_msg}... [red]excluded[/] as they are not in [cyan]{group}[/] group ",
+                    show=True,
+                )
             raise typer.Exit(1)
         else:
             if not completion and not silent:
