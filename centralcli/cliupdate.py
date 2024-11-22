@@ -116,8 +116,9 @@ def template(
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        # will exit above if call failed.
         cache_template.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
-        _ = cli.central.request(cli.cache.update_template_db, data=cache_template)
+        _ = cli.central.request(cli.cache.update_template_db, data=cache_template.data)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")
