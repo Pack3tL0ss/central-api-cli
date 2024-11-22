@@ -527,7 +527,7 @@ def template(
     name: str = typer.Argument(..., show_default=False,),
     group: str = typer.Argument(..., help="Group to upload template to", autocompletion=cli.cache.group_completion, show_default=False,),
     template: Path = typer.Argument(None, exists=True, show_default=False,),
-    dev_type: DevTypes = typer.Option("sw"),
+    dev_type: DevTypes = typer.Option(DevTypes.sw),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
     yes: bool = cli.options.yes,
@@ -544,7 +544,7 @@ def template(
 
     print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
     print("[bright_green]Template will apply to[/]:")
-    print(f"    Device Type: [cyan]{dev_type}[/]")
+    print(f"    Device Type: [cyan]{dev_type.value}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
     if cli.confirm(yes):
