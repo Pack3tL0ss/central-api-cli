@@ -1281,6 +1281,40 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    async def create_device_template_variables(
+        self,
+        serial: str,
+        mac: str,
+        var_dict: dict,
+    ) -> Response:
+        """Create template variables for a device.
+
+        Args:
+            serial (str): Serial number of the device.
+            mac (str): MAC address of the device.
+            var_dict (dict): dict with variables to be updated
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{serial}/template_variables"
+
+        var_dict = {k: v for k, v in var_dict.items() if k not in ["_sys_serial", "_sys_lan_mac"]}
+        mac = utils.Mac(mac)
+
+        json_data = {
+            'total': len(var_dict) + 2,
+            "variables": {
+                **{
+                    '_sys_serial': serial,
+                    '_sys_lan_mac': mac.cols,
+                },
+                **var_dict
+            }
+        }
+
+        return await self.post(url, json_data=json_data)
+
 
     # TODO figure out how to make this work, need file like object
     async def update_device_template_variables(
@@ -1300,6 +1334,7 @@ class CentralApi(Session):
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/devices/{serial}/template_variables"
+        var_dict = {k: v for k, v in var_dict.items() if k not in ["_sys_serial", "_sys_lan_mac"]}
         # headers = {"Content-Type": "multipart/form-data"}
 
         json_data = {

@@ -93,6 +93,8 @@ def template(
             cli.exit(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
 
         cache_template = CacheTemplate(_tmplt[0])
+    else:
+        cache_template = obj
 
     kwargs = {
         "name": cache_template.name,
@@ -114,14 +116,15 @@ def template(
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        # will exit above if call failed.
         cache_template.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
-        _ = cli.central.request(cli.cache.update_template_db, data=cache_template)
+        _ = cli.central.request(cli.cache.update_template_db, data=cache_template.data)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")
 def variables(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion),
-    var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'"),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -149,16 +152,15 @@ def variables(
             get_next = False
 
     if len(vars) != len(vals):
-        typer.secho("something went wrong parsing variables.  Unequal length for Variables vs Values")
-        raise typer.Exit(1)
+        cli.exit("Something went wrong parsing variables.  Unequal length for Variables vs Values")
 
     var_dict = {k: v for k, v in zip(vars, vals)}
 
     con = Console(emoji=False)
     msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
     con.print(f"{msg} {dev.rich_help_text}")
-    [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
-    if yes or typer.confirm("\nProceed?", abort=True):
+    _ = [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
+    if cli.confirm(yes):
         resp = cli.central.request(
             cli.central.update_device_template_variables,
             serial,

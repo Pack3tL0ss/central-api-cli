@@ -15,12 +15,12 @@ from rich.console import Console
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, log, Response
+    from centralcli import cli, utils, log, config, Response
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, log, Response
+        from centralcli import cli, utils, log, config, Response
     else:
         print(pkg_dir.parts)
         raise e
@@ -527,7 +527,7 @@ def template(
     name: str = typer.Argument(..., show_default=False,),
     group: str = typer.Argument(..., help="Group to upload template to", autocompletion=cli.cache.group_completion, show_default=False,),
     template: Path = typer.Argument(None, exists=True, show_default=False,),
-    dev_type: DevTypes = typer.Option("sw"),
+    dev_type: DevTypes = typer.Option(DevTypes.sw),
     model: str = typer.Option("ALL"),
     version: str = typer.Option("ALL", "--ver"),
     yes: bool = cli.options.yes,
@@ -544,7 +544,7 @@ def template(
 
     print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
     print("[bright_green]Template will apply to[/]:")
-    print(f"    Device Type: [cyan]{dev_type}[/]")
+    print(f"    Device Type: [cyan]{dev_type.value}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
     if cli.confirm(yes):
@@ -567,6 +567,36 @@ def template(
                 },
                 add=True
             )
+
+
+@app.command()
+def variables(
+    variable_file: Path = typer.Argument(..., exists=True, show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Upload variables for a device from file
+
+    Variables: _sys_serial, and _sys_lan_mac are required.
+    """
+    var_dict = config.get_file_data(variable_file)
+    serial = var_dict.get("_sys_serial")
+    mac = var_dict.get("_sys_lan_mac")
+    if any([var is None for var in [serial, mac]]):
+        cli.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
+
+    print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] the following variables for device with serial [cyan]{serial}[/]")
+    _ = [cli.console.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
+    if cli.confirm(yes):
+        resp = cli.central.request(
+            cli.central.create_device_template_variables,
+            serial,
+            mac,
+            var_dict=var_dict
+        )
+        cli.display_results(resp, tablefmt="action")
 
 
 # TODO config option for different random pass formats

@@ -28,6 +28,7 @@ log_colors = {
 # }
 console = Console(emoji=False, markup=False)
 emoji_console = Console(markup=False)
+default_console = Console()
 DEBUG_ONLY_MSGS = [
     "Loaded token from storage from file"
 ]
@@ -102,6 +103,18 @@ class MyLogger:
         else:
             return "\n".join([f'  {msg}' for msg in self._caption])
 
+    @staticmethod
+    def _remove_rich_markups(log_msg: str) -> str:
+        # Need to include [/] as closing markup style to print color for log messages.  Logs with API endpoints ... [/configuration/v2...] will cause MarkupError otherwise
+        if "[/]" not in log_msg:
+            return log_msg
+
+        console = Console(force_terminal=False)
+        with console.capture() as cap:
+            console.print(log_msg, end="")
+
+        return cap.get()
+
     def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs) -> None:
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         _msgs = []
@@ -113,7 +126,7 @@ class MyLogger:
 
             if i not in _logged:
                 if log:
-                    getattr(self._log, level)(i, *args, **kwargs)
+                    getattr(self._log, level)(self._remove_rich_markups(i), *args, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
@@ -123,7 +136,9 @@ class MyLogger:
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
                     _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
-                    emoji_console.print(f"{_pfx}{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
+                    con = emoji_console if "[/]" not in m else default_console
+                    con.print(f"{_pfx}{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
+
             self.log_msgs = []
 
         if caption:
