@@ -2711,6 +2711,8 @@ class Cache:
             doc_ids: int | List[int] = None,
             add: bool = False,
         ):
+        data = utils.listify(data)
+
         try:
             if doc_ids:
                 doc_ids = utils.listify(doc_ids)
