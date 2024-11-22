@@ -12,6 +12,9 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 
 ![centralcli Animated Demo](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/cencli-demo.gif)
 
+## Known Issues
+When running with Python 3.12 it's possible to see a number of SyntaxWarning messages regarding "invaslid escape sequence".  This is due to a change in behavior in 3.12.  This will be resolved in an upcoming release.  The warnings do not impact functionality.
+
 ## Features
 
 - Cross Platform Support
@@ -51,8 +54,8 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 #### Install `centralcli` via `uv`
 ```bash
-# install centralcli (will also quickly install Python 3.12 if needed)
-uv tool install --python 3.12 centralcli
+# install centralcli (will also quickly install Python 3.11 if needed)
+uv tool install --python 3.11 centralcli
 ```
 
 Then to Upgrade `centralcli`
