@@ -2807,7 +2807,7 @@ class Cache:
                     if "wireless" in [new_clients[0].type, new_clients[-1].type]:
                         self.responses.client = resp
                     data = {**self.cache_clients_by_mac, **new_clients.by_mac}
-                _ = await self.update_db(self.ClientDB, data=data.values(), truncate=True)
+                _ = await self.update_db(self.ClientDB, data=list(data.values()), truncate=True)
         return resp
 
 
