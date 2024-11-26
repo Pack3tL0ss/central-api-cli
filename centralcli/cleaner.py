@@ -200,6 +200,7 @@ _short_value = {
     "lease_end_ts": lambda x: DateTime(x, "log"),
     "create_date": lambda x: DateTime(x, "date-string"),
     "created_at": lambda x: DateTime(x, "day-datetime"),  # show portals
+    "expire_at": lambda x: DateTime(x, "day-datetime"),  # show portals
     "acknowledged_timestamp": lambda x: DateTime(x, "log"),
     "lease_time": lambda x: DateTime(x, "durwords"),
     "lease_time_left": lambda x: DateTime(x, "durwords-short"),
