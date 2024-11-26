@@ -469,6 +469,53 @@ class CachePortal(CentralObject):
         return render.rich_capture(self.__rich__())
 
 
+class CacheGuest(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('guest', data)
+        self.portal_id: str = data["portal_id"]
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+        self.email: str = data["email"]
+        self.phone: str = data["phone"]
+        self.company: str = data["company"]
+        self.enabled: bool = data["enabled"]
+        self.status: str = data["status"]
+        self.created: int = data["created"]
+        self.expires: int = data["expires"]
+
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int | None:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.id is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.id == self.id)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Guest[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]| portal id:[cyan]{self.portal_id}[/]'
+
+    @property
+    def help_text(self):
+        return render.rich_capture(self.__rich__())
+
+
 class CacheTemplate(CentralObject):
     db: Table | None = None
 
@@ -619,6 +666,7 @@ class CacheResponses:
         portal: Response = None,
         license: Response = None,
         client: Response = None,
+        guest: Response = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -630,6 +678,7 @@ class CacheResponses:
         self._portal = portal
         self._license = license
         self._client = client
+        self._guest = guest
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
@@ -637,7 +686,7 @@ class CacheResponses:
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license, self._client] if r is not None])  # , key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license, self._client, self._guest] if r is not None])  # , key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -722,6 +771,14 @@ class CacheResponses:
     def client(self, resp: Response):
         self._client = resp
 
+    @property
+    def guest(self) -> Response | None:
+        return self.update_rl(self._guest)
+
+    @guest.setter
+    def guest(self, resp: Response):
+        self._guest = resp
+
 
 class Cache:
     config: Config = None
@@ -759,6 +816,7 @@ class Cache:
             self.HookDataDB: Table = self.DevDB.table("wh_data")
             self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
+            self.GuestDB: Table = self.DevDB.table("guest")  # Only updated when show guests is ran or as needed
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q = Query()
             if data:
@@ -922,6 +980,14 @@ class Cache:
     @property
     def portals_by_id(self) -> Dict[str, Dict[str, str | bool]]:
         return {p["id"]: p for p in self.portals}
+
+    @property
+    def guests(self) -> list:
+        return self.GuestDB.all()
+
+    @property
+    def guests_by_id(self) -> Dict[str, Dict[str, str | bool]]:
+        return {p["id"]: p for p in self.guests}
 
     @property
     def logs(self) -> list:
@@ -1364,6 +1430,143 @@ class Cache:
                 if m.name.startswith(incomplete):
                     out += [tuple([m.name, m.help_text])]
                 elif m.id.startswith(incomplete):
+                    out += [tuple([m.id, m.help_text])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
+    def get_guest_identifier(
+        self,
+        query_str: str,
+        portal_id: str | List[str] = None,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CacheGuest | List[CacheGuest]:
+        """Get guest info from Guest Cache"""
+        retry = False if completion else retry
+        if not query_str and completion:
+            return [CacheGuest(g) for g in self.guests]
+
+        match, all_match = None, None
+        for _ in range(0, 2 if retry else 1):
+            # exact
+            match = self.GuestDB.search(
+                (self.Q.name == query_str)
+                | (self.Q.email == query_str)
+                | (self.Q.phone == query_str)
+                | (self.Q.id == query_str)
+            )
+
+            # case insensitive
+            if not match:
+                match = self.GuestDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                    | self.Q.email.test(lambda v: v and v.lower() == query_str.lower())
+                    | self.Q.id.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive with -/_ swap
+            if not match:
+                if "_" in query_str:
+                    match = self.GuestDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+                elif "-" in query_str:
+                    match = self.GuestDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+
+            # startswith - phone has all non digit characters stripped
+            if not match:
+                match = self.GuestDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.email.test(lambda v: v and v.lower().startswith(query_str.lower()))
+                    | self.Q.id.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()]).startswith("".join([d for d in query_str if d.isdigit()])))
+                )
+
+            # phone with only last 10 digits (strip country code)
+            if not match:
+                match = self.GuestDB.search(
+                    self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()][::-1][0:10][::-1]).startswith("".join([d for d in query_str if d.isdigit()][::-1][0:10][::-1])))
+                )
+
+            if match and portal_id:
+                all_match: List[Document] = match.copy()
+                match = [d for d in all_match if d.get("portal_id", "") == portal_id]
+
+            if retry and not match and self.responses.guest is None:
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.guests if portal_id is None or g["portal_id"] == portal_id], limit=1)[0]
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.GuestDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    if not portal_id:
+                        econsole.print(f"[red]:warning:[/]  Unable to gather guest from provided identifier {query_str}.  Use [cyan]cencli show guest <PORTAL>[/] to update cache.")
+                        raise typer.Exit(1)
+                    econsole.print(":arrows_clockwise: Updating guest Cache")
+                    self.central.request(self.refresh_guest_db, portal_id=portal_id)
+            if match:
+                match = [CacheGuest(g) for g in match]
+                break
+
+        if match:
+            if completion:
+                return match
+
+            if len(match) > 1:
+                match = self.handle_multi_match(
+                    match,
+                    query_str=query_str,
+                    query_type="guest",
+                )
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Unable to gather guest from provided identifier {query_str}", show=not silent, log=silent)
+            if all_match:
+                first_five = [f"[bright_green]{m['name']}[/]" for m in all_match[0:5]]
+                all_match_msg = f"{', '.join(first_five)}{', ...' if len(all_match) > 5 else ''}"
+                log.error(
+                    f"The Following guests matched: {all_match_msg} [red]Excluded[/] as they are not associated with portal id [cyan]{portal_id}[/] group ",
+                    show=True,
+                )
+            raise typer.Exit(1)
+        else:
+            if not completion and not silent:
+                log.warning(f"Unable to gather guest from provided identifier {query_str}", show=False)
+
+    def guest_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str = "",
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            econsole.print(":warning:  Invalid config")
+            return
+
+        match = self.get_guest_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
+
+        if match:
+            # remove items that are already on the command line
+            # match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete) and m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+                elif m.email.startswith(incomplete) and m.email not in args:
+                    out += [tuple([m.email, m.help_text])]
+                elif m.phone.startswith(incomplete) and m.phone not in args:
+                    out += [tuple([m.phone, m.help_text])]
+                elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
@@ -2581,7 +2784,7 @@ class Cache:
             if not remove:
                 data = models.Sites(data).by_id
                 combined_data = {**self.sites_by_id, **data}
-                return await self.update_db(self.SiteDB, data=combined_data.values(), truncate=True)
+                return await self.update_db(self.SiteDB, data=list(combined_data.values()), truncate=True)
             else:
                 doc_ids = []
                 if all([isinstance(s, int) for s in data]):
@@ -2807,7 +3010,7 @@ class Cache:
                     if "wireless" in [new_clients[0].type, new_clients[-1].type]:
                         self.responses.client = resp
                     data = {**self.cache_clients_by_mac, **new_clients.by_mac}
-                _ = await self.update_db(self.ClientDB, data=data.values(), truncate=True)
+                _ = await self.update_db(self.ClientDB, data=list(data.values()), truncate=True)
         return resp
 
 
@@ -2872,7 +3075,6 @@ class Cache:
 
         return resp
 
-    # Not used or tested... would only need if delete portal or add portal is added
     async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = True) -> bool:
         if remove:
             return await self.update_db(self.PortalDB, doc_ids=data)
@@ -2893,6 +3095,31 @@ class Cache:
             portal_model = models.Portals(deepcopy(resp.output))
             update_data = portal_model.model_dump()
             _ = await self.update_db(self.PortalDB, data=update_data, truncate=True)
+
+            return resp
+
+    async def update_guest_db(self, data: List[Dict[str, Any]] | List[int], portal_id: str = None, remove: bool = True) -> bool:
+        if remove:
+            return await self.update_db(self.GuestDB, doc_ids=data)
+
+        # TODO there is no simple add unless update_db is called directly
+        guest_models = models.Guests(portal_id, data)
+        data_by_id = {p.id: p.model_dump() for p in guest_models}
+        update_data = {**self.guests_by_id, **data_by_id}
+        return await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
+
+    async def refresh_guest_db(self, portal_id: str) -> Response:
+            resp: Response = await self.central.get_visitors(portal_id)
+            if not resp.ok:
+                return resp
+
+            self.responses.guest = resp
+
+            guest_models = models.Guests(portal_id, deepcopy(resp.output))
+            data_by_id = {p.id: p.model_dump() for p in guest_models}
+            update_data = {**{k: v for k, v in self.guests_by_id.items() if v["portal_id"] != portal_id}, **data_by_id}
+            # update_data = guest_models.model_dump()
+            _ = await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
 
             return resp
 
@@ -3600,7 +3827,7 @@ class Cache:
         if not query_str and completion:
             return [CentralObject("template", data=t) for t in self.templates]
 
-        match = None
+        match, all_match = None, None
         for _ in range(0, 2 if retry else 1):
             # exact
             match = self.TemplateDB.search(

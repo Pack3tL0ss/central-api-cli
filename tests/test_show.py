@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 import traceback
 
 
-from cli import app
+from centralcli.cli import app
 from . import test_data, common
 cache = common.cache
 
@@ -448,3 +448,23 @@ def test_show_config_ap_dev():
     )
     assert result.exit_code == 0
     assert "per-ap-settings" in result.stdout
+
+
+def test_show_portals():
+    result = runner.invoke(app, [
+            "show",
+            "portals"
+        ]
+    )
+    assert result.exit_code == 0 and ("name" in result.stdout or "Empty Response" in result.stdout)
+
+
+def test_show_guests():
+    result = runner.invoke(app, [
+            "show",
+            "guests",
+            test_data["portal"]["name"]
+        ]
+    )
+    assert result.exit_code == 0 and ("auto_created" in result.stdout or "Empty Response" in result.stdout)
+

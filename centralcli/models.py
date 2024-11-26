@@ -579,7 +579,6 @@ class WIDS_LIST(BaseModel):
     neighbor: Optional[List[WidsItem]] = Field(default_factory=list)
     suspectrogue: Optional[List[WidsItem]] = Field(default_factory=list)
 
-
 # SNOW Response
 class SysTargetSysId(BaseModel):
     display_value: Optional[str] = None
@@ -1055,3 +1054,53 @@ class Portals(RootModel):
 
     def __len__(self) -> int:
         return len(self.root)
+
+class Guest(BaseModel):
+    portal_id: str
+    name: str
+    id: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = Field(None, alias=AliasChoices("company", "company_name"))
+    enabled: bool = Field(None, alias=AliasChoices("is_enabled", "enabled"))
+    status:  Optional[str] = None
+    created: int = Field(alias=AliasChoices("created", "created_at"))
+    expires: Optional[int] = Field(None, alias=AliasChoices("expires", "expire_at"))
+
+class Guests(RootModel):
+    root: List[Guest]
+
+    def __init__(self, portal_id: str, data: List[dict]) -> None:
+        data = self._flatten_guest_data(data)
+        super().__init__([Guest(**{"portal_id": portal_id, **p}) for p in data])
+
+    @staticmethod
+    def _flatten_guest_data(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
+        return [
+            {**{k: v for k, v in inner.items() if k != ["user"]}, **inner.get("user", {})}
+            for inner in data
+        ]
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+# class Guests(RootModel):
+#     root: Dict[str, GuestItems]
+
+#     def __init__(self, portal_id: str, data: List[dict]) -> None:
+#         super().__init__({portal_id: GuestItems(data)})
+
+#     def __iter__(self):
+#         return iter(self.root)
+
+#     def __getitem__(self, item):
+#         return self.root[item]
+
+#     def __len__(self) -> int:
+#         return len(self.root)

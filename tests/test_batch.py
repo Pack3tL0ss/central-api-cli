@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from cli import app  # type: ignore # NoQA
+from centralcli.cli import app  # type: ignore # NoQA
 from . import test_site_file, test_group_file, test_data, test_batch_device_file
 import traceback
 from rich.traceback import Traceback

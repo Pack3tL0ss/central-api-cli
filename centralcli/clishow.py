@@ -14,6 +14,7 @@ import getpass
 from jinja2 import Template
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
 
 
@@ -53,7 +54,7 @@ from centralcli.objects import DateTime
 from .strings import cron_weekly
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice
+    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice, CachePortal
     from tinydb.table import Document
 
 
@@ -2909,7 +2910,8 @@ def portals(
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(..., help="portal name", autocompletion=cli.cache.portal_completion, show_default=False,),
+    portal: str = typer.Argument(None, help=f"portal name [grey42]{escape('[default: Guests for all defined User/Pass portals]')}[/]", autocompletion=cli.cache.portal_completion, show_default=False,),
+    refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -2924,10 +2926,42 @@ def guests(
     account: str = cli.options.account,
 ) -> None:
     """Show Guests configured for a Portal"""
-    portal = cli.cache.get_name_id_identifier("portal", portal)
-    resp = cli.central.request(cli.central.get_visitors, portal.id, )
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
+    caption = None
+    title="Guest Users"
+    if portal:
+        portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+        resp = cli.central.request(cli.cache.refresh_guest_db, portal.id, )
+        title = f"{title} for {portal.name} portal"
+
+    else:
+        if refresh:
+            _ = cli.central.request(cli.cache.refresh_portal_db)
+        portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
+        for idx in range(0, 2):
+            portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
+            if not portals:
+                if idx == 0 and not refresh:
+                    _ = cli.central.request(cli.cache.refresh_portal_db)
+                else:
+                    cli.exit(":information:  No portals configured with Username/Password auth type", code=0)
+
+        batch_resp = cli.central.batch_request([BatchRequest(cli.cache.refresh_guest_db, portal["id"]) for portal in portals])
+        resp_by_name = {resp: portal for portal, resp in zip(portals, batch_resp)}
+        passed = [r for r in batch_resp if r.ok]
+        failed = [] if len(passed) == len(batch_resp) else [r for r in batch_resp if not r.ok]
+        if passed:
+            passed = sorted(passed, key=lambda r: r.rl)
+            resp = passed[-1]
+            resp.output = [{"portal": resp_by_name[r]["name"], **item} for r in passed for item in r.output]
+            portal_ids = [f"[cyan]{p['name']}[/]: {p['id']}" for p in portals]
+            caption = f"[italic cornflower_blue]Portal IDs[/]: {', '.join(portal_ids)}"
+            if failed:
+                log.error(f"Partial call failure.  {len(failed)} API requests failed.  Refer to logs [cyan]cencli show logs cencli[/].", caption=True)
+        else:
+            resp = failed
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_guests, output_format=tablefmt)
 
 def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
     try:

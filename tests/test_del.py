@@ -1,5 +1,6 @@
 from typer.testing import CliRunner
-from cli import app  # type: ignore # NoQA
+from centralcli.cli import app
+from . import test_data
 
 runner = CliRunner()
 
@@ -27,3 +28,12 @@ def test_del_group_multiple():
     assert result.exit_code == 0
     assert "Success" in result.stdout
     assert result.stdout.count("Success") == 2
+
+def test_del_guest():
+    result = runner.invoke(app, ["-d", "delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
+    assert True in [
+        result.exit_code == 0 and "200" in result.stdout,
+        result.exit_code != 0 and "Unable to gather" in result.stdout
+    ]
+    assert "cache update ERROR" not in result.stdout
+    assert "xception" not in result.stdout

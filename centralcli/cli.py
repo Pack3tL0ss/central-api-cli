@@ -183,7 +183,7 @@ def bounce(
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     ports = utils.get_interfaces_from_range(ports)
 
-    print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
+    print(f"Bounce [cyan]{what.value}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
     if len(ports) > 1:
         print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if cli.confirm(yes):
@@ -319,7 +319,7 @@ def blink(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    command = f'blink_led_{action}'
+    command = f'blink_led_{action.value}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
     cli.display_results(resp, tablefmt="action")

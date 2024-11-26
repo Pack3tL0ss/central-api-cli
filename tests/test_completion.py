@@ -1,4 +1,4 @@
-from cli import app  # type: ignore # NoQA
+from centralcli.cli import app  # type: ignore # NoQA
 from typer.testing import CliRunner
 from centralcli import cache
 from click import Context, Command

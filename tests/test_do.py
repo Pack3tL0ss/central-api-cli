@@ -1,7 +1,7 @@
 from typer.testing import CliRunner
 import pytest
 
-from cli import app  # type: ignore # NoQA
+from centralcli.cli import app  # type: ignore # NoQA
 from centralcli import cache
 from . import test_data
 

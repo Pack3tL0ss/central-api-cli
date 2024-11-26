@@ -20,14 +20,12 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars
+from centralcli.constants import iden_meta
 
 from centralcli.cache import CacheSite, CacheLabel, CacheDevice
 
 if TYPE_CHECKING:
-    from .cache import CachePortal, CacheGroup, CacheTemplate
-
-iden = IdenMetaVars()
+    from .cache import CachePortal, CacheGroup, CacheTemplate, CacheGuest
 
 app = typer.Typer()
 app.add_typer(clidelfirmware.app, name="firmware")
@@ -76,7 +74,7 @@ def site(
 
 @app.command(name="label")
 def label_(
-    labels: List[str] = typer.Argument(..., metavar=iden.label_many, autocompletion=cli.cache.label_completion, show_default=False,),
+    labels: List[str] = typer.Argument(..., metavar=iden_meta.label_many, autocompletion=cli.cache.label_completion, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -92,7 +90,7 @@ def label_(
 
 @app.command()
 def portal(
-    portals: List[str] = typer.Argument(..., metavar=iden.label_many, autocompletion=cli.cache.portal_completion, show_default=False,),
+    portals: List[str] = typer.Argument(..., metavar=iden_meta.label_many, autocompletion=cli.cache.portal_completion, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -190,9 +188,9 @@ def webhook(
 
 @app.command(help="Delete a Template", no_args_is_help=True)
 def template(
-    template: str = typer.Argument(..., metavar=iden.template, help="The name of the template", autocompletion=cli.cache.template_completion, show_default=False,),
-    group: List[str] = typer.Argument(None, metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
-    _group: str = typer.Option(None, "--group", metavar=iden.group, autocompletion=cli.cache.group_completion, show_default=False),
+    template: str = typer.Argument(..., metavar=iden_meta.template, help="The name of the template", autocompletion=cli.cache.template_completion, show_default=False,),
+    group: List[str] = typer.Argument(None, metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
+    _group: str = typer.Option(None, "--group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -292,6 +290,28 @@ def device(
     # up.  It just validates the import has the `serial` field.
     data = [{"serial": d} for d in devices]
     cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+
+
+@app.command()
+def guest(
+    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
+    guest: str = typer.Argument(..., metavar=iden_meta.guest, autocompletion=cli.cache.guest_completion, show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Add a guest user to a configured portal"""
+    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+    guest: CacheGuest = cli.cache.get_guest_identifier(guest, portal_id=portal.id)
+
+    _msg = f"[red]:warning:  Delet{'e' if not yes else 'ing'}[/] Guest: [cyan]{guest.name}[/] from portal: [cyan]{portal.name}[/]"
+    print(_msg)
+    if cli.confirm(yes):
+        resp = cli.central.request(cli.central.delete_guest, portal_id=portal.id, guest_id=guest.id)
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
+        _ = cli.central.request(cli.cache.update_guest_db, guest.doc_id, remove=True)
+
 
 
 @app.callback()
