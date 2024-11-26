@@ -319,7 +319,7 @@ def blink(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    command = f'blink_led_{action}'
+    command = f'blink_led_{action.value}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
     cli.display_results(resp, tablefmt="action")
