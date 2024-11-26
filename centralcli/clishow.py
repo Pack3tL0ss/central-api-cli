@@ -2953,6 +2953,7 @@ def guests(
             passed = sorted(passed, key=lambda r: r.rl)
             resp = passed[-1]
             resp.output = [{"portal": resp_by_name[r]["name"], **item} for r in passed for item in r.output]
+            resp.raw = {r.url.path: r.raw for r in batch_resp}
             portal_ids = [f"[cyan]{p['name']}[/]: {p['id']}" for p in portals]
             caption = f"[italic cornflower_blue]Portal IDs[/]: {', '.join(portal_ids)}"
             if failed:
