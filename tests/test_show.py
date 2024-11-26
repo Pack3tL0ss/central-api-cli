@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 import traceback
 
 
-from cli import app
+from centralcli.cli import app
 from . import test_data, common
 cache = common.cache
 

@@ -1,5 +1,5 @@
 from typer.testing import CliRunner
-from cli import app  # type: ignore # NoQA
+from centralcli.cli import app  # type: ignore # NoQA
 
 runner = CliRunner()
 

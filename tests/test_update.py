@@ -1,5 +1,5 @@
 from typer.testing import CliRunner
-from cli import app
+from centralcli.cli import app
 from . import test_data, gw_group_config_file, ConfigNotFoundError
 import pytest
 
