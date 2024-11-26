@@ -357,6 +357,7 @@ class CacheArgs(str, Enum):
     mpsk = "mpsk"
     portals = "portals"
     tables = "tables"
+    guests = "guests"
 
 
 class KickArgs(str, Enum):
@@ -548,6 +549,7 @@ class ArgToWhat:
         self.device = self.devices = self.dev = "device"
         self.label = self.labels = "label"
         self.portal = self.portals = "portal"
+        self.guest = self.guests = "guest"
 
     def _init_upgrade(self):
         self.device = self.devices = self.dev = "device"
@@ -1087,6 +1089,7 @@ class IdenMetaVars:
         self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
+        self.guest = "[name|email|phone|id]"
 
 iden_meta = IdenMetaVars()
 

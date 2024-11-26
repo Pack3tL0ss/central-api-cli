@@ -5773,6 +5773,24 @@ class CentralApi(Session):
 
         return await self.put(url, json_data=json_data)
 
+    async def delete_guest(
+        self,
+        portal_id: str,
+        guest_id: str,
+    ) -> Response:
+        """Delete guest visitor account.
+
+        Args:
+            portal_id (str): Portal ID of the splash page
+            guest_id (str): ID of Guest associated with the portal
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/guest/v1/portals/{portal_id}/visitors/{guest_id}"
+
+        return await self.delete(url)
+
     # TODO build command
     async def get_guest_summary(
         self,

@@ -2925,7 +2925,8 @@ def guests(
 ) -> None:
     """Show Guests configured for a Portal"""
     portal = cli.cache.get_name_id_identifier("portal", portal)
-    resp = cli.central.request(cli.central.get_visitors, portal.id, )
+    # resp = cli.central.request(cli.central.get_visitors, portal.id, )
+    resp = cli.central.request(cli.cache.refresh_guest_db, portal.id, )
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
