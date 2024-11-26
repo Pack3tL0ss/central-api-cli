@@ -183,7 +183,7 @@ def bounce(
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     ports = utils.get_interfaces_from_range(ports)
 
-    print(f"Bounce [cyan]{what}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
+    print(f"Bounce [cyan]{what.value}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
     if len(ports) > 1:
         print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if cli.confirm(yes):
