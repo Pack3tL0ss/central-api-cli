@@ -199,8 +199,8 @@ _short_value = {
     "lease_start_ts": lambda x: DateTime(x, "log"),
     "lease_end_ts": lambda x: DateTime(x, "log"),
     "create_date": lambda x: DateTime(x, "date-string"),
-    "created_at": lambda x: DateTime(x, "day-datetime"),  # show portals
-    "expire_at": lambda x: DateTime(x, "day-datetime"),  # show portals
+    "created_at": lambda x: DateTime(x, "mdyt"),  # show portals
+    "expire_at": lambda x: DateTime(x, "mdyt"),  # show portals
     "acknowledged_timestamp": lambda x: DateTime(x, "log"),
     "lease_time": lambda x: DateTime(x, "durwords"),
     "lease_time_left": lambda x: DateTime(x, "durwords-short"),
@@ -2036,3 +2036,54 @@ def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
     data = simple_kv_formatter(data, key_order=key_order)
 
     return data
+
+def get_guests(data: List[Dict[str, Any]], output_format: TableFormat = "yaml") -> List[Dict[str, Any]]:
+    def calc_remaining_expiration(expire_ts: int) -> DateTime:
+        if expire_ts is None:
+            return "[bright_green]Will Not Expire[/]"
+        now = pendulum.now(tz="UTC")
+        if now.int_timestamp > expire_ts:
+            return "[red]Expired[/]"
+
+        expire = pendulum.from_timestamp(expire_ts)
+        remaining = expire.int_timestamp - now.int_timestamp
+        return DateTime(remaining, "durwords-short")
+
+    # flatten user key which is a dict with email in phone
+    data = [
+            {
+                **{k: v for k, v in inner.items() if k != "user" and not k.startswith("valid_till") and not k.startswith("notify")},
+                **inner.get("user", {}),
+                "remaining": calc_remaining_expiration(inner.get("expire_at", None)),
+                "notify_to": None if not inner.get("notify") else inner.get("notify_to")
+            }
+            for inner in data
+    ]
+    all_keys = list(set([key for d in data for key in d.keys()]))
+    key_order = [
+        "portal",
+        "name",
+        "display_name",
+        "email",
+        "phone",
+        "company_name",
+        "created_at",
+        "expire_at",
+        "remaining",
+        "is_enabled",
+        "status",
+        "notify_to",
+        "auto_created",
+        *all_keys
+    ]
+
+    global _short_key
+    _short_key = {
+        **_short_key,
+        "created_at": "created",
+        "expire_at": "expires",
+        "is_enabled": "enabled"
+    }
+    strip_keys = ["auto_created"] if all([item.get("auto_created") is False for item in data]) else None
+
+    return simple_kv_formatter(data, key_order=key_order, strip_keys=strip_keys, strip_null=output_format == "rich", emoji_bools=output_format == "rich")
