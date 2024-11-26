@@ -3102,11 +3102,11 @@ class Cache:
         if remove:
             return await self.update_db(self.GuestDB, doc_ids=data)
 
-        # Not Used yet... need to verify portal_id provided if update is used
+        # TODO there is no simple add unless update_db is called directly
         guest_models = models.Guests(portal_id, data)
         data_by_id = {p.id: p.model_dump() for p in guest_models}
         update_data = {**self.guests_by_id, **data_by_id}
-        return await self.update_db(self.GuestDB, data=update_data, truncate=True)
+        return await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_guest_db(self, portal_id: str) -> Response:
             resp: Response = await self.central.get_visitors(portal_id)

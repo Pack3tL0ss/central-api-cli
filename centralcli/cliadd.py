@@ -11,6 +11,7 @@ import typer
 import yaml
 from rich import print
 from rich.console import Console
+import pendulum
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -600,6 +601,7 @@ def variables(
 
 
 # TODO config option for different random pass formats
+# TODO options for valid_till and valid_till_no_limit
 @app.command()
 def guest(
     portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
@@ -616,7 +618,7 @@ def guest(
     account: str = cli.options.account,
 ) -> None:
     """Add a guest user to a configured portal"""
-    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal).id
+    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
@@ -636,7 +638,7 @@ def guest(
 
     # TODO Add options for expire after / valid forever
     kwargs = {
-        "portal_id": portal,
+        "portal_id": portal.id,
         "name": name,
         "company_name": company,
         "phone": phone,
@@ -658,7 +660,17 @@ def guest(
     if cli.confirm(yes):
         resp = cli.central.request(cli.central.add_visitor, **kwargs)
         password = kwargs = None
-        cli.display_results(resp, tablefmt="action")
+        cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
+        # TODO calc expiration based on portal config Kabrew portal appears to be 3 days
+        try:
+            created = pendulum.now(tz="UTC")
+            expires = created.add(days=3)
+            cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
+            _ = cli.central.request(cli.cache.update_db, cli.cache.GuestDB, cache_data, truncate=False)
+        except Exception as e:
+            log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
+            cli.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
+
 
 
 @app.callback()
