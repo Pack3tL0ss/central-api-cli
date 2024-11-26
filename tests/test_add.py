@@ -46,3 +46,5 @@ def test_add_guest():
     assert True in [
         result.exit_code == 0 and "200" in result.stdout,
     ]
+    assert "cache update ERROR" not in result.stdout
+    assert "xception" not in result.stdout
