@@ -2784,7 +2784,7 @@ class Cache:
             if not remove:
                 data = models.Sites(data).by_id
                 combined_data = {**self.sites_by_id, **data}
-                return await self.update_db(self.SiteDB, data=combined_data.values(), truncate=True)
+                return await self.update_db(self.SiteDB, data=list(combined_data.values()), truncate=True)
             else:
                 doc_ids = []
                 if all([isinstance(s, int) for s in data]):
