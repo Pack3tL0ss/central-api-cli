@@ -288,7 +288,7 @@ def reboot(
 
 @app.command()
 def reset(
-    what: ResetArgs = typer.Argument("overlay"),
+    what: ResetArgs = typer.Argument("overlay", help="overlay is the only option currently"),
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
