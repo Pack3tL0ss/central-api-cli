@@ -5425,7 +5425,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    async def get_brach_health(
+    async def get_branch_health(
         self,
         name: str = None,
         column: int = None,  # NEXT-MAJOR remove or make consistent with other parameters (sort)
@@ -5434,7 +5434,7 @@ class CentralApi(Session):
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
-        """Get data for all sites.
+        r"""Get data for all sites.
 
         Args:
             name (str, optional): site / label name or part of its name
@@ -5449,10 +5449,10 @@ class CentralApi(Session):
                 Valid Values: gt  (Greater than), lt  (Less than), gte (Greater than or equal to),
                 lte (Less than or equal to)
                 * All properties of a site can be used as filter parameters with a threshold
-                * The range filters can be combined with the column names with "\__"  # noqa
-                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in down state # noqa
-                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan in down state # noqa
-                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10 devices up # noqa
+                * The range filters can be combined with the column names with "\__"
+                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in down state
+                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan in down state
+                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10 devices up
 
 
             offset (int, optional): pagination start index Defaults to 0.
