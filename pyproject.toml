@@ -64,11 +64,8 @@ Brotli = {version = "*", markers = "platform_python_implementation == 'CPython'"
 brotlicffi = {version = "*", markers = "platform_python_implementation != 'CPython'", optional = true}
 
 [tool.poetry.dev-dependencies]
-pyflakes = ">=2"
-pycodestyle = ">=2"
-flake8 = ">=4"
+ruff = ">=0.8.0"
 pytest = ">=6"
-black = ">=21.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -82,6 +79,15 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 181
+# Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["E", "F", "W605"]
+ignore = ["E501"]  # ignore line too long
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+# fixable = ["ALL"]
+# unfixable = []
 
 [tool.poetry.extras]
 hook-proxy = [
