@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError, ConfigDict
 from rich import print
 from rich.console import Console
 from rich.progress import track
+from rich.markup import escape
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -328,24 +329,17 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
     return data
 
 
-def _convert_site_key(_data: dict) -> dict:
-    _site_aliases = {
-        "site-name": "site_name",
-        "site": "site_name",
-        "name": "site_name",
-        "latitude": "lat",
-        "longitude": "lon",
-        "zipcode": "zip",
-    }
-
-    _data = {
-        **_data.get("site_address", {}),
-        **_data.get("geolocation", {}),
-        **{k: v for k, v in _data.items() if k not in ["site_address", "geolocation"]}
-    }
-    _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
-
-    return _data
+def _invalid_msg(usage: str, provide: str = None) -> str:
+        usage = escape(usage)
+        provide = provide or "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]"
+        _msg = [
+            "Invalid combination of arguments / options.",
+            provide,
+            "",
+            f"[yellow]Usage[/]: {usage}",
+            f"Use [cyan]{usage.split(' [')[0]} --help[/] for help.",
+        ]
+        return "\n".join(_msg)
 
 def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
     if all([d is None for d in [import_file, data]]):
@@ -939,22 +933,15 @@ def deploy(
 
     Use --example to see example import file format.
     """
-    # TODO allow optional argument for --example to show example in various formats.
+    # TODO deploy example not  # FIXME
     if show_example:
         print(examples.deploy)
         return
 
     if not import_file:
-        _msg = [
-            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices] IMPORT_FILE",
-            "Try 'cencli batch add ?' for help.",
-            "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch deploy [OPTIONS] [IMPORT_FILE]"))
 
     batch_deploy(import_file, yes)
-    # cli.display_results(resp, tablefmt="action")
 
 
 # FIXME appears this is not current state aware, have it only do the API calls not reflected in current state
@@ -972,17 +959,11 @@ def add(
     """Perform batch Add operations using import data from file
     """
     if show_example:
-        print(getattr(examples, f"add_{what}"))
+        print(getattr(examples, f"add_{what.value}"))
         return
 
     if not import_file:
-        _msg = [
-            "Usage: cencli batch add [OPTIONS] WHAT:[sites|groups|devices|macs|mpsk] IMPORT_FILE",
-            "Try 'cencli batch add ?' for help.",
-            "",
-            "Error: One of 'IMPORT_FILE' or --example should be provided.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch add [OPTIONS] WHAT:[sites|groups|devices|macs|mpsk] [IMPORT_FILE]"))
 
     caption, tablefmt = None, "action"
     if what == "sites":
@@ -1097,14 +1078,7 @@ def delete(
         return
 
     if not import_file:
-        _msg = [
-            "Invalid combination of arguments / options.",
-            "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]",
-            "",
-            "Usage: cencli batch delete \[OPTIONS] \[devices|sites|groups|labels] \[IMPORT_FILE]",
-            "Use [cyan]cencli batch delete --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch delete [OPTIONS] [devices|sites|groups|labels] [IMPORT_FILE]"))
 
     data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
 
@@ -1162,17 +1136,10 @@ def subscribe(
     to add devices and assign subscription use [cyan]cencli batch add devices <IMPORT_FILE>[/][/]
     """
     if show_example:
-        print(getattr(examples, "subscribe"))  # TODO need example should be same as add devices
+        print(getattr(examples, "subscribe"))
         return
     elif not import_file:
-        _msg = [
-            "Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or [cyan]--example[/] flag.",
-            "",
-            "[yellow]Usage[/]: cencli batch subscribe \[OPTIONS] \[IMPORT_FILE]",
-            "Use [cyan]cencli batch subscribe --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch subscribe [OPTIONS] [IMPORT_FILE]"))
 
     devices = cli._get_import_file(import_file, "devices")
     sub_reqs = _build_sub_requests(devices)
@@ -1221,14 +1188,7 @@ def unsubscribe(
                 if cli.confirm(yes):
                     resp = cli.central.batch_request(unsub_reqs)
     elif not import_file:
-        _msg = [
-            "Invalid combination of arguments / options.",
-            "Provide IMPORT_FILE argument or at least one of: [cyan]-N[/], [cyan]--never-connected[/], [cyan]--example[/] flags.",
-            "",
-            "Usage: cencli batch unsubscribe \[OPTIONS] [IMPORT_FILE]",
-            "Use [cyan]cencli batch unsubscribe --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch unsubscribe [OPTIONS] [IMPORT_FILE]"))
     elif import_file:
         devices = cli._get_import_file(import_file, "devices")
         unsub_reqs = _build_sub_requests(devices, unsub=True)
@@ -1260,7 +1220,7 @@ def rename(
         None,
         "-S",
         "--space",
-        help="[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]\[default: '_'][/]",
+        help=f"[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]{escape('[default: \'_\']')}[/]",
         show_default=False,
     ),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
@@ -1285,7 +1245,12 @@ def rename(
         import_file = None
 
     if not import_file and not lldp:
-        cli.exit("Missing required parameter \[IMPORT_FILE|'lldp']")
+        cli.exit(
+            _invalid_msg(
+                "cencli batch rename [OPTIONS] aps [IMPORT_FILE]",
+                provide="Provide [bright_green]IMPORT_FILE[/] argument, or one of [cyan]--lldp[/] or [cyan]--example[/]"
+            )
+        )
 
     if import_file:
         data = cli._get_import_file(import_file)
@@ -1381,13 +1346,7 @@ def move(
         return
 
     if not import_file:
-        _msg = [
-            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
-            "",
-            "[yellow]Usage[/]: cencli batch move \[OPTIONS] \[IMPORT_FILE]",
-            "Use [cyan]cencli batch move --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch move [OPTIONS] [IMPORT_FILE]"))
     elif len(import_file) > 2:
         cli.exit("Too many arguments.  Use [cyan]cencli batch move --help[/] for help.")
     else:
@@ -1417,13 +1376,7 @@ def archive(
         return
 
     elif not import_file:
-        _msg = [
-            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
-            "",
-            "[yellow]Usage[/]: cencli batch archive \[OPTIONS] WHAT:[devices] \[IMPORT_FILE]",
-            "Use [cyan]cencli batch archive --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch archive [OPTIONS] [IMPORT_FILE]"))
     else:
         data = cli._get_import_file(import_file, "devices", text_ok=True)
         if data and isinstance(data, list):
@@ -1470,13 +1423,7 @@ def unarchive(
         return
 
     elif not import_file:
-        _msg = [
-            "One of [bright_green]IMPORT_FILE[/] or [cyan]--example[/] should be provided.",
-            "",
-            "Usage: cencli batch unarchive \[OPTIONS] \[IMPORT_FILE]",
-            "Use [cyan]cencli batch unarchive --help[/] for help.",
-        ]
-        cli.exit("\n".join(_msg))
+        cli.exit(_invalid_msg("cencli batch unarchive [OPTIONS] [IMPORT_FILE]"))
     else:
         data = cli._get_import_file(import_file, import_type="devices", text_ok=True)
 

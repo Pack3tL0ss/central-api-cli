@@ -9,6 +9,7 @@ import typer
 from rich import print
 from rich.console import Console
 from rich.text import Text
+from rich.markup import escape
 from jinja2 import FileSystemLoader, Environment
 import yaml
 
@@ -48,7 +49,7 @@ def template(
     name: str = typer.Argument(
         ...,
         metavar="IDENTIFIER",
-        help=f"Template: \[name] or Device: \{iden_meta.dev}",
+        help=f"Template: {escape(f'[name] or Device: {iden_meta.dev}')}",
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
@@ -448,7 +449,7 @@ def wlan(
     wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
     groups: List[str] = typer.Argument(
         None,
-        help="Group(s) to update (SSID must be defined in each group) [grey42]\[default: All Groups that contain specified SSIDs will be updated][/]",
+        help=f"Group(s) to update (SSID must be defined in each group) [grey42]{escape('[default: All Groups that contain specified SSIDs will be updated]')}[/]",
         autocompletion=cli.cache.group_completion,
         show_default=False,
     ),

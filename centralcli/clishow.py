@@ -452,12 +452,11 @@ def devices(
         None,
         metavar=iden_meta.dev_many.replace("]", "|'all']"),
         hidden=False,
-        # HACK added ctx param to dev_completion
         autocompletion=lambda incomplete: [
             m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ],
-        help="Show details for a specific device [grey42]\[default: show details for all devices][/]",
+        help=f"Show details for a specific device [grey42]{escape('[default: show details for all devices]')}[/]",
         show_default=False,
     ),
     group: str = cli.options.group,
@@ -509,7 +508,7 @@ def devices(
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    dirty: bool = typer.Option(False, "--dirty", "-D", help="Get Dirty diff [grey42 italic](config items not pushed) \[requires [cyan]--group[/]]"),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [grey42 italic](config items not pushed) {escape('[requires --group]')}[/]"),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
@@ -517,7 +516,7 @@ def aps(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help="Show all AP LLDP neighbors for a site \[requires --site]", show_default=False,),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [grey42 italic]{escape('[requires --site]')}[/]", show_default=False,),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortDevOptions = cli.options.sort_by,
@@ -759,7 +758,7 @@ def inventory(
     dev_type: ShowInventoryArgs = typer.Argument("all",),
     sub: bool = typer.Option(
         None,
-        help="Show devices with applied subscription/license, or devices with no subscription/license applied. [grey42]\[default: show all][/]",
+        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. [grey42]{escape('[default: show all]')}[/]",
         show_default=False,
     ),
     verbose: int = cli.options.verbose,
@@ -1518,10 +1517,10 @@ def templates(
 
 @app.command(short_help="Show Variables for all or specific device")
 def variables(
-    args: str = typer.Argument(
+    device: str = typer.Argument(
         None,
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
-        help="[grey42]\[default: 'all'][/]",
+        help=f"[grey42]{escape('[default: all]')}[/]",
         autocompletion=lambda incomplete: [
             m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
@@ -1542,16 +1541,16 @@ def variables(
 ):
     central = cli.central
 
-    if args and args != "all":
-        args = cli.cache.get_dev_identifier(args)
+    if device and device != "all":
+        device = cli.cache.get_dev_identifier(device, conductor_only=True)
     else:
-        args = ""
+        device = ""
 
-    resp = central.request(central.get_variables, () if not args else args.serial)
-    if args:
+    resp = central.request(central.get_variables, () if not device else device.serial)
+    if device:
         resp.output = resp.output.get("variables", resp.output)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    if not args and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
+    if not device and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
         all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
         if not all([all_keys[0] == key_list for key_list in all_keys[1:]]):
             tablefmt = "json"
@@ -1560,7 +1559,7 @@ def variables(
     cli.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Variables" if not args else f"{args.name} Variables",
+        title="Variables" if not device else f"{device.name} Variables",
         pager=pager,
         outfile=outfile,
     )
@@ -1767,6 +1766,8 @@ def config_(
     group_dev: CacheGroup | CacheDevice = cli.cache.get_identifier(group_dev, ["group", "dev"],)
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
         _group: CacheGroup = cli.cache.get_group_identifier(group_dev.group)
+        if device:
+            log.warning(f"ignoring extra argument {device}.  As {group_dev.name} is a device.", caption=True)
         if _group.wired_tg:
             return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
         else:
@@ -1817,7 +1818,7 @@ def config_(
                     outfile = outdir / f"{d.name}_ap_dev.cfg"
                     cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
 
-            raise typer.Exit(0)
+            cli.exit(code=0)
 
     if group_dev.is_group:
         group = group_dev
@@ -1828,7 +1829,8 @@ def config_(
     else:  # group_dev is a device iden
         group = cli.cache.get_group_identifier(group_dev.group)
         if device is not None:
-            cli.exit("Invalid input enter \[[cyan]Group[/]] \[[cyan]device iden[/]] or \[[cyan]device iden[/]]")
+            lbrkt, rbrkt = escape("["), escape("]")
+            cli.exit(f"Invalid input provide {lbrkt}[cyan]GROUP NAME[/]{rbrkt} {lbrkt}[cyan]device iden[/]{rbrkt} or {lbrkt}[cyan]device iden[/]{rbrkt} [red]NOT[/] 2 devices.")
         else:
             device = group_dev
 
@@ -1968,7 +1970,7 @@ def wlans(
     label: str = cli.options.label,
     swarm: str = cli.options.swarm_device,
     verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
-    sort_by: SortWlanOptions = typer.Option(None, "--sort", help="Field to sort by [grey42]\[default: SSID][/]", show_default=False),
+    sort_by: SortWlanOptions = typer.Option(None, "--sort", help=f"Field to sort by [grey42]{escape('[default: SSID]')}[/]", show_default=False),
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2856,14 +2858,14 @@ def portals(
     portal: List[str] = typer.Argument(
         None,
         metavar="[name|id]",
-        help="show details for a specific portal profile [grey42]\[default: show summary for all portals][/]",
+        help=f"show details for a specific portal profile [grey42]{escape('[default: show summary for all portals]')}[/]",
         autocompletion=cli.cache.portal_completion,
         show_default=False,),
     logo: bool = typer.Option(
         False,
         "-L", "--logo",
         metavar="PATH",
-        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]\[default: {Path.cwd()}/<original_logo_filename>[/]]",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]{escape(f'[default: {Path.cwd()}/<original_logo_filename>]')}[/]",
         show_default = False,
         writable=True,
     ),

@@ -7,6 +7,7 @@ import sys
 from typing import List
 from pathlib import Path
 from rich import print
+from rich.markup import escape
 
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -35,8 +36,18 @@ class ShowFirmwareKwags(str, Enum):
     group = "group"
     type = "type"
 
+# TODO add support for APs use batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, dev.swack_id) for dev in devs]
+# has to be done this way as typer does not show help if docstr is an f-string
+device_help = f"""Show firmware details for device(s)
 
-@app.command()
+    Either provide one or more devices as arguments or [cyan]--dev-type[/]
+    [cyan]--dev-type[/] can be one of cx, sw, gw (not supported on APs)
+    [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
+
+    [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
+    API endpoint treats them all the same and returns all switches.
+    """
+@app.command(help=device_help)
 def device(
     device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_gw_switch_completion, show_default=False,),
     dev_type: FirmwareDeviceType = typer.Option(None, help="Show firmware by device type", show_default=False,),
@@ -51,15 +62,6 @@ def device(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Show firmware details for device(s)
-
-    Either provide one or more devices as arguments or [cyan]--dev-type[/]
-    [cyan]--dev-type[/] can be one of cx, sw, gw (not supported on APs)
-    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
-
-    [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
-    API endpoint treats them all the same and returns all switches.
-    """
     if device:
         devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch"], conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
@@ -99,7 +101,10 @@ def device(
         cleaner=cleaner.get_device_firmware_details
     )
 
+swarms_help = f"""Show firmware details for swarms
 
+    [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
+    """
 @app.command()
 def swarms(
     device: List[str] = typer.Argument(None, help="Show firmware for the swarm the provided device(s) belongs to", metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
@@ -115,10 +120,6 @@ def swarms(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Show firmware details for swarms
-
-    [italic cyan]cencli show \[all|aps|switches|gateways][/] includes the firmware version as well
-    """
     central = cli.central
 
     if device:

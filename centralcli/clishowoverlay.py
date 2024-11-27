@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 from rich import print
+from rich.markup import escape
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -57,7 +58,7 @@ def _build_caption(resp: Response) -> str | None:
 @app.command()
 def routes(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    advertised: bool = typer.Option(False, "--advertised", "-a", help="Show advertised routes [grey42]\[default: show learned routes][/]"),
+    advertised: bool = typer.Option(False, "--advertised", "-a", help=f"Show advertised routes [grey42]{escape('[default: show learned routes]')}[/]"),
     best: bool = typer.Option(False, "--best", "-b", help="Return only best/preferred route for each destination"),
     sort_by: SortRouteOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,

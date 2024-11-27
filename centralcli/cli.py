@@ -11,6 +11,7 @@ import typer
 
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
 try:
     import psutil
@@ -102,7 +103,7 @@ def move(
         None,
         metavar="[group <GROUP>]",
         show_default=False,
-        help="[cyan]group[/] keyword followed by the group name.  [grey42 italic]\[site and/or group required][/]",
+        help=f"[cyan]group[/] keyword followed by the group name.  [grey42 italic]{escape('[site and/or group required]')}[/]",
         hidden=False,
     ),
     _group: str = typer.Option(
@@ -397,7 +398,24 @@ def sync(
 
 # TODO get the account, port and process details (start_time, pid) cache
 # add cache.RunDB or InfoDB to use to store this kind of stuff
-@app.command(short_help="Start WebHook Proxy", hidden=not hook_enabled)
+start_help = f"""Start WebHook Proxy Service on this system in the background
+
+    Currently 2 webhook automations:
+    For Both automations the URL to configure as the webhook destination is [cyan]http://localhost/api/webhook[/] (currently http)
+
+    [cyan]hook-proxy[/]:
+      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
+      - Presents it's own REST API that can be polled for branch/tunnel status:
+        See [cyan]http://localhost:port/api/docs[/] (after starting proxy) for available endpoints / schema details.
+
+    [cyan]hook2snow[/]:
+      - [bright_red]!!![/] This integration is incomplete, as the customer that requested it ended up going a different route with the webhooks.
+      - Queries alerts API at launch to gather any "Open" items.
+      - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
+
+    [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli{escape("[hook-proxy]")}[reset]'
+    """
+@app.command(help=start_help, short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
         "hook-proxy",
@@ -410,23 +428,6 @@ def start(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Start WebHook Proxy Service on this system in the background
-
-    Currently 2 webhook automations:
-    For Both automations the URL to configure as the webhook destination is [cyan]http://localhost/api/webhook[/] (currently http)
-
-    [cyan]hook-proxy[/]:
-      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
-      - Presents it's own REST API that can be polled for branch/tunnel status:
-        See [cyan]http://localhost:port/api/docs[/] for available endpoints / schema details.
-
-    [cyan]hook2snow[/]:
-      - [bright_red]!!![/]This integration is incomplete, as the customer that requested it ended up going a different route with the webhooks.
-      - Queries alerts API at launch to gather any "Open" items.
-      - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
-
-    [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli\[hook-proxy][reset]'
-    """
     if config.deprecation_warning:  # TODO remove at 2.0.0+
         print(config.deprecation_warning)
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"

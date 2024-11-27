@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import typer
 from rich import print
+from rich.markup import escape
 from typing import TYPE_CHECKING
 
 
@@ -54,7 +55,7 @@ def device(
         ],
     ),
     at: datetime = cli.options.at,
-    in_: str = typer.Option(None, "--in", help="Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
+    in_: str = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]{escape('[default: Now]')}[/]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](APs will reboot regardless)[/]"),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
@@ -127,9 +128,9 @@ def group(
         ],
     ),
     at: datetime = cli.options.at,
-    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
+    in_: str = typer.Option(None, "--in", help=f"Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]{escape('[default: Now]')}[/]", show_default=False,),
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
-    model: str = typer.Option(None, help="Upgrade a specific switch model [grey42]\[applies to AOS-SW switches only]", show_default=False,),
+    model: str = typer.Option(None, help=f"Upgrade a specific switch model [grey42]{escape('[applies to AOS-SW switches only]')}", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download (APs will reboot regardless)"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -198,10 +199,11 @@ def swarm(
         metavar=iden_meta.dev,
         help="Upgrade will be performed on the cluster the AP belongs to.",
         autocompletion=cli.cache.dev_ap_completion,
+        show_default=False,
     ),
     version: str = typer.Argument(None, help="Version to upgrade to",),
     at: datetime = cli.options.at,
-    in_: str = typer.Option(None, "--in", help="Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]\[default: Now][/]", show_default=False,),
+    in_: str = typer.Option(None, "--in", help=f"Upgrade devices in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]{escape('[default: Now]')}[/]", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,

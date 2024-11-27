@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
+from rich.markup import escape
 
 import typer
 
@@ -74,7 +75,7 @@ class CLIOptions:
         self.end = typer.Option(
             None,
             "-e", "--end",
-            help="End of time-range (24hr notation) [grey42]\[default: Now][/]",
+            help=f"End of time-range (24hr notation) [grey42]{escape('[default: Now]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
@@ -83,7 +84,7 @@ class CLIOptions:
         self.show_example = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
         self.at = typer.Option(
             None,
-            help="Perform operation at specified date/time (24hr notation) [grey42]\[default: Now][/]",
+            help=f"Perform operation at specified date/time (24hr notation) [grey42]{escape('[default: Now]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M"],
             # rich_help_panel="Time Range Options",
             show_default=False,
@@ -94,7 +95,7 @@ class CLIOptions:
         return typer.Option(
             None,
             "-s", "--start",
-            help=f"Start of time-range (24hr notation) [grey42]\[default: {self.timerange_to_start}][/]",
+            help=f"Start of time-range (24hr notation) [grey42]{escape(f'[default: {self.timerange_to_start}]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
@@ -106,7 +107,7 @@ class CLIOptions:
             None,
             "-p",
             "--past",
-            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours{', m=mins' if self.include_mins else ''} i.e.: 3h [grey42]\[default: {self.timerange}][/]",
+            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours{', m=mins' if self.include_mins else ''} i.e.: 3h [grey42]{escape(f'[default: {self.timerange}]')}[/]",
             # rich_help_panel="Time Range Options",
             show_default=False,
         )

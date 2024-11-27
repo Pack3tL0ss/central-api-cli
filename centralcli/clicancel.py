@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import typer
 from rich import print
+from rich.markup import escape
 from typing import List
 
 
@@ -29,7 +30,7 @@ app = typer.Typer()
 def upgrade(
     what: CancelWhat = typer.Argument(...),
     dev_or_group: List[str] = typer.Argument(..., help="device(s) or group(s) to cancel upgrade", autocompletion=cli.cache.group_dev_completion, show_default=False,),
-    dev_type: DevTypes = typer.Option(None, help="[red]\[required][/] when Canceling group upgrade.", show_default=False,),
+    dev_type: DevTypes = typer.Option(None, help=f"[red]{escape('[required]')}[/] when Canceling group upgrade.", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
