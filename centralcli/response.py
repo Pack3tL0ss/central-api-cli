@@ -865,7 +865,7 @@ class Session():
                     r.output = paged_output
                     r.raw = paged_raw
                     break
-            else:  # The routing api endpoints use an opaque handle representing the next page or results, so they can not be batched, as we need the result to get the marker for the next call
+            elif isinstance(r.raw, dict):  # The routing api endpoints use an opaque handle representing the next page or results, so they can not be batched, as we need the result to get the marker for the next call
                 if r.raw.get("marker"):
                     params["marker"] = r.raw["marker"]
                 else:
@@ -873,6 +873,8 @@ class Session():
                     if r.raw.get("marker"):
                         del r.raw["marker"]
                     break
+            else:
+                break  # oto reset returns empty string (PUT)
 
         # No errors but the total provided by Central doesn't match the # of records
         try:
