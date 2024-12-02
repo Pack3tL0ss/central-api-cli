@@ -1107,7 +1107,7 @@ class CentralApi(Session):
         """Get all devices from Aruba Central.
 
         Args:
-            dev_type (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
+            dev_types (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
             group (str, optional): Filter by devices in a Group. Defaults to None.
             site (str, optional): Filter by devices in a Site. Defaults to None.
             label (str, optional): Filter by devices with a label assigned. Defaults to None.
@@ -1472,12 +1472,12 @@ class CentralApi(Session):
             Response: CentralAPI Response object
 
         Raises:
-            ValueError: Raised if dev_type is not valid.
+            ValueError: Raised if device_type is not valid.
         """
         if device_type not in ["switches", "aps", "gateways"]:
             device_type = constants.lib_to_api(device_type, "monitoring")
             if device_type not in ["switches", "aps", "gateways"]:
-                raise ValueError(f"dev_type must be one of ap, gw, switch not {device_type}")
+                raise ValueError(f"device_type must be one of ap, gw, switch not {device_type}")
 
         dev_params = {
             "aps": {
@@ -1585,7 +1585,7 @@ class CentralApi(Session):
         """
         device_type = constants.lib_to_api(device_type, "monitoring")
         if device_type not in ["switches", "aps", "gateways"]:
-            raise ValueError(f"dev_type must be one of ap, gw, switch not {device_type}")
+            raise ValueError(f"device_type must be one of ap, gw, switch not {device_type}")
 
         url = f"/monitoring/v1/{device_type}/{serial}"
 
@@ -5428,9 +5428,9 @@ class CentralApi(Session):
     async def get_branch_health(
         self,
         name: str = None,
-        column: int = None,  # NEXT-MAJOR remove or make consistent with other parameters (sort)
+        # column: int = None,  # API-FLAW schema says it takes an int, but with int or string did not seem to impact sort
         reverse: bool = False,
-        filters: dict = {},
+        # filters: dict = None,  # Needs testing
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
@@ -5438,22 +5438,8 @@ class CentralApi(Session):
 
         Args:
             name (str, optional): site / label name or part of its name
-            column (int, optional): Column to sort on
-            reverse (bool, optional): Sort in reverse order:
+            reverse (bool, optional): Sort in reverse order (sort is by device count):
                 Valid Values: asc, desc
-                * asc - Ascending, from A to Z.
-                * desc - Descending, from Z to A.
-
-
-            filters (str, optional): Site thresholds
-                Valid Values: gt  (Greater than), lt  (Less than), gte (Greater than or equal to),
-                lte (Less than or equal to)
-                * All properties of a site can be used as filter parameters with a threshold
-                * The range filters can be combined with the column names with "\__"
-                * For eg. /site?device_down\__gt=0 - Lists all sites that have more than 1 device in down state
-                * For eg. /site?wan_uplinks_down\__lt=1 - Lists all sites that have less than 1 wan in down state
-                * For eg. /site?device_up__gt=1&device_up\__lt=10 - Lists all sites that have 1-10 devices up
-
 
             offset (int, optional): pagination start index Defaults to 0.
             limit (int, optional): pagination size Defaults to 100.
@@ -5465,10 +5451,7 @@ class CentralApi(Session):
 
         params = {
             "name": name,
-            # "column": column,
             "order": "asc" if not reverse else "desc",
-            # "wan_tunnels_down\__gt": "0",
-            # "wan_uplinks_down\__gt": "0",
             # **filters,
             "offset": offset,
             "limit": limit,
@@ -5599,7 +5582,7 @@ class CentralApi(Session):
 
         return await self.delete(url)
 
-    async def get_visitors(
+    async def get_guests(
         self,
         portal_id: str,
         sort: str = '+name',
@@ -5608,7 +5591,7 @@ class CentralApi(Session):
         offset: int = 0,
         limit: int = 100,
     ) -> Response:
-        """Get all visitors created against a portal.
+        """Get all guests created against a portal.
 
         Args:
             portal_id (str): Portal ID of the splash page
@@ -5635,7 +5618,7 @@ class CentralApi(Session):
         return await self.get(url, params=params)
 
 
-    async def add_visitor(
+    async def add_guest(
         self,
         portal_id: str,
         name: str,
@@ -5711,8 +5694,7 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # NEXT-MAJOR Change all _visitor_ methods to _guest_ methods for consistency
-    async def update_visitor(
+    async def update_guest(
         self,
         portal_id: str,
         visitor_id: str,

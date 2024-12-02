@@ -659,7 +659,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_visitor, **kwargs)
+        resp = cli.central.request(cli.central.add_guest, **kwargs)
         password = kwargs = None
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
         # TODO calc expiration based on portal config Kabrew portal appears to be 3 days

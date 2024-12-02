@@ -541,7 +541,7 @@ def wlan(
         cli.display_results(update_res)
 
 def get_guest_id(portal_id: str, name: str) -> str:
-    guest_resp = cli.central.request(cli.central.get_visitors, portal_id)
+    guest_resp = cli.central.request(cli.central.get_guests, portal_id)
     if not guest_resp:
         log.error(f"Unable to Update details for {name}, request to fetch visitor_id failed.", caption=True, log=True)
         cli.display_results(guest_resp, tablefmt="action", exit_on_fail=True)
@@ -618,7 +618,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_visitor, **payload)
+        resp = cli.central.request(cli.central.add_guest, **payload)
         password = None
         payload = None
         cli.display_results(resp, tablefmt="action")
