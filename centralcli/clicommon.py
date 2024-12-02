@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.text import Text
 from rich.progress import track
+from rich.markup import escape
 from rich import print
 import json
 from importlib.metadata import version
@@ -1188,7 +1189,10 @@ class CLICommon:
 
         devices = data or self._get_import_file(import_file, import_type="devices")
 
-        dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+        try:
+            dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
+        except AttributeError as e:
+            self.exit(f"Exception gathering devices from [cyan]{import_file.name}[/]\n[red]AttributeError:[/] {e.args[0]}\nUse [cyan]cencli batch move --example[/] for example import format.)")
         if "INVALID" in dev_idens:
             self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
         if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries
@@ -1414,7 +1418,7 @@ class CLICommon:
         _delay = 30
         for _try in range(4):
             _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else f"\[Attempt {_try + 1}] "
+            _prefix = "" if _try == 0 else escape("[Attempt {_try + 1}] ")
             _delay -= (5 * _try) # reduce delay by 5 secs for each loop
             for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
                 time.sleep(1)

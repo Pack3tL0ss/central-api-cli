@@ -47,7 +47,7 @@ def health(
 ):
     central = cli.central
 
-    resp = central.request(central.get_brach_health, name=site)
+    resp = central.request(central.get_branch_health, name=site)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cf = "[italic dark_olive_green2]"

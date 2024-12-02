@@ -1,6 +1,2 @@
-pyflakes
-pycodestyle
-mccabe
-flake8
+ruff
 pytest
-black

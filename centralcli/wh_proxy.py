@@ -220,7 +220,7 @@ def get_current_branch_state():
     if config.account not in ["central_info", "default"]:
         log.info(f"hook_proxy is using alternate account '{config.account}'", show=True)
     _reqs = [
-        central.BatchRequest(central.get_brach_health),
+        central.BatchRequest(central.get_branch_health),
         central.BatchRequest(central.get_devices, "gateways"),
         central.BatchRequest(central.get_groups_properties),
     ]

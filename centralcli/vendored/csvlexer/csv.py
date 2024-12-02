@@ -5,7 +5,7 @@
 # NOTE: This csv lexer will not accomodate a quoted comma seperated list of items within a field
 # i.e. for a row like: field1,field2,"ap,gw,sw",field4
 # We would expect "ap,gw,sw" to be the value for field3, but field3 is '"ap' and total fields is 6
-# This is manageable, the documented format for fields that can be a list of items in a csv is to space
+# This is manageable, the documented format for fields that can be a list of items in a csv is to
 # space seperate them.
 """ Pygments CSV Lexer csvlexer/csv.py
 

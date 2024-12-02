@@ -3109,7 +3109,7 @@ class Cache:
         return await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_guest_db(self, portal_id: str) -> Response:
-            resp: Response = await self.central.get_visitors(portal_id)
+            resp: Response = await self.central.get_guests(portal_id)
             if not resp.ok:
                 return resp
 

@@ -11,6 +11,7 @@ import typer
 import yaml
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 import pendulum
 
 
@@ -168,8 +169,8 @@ def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help="Configure Gateway Role [grey42]\[default: vpnc if --sdwan branch if not][/]", show_default=False,),
-    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group [grey42]\[default: AOS8 IAP][/]", show_default=False),
+    gw_role: GatewayRole = typer.Option(None, help=f"Configure Gateway Role [grey42]{escape('[default: vpnc if --sdwan branch if not]')}[/]", show_default=False,),
+    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help=f"Create AOS10 Group [grey42]{escape('[default: AOS8 IAP]')}[/]", show_default=False),
     microbranch: bool = typer.Option(
         None,
         "--mb",
@@ -658,7 +659,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_visitor, **kwargs)
+        resp = cli.central.request(cli.central.add_guest, **kwargs)
         password = kwargs = None
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
         # TODO calc expiration based on portal config Kabrew portal appears to be 3 days

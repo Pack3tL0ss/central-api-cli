@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "centralcli"
-version = "7.4.0"
+version = "8.0.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
@@ -64,11 +64,8 @@ Brotli = {version = "*", markers = "platform_python_implementation == 'CPython'"
 brotlicffi = {version = "*", markers = "platform_python_implementation != 'CPython'", optional = true}
 
 [tool.poetry.dev-dependencies]
-pyflakes = ">=2"
-pycodestyle = ">=2"
-flake8 = ">=4"
+ruff = ">=0.8.0"
 pytest = ">=6"
-black = ">=21.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -82,6 +79,44 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 181
+# Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+
+[tool.ruff.lint]
+select = ["E", "F", "W605"]
+ignore = ["E501"]  # ignore line too long
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+# fixable = ["ALL"]
+# unfixable = []
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
 
 [tool.poetry.extras]
 hook-proxy = [

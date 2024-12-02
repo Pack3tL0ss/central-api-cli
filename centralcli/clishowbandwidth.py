@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from rich import print
 from datetime import datetime
+from rich.markup import escape
 from typing import Literal, TYPE_CHECKING
 
 # Detect if called from pypi installed package or via cloned github repo (development)
@@ -54,13 +55,13 @@ def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", 
 
 @app.command()
 def ap(
-    ap: str = typer.Argument(None, help="Show Bandwidth details for a specific AP [grey42]\[default: All APs][/]", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
+    ap: str = typer.Argument(None, help=f"Show Bandwidth details for a specific AP [grey42]{escape('[default: All APs]')}[/]", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
     group: str = cli.options.group,
     site: str = cli.options.site,
     label: str = cli.options.label,
-    swarm: bool = typer.Option(False, "-s", "--swarm", help="Show Bandwidth for the swarm/cluster the provided AP belongs to [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]", show_default=False),
-    band: RadioBandOptions = typer.Option(None, help="Show Bandwidth for a specific band [grey42]\[ap must be provided][/]", autocompletion=cli.cache.group_completion, show_default=False),
-    ssid: str = typer.Option(None, help="Show Bandwidth for a specifc ssid [grey42]\[ap must be provided][/]", show_default=False),
+    swarm: bool = typer.Option(False, "-s", "--swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [grey42]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]", show_default=False),
+    band: RadioBandOptions = typer.Option(None, help=f"Show Bandwidth for a specific band [grey42]{escape('[ap must be provided]')}[/]", autocompletion=cli.cache.group_completion, show_default=False),
+    ssid: str = typer.Option(None, help=f"Show Bandwidth for a specifc ssid [grey42]{escape('[ap must be provided]')}[/]", show_default=False),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
     start: datetime = cli.options.start,
     end: datetime = cli.options.end,
@@ -190,7 +191,7 @@ def switch(
 
 @app.command()
 def client(
-    client: str = typer.Argument(None, help="Show Bandwidth details for a specific client [grey42]\[default: All clients][/]", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
+    client: str = typer.Argument(None, help=f"Show Bandwidth details for a specific client [grey42]{escape('[default: All clients]')}[/]", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
     device: str = typer.Option(None, "--dev", help="Show Bandwidth details for clients connected to a specific device", metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, case_sensitive=False, show_default=False,),
     group: str = typer.Option(None, help="Show Bandwidth for clients connected to devices in a specific group", metavar=iden_meta.group, autocompletion=cli.cache.group_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for clients connected to devices with a specific label", metavar=iden_meta.label, autocompletion=cli.cache.label_completion, show_default=False),
@@ -334,7 +335,7 @@ def wlan(
         "-s", "--swarm",
         metavar=iden_meta.dev,
         autocompletion=cli.cache.dev_switch_ap_completion,
-        help="Show bandwidth for the swarm associated with provided AP [grey42]\[AP argument must be provided. Valid for AOS8 IAP][/]",
+        help=f"Show bandwidth for the swarm associated with provided AP [grey42]{escape('[Valid for AOS8 IAP]')}[/]",
         show_default=False,
     ),
     start: datetime = cli.options.start,

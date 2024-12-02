@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal, List, Dict, Any
 from rich.console import Console
 from rich.syntax import Syntax
+from rich.markup import escape
 from pygments.lexers.data import JsonLexer, YamlLexer
 from centralcli import log, utils
 from centralcli.vendored.csvlexer.csv import CsvLexer
@@ -38,15 +39,15 @@ ADD_FIELDS = {
     "groups": {
         "required": ["name"],
         "optional": {
-            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [grey42]\[default: All but sdwan allowed][/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or "\[cx,ap,gw]',
-            "wired-tg": "Set to true to make the group a template group for switches. [grey42]\[default: False][/]",
-            "wlan-tg": "Set to true to make the group a template group for APs.  [grey42]\[default: False][/]",
-            "gw-role": '[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [grey42]\[default: branch][/]',
-            "aos10": "Set to true to enable group as aos10 group (APs).  [grey42]\[default: AOS8 IAP][/]",
-            "microbranch": "Set to true to configure APs in the group as micro-branch APs (implies aos_10). [grey42]\[default: False][/]",
+            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [grey42]{escape("[default: All but sdwan allowed]")}[/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or {escape("[cx,ap,gw]")}',
+            "wired-tg": f"Set to true to make the group a template group for switches. [grey42]{escape('[default: False]')}[/]",
+            "wlan-tg": f"Set to true to make the group a template group for APs.  [grey42]{escape('[default: False]')}[/]",
+            "gw-role": f"[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [grey42]{escape('[default: branch]')}[/]",
+            "aos10": f"Set to true to enable group as aos10 group (APs).  [grey42]{escape('[default: AOS8 IAP]')}[/]",
+            "microbranch": f"Set to true to configure APs in the group as micro-branch APs (implies aos_10). [grey42]{escape('[default: False]')}[/]",
             "monitor-only-cx": "Set to true to enable CX switches as monitor only.",
             "monitor-only-sw": "Set to true to enable AOS-SW switches as monitor only.",
-            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [grey42]\[default: False][/]",
+            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [grey42]{escape('[default: False]')}[/]",
             "gw-config": "Path to file containing gw group level config or jinja2 template.",
             "ap-config": "Path to file containing ap group level config or jinja2 template.",
             "gw-vars": "Path to variables used if gw-config is a j2 template.",
@@ -384,7 +385,7 @@ Accepts the following keys (include as header row for csv import):
 {common_add_delete_end}
 """
 
-clibatch_add_labels = """[italic cyan]cencli batch add labels IMPORT_FILE[/]:
+clibatch_add_labels = f"""[italic cyan]cencli batch add labels IMPORT_FILE[/]:
 
 For all formats, labels should be under a 'labels' key/header.
 
@@ -396,7 +397,7 @@ labels:
 
 [bright_green]- OR -[/]
 
-labels: \[example1, example2, example3]
+labels: {escape('[example1, example2, example3]')}
 ----------------------------------------
 [italic]Both are valid yaml[/]
 
@@ -428,29 +429,34 @@ example = Example(data=data, type="groups", action="add")
 
 # TODO verify aos10 default. make functional only tested with deploy yaml file need to make work for csv
     # [red]name[/],[cyan]types[/],[cyan]wired-tg[/],[cyan]wlan-tg[/],[cyan]gw-role[/],[cyan]aos10[/],[cyan]gw-config[/],[cyan]ap-config[/],[cyan]gw-vars[/],[cyan]ap-vars[/] [italic red](red=required)[/]
+_str = escape("[str]")
+_str_or_list = escape("[str | list]")
+_bool = escape("[bool]")
+_path = escape("[Path]")
+_default_false = escape("[default: False]")
 clibatch_add_groups = f"""{example.command_text}
 
 Accepts the following keys (include as header row for csv import):
     {utils.color(ADD_FIELDS['groups']["required"], color_str="red")}, {utils.color(list(ADD_FIELDS['groups']["optional"].keys()))} [italic red](red=required)[/]
 
-Where [cyan]name[/]\[str]: The name of the group. [red italic]required[/]
-      [cyan]types[/]\[str | list]: defines what type of devices are allowed in the group.
-            Valid values: ["ap", "gw", "cx", "sw" "sdwan"] [grey42]\[default: ap, gw, cx, sw][/]
-            :information:  For csv the field can be blank \[use default: ap, gw, cx, sw]: or a space seperated list of device types.
+Where [cyan]name[/]{_str}: The name of the group. [red italic]required[/]
+      [cyan]types[/]{_str_or_list}: defines what type of devices are allowed in the group.
+            Valid values: ["ap", "gw", "cx", "sw" "sdwan"] [grey42]{escape('[default: ap, gw, cx, sw]')}[/]
+            :information:  For csv the field can be blank {escape('[use default: ap, gw, cx, sw]')}: or a space seperated list of device types.
             :information: "sdwan" is for EdgeConnect SD-WAN portfolio (SilverPeak), when allowed it has to be the only type allowed.
-      [cyan]wired-tg[/]\[bool]: Set to true to make the group a template group for switches. [grey42]\[default: False][/]
-      [cyan]wlan-tg[/]\[bool]: Set to true to make the group a template group for APs.  [grey42]\[default: False][/]
-      [cyan]gw-role[/]\[str]: [cyan]branch[/], [cyan]vpnc[/], or [cyan]wlan[/] only valid if gw type is allowed. [grey42]\[default: branch][/]
-      [cyan]aos10[/]\[bool]: set to true to enable group as aos10 group.  [grey42]\[default: AOS8 IAP][/]
-      [cyan]microbranch[/]\[bool]: Set to true to configure APs in the group as micro-branch APs [grey42]\[default: False][/]
-      [cyan]monitor-only-cx[/]\[bool]: Set to true to enable CX switches as monitor only [grey42]\[default: False][/]
-      [cyan]monitor-only-sw[/]\[bool]: Set to true to enable AOS-SW switches as monitor only [grey42]\[default: False][/]
-      [cyan]cnx[/]\[bool]: Make group compatible with New Central (cnx).
-            :warning:  All configurations will be pushed from New Central configuration model. [grey42]\[default: False][/]
-      [cyan]gw-config[/]\[Path]: Path to file containing gw group level config or jinja2 template.
-      [cyan]ap-config[/]\[Path]: Path to file containing ap group level config or jinja2 template.
-      [cyan]gw-vars[/]\[Path]: Path to variables used if gw-config is a j2 template.
-      [cyan]ap-vars[/]\[Path]: Path to variables used if ap-config is a j2 template.
+      [cyan]wired-tg[/]{_bool}: Set to true to make the group a template group for switches. [grey42]{_default_false}[/]
+      [cyan]wlan-tg[/]{_bool}: Set to true to make the group a template group for APs.  [grey42]{_default_false}[/]
+      [cyan]gw-role[/]{_str}: [cyan]branch[/], [cyan]vpnc[/], or [cyan]wlan[/] only valid if gw type is allowed. [grey42]{escape('[default: branch]')}[/]
+      [cyan]aos10[/]{_bool}: set to true to enable group as aos10 group.  [grey42]{escape('[default: AOS8 IAP]')}[/]
+      [cyan]microbranch[/]{_bool}: Set to true to configure APs in the group as micro-branch APs [grey42]{_default_false}[/]
+      [cyan]monitor-only-cx[/]{_bool}: Set to true to enable CX switches as monitor only [grey42]{_default_false}[/]
+      [cyan]monitor-only-sw[/]{_bool}: Set to true to enable AOS-SW switches as monitor only [grey42]{_default_false}[/]
+      [cyan]cnx[/]{_bool}: Make group compatible with New Central (cnx).
+            :warning:  All configurations will be pushed from New Central configuration model. [grey42]{_default_false}[/]
+      [cyan]gw-config[/]{_path}: Path to file containing gw group level config or jinja2 template.
+      [cyan]ap-config[/]{_path}: Path to file containing ap group level config or jinja2 template.
+      [cyan]gw-vars[/]{_path}: Path to variables used if gw-config is a j2 template.
+      [cyan]ap-vars[/]{_path}: Path to variables used if ap-config is a j2 template.
 
 :warning:  USE [cyan]ap-config[/] / [cyan]gw-config[/] variables with caution. Best to be familiar with these and the caveats before using.
 If [cyan]gw-config[/] or [cyan]ap-config[/] is a j2 file and the associated [cyan]gw-vars[/] / [cyan]ap-vars[/] key is not provided

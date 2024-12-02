@@ -16,6 +16,7 @@ from rich import print
 from rich.console import Console
 from rich.status import Status
 from rich.text import Text
+from rich.markup import escape
 
 if TYPE_CHECKING:
     from rich.style import StyleType
@@ -583,7 +584,7 @@ class Session():
         auth = self.auth
         resp = None
         _url = URL(url).with_query(params)
-        _data_msg = ' ' if not url else f' \[{_url.path}]'  #  Need to cancel [ or rich will eval it as a closing markup
+        _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
         if config.sanitize and utils.is_serial(end_name):
             end_name = "USABCD1234"
@@ -605,9 +606,8 @@ class Session():
             # TODO This DEBUG messasge won't hit for COP, need conditional to compare url to config.base_url
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
-            log_msg = _data_msg.replace(' \[', ' [')
             log.debug(
-                f'Attempt API Call to:{log_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
+                f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
@@ -865,7 +865,7 @@ class Session():
                     r.output = paged_output
                     r.raw = paged_raw
                     break
-            else:  # The routing api endpoints use an opaque handle representing the next page or results, so they can not be batched, as we need the result to get the marker for the next call
+            elif isinstance(r.raw, dict):  # The routing api endpoints use an opaque handle representing the next page or results, so they can not be batched, as we need the result to get the marker for the next call
                 if r.raw.get("marker"):
                     params["marker"] = r.raw["marker"]
                 else:
@@ -873,6 +873,8 @@ class Session():
                     if r.raw.get("marker"):
                         del r.raw["marker"]
                     break
+            else:
+                break  # oto reset returns empty string (PUT)
 
         # No errors but the total provided by Central doesn't match the # of records
         try:

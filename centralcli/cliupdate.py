@@ -9,6 +9,7 @@ import typer
 from rich import print
 from rich.console import Console
 from rich.text import Text
+from rich.markup import escape
 from jinja2 import FileSystemLoader, Environment
 import yaml
 
@@ -48,7 +49,7 @@ def template(
     name: str = typer.Argument(
         ...,
         metavar="IDENTIFIER",
-        help=f"Template: \[name] or Device: \{iden_meta.dev}",
+        help=f"Template: {escape(f'[name] or Device: {iden_meta.dev}')}",
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
@@ -448,7 +449,7 @@ def wlan(
     wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
     groups: List[str] = typer.Argument(
         None,
-        help="Group(s) to update (SSID must be defined in each group) [grey42]\[default: All Groups that contain specified SSIDs will be updated][/]",
+        help=f"Group(s) to update (SSID must be defined in each group) [grey42]{escape('[default: All Groups that contain specified SSIDs will be updated]')}[/]",
         autocompletion=cli.cache.group_completion,
         show_default=False,
     ),
@@ -540,7 +541,7 @@ def wlan(
         cli.display_results(update_res)
 
 def get_guest_id(portal_id: str, name: str) -> str:
-    guest_resp = cli.central.request(cli.central.get_visitors, portal_id)
+    guest_resp = cli.central.request(cli.central.get_guests, portal_id)
     if not guest_resp:
         log.error(f"Unable to Update details for {name}, request to fetch visitor_id failed.", caption=True, log=True)
         cli.display_results(guest_resp, tablefmt="action", exit_on_fail=True)
@@ -617,7 +618,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_visitor, **payload)
+        resp = cli.central.request(cli.central.add_guest, **payload)
         password = None
         payload = None
         cli.display_results(resp, tablefmt="action")
