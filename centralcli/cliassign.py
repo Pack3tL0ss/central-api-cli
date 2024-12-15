@@ -45,11 +45,11 @@ def license(
     # TODO add confirmation method builder to output class
     do_auto = True if "auto" in [s.lower() for s in serial_nums] else False
     if do_auto:
-        _msg = f"Enable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
+        _msg = f"Enable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
         if len(serial_nums) > 1:
             cli.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
-        _msg = f"Assign [bright_green]{license}[/bright_green] to"
+        _msg = f"Assign [bright_green]{license.value}[/bright_green] to"
         try:
             _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in serial_nums]
         except Exception:
