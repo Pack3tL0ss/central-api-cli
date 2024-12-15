@@ -1220,7 +1220,7 @@ def rename(
         None,
         "-S",
         "--space",
-        help=f"[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]{escape('[default: \'_\']')}[/]",
+        help="[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]{}[/]".format(escape("[default: '_']")),
         show_default=False,
     ),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
