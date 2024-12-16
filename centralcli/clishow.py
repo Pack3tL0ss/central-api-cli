@@ -1691,7 +1691,9 @@ def run(
         clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "gw":
         clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
+    # Above device types will exit above
 
+    # APs
     resp = central.request(central.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
