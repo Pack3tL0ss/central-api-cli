@@ -776,13 +776,13 @@ class Utils:
         cli_cmds = []
         for line in data.splitlines():
             cli_cmds += [line.rstrip()]
-            if "******" in line:
-                typer.secho("Masked credential found in file.", fg="red")
-                typer.secho(
-                    f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
-                    fg="red",
-                    )
-                raise typer.Exit(1)
+            # if "******" in line:
+            #     typer.secho("Masked credential found in file.", fg="red")
+            #     typer.secho(
+            #         f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
+            #         fg="red",
+            #         )
+            #     raise typer.Exit(1)
 
         if not cli_cmds:
             print(":x: [bright_red]Error:[/] No cli commands.")
