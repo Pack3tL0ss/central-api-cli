@@ -71,7 +71,7 @@ app.add_typer(clitshoot.app, name="ts",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
-app.add_typer(cliexport.app, name="export", hidden=True)  # TODO remove once implemented
+app.add_typer(cliexport.app, name="export",)
 app.add_typer(clicheck.app, name="check",)
 app.add_typer(clicancel.app, name="cancel",)
 
