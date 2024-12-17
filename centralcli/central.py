@@ -5425,6 +5425,63 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # TODO not used
+    async def update_per_ap_settings(
+            self,
+            serial: str,
+            hostname: str = None,
+            ip: str = None,
+            mask: str = None,
+            gateway: str = None,
+            dns: str | List[str] = None,
+            domain: str = None,
+            swarm_mode: str = None,
+            radio_24_mode: str = None,
+            radio_5_mode: str = None,
+            radio_6_mode: str = None,
+            uplink_vlan: int = None,
+            zone: str = None,
+    ) -> Response:
+        url = f"/configuration/v1/ap_settings_cli/{serial}"
+
+        now_res = await self.get(url)
+        if not now_res.ok:
+            return now_res
+
+        clis = now_res.output["clis"]
+
+        ip_address = None
+        if ip:
+            for param in [mask, gateway, dns]:
+                if not param:
+                    raise ValueError("mask, gateway, and dns are required when IP is updated")
+
+            dns = ','.join(utils.listify(dns))
+
+            ip_address = f'{ip} {mask} {gateway} {dns} {domain or ""}'.rstrip()
+
+        cli_items = {
+            "hostname": hostname,
+            "ip-address": ip_address,
+            "swarm-mode": swarm_mode,
+            "wifi0-mode": radio_24_mode,
+            "wifi1-mode": radio_5_mode,
+            "wifi2-mode": radio_6_mode,
+            "zonename": zone,
+            "uplink-vlan": uplink_vlan
+        }
+
+        for idx, key in enumerate(cli_items, start=1):
+            if cli_items[key] is not None:
+                clis = [item for item in clis if not item.startswith(key)]
+                clis.insert(idx, f"  {key} {cli_items[key]}")
+
+        json_data = {
+            'clis': clis
+        }
+
+        return await self.post(url, json_data=json_data)
+
     async def get_branch_health(
         self,
         name: str = None,
