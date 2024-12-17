@@ -6,7 +6,7 @@ import asyncio
 import json
 import sys
 import time
-from typing import Any, Dict, List, Literal, Tuple, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Literal, Tuple, Union, Optional, TYPE_CHECKING
 
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
@@ -158,9 +158,27 @@ class RateLimit():
 
 
 class Spinner(Status):
-    """A Spinner Object that adds methods to rich.status.Status object"""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    """A Spinner Object that adds methods to rich.status.Status object
+
+        Args:
+            status (RenderableType): A status renderable (str or Text typically).
+            console (Console, optional): Console instance to use, or None for global console. Defaults to None.
+            spinner (str, optional): Name of spinner animation (see python -m rich.spinner). Defaults to "dots".
+            spinner_style (StyleType, optional): Style of spinner. Defaults to "status.spinner".
+            speed (float, optional): Speed factor for spinner animation. Defaults to 1.0.
+            refresh_per_second (float, optional): Number of refreshes per second. Defaults to 12.5.
+    """
+    def __init__(
+        self,
+        status: RenderableType,
+        *,
+        console: Optional[Console] = None,
+        spinner: str = "dots",
+        spinner_style: StyleType = "status.spinner",
+        speed: float = 1.0,
+        refresh_per_second: float = 12.5,
+    ):
+        super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
 
     def fail(self, text: RenderableType = None) -> None:
         if self._live.is_started:
