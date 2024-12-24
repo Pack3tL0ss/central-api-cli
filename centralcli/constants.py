@@ -240,6 +240,14 @@ class RadioBandOptions(str, Enum):  # 5m, 1h, 1d, 1w
     _5 = "5"
     _6 = "6"
 
+class DynamicAntMode(str, Enum):
+    narrow = "narrow"
+    wide = "wide"
+
+class RadioMode(str, Enum):
+    access = "access"
+    monitor = "monitor"
+    spectrum = "spectrum"
 
 class UplinkNames(str, Enum):
     uplink101 = "uplink101"
@@ -533,6 +541,7 @@ class ArgToWhat:
         self.sites = self.site = "site"
         self.wlan = self.wlans = "wlan"
         self.guest = self.guests = "guest"
+        self.ap = self.aps = "ap"
 
     def _init_rename(self):
         self.group = self.groups = "group"
