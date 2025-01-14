@@ -1146,7 +1146,7 @@ def subscribe(
 
     cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
     print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.batch_request(sub_reqs)
         cli.display_results(resp, tablefmt="action")
 
