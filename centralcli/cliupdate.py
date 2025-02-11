@@ -338,7 +338,7 @@ def config_(
             cli.display_results(resp, tablefmt="action")
 
 
-@app.command(hidden=True)
+@app.command()
 def ap(
     aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     hostname: str = typer.Option(None, help="Rename/Set AP hostname", show_default=False),
