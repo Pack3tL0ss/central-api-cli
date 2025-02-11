@@ -31,7 +31,7 @@ When running with Python 3.12 it's possible to see a number of SyntaxWarning mes
 
 ## Installation
 
-The recommended method is to use uv, which is a single Rust binary that you can use to install Python apps. It's significantly faster than alternative tools, and will get you up and running with Posting in seconds.  `uv` will install `centralcli` in an isolated environment and expose the `cencli` command in PATH.
+The recommended method is to use uv, which is a single Rust binary that you can use to install Python apps. It's significantly faster than alternative tools, and will get you up and running with Central CLI in seconds.  `uv` will install `centralcli` in an isolated environment and expose the `cencli` command in PATH.
 
 You don't even need to worry about installing Python yourself - uv will manage everything for you.
 
