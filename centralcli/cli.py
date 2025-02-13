@@ -66,7 +66,6 @@ app.add_typer(clibatch.app, name="batch",)
 app.add_typer(clicaas.app, name="caas", hidden=True,)
 app.add_typer(clirefresh.app, name="refresh",)
 app.add_typer(clitest.app, name="test",)
-app.add_typer(clitshoot.app, name="tshoot", deprecated=True, help="Deprecated Troubleshooting, use simplified sub-command [cyan]ts[/]")
 app.add_typer(clitshoot.app, name="ts",)
 app.add_typer(clirename.app, name="rename",)
 app.add_typer(clikick.app, name="kick",)
@@ -344,18 +343,18 @@ def nuke(
         cli.exit("This command only applies to [cyan]AOS-SW[/] switches, not [cyan]CX[/]")
 
     conf_msg = dev.rich_help_text
-    if dev.generic_type == "switch":
+    if dev.type == "cx":
         func = cli.central.send_command_to_device
         arg = dev.serial
         if swarm:
-            print(f":warning:  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
+            print(f"[dark_orange3]:warning:[/]  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
     else:  # AP all others will error in get_dev_identifier
         func = cli.central.send_command_to_swarm
         arg = dev.swack_id
         if dev.is_aos10:
             cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
         elif not swarm:
-            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [cyan]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster")
+            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [cyan]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster associated with the provided AP")
         else:
             conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
