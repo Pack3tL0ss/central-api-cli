@@ -111,7 +111,7 @@ def device(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Add a Device to Aruba Central.
+    """Add a Device to Aruba Central
 
     Serial Number and MAC are required, group is opional.
     """
@@ -164,7 +164,7 @@ def device(
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
 
 
-@app.command(short_help="Add a group", help="Add a group")
+@app.command()
 def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
@@ -191,6 +191,7 @@ def group(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
+    """Add a group to Aruba Central"""
     allowed_types = []
     if ap:
         allowed_types += ["ap"]
@@ -359,7 +360,7 @@ def site(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Add a site.
+    """Add a site to Aruba Central
 
     Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
     [italic]Google Maps "Plus Codes" are supported for address field.[/]
@@ -404,7 +405,7 @@ def label(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Delete label(s)
+    """Add label(s) to Aruba Central
 
     Label can't have any devices associated with it to delete.
     """
@@ -451,7 +452,7 @@ def certificate(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Upload a Certificate to Aruba Central
+    """Add/Upload a Certificate to Aruba Central
     """
     passphrase = "" if passphrase is None else passphrase
     cert_format_params = [pem, der, pkcs12]
