@@ -25,7 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode
+from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, flex_dual_models
 from . import render
 from .cache import CacheTemplate
 from .caas import CaasAPI
@@ -337,7 +337,7 @@ def config_(
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
-
+# TODO Add access spectrum monitor mode support, move logic to clicommon, and build batch update
 @app.command()
 def ap(
     aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
@@ -356,9 +356,9 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
-    access_mode: List[RadioBandOptions] = typer.Option(None, "-A", "--access", help="Space seperated list of radio(s) to set to [cyan]access mode[/]", show_default=False),
-    spectrum_mode: List[RadioBandOptions] = typer.Option(None, "-S", "--spectrum", help="Space seperated list of radio(s) to set to [cyan]spectrum mode[/]", show_default=False),
-    monitor_mode: List[RadioBandOptions] = typer.Option(None, "-M", "--monitor", help="Space seperated list of radio(s) to set to [cyan]air monitor mode[/]", show_default=False),
+    access_mode: List[RadioBandOptions] = typer.Option(None, "-A", "--access", help="Space seperated list of radio(s) to set to [cyan]access mode[/]", show_default=False, hidden=True),
+    spectrum_mode: List[RadioBandOptions] = typer.Option(None, "-S", "--spectrum", help="Space seperated list of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, hidden=True),
+    monitor_mode: List[RadioBandOptions] = typer.Option(None, "-M", "--monitor", help="Space seperated list of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, hidden=True),
     antenna_width: DynamicAntMode = typer.Option(None, "-W", "--antenna-width", help="Dynamic Antenna Width [grey62 italic]Only applies to AP 679[/]", show_default=False,),
     tagged_uplink_vlan: int = typer.Option(None, "-u", "--tagged-uplink-pvid", help="Configure Uplink VLAN (tagged).", show_default=False,),
     yes: bool = cli.options.yes,
@@ -407,22 +407,31 @@ def ap(
         cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
 
     print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in aps], color=None, pad=10).lstrip()}")
-    print("[green italic]With the following per-ap-settings[/]:")
+    print("\n[green italic]With the following per-ap-settings[/]:")
     _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
-    skip_flex = [ap for ap in aps if ap.model not in ["615", "605H"]]
+    skip_flex = [ap for ap in aps if ap.model not in flex_dual_models]
     skip_width = [ap for ap in aps if ap.model not in ["679"]]
+
+    warnings = []
     if flex_dual_exclude is not None and skip_flex:
-        print(f"flexible dual radio will be ignored for {len(skip_flex)} AP, as the setting doesn't apply to those models.")
+        warnings += [f"[yellow]:information:[/]  Flexible dual radio [red]will be ignored[/] for {len(skip_flex)} AP, as the setting doesn't apply to those models."]
     if antenna_width is not None and skip_width:
-        print(f"Dynamic antenna width will be ignored for {len(skip_width)} AP, as the setting doesn't apply to those models.")
-    if access_mode:
-        if "2.4" in access_mode:
-            ...
+        warnings += [f"[yellow]:information:[/]  Dynamic antenna width [red]will be ignored[/] for {len(skip_width)} AP, as the setting doesn't apply to those models."]
+    if warnings:
+        warn_text = '\n'.join(warnings)
+        print(f"\n{warn_text}")
 
-
+    # determine if any effective changes after skips for settings on invalid AP models
+    changes = 2
+    if not list(filter(None, list(kwargs.values())[0:-2])):
+        if not flex_dual_exclude or (flex_dual_exclude and not [ap for ap in aps if ap not in skip_flex]):
+            changes -= 1
+        if not antenna_width or (antenna_width and not [ap for ap in aps if ap not in skip_width]):
+            changes -= 1
+    if not changes:
+        cli.exit("No valid updates provided for the selected AP models... Nothing to do.")
 
     cli.confirm(yes)  # exits here if they abort
-
     batch_resp = cli.central.batch_request(
         [
             BatchRequest(
@@ -438,7 +447,7 @@ def ap(
                 radio_5_disable=radio_5_disable,
                 radio_6_disable=radio_6_disable,
                 uplink_vlan=tagged_uplink_vlan,
-                flex_dual_exclude=None if ap.model not in ["615", "605H"] else flex_dual_exclude,
+                flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
                 dynamic_ant_mode=None if ap.model != "679" else antenna_width,
             ) for ap in aps
         ]

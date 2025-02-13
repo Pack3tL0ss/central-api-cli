@@ -10,6 +10,7 @@ from typing import Literal, Union
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
 generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
+flex_dual_models = ["615", "605H", "605R"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete
