@@ -236,7 +236,7 @@ def group(
     if wlan_tg:
         _msg = f"{_msg}\n    [cyan]APs[/cyan]: [bright_green]Template Group[/bright_green]"
     if gw_role:
-        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role}[/bright_green]"
+        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role.value}[/bright_green]"
     if microbranch:
         _msg = f"{_msg}\n    [cyan]AP Role[/cyan]: [bright_green]Microbranch[/bright_green]"
     if mon_only_sw:
