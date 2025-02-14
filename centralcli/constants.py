@@ -941,13 +941,13 @@ class SortSiteOptions(str, Enum):
     associated_devices = "associated-devices"
 
 
-class SortGroupOptions(str, Enum):  # TODO send group output through cleaner get rid of camel case
+class SortGroupOptions(str, Enum):
     name = "name"
-    AOSVersion = "AOSVersion"
-    AllowedDevTypes = "AllowedDevTypes"
-    ApNetworkRole = "ApNetworkRole"
-    Architecture = "Architecture"
-    GwNetworkRole = "GwNetworkRole"
+    AllowedDevTypes = "allowed-types"
+    AOSVersion = "gw-role"
+    ApNetworkRole = "aos10"
+    Architecture = "microbranch"
+    GwNetworkRole = "cnx"
     template_group = "template-group"
 
 
