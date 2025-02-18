@@ -257,6 +257,11 @@ class UplinkNames(str, Enum):
     uplink104 = "uplink104"
     uplink105 = "uplink105"
 
+# Not used ... for reference
+# class RadioNumber(Enum):
+#     "5Ghz" = 0
+#     "2.4Ghz" = 1
+#     "6Ghz" = 2
 class ShowArgs(str, Enum):
     all = "all"
     device = "device"
