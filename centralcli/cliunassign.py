@@ -39,7 +39,7 @@ def license(
     """
     do_auto = True if "auto" in [s.lower() for s in devices] else False
     if do_auto:
-        _msg = f"Disable Auto-assignment of [bright_green]{license}[/bright_green] to applicable devices."
+        _msg = f"Disable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
         if len(devices) > 1:
             print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
         cli.econsole.print(_msg)
@@ -50,7 +50,7 @@ def license(
 
     devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
 
-    _msg = f"Unassign [bright_green]{license}[/bright_green] from"
+    _msg = f"Unassign [bright_green]{license.value}[/bright_green] from"
     if len(devices) > 1:
         _dev_msg = '\n    '.join([dev.summary_text for dev in devices])
         _msg = f"{_msg}:\n    {_dev_msg}"

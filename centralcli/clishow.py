@@ -63,7 +63,6 @@ app.add_typer(clishowfirmware.app, name="firmware")
 app.add_typer(clishowwids.app, name="wids")
 app.add_typer(clishowbranch.app, name="branch")
 app.add_typer(clishowospf.app, name="ospf")
-app.add_typer(clishowtshoot.app, name="tshoot", deprecated=True, help="Deprecated, use [cyan]cencli show ts ...[/]")
 app.add_typer(clishowtshoot.app, name="ts")
 app.add_typer(clishowoverlay.app, name="overlay")
 app.add_typer(clishowaudit.app, name="audit")
@@ -517,7 +516,7 @@ def aps(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [grey42 italic]{escape('[requires --site]')}[/]", show_default=False,),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortDevOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -580,7 +579,7 @@ def switches_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include switches in Inventory that have yet to connect", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortDevOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -1691,7 +1690,9 @@ def run(
         clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "gw":
         clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
+    # Above device types will exit above
 
+    # APs
     resp = central.request(central.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
@@ -1723,11 +1724,7 @@ def config_(
     ),
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
-    all: bool = typer.Option(
-        False, "-A", "--all",
-        help="collect device level configs for all devices of specified type [grey42]1st argument needs to be a group and --gw or --ap needs to be provided[/]",
-        show_default=False,
-    ),
+    ap_env: bool = typer.Option(False, "-e", "--env", help="Show AP environment settings.  [italic grey62]Valid for APs only[/]", show_default=False,),
     status: bool = typer.Option(
         False,
         "--status",
@@ -1773,53 +1770,6 @@ def config_(
         else:
             return run(group_dev.serial, outfile=outfile, pager=pager)
 
-    if all:  # TODO move this either to cliexport or clibatch (cencli batch export configs)
-        if not any([do_gw, do_ap]):
-            print(":warning:  Invalid combination [cyan]--all[/] requires [cyan]--ap[/] or [cyan]--gw[/] flag.")
-            raise typer.Exit(1)
-        elif not group_dev.is_group:
-            print(":warning:  Invalid combination [cyan]--all[/] requires first argument to be a group")
-            raise typer.Exit(1)
-        else:  # TODO make this a sep func  Allow site as first arg
-            br = BatchRequest
-            if do_gw:
-                devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "gw" and d["group"] == group_dev.name]
-                caasapi = caas.CaasAPI(central=cli.central)
-
-                reqs = [br(caasapi.show_config, group_dev.name, d.mac) for d in devs]
-                res = cli.central.batch_request(reqs)
-
-                outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_gw_configs"
-                outdir.mkdir(parents=True, exist_ok=True)
-                for d, r in zip(devs, res):
-                    if isinstance(r.output, dict) and "config" in r.output:
-                        r.output = r.output["config"]
-                    console = Console(emoji=False)
-                    console.rule()
-                    console.print(f"[bold]Config for {d.rich_help_text}[reset]")
-                    console.rule()
-                    outfile = outdir / f"{d.name}_gw_dev.cfg"
-                    # cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
-                    cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
-            if do_ap:
-                devs: List[CentralObject] = [CentralObject("dev", d) for d in cli.cache.devices if d["type"] == "ap"]
-
-                reqs = [br(cli.central.get_per_ap_config, d.serial) for d in devs]
-                res = cli.central.batch_request(reqs)
-
-                outdir = config.outdir / f"{group_dev.name.replace(' ', '_')}_ap_configs"
-                outdir.mkdir(parents=True, exist_ok=True)
-
-                for d, r in zip(devs, res):
-                    console = Console(emoji=False)
-                    console.rule()
-                    console.print(f"[bold]Config for {d.rich_help_text}[reset]")
-                    console.rule()
-                    outfile = outdir / f"{d.name}_ap_dev.cfg"
-                    cli.display_results(r, tablefmt="simple", pager=pager, outfile=outfile)
-
-            cli.exit(code=0)
-
     if group_dev.is_group:
         group = group_dev
         if device:
@@ -1845,14 +1795,15 @@ def config_(
         else:
             func = caasapi.get_config_status
     elif do_ap or (device and device.generic_type == "ap"):
+        func = cli.central.get_ap_config
         if device:
             if device.generic_type == "ap":
-                func = cli.central.get_per_ap_config
                 args = [device.serial]
+                if ap_env:
+                    func = cli.central.get_per_ap_config
             else:
                 cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
         else:
-            func = cli.central.get_ap_config
             args = [group.name]
     else:
         cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)

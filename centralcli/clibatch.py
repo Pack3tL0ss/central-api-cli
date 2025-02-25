@@ -1146,7 +1146,7 @@ def subscribe(
 
     cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
     print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = cli.central.batch_request(sub_reqs)
         cli.display_results(resp, tablefmt="action")
 
@@ -1302,7 +1302,7 @@ def rename(
     # cache update
     if import_file:
         cache_data = [cli.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
-        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]                                              # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
+        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
         cli.central.request(cli.cache.update_dev_db, data=cache_data)
 
 

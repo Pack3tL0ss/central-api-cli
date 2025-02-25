@@ -402,7 +402,7 @@ class CLICommon:
                     config.outdir.mkdir(exist_ok=True)
                     outfile = config.outdir / outfile
 
-            print(f"\n[cyan]Writing output to {outfile}... ", end="")
+            print(f"[cyan]Writing output to {outfile}... ", end="")
 
             if not outfile.parent.is_dir():
                 self.econsole.print(f"[red]Directory Not Found[/]\n[dark_orange3]:warning:[/]  Unable to write output to [cyan]{outfile.name}[/].\nDirectory [cyan]{str(outfile.parent.absolute())}[/] [red]does not exist[/].")
@@ -411,6 +411,8 @@ class CLICommon:
                 try:
                     if isinstance(outdata, (dict, list)):
                         outdata = json.dumps(outdata, indent=4)
+                    # ensure LF at EoF
+                    outdata = f"{outdata.rstrip()}\n"
                     outfile.write_text(outdata)  # typer.unstyle(outdata) also works
                 except Exception as e:
                     outfile.write_text(f"{outdata}")
@@ -556,6 +558,7 @@ class CLICommon:
             cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
+            print()
             self.write_file(outfile, outdata.file)
 
 
@@ -698,6 +701,7 @@ class CLICommon:
                                 plain_console.print(r.raw)
 
                         if outfile:
+                            print()
                             self.write_file(outfile, r.raw if tablefmt != "clean" else r.output)
 
                     # prints the Response objects __str__ method which includes status_code

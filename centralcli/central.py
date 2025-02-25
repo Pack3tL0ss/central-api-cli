@@ -5425,6 +5425,92 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    # TODO not used # TODO types for below
+    # FIXME effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
+    async def update_per_ap_settings(
+            self,
+            serial: str,
+            hostname: str = None,
+            ip: str = None,
+            mask: str = None,
+            gateway: str = None,
+            dns: str | List[str] = None,
+            domain: str = None,
+            swarm_mode: str = None,
+            radio_24_mode: str = None,
+            radio_5_mode: str = None,
+            radio_6_mode: str = None,
+            radio_24_disable: bool = None,
+            radio_5_disable: bool = None,
+            radio_6_disable: bool = None,
+            uplink_vlan: int = None,
+            zone: str = None,
+            dynamic_ant_mode: Literal["narrow", "wide"] = None,
+            flex_dual_exclude: Literal["2.4", "5", "6"] = None,
+    ) -> Response:
+        url = f"/configuration/v1/ap_settings_cli/{serial}"
+
+        now_res = await self.get(url)
+        if not now_res.ok:
+            return now_res
+
+        clis = now_res.output
+
+        ip_address = None
+        if ip:
+            for param in [mask, gateway, dns]:
+                if not param:
+                    raise ValueError("mask, gateway, and dns are required when IP is updated")
+
+            dns = ','.join(utils.listify(dns))
+
+            domain = domain or '""'
+            ip_address = f'{ip} {mask} {gateway} {dns} {domain}'.rstrip()
+        flex_dual = None
+        if flex_dual_exclude:
+            flex_dual_exclude = str(flex_dual_exclude)
+            if flex_dual_exclude.startswith("6"):
+                flex_dual = "5GHz-and-2.4GHz"
+            elif flex_dual_exclude.startswith("5"):
+                flex_dual = "2.4GHz-and-6GHz"
+            elif flex_dual_exclude.startswith("2.4") or flex_dual_exclude.startswith("24"):
+                flex_dual = "5GHz-and-6GHz"
+
+        cli_items = {
+            "hostname": hostname,
+            "ip-address": ip_address,
+            "swarm-mode": swarm_mode,
+            "wifi0-mode": radio_5_mode,
+            "wifi1-mode": radio_24_mode,
+            "wifi2-mode": radio_6_mode,
+            "radio-0-disable": radio_5_disable,
+            "radio-1-disable": radio_24_disable,
+            "radio-2-disable": radio_6_disable,
+            "zonename": zone,
+            "uplink-vlan": uplink_vlan,
+            "dynamic-ant": dynamic_ant_mode,
+            "flex-dual-band": flex_dual
+        }
+        if all([v is None for v in cli_items.values()]):
+            return Response(error="No Values provided to update")
+
+        for idx, key in enumerate(cli_items, start=1):
+            if cli_items[key] is not None:
+                clis = [item for item in clis if not item.lstrip().startswith(key)]
+                if key.endswith("-disable"):
+                    if cli_items[key] is True:
+                        clis.insert(idx, f"  {key}")
+                else:
+                    clis.insert(idx, f"  {key} {cli_items[key]}")
+
+        json_data = {
+            'clis': clis
+        }
+
+        # utils.json_print(json_data)
+        # raise NotImplementedError("This helper function is currently under test, not implemented.")
+        return await self.post(url, json_data=json_data)
+
     async def get_branch_health(
         self,
         name: str = None,

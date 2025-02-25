@@ -111,7 +111,7 @@ def device(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Add a Device to Aruba Central.
+    """Add a Device to Aruba Central
 
     Serial Number and MAC are required, group is opional.
     """
@@ -164,7 +164,7 @@ def device(
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
 
 
-@app.command(short_help="Add a group", help="Add a group")
+@app.command()
 def group(
     group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
@@ -191,6 +191,7 @@ def group(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
+    """Add a group to Aruba Central"""
     allowed_types = []
     if ap:
         allowed_types += ["ap"]
@@ -235,13 +236,18 @@ def group(
     if wlan_tg:
         _msg = f"{_msg}\n    [cyan]APs[/cyan]: [bright_green]Template Group[/bright_green]"
     if gw_role:
-        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role}[/bright_green]"
+        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role.value}[/bright_green]"
     if microbranch:
         _msg = f"{_msg}\n    [cyan]AP Role[/cyan]: [bright_green]Microbranch[/bright_green]"
     if mon_only_sw:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]True[/bright_green]"
     if mon_only_cx:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
+    if cnx:
+        _msg = f"{_msg}\n\n    [yellow]:information:[/]  [italic]Group will be configured as [bright_green]CNX[/] enabled.  All configuration must be done in CNX ([bright_green]C[/]entral [bright_green]N[/]ext Generation E[bright_green]x[/]perience)"
+        _msg = f"{_msg}\n    [dark_orange3]:warning:[/]  [italic]CNX configuration is currently Select Availability, contant your HPE Aruba Networking Account Team for details.[/italic]"
+
+
     print(f"{_msg}")
 
     if cli.confirm(yes):
@@ -359,7 +365,7 @@ def site(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Add a site.
+    """Add a site to Aruba Central
 
     Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
     [italic]Google Maps "Plus Codes" are supported for address field.[/]
@@ -404,7 +410,7 @@ def label(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Delete label(s)
+    """Add label(s) to Aruba Central
 
     Label can't have any devices associated with it to delete.
     """
@@ -451,7 +457,7 @@ def certificate(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Upload a Certificate to Aruba Central
+    """Add/Upload a Certificate to Aruba Central
     """
     passphrase = "" if passphrase is None else passphrase
     cert_format_params = [pem, der, pkcs12]

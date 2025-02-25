@@ -10,6 +10,7 @@ from typing import Literal, Union
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
 generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
+flex_dual_models = ["615", "605H", "605R"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete
@@ -240,6 +241,14 @@ class RadioBandOptions(str, Enum):  # 5m, 1h, 1d, 1w
     _5 = "5"
     _6 = "6"
 
+class DynamicAntMode(str, Enum):
+    narrow = "narrow"
+    wide = "wide"
+
+class RadioMode(str, Enum):
+    access = "access"
+    monitor = "monitor"
+    spectrum = "spectrum"
 
 class UplinkNames(str, Enum):
     uplink101 = "uplink101"
@@ -248,6 +257,11 @@ class UplinkNames(str, Enum):
     uplink104 = "uplink104"
     uplink105 = "uplink105"
 
+# Not used ... for reference
+# class RadioNumber(Enum):
+#     "5Ghz" = 0
+#     "2.4Ghz" = 1
+#     "6Ghz" = 2
 class ShowArgs(str, Enum):
     all = "all"
     device = "device"
@@ -533,6 +547,7 @@ class ArgToWhat:
         self.sites = self.site = "site"
         self.wlan = self.wlans = "wlan"
         self.guest = self.guests = "guest"
+        self.ap = self.aps = "ap"
 
     def _init_rename(self):
         self.group = self.groups = "group"
@@ -931,13 +946,13 @@ class SortSiteOptions(str, Enum):
     associated_devices = "associated-devices"
 
 
-class SortGroupOptions(str, Enum):  # TODO send group output through cleaner get rid of camel case
+class SortGroupOptions(str, Enum):
     name = "name"
-    AOSVersion = "AOSVersion"
-    AllowedDevTypes = "AllowedDevTypes"
-    ApNetworkRole = "ApNetworkRole"
-    Architecture = "Architecture"
-    GwNetworkRole = "GwNetworkRole"
+    AllowedDevTypes = "allowed-types"
+    AOSVersion = "gw-role"
+    ApNetworkRole = "aos10"
+    Architecture = "microbranch"
+    GwNetworkRole = "cnx"
     template_group = "template-group"
 
 

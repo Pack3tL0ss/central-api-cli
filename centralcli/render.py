@@ -413,12 +413,14 @@ def output(
     elif tablefmt in ["yml", "yaml"]:
         outdata = utils.unlistify(outdata)
         # TODO custom yaml Representer
-        raw_data = yaml.dump(json.loads(json.dumps(outdata, cls=Encoder)), sort_keys=False)
+        raw_data = yaml.safe_dump(json.loads(json.dumps(outdata, cls=Encoder)), sort_keys=False)
         table_data = rich_capture(raw_data)
 
     elif tablefmt == "csv":
         def normalize_for_csv(value: Any) -> str:
-            if isinstance(value, DateTime):
+            if value is None:
+                return ""
+            elif isinstance(value, DateTime):
                 return str(value.original)
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'

@@ -188,7 +188,7 @@ def logs(
     """Show Audit Event Logs.
 
     Other available log commands:
-      - [cyan]show audit system-logs[/] to show audit logs related to Central itself.
+      - [cyan]show audit acp-logs[/] to show audit logs related to Central itself.
       - [cyan]show logs[/] to show device event logs.
 
     :clock2:  Displays prior 2 days if no time options are provided.
