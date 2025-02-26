@@ -1501,14 +1501,19 @@ class CLICommon:
         cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
 
         serials_in = [s.upper() if idx not in serial_updates else serial_updates[idx] for idx, s in enumerate(serials_in)]
+        invalid_serials = [s for s in serials_in if not utils.is_serial(s)]
+        valid_serials = [s for s in serials_in if s not in invalid_serials]
+        _not_valid_msg = "does not appear to be a valid serial"
+        _not_found_msg = "was not found, does not exist in inventory"
 
+        _ = [log.warning(f"Ignoring [cyan]{s}[/] as it {_not_valid_msg if s not in [s.upper() for s in not_found_devs] else _not_found_msg}", caption=True) for s in invalid_serials]
 
         # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
         # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
         # We always use serials with import without validation for arch/unarchive as device will not show in inventory if it's already archved
-        arch_reqs = [] if ui_only or not serials_in else [
-            BR(self.central.archive_devices, serials_in),
-            BR(self.central.unarchive_devices, serials_in),
+        arch_reqs = [] if ui_only or not valid_serials else [
+            BR(self.central.archive_devices, valid_serials),
+            BR(self.central.unarchive_devices, valid_serials),
         ]
 
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1552,7 +1557,7 @@ class CLICommon:
             else:
                 confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
-            confirmation_list = serials_in if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
+            confirmation_list = valid_serials if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
             confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
 
         if _total_reqs > 1:
