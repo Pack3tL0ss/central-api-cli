@@ -946,7 +946,10 @@ def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, output_for
 
     return data
 
-def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List[dict]:
+def get_audit_logs(data: List[dict], cache_update_func: callable = None, verbosity: int = 0) -> List[dict]:
+    if verbosity > 1:
+        return data  # No formatting with verbosity -vv
+
     field_order = [
         "id",
         "ts",
@@ -959,6 +962,10 @@ def get_audit_logs(data: List[dict], cache_update_func: callable = None) -> List
         "user",
         "has_details",
     ]
+
+    if not verbosity:
+        data = [inner for inner in data if inner.get("user") != "periodic_system_default_app_task"]
+
     data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
     data = strip_no_value(data)
 

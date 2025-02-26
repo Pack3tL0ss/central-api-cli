@@ -69,6 +69,15 @@ def acp_logs(
     start: datetime = cli.options(timerange="5d").start,
     end: datetime = cli.options.end,
     past: str = cli.options.past,
+    verbose: int = typer.Option(
+            0,
+            "-v",
+            count=True,
+            metavar="",
+            help="Verbosity: -v Show periodic system default app tasks, which are filtered by default, -vv Show logs with original field names and minimal formatting (vertically)",
+            rich_help_panel="Formatting",
+            show_default=False,
+    ),
     sort_by: LogSortBy = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -81,7 +90,6 @@ def acp_logs(
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
-    verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show ACP audit logs
 
@@ -138,19 +146,20 @@ def acp_logs(
     if kwargs.get("log_id"):
         cli.display_results(resp, tablefmt="action")
     else:
-        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if verbose <= 1 else "yaml")
 
         cli.display_results(
             resp,
             tablefmt=tablefmt,
             title=title,
+            caption="Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
             pager=pager,
             outfile=outfile,
             sort_by=sort_by,
             reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
-            cleaner=cleaner.get_audit_logs if not verbose else None,
-            cache_update_func=cli.cache.update_log_db if not verbose else None,
-            caption="Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
+            cleaner=cleaner.get_audit_logs,  # if not verbose else None,
+            cache_update_func=cli.cache.update_log_db,  # cache is not updated if -vv if not verbose else None,
+            verbosity = verbose
         )
 
 

@@ -443,6 +443,10 @@ class CLICommon:
         if code != 0:
             msg = f"[dark_orange3]\u26a0[/]  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
+        # Display any log captions when exiting
+        if log.caption:
+            console.print(log.caption.lstrip().replace("\n  ", "\n"))
+
         if msg:
             console.print(msg)
         raise typer.Exit(code=code)
@@ -896,6 +900,9 @@ class CLICommon:
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
+
+        if not data:
+            log.warning("No data after import from file.", caption=True)
 
         return data
 
@@ -1422,7 +1429,7 @@ class CLICommon:
         _delay = 30
         for _try in range(4):
             _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else escape("[Attempt {_try + 1}] ")
+            _prefix = "" if _try == 0 else escape(f"[Attempt {_try + 1}] ")
             _delay -= (5 * _try) # reduce delay by 5 secs for each loop
             for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
                 time.sleep(1)
@@ -1474,23 +1481,39 @@ class CLICommon:
         confirm_msg = []
 
         try:
-            serials_in = [dev["serial"].upper() for dev in data]
+            serials_in = [dev["serial"] for dev in data]
+            # serials_in = [dev["serial"].upper() for dev in data]
         except KeyError:
             self.exit("Missing required field: [cyan]serial[/].")
 
-        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for d in serials_in]  # returns None if device not found in cache after update
+        # cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for idx, d in enumerate(serials_in)]  # returns None if device not found in cache after update
+        cache_devs: List[CacheDevice | CacheInvDevice | None] = []
+        serial_updates: Dict[int, str] = {}
+        for idx, d in enumerate(serials_in):
+            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only)
+            if this_dev:
+                serial_updates[idx] = this_dev.serial
+            cache_devs += [this_dev]
+
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
         cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
 
+        serials_in = [s.upper() if idx not in serial_updates else serial_updates[idx] for idx, s in enumerate(serials_in)]
+        invalid_serials = [s for s in serials_in if not utils.is_serial(s)]
+        valid_serials = [s for s in serials_in if s not in invalid_serials]
+        _not_valid_msg = "does not appear to be a valid serial"
+        _not_found_msg = "was not found, does not exist in inventory"
+
+        _ = [log.warning(f"Ignoring [cyan]{s}[/] as it {_not_valid_msg if s not in [s.upper() for s in not_found_devs] else _not_found_msg}", caption=True) for s in invalid_serials]
 
         # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
         # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
         # We always use serials with import without validation for arch/unarchive as device will not show in inventory if it's already archved
-        arch_reqs = [] if ui_only or not serials_in else [
-            BR(self.central.archive_devices, serials_in),
-            BR(self.central.unarchive_devices, serials_in),
+        arch_reqs = [] if ui_only or not valid_serials else [
+            BR(self.central.archive_devices, valid_serials),
+            BR(self.central.unarchive_devices, valid_serials),
         ]
 
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1517,6 +1540,8 @@ class CLICommon:
             _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
 
         if not _total_reqs:
+            if ui_only and delayed_mon_del_reqs:  # they select ui only, but devices are online
+                self.exit(f"[cyan]--ui-only[/] provided, but only applies to devices that are offline, {len(delayed_mon_del_reqs)} device{'s are' if len(delayed_mon_del_reqs) > 1 else ' is'} online.  Nothing to do. Exiting...")
             self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
 
         sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
@@ -1534,7 +1559,7 @@ class CLICommon:
             else:
                 confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
-            confirmation_list = serials_in if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
+            confirmation_list = valid_serials if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
             confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
 
         if _total_reqs > 1:
