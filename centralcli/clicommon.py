@@ -443,6 +443,10 @@ class CLICommon:
         if code != 0:
             msg = f"[dark_orange3]\u26a0[/]  {msg}" if msg else msg  # \u26a0 = ⚠ / :warning:
 
+        # Display any log captions when exiting
+        if log.caption:
+            console.print(log.caption.lstrip().replace("\n  ", "\n"))
+
         if msg:
             console.print(msg)
         raise typer.Exit(code=code)
@@ -896,6 +900,9 @@ class CLICommon:
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
+
+        if not data:
+            log.warning("No data after import from file.", caption=True)
 
         return data
 
