@@ -2514,16 +2514,17 @@ class Cache:
 
     async def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
         # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
+        new_by_serial = {dev["serial"]: dev for dev in new_data}
         if db == "dev":
             DB = self.DevDB
             cache_by_serial = self.devices_by_serial
+            updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
         else:
             DB = self.InvDB
             cache_by_serial = self.inventory_by_serial
+            updated_devs_by_serial = {**cache_by_serial, **{serial: dict(models.InventoryDevice(**{**cache_by_serial.get(serial, {}), **new_by_serial[serial]}).model_dump()) for serial in new_by_serial}}
 
-        new_by_serial = {dev["serial"]: dev for dev in new_data}
-        # updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
-        updated_devs_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], **new_by_serial[serial]} for serial in new_by_serial}}
+        # updated_devs_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial.get(serial, {}), **new_by_serial[serial]} for serial in new_by_serial}}
         return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
 
 
@@ -3472,9 +3473,9 @@ class Cache:
                     econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/]{dev_type_sfx}.")
                     if FUZZ:
                         if dev_type:
-                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if d["type"] in dev_type], limit=1)[0]
+                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
                         else:
-                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices], limit=1)[0]
+                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d], limit=1)[0]
                         confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.DevDB.search(self.Q.name == fuzz_match)
