@@ -2522,7 +2522,8 @@ class Cache:
             cache_by_serial = self.inventory_by_serial
 
         new_by_serial = {dev["serial"]: dev for dev in new_data}
-        updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
+        # updated_devs_by_serial = {**cache_by_serial, **new_by_serial}
+        updated_devs_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], **new_by_serial[serial]} for serial in new_by_serial}}
         return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
 
 

@@ -1094,14 +1094,18 @@ def delete(
 
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
-def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchRequest]:
+def _build_sub_requests(devices: List[dict], unsub: bool = False) -> Tuple[List[dict], List[dict], List[BatchRequest]]:
     if "'license': " in str(devices):
         devices = [{**d, "services": d["license"]} for d in devices]
     elif "'subscription': " in str(devices):
         devices = [{**d, "services": d["subscription"]} for d in devices]
 
-    subs = set([d["services"] for d in devices if d["services"]])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
-    devices = [d for d in devices if d["services"]]  # filter any devs that currently do not have subscription
+    subs = set([d["services"] for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    ignored = [d for d in devices if not d.get("services")]
+    devices = [d for d in devices if d.get("services")]  # filter any devs that currently do not have subscription
+
+    if ignored:
+        log.warning(f"Ignored {len(ignored)} devices, no desired subscription provided", caption=True)
 
     try:
         subs = [cli.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
@@ -1114,9 +1118,12 @@ def _build_sub_requests(devices: List[dict], unsub: bool = False) -> List[BatchR
         devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
 
     func = cli.central.unassign_licenses if unsub else cli.central.assign_licenses
-    return [
-        BatchRequest(func, serials=serials, services=sub) for sub, serials in devs_by_sub.items()
+    # Both Assign and unassign allow a max of 50 serials per call
+    requests = [
+        BatchRequest(func, serials=chunk, services=sub) for sub in devs_by_sub for chunk in utils.chunker(devs_by_sub[sub], 50)
     ]
+
+    return devices, ignored, requests
 
 @app.command()
 def subscribe(
@@ -1142,10 +1149,12 @@ def subscribe(
         cli.exit(_invalid_msg("cencli batch subscribe [OPTIONS] [IMPORT_FILE]"))
 
     devices = cli._get_import_file(import_file, "devices")
-    sub_reqs = _build_sub_requests(devices)
+    devices, ignored, sub_reqs = _build_sub_requests(devices)
 
     cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
-    print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+    # print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+    if ignored:
+        cli.display_results(data=ignored, tablefmt="rich", title="[bright_red]!![/] The following devices will be IGNORED [bright_red]!![/]", caption=f'{len(ignored)} devices will be ignored due to incomplete data')
     if cli.confirm(yes):
         resp = cli.central.batch_request(sub_reqs)
         cli.display_results(resp, tablefmt="action")
@@ -1181,7 +1190,9 @@ def unsubscribe(
             if dis_cen:
                 resp = cli.batch_delete_devices(devices, yes=yes)
             else:
-                unsub_reqs = _build_sub_requests(devices, unsub=True)
+                devices, ignored, unsub_reqs = _build_sub_requests(devices, unsub=True)
+                if not devices:
+                    cli.exit("No devices with subscriptions found in inventory that have never connected.\nNoting to do.")
 
                 cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
                 print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
@@ -1191,22 +1202,30 @@ def unsubscribe(
         cli.exit(_invalid_msg("cencli batch unsubscribe [OPTIONS] [IMPORT_FILE]"))
     elif import_file:
         devices = cli._get_import_file(import_file, "devices")
-        unsub_reqs = _build_sub_requests(devices, unsub=True)
+        devices, ignored, unsub_reqs = _build_sub_requests(devices, unsub=True)
 
         cli.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
-        print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
+        # print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
+        if ignored:
+            cli.display_results(data=ignored, tablefmt="rich", title="[bright_red]!![/] The following devices will be IGNORED [bright_red]!![/]", caption=f'{len(ignored)} devices will be ignored due to incomplete data')
+
+        if not unsub_reqs:
+            cli.exit("Nothing to do")
         if cli.confirm(yes):
             resp = cli.central.batch_request(unsub_reqs)
 
-    if not dis_cen:
-        inv_devs = [{**d, "services": None} for r, d in zip(resp, devices) if r.ok]
-        cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
-        if len(inv_devs) != len(cache_resp):
-            log.warning(
-                f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
-                )
+    # if not dis_cen:
+    #     inv_devs = [{**d, "services": None, "subscription_key": None, "subscription_expires": None} for r, d in zip(resp, devices) if r.ok]
+    #     cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
+    #     if len(inv_devs) != len(cache_resp):
+    #         log.warning(
+    #             f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
+    #             )
 
     cli.display_results(resp, tablefmt="action")
+    if not dis_cen:
+        inv_devs = [{"serial": serial, "services": None, "subscription_key": None, "subscription_expires": None} for req, resp in zip(unsub_reqs, resp) if resp.ok for serial in req.kwargs["serials"]]
+        cli.central.request(cli.cache.update_inv_db, inv_devs)
 
 
 @app.command()

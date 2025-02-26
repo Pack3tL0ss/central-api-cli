@@ -4931,12 +4931,23 @@ class CentralApi(Session):
             services (str | List[str]): List of service names. Call services/config API to get the list of
                 valid service names.
 
+        Raises:
+            ValueError: When more the 50 serials are provided, which exceeds the max allowed by the API endpoint.
+
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/subscriptions/assign"
         serials = utils.listify(serials)
         services = utils.listify(services)
+
+        if len(serials) > 50:
+            raise ValueError(f"{url} endpoint allows a max of 50 serials per call.  {len(serials)} were provided.")
+
+        # Working code for doing 50 serial chunking here.  This results in _batch_request calling _batch_request and a list of lists.  Would need to flatted the lists
+        # for display_results to handle the output.
+        # requests = [self.BatchRequest(self.post, url, json_data={"serials": chunk, "services": services}) for chunk in utils.chunker(serials, 50)]
+        # return await self._batch_request(requests)
 
         json_data = {
             'serials': serials,
@@ -4953,12 +4964,18 @@ class CentralApi(Session):
             services (str | List[str]): List of service names. Call services/config API to get the list of
                 valid service names.
 
+        Raises:
+            ValueError: When more the 50 serials are provided, which exceeds the max allowed by the API endpoint.
+
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/licensing/v1/subscriptions/unassign"
         serials = utils.listify(serials)
         services = utils.listify(services)
+
+        if len(serials) > 50:
+            raise ValueError(f"{url} endpoint allows a max of 50 serials per call.  {len(serials)} were provided.")
 
         json_data = {
             'serials': serials,
