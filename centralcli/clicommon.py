@@ -1429,7 +1429,7 @@ class CLICommon:
         _delay = 30
         for _try in range(4):
             _word = "more " if _try > 0 else ""
-            _prefix = "" if _try == 0 else escape("[Attempt {_try + 1}] ")
+            _prefix = "" if _try == 0 else escape(f"[Attempt {_try + 1}] ")
             _delay -= (5 * _try) # reduce delay by 5 secs for each loop
             for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
                 time.sleep(1)
@@ -1540,6 +1540,8 @@ class CLICommon:
             _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
 
         if not _total_reqs:
+            if ui_only and delayed_mon_del_reqs:  # they select ui only, but devices are online
+                self.exit(f"[cyan]--ui-only[/] provided, but only applies to devices that are offline, {len(delayed_mon_del_reqs)} device{'s are' if len(delayed_mon_del_reqs) > 1 else ' is'} online.  Nothing to do. Exiting...")
             self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
 
         sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
