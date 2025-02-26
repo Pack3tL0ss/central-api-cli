@@ -1481,15 +1481,26 @@ class CLICommon:
         confirm_msg = []
 
         try:
-            serials_in = [dev["serial"].upper() for dev in data]
+            serials_in = [dev["serial"] for dev in data]
+            # serials_in = [dev["serial"].upper() for dev in data]
         except KeyError:
             self.exit("Missing required field: [cyan]serial[/].")
 
-        cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for d in serials_in]  # returns None if device not found in cache after update
+        # cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for idx, d in enumerate(serials_in)]  # returns None if device not found in cache after update
+        cache_devs: List[CacheDevice | CacheInvDevice | None] = []
+        serial_updates: Dict[int, str] = {}
+        for idx, d in enumerate(serials_in):
+            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only)
+            if this_dev:
+                serial_updates[idx] = this_dev.serial
+            cache_devs += [this_dev]
+
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
         cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
+
+        serials_in = [s.upper() if idx not in serial_updates else serial_updates[idx] for idx, s in enumerate(serials_in)]
 
 
         # archive / unarchive removes any subscriptions (less calls than determining the subscriptions for each then unsubscribing)
