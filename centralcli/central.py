@@ -1724,7 +1724,7 @@ class CentralApi(Session):
         calculate_total: bool = False,
         sort: str = None,
         offset: int = 0,
-        limit: int = 100,
+        limit: int = 1000,
     ) -> Response:
         """List Sites.
 
