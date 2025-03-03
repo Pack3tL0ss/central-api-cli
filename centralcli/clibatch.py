@@ -375,9 +375,15 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
         cli.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
 
     resp = None
-    site_names = utils.summarize_list([s.site_name for s in verified_sites], max=7)
-    cli.console.print("\n[bright_green]The Following Sites will be created:[/]")
-    cli.console.print(site_names, emoji=False)
+    address_fields = {"site_name": "bright_green", "name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green3", "country": "magenta", "zipcode": "blue", "zip": "blue"}
+    confirm_msg = utils.summarize_list(
+        [
+            "|".join([f'[{address_fields[k]}]{v}[/]' for k, v in site.items() if v and k in address_fields]) for site in verified_sites.model_dump()
+        ],
+        max=7
+    )
+    cli.console.print(f"\n[bright_green]The Following [cyan]{len(verified_sites)}[/] Sites will be created:[/]")
+    cli.console.print(confirm_msg, emoji=False)
     if cli.confirm(yes):
         reqs = [
             BatchRequest(central.create_site, **site.model_dump())
@@ -969,6 +975,7 @@ def add(
     if what == "sites":
         resp = batch_add_sites(import_file, yes=yes)
         tablefmt = "rich"
+        # TODO should re-order columns so output is more consistent with show sites (i.e. site_name is not guaranteed to be first col in output of these calls)
     elif what == "groups":
         resp = batch_add_groups(import_file, yes=yes)
     elif what == "devices":
