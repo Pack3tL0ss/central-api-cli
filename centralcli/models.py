@@ -180,12 +180,13 @@ class Sites(RootModel):
 
 
 class ImportSite(BaseModel):
-    model_config = ConfigDict(extra="allow", use_enum_values=True)
+    # model_config = ConfigDict(extra="allow", use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True)
     site_name: str = Field(..., alias=AliasChoices("site_name", "site", "name"))
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
-    country: Optional[str] = Field(None, min_length=3)
+    country: Optional[str] = None  # Field(None, min_length=3)
     zipcode: Optional[str | int] = Field(None, alias=AliasChoices("zip", "zipcode"))
     latitude: Optional[str | float] = Field(None, alias=AliasChoices("lat", "latitude"))
     longitude: Optional[str | float] = Field(None, alias=AliasChoices("lon", "longitude"))
@@ -193,6 +194,9 @@ class ImportSite(BaseModel):
     @field_validator("state")
     @classmethod
     def short_to_long(cls, v: str) -> str:
+        if v.lower() == "district of columbia":
+            return "District of Columbia"
+
         try:
             return SiteStates(state_abbrev_to_pretty.get(v.upper(), v.title())).value
         except ValueError:
@@ -218,12 +222,16 @@ class ImportSites(RootModel):
     @staticmethod
     def _convert_site_key(_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         def auto_usa(data: Dict[str, str | int | float]) -> str:
-            if not data.get("country") and data.get("state") and data["state"] in state_abbrev_to_pretty.values():
+            _country = data.get("country", "")
+            if _country.isdigit():  # Data from large customer had country as '1' for some sites
+                _country = ""
+
+            if not _country and data.get("state") and data["state"].upper() in [kk.upper() for k, v in state_abbrev_to_pretty.items() for kk in [k, v]]:
                 return "United States"
-            if data.get("country", "").upper() in ["USA", "US"]:
+            if _country.upper() in ["USA", "US"]:
                 return "United States"
 
-            return data.get("country")
+            return _country
 
         _data = [
             {

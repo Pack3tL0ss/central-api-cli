@@ -1074,7 +1074,7 @@ def get_event_logs(data: List[dict], cache_update_func: callable = None) -> List
 def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     data = utils.listify(data)
     data = Sites(data)
-    return data.model_dump()["sites"]
+    return data.model_dump()
 
 
 def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:

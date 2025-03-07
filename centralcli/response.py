@@ -1085,7 +1085,7 @@ class Session():
         # strip out the pause/limiter (asyncio.sleep) responses (None)
         m_resp = utils.strip_none(m_resp)
 
-        log.debug(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
+        log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 
