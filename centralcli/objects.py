@@ -71,7 +71,10 @@ class DateTime():
             int | float: timestamp/epoch in seconds
         """
         if isinstance(timestamp, str):
-            return pendulum.parse(timestamp).timestamp()
+            if not timestamp.isdigit():
+                return pendulum.parse(timestamp).timestamp()
+            else:
+                timestamp = int(timestamp)
 
         if str(timestamp).isdigit() and len(str(int(timestamp))) > 10:
             timestamp = timestamp / 1000
