@@ -308,7 +308,7 @@ class Utils:
             if not strip_empty_obj:
                 return {k: v if not callable(v) else v.__name__ for k, v in data.items() if v is not None}
             else:
-                return {k: v for k, v in data.items() if not isinstance(v, bool) and v}
+                return {k: v for k, v in data.items() if isinstance(v, bool) or v}
         elif isinstance(data, (list, tuple)):
             if strip_empty_obj:
                 return type(data)(d for d in data if d)
