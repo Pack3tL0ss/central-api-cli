@@ -533,6 +533,8 @@ def aps(
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for APs
+
+    Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
     """
     if dirty:
         if not group:
@@ -1589,7 +1591,6 @@ def lldp(
 
     Valid on APs and CX switches
 
-    Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
     NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
