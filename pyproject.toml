@@ -41,6 +41,7 @@ keywords = [
     "RESTFUL",
     "REST"
 ]
+
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -59,7 +60,6 @@ speedups = [ "aiodns>=3.2.0;platform_system != 'Windows'", "Brotli;platform_pyth
 documentation = "https://central-api-cli.readthedocs.org"
 repository = "https://github.com/Pack3tL0ss/central-api-cli"
 issues = "https://github.com/Pack3tL0ss/central-api-cli/issues"
-
 
 [project.scripts]
 cencli = "centralcli.cli:app"
