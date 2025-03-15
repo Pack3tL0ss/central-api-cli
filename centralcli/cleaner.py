@@ -357,6 +357,17 @@ _short_key = {
 }
 
 
+def ensure_common_keys(data: List[dict]) -> List[dict]:
+    try:
+        common_keys = []  # This preserves field order vs using set/intersection
+        _ = [common_keys.append(k) for inner in data for k in inner.keys() if k not in common_keys]
+        res = [{k: iface.get(k) for k in common_keys} for iface in data]
+    except Exception as e:
+        log.exception(f"{e.__class__.__name__} occured in cleaner.ensure_common_keys.\n{e}")
+        return data
+
+    return res
+
 def strip_outer_keys(data: dict) -> Union[list, dict]:
     """strip unnecessary wrapping key from API response payload
 
@@ -449,7 +460,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
     """Default simple formatter
 
     Args:
-        data (List[Dict[str, Any]]): Data to be formatted, data is returned unchanged is data is not a list.
+        data (List[Dict[str, Any]]): Data to be formatted, data is returned unchanged if data is not a list.
         key_order (List[str], optional): List of keys in the order desired.
             If defined only key_order key/value pairs are returned. Defaults to None.
         strip_keys (List[str], optional): List of keys to be stripped from output.
