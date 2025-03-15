@@ -47,14 +47,16 @@ from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
     SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, DeviceStatus,
-    DeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 from .strings import cron_weekly
+from .cache import CacheDevice
+from .response import CombinedResponse
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CacheDevice, CachePortal
+    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal
     from tinydb.table import Document
 
 
@@ -917,12 +919,78 @@ def swarms(
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
+class ParsedCombinedResp:
+    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float):
+        self.dev_type = dev_type
+        self.passed = passed
+        self.failed = failed
+        self.output = output
+        self.raw = raw
+        self.elapsed = elapsed
+
+    @property
+    def to_dict(self) -> dict:
+        return {"response": self.response._response, "output": self.clean, "raw": self.raw, "elapsed": self.elapsed}
+
+    @property
+    def clean(self):
+        _clean =  [{"device": r.get("_name", r.get("name")), **i} for r in self.output for i in cleaner.show_interfaces(r, dev_type=r.get("_dev_type") or self.dev_type)]
+        if self.dev_type == "gw":
+            _clean = [{k: v for k, v in d.items() if k != "name"} for d in _clean]
+        return cleaner.ensure_common_keys(_clean)
+
+    @property
+    def response(self):
+        return sorted(self.passed or self.failed, key=lambda r: r.rl)[0]
+
+def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response]) -> ParsedCombinedResp:
+    _failed = [r for r in responses if not r.ok]
+    _passed = responses if not _failed else [r for r in responses if r.ok]
+
+    if _failed:
+        log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.name for r in _failed])}", caption=True)
+
+    output = [i for r in _passed for i in utils.listify(r.output)]
+    raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
+    elapsed = sum(r.elapsed for r in _passed)
+
+    return ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed)
+
+def combine_ap_interface_responses(responses: List[Response]) -> Response:
+    parsed = parse_interface_responses("ap", responses)
+
+    return {**parsed.to_dict}
+
+
+def combine_gw_interface_responses(responses: List[Response]) -> Response:
+    parsed = parse_interface_responses("gw", responses)
+
+    return {**parsed.to_dict}
+
+
+def combine_switch_interface_responses(responses: List[Response]) -> Response:
+    parsed = parse_interface_responses("switch", responses)
+
+    return {**parsed.to_dict}
+
 
 # TODO define sort_by fields
 @app.command()
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey42](chassis only)[/]", show_default=False,),
+    device: str = typer.Argument(
+        "all",
+        metavar=f"{iden_meta.dev.replace(']', '|\"all\"]')}",
+        autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
+        help="",
+        show_default=False,
+    ),
+    slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    do_gw: bool = typer.Option(False, "--gw", help="Show interfaces for all gateways, [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
+    do_ap: bool = typer.Option(False, "--ap", help="Show interfaces for all APs [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
+    do_switch: bool = typer.Option(False, "--switch", help="Show interfaces for all switches [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
+    _do_switch: bool = typer.Option(False, "--cx", "--sw", hidden=True,),  # hidden support common alternative switch flags
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
     verbose: int = cli.options.verbose,
@@ -940,29 +1008,100 @@ def interfaces(
     account: str = cli.options.account,
 ):
     """Show interfaces/details"""
-    dev = cli.cache.get_dev_identifier(device, conductor_only=True,)
-    if dev.generic_type == "gw":
-        resp = cli.central.request(cli.central.get_gateway_ports, dev.serial)
-    elif dev.type == "ap":
-        resp = cli.central.request(cli.central.get_dev_details, "aps", dev.serial)  # We extract the wired interface details from /monitoring/v2/aps
+    do_switch = do_switch or _do_switch
+    title_sfx = ""
+    filters = {
+        "group": group,
+        "site": site
+    }
+
+    if device != "all":
+        if any([site, group]):
+            warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in filters.items() if v])
+            log.warning(f"{warn_msg} ignored as the option does not apply when a specific device is provided.", caption=True)
+        dev: CacheDevice = cli.cache.get_dev_identifier(device, conductor_only=True,)
+        dev_type = dev.generic_type
+        dev = [dev]
     else:
-        iden = dev.swack_id or dev.serial
-        resp = cli.central.request(cli.central.get_switch_ports, iden, slot=slot, stack=dev.swack_id is not None, aos_sw=dev.type == "sw")
+        if [do_ap, do_gw, do_switch].count(True) > 1:
+            cli.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
+        if verbose:
+            log.warning("[cyan]-v[/] (verbose) option only supported on single device output.", caption=True)
+
+        if do_ap:
+            dev_type = "ap"
+        elif do_gw:
+            dev_type = "gw"
+        elif do_switch:
+            dev_type = "switch"
+        else:
+            cli.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
+
+        # Update cache basesd on provided filters
+        dev_resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, group=group, site=site)
+        if not dev_resp:
+            cli.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
+
+        site: CacheSite = site if not site else cli.cache.get_site_identifier(site)
+        group: CacheGroup = group if not group else cli.cache.get_group_identifier(group)
+
+        dev: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in cli.cache.devices] if cd.generic_type == dev_type]
+        if site:
+            dev = [d for d in dev if d.site == site.name]
+            title_sfx = f" in site {site.name}"
+        if group:
+            dev = [d for d in dev if d.group == group.name]
+            title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
+
+        if not dev:
+            cli.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
+
+    if dev_type == "gw":
+        batch_resp = cli.central.batch_request([BatchRequest(cli.central.get_gateway_ports, d.serial) for d in dev])
+    elif dev_type == "ap":
+        batch_resp = cli.central.batch_request([BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in dev])  # We extract the wired interface details from /monitoring/v2/aps
+    else:
+        batch_resp = cli.central.batch_request(
+            [
+                BatchRequest(
+                    cli.central.get_switch_ports,
+                    d.swack_id or d.serial,
+                    slot=slot,
+                    stack=d.swack_id is not None,
+                    aos_sw=d.type == "sw"
+                ) for d in dev
+            ]
+        )
+
+    if len(batch_resp) > 1 and dev_type in ["gw", "switch"]:  # We need to append name to ap/switch for multi-device listings
+            for d, r in zip(dev, batch_resp):
+                if r.ok:
+                    r.output = [{"_name": d.name, "_dev_type": d.type, **i} for i in r.output]
+
+
+    combiner_func = {
+        "ap": combine_ap_interface_responses,
+        "gw": combine_gw_interface_responses,
+        "switch": combine_switch_interface_responses
+    }
+
+    resp = CombinedResponse(batch_resp, combiner_func[dev_type]) if len(batch_resp) > 1 else batch_resp[0]
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
-    title = f"{dev.name} Interfaces"
+    title = f"Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(dev) > 1 else f"{dev[0].name} Interfaces"
 
     caption = []
-    if dev.type == "sw":
-        caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown as not provided by API for aos-sw", emoji=True)]
+    if dev_type == "switch" and "sw" in [d.type for d in dev]:
+        dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
+        caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by API", emoji=True)]
 
     if resp:
-        try:
-            up = len([i for i in resp.output if i.get("status").lower() == "up"])
-            down = len(resp.output) - up
-            caption += [f"Counts: Total: [cyan]{len(resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
+        try:  # TODO add --up --down filter
+            up = len([i for i in batch_resp.output if i.get("status").lower() == "up"])
+            down = len(batch_resp.output) - up
+            caption += [f"Counts: Total: [cyan]{len(batch_resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
         except Exception as e:
-            log.error(f"{e.__class__.__name__} while trying to get counts from {dev.name} interface output")
+            log.error(f"{e.__class__.__name__} while trying to get counts from interface output")
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
     cli.display_results(
@@ -974,9 +1113,9 @@ def interfaces(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        cleaner=cleaner.show_interfaces,
+        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,
         verbosity=verbose,
-        dev_type=dev.type
+        dev_type=dev_type
     )
 
 
