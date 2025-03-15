@@ -895,7 +895,7 @@ def sort_result_keys(data: List[dict], order: List[str] = None) -> List[dict]:
     return data
 
 
-def get_devices(data: Union[List[dict], dict], *, verbosity: int = 0, output_format: TableFormat = None) -> Union[List[dict], dict]:
+def get_devices(data: List[dict] | dict, *, verbosity: int = 0, output_format: TableFormat = None) -> List[dict] | dict:
     """Clean device output from Central API (Monitoring)
 
     Args:
