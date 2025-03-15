@@ -54,6 +54,7 @@ from centralcli.objects import DateTime
 from .strings import cron_weekly
 from .cache import CacheDevice
 from .response import CombinedResponse
+from .models import Device
 
 if TYPE_CHECKING:
     from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal
@@ -254,6 +255,16 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
 
     return resp, caption
 
+def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[CacheDevice]):
+    try:
+        data = [{**r.output, "type": d.type, "switch_role": d.switch_role} for r, d in zip(batch_res, devs) if r.ok]
+        model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
+        cli.central.request(cli.cache.update_dev_db, model_data)
+    except Exception as e:
+        log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
+        log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
+
+
 def _get_details_for_specific_devices(
         devices: List[CentralObject],
         dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
@@ -275,6 +286,7 @@ def _get_details_for_specific_devices(
             for r, dev in zip(batch_res, devs):
                 r.output = {**r.output, **cli.cache.inventory_by_serial.get(dev.serial, {})}
 
+        _update_cache_for_specific_devices(batch_res, devs)
 
         if do_table and len(dev_types) > 1:
             _output = [r.output for r in batch_res]

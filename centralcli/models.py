@@ -101,23 +101,35 @@ class Inventory(RootModel):
         return {s.serial: s.model_dump() for s in self.root}
 
 
-# Not used yet  None of the Cache models below are currently used.
 # TODO have Cache return model for attribute completion support in IDE
 class Device(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
     name: str
     status: DeviceStatus
-    type: DevType
+    type: DevType = Field(alias=AliasChoices("type", "switch_type", "device_type"))
     model: str
     ip: str = Field(None, alias="ip_address")  # can't use IPvAnyAddress here as stack members do not have IP addresses
     mac: str = Field(alias="macaddr")
     serial: str
     group: str = Field(alias="group_name")
-    site: Optional[str] = Field(None)
+    site: Optional[str] = Field(None, alias=AliasChoices("site", "site_name"))
     version: str = Field(alias="firmware_version")
-    swack_id: Optional[str] = Field(None)
+    swack_id: Optional[str] = Field(None, alias=AliasChoices("stack_id", "swarm_id"))
     switch_role: Optional[int] = Field(None)
 
-    # _normalize_type = validator("type", allow_reuse=True)(lambda v: switch_types.get(v, v))
+    @field_validator("type", mode="before")
+    @classmethod
+    def transform_dev_type(cls, dev_type: str) -> DevType:
+        if dev_type == "ArubaCX":
+            return DevType.cx
+
+        if dev_type == "ArubaSwitch":
+            return DevType.sw
+
+        if dev_type == "MC":
+            return DevType.gw
+
+        return DevType(dev_type)
 
 class Devices(BaseModel):
     aps: Optional[List[Device]] = Field([])
