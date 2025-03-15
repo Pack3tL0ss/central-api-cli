@@ -980,7 +980,7 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
 def interfaces(
     device: str = typer.Argument(
         "all",
-        metavar=f"{iden_meta.dev.replace(']', '|"all"]')}",
+        metavar=f"{iden_meta.dev.replace(']', '|all]')}",
         autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
         help=f"Device to fetch interfaces from {cli.help_default('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
