@@ -1567,7 +1567,19 @@ def sort_interfaces(interfaces: List[Dict[str, Any]], interface_key: str= "port_
         return interfaces
 
 
-def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx") -> List[dict] | dict:
+def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", by_interface: bool = None) -> List[dict] | dict:
+    """Clean Output of interface endpoints for each device type.
+
+    Args:
+        data (List[dict] | dict): The API response payload
+        verbosity (int, optional): verbosity, more fields displayed. Defaults to 0.
+        dev_type (DevTypes, optional): One of ap, gw, cx, sw, switch. Defaults to "cx".
+        by_interface (bool, optional): By default if verbosity > 0 List[Dict] will be converted to Dict keyed by interface, set this to False to always return a list.
+            This is useful for multi-device interface listings.  Defaults to None.
+
+    Returns:
+        List[dict] | dict: Cleaned API response payload with less interesting fields removed
+    """
     if isinstance(data, list) and data and "member_port_detail" in data[0]:  # switch stack
         normal_ports = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
         stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
@@ -1578,6 +1590,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     # TODO verbose and non-verbose
     # TODO determine if "mode" has any value, appears to always be Access on SW
     key_order = [
+        "device",
         "macaddr",
         "type",
         "phy_type",
@@ -1608,6 +1621,7 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
 
     verbosity_keys = {
         0: [
+            "device", # multi device. stripped in combiner
             "port_number",
             "name", # ap
             "vlan",
@@ -1626,10 +1640,10 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     }
 
     # API for AOS_SW always shows VLAN as 1
-    if dev_type == "sw":
+    if dev_type in ["sw", "switch"]:
         # _ = verbosity_keys[0].pop(verbosity_keys[0].index("vlan"))
         data = [
-            {
+            d if d.get("_dev_type", "") != "sw" and dev_type != "sw" else {
                 **d,
                 "vlan_mode": "Trunk" if len(d.get("allowed_vlan")) > 1 else "Access",
                 "vlan": "?" if len(d.get("allowed_vlan")) > 1 else d["allowed_vlan"][0],
@@ -1638,9 +1652,12 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     elif dev_type == "gw":
         verbosity_keys[0].insert(4, "trusted")
     elif dev_type == "ap" and data:
-        data = data[0].get("ethernets", [])
-        verbosity_keys[0].insert(2, "macaddr")
-        verbosity_keys[0].insert(10, "duplex_mode")
+        if "device" in data[0]:
+            data = [{"device": d["device"], **iface} for d in data for iface in d.get("ethernets", [])]
+        else:
+            data = data[0].get("ethernets", [])
+        verbosity_keys[0].insert(3, "macaddr")
+        verbosity_keys[0].insert(11, "duplex_mode")
         for iface in data:
             if iface.get("status", "").lower() != "up":
                 iface["duplex_mode"] = "--"
@@ -1656,9 +1673,16 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     else:
         key_order = [*key_order, *data[-1].keys()]
         # send all key/value pairs through formatters and convert List[Dict] to Dict where port_number is key
-        data = {
-            d["port_number"] if not all(d.isdigit() for d in d["port_number"]) else int(d["port_number"]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
-        }
+        if by_interface is not False:
+            key_field = "port_number" if dev_type != "ap" else "name"
+            data = {
+                d[key_field] if not d[key_field].isdigit() else int(d[key_field]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
+            }
+        else:
+            strip_keys = [k for k in strip_keys if k != "port_number"]
+            data = [
+                dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
+            ]
 
     return strip_no_value(data)
 

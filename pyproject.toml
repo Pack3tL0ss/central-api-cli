@@ -1,13 +1,36 @@
-[tool.poetry]
+[project]
 name = "centralcli"
-version = "8.1.0"
+version = "8.1.3"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
-authors = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
-maintainers = ["Wade Wells (Pack3tL0ss) <wade@consolepi.org>"]
+authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
+maintainers = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
 readme = "README.md"
-repository = "https://github.com/Pack3tL0ss/central-api-cli"
-documentation = "https://central-api-cli.readthedocs.org"
+requires-python = ">=3.8,<4.0"
+
+dependencies = [
+    "tabulate>=0.8",
+    "typer>=0.6,<0.11.0",
+    "pylibyaml>=0.1.0",
+    "PyYAML>=6",
+    "tinydb>=4",
+    "shellingham>=1",
+    "pendulum>=2",
+    "pycentral>=0.0.3",
+    "aiohttp>=3",
+    "asyncio>=3",
+    "rich>=10",
+    "tablib>=3",
+    "jinja2",
+    "pydantic>=2.0.0",
+    "ipaddress",
+    "fuzzywuzzy",
+    "levenshtein",
+    "click<=7.1.2",
+    "uniplot>=0.13.0",
+    "eval_type_backport;python_version<'3.10'",
+]
+
 keywords = [
     "cli",
     "Aruba",
@@ -18,6 +41,7 @@ keywords = [
     "RESTFUL",
     "REST"
 ]
+
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -25,45 +49,22 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: MIT License"
 ]
 
-[tool.poetry.scripts]
+[project.optional-dependencies]
+hook-proxy = [ "fastapi", "uvicorn", "psutil"]
+speedups = [ "aiodns>=3.2.0;platform_system != 'Windows'", "Brotli;platform_python_implementation == \"CPython\"", "brotlicffi;platform_python_implementation != 'CPython'"]
+
+[project.urls]
+documentation = "https://central-api-cli.readthedocs.org"
+repository = "https://github.com/Pack3tL0ss/central-api-cli"
+issues = "https://github.com/Pack3tL0ss/central-api-cli/issues"
+
+[project.scripts]
 cencli = "centralcli.cli:app"
 
-[tool.poetry.dependencies]
-python = ">=3.8,<4.0"
-tabulate = ">=0.8"
-typer = ">=0.6,<0.11.0"
-pylibyaml = ">=0.1.0"
-PyYAML = ">=6"
-tinydb = ">=4"
-shellingham = ">=1"
-pendulum = ">=2"
-pycentral = ">=0.0.3"
-aiohttp = ">=3"
-asyncio = ">=3"
-rich = ">=10"
-tablib = ">=3"
-jinja2 = "*"
-pydantic = ">=2.0.0"
-ipaddress = "*"
-fuzzywuzzy = "*"
-levenshtein = "*"
-click = "<=7.1.2"
-uniplot = ">=0.13.0"
-eval_type_backport = { version = "*", python = "<3.10" }
-
-
-# Optional dependencies see tool.poetry.extras
-fastapi = {version = "*", optional = true}
-uvicorn = {version = "*", optional = true}
-psutil = {version = "*", optional = true}
-aiodns = {version = ">=3.2.0", markers = "platform_system != 'Windows'", optional = true}
-Brotli = {version = "*", markers = "platform_python_implementation == 'CPython'", optional = true}
-brotlicffi = {version = "*", markers = "platform_python_implementation != 'CPython'", optional = true}
-
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"
 pytest = ">=6"
 
@@ -117,15 +118,3 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
-
-[tool.poetry.extras]
-hook-proxy = [
-    "fastapi",
-    "uvicorn",
-    "psutil",
-]
-speedups = [
-    "aiodns",
-    "Brotli",
-    "brotlicffi",
-]
