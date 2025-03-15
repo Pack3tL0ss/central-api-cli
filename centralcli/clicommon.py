@@ -1603,6 +1603,16 @@ class CLICommon:
         if inv_doc_ids:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
+    def help_default(self, default_txt: str) -> str:
+        """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
+
+        Args:
+            default_txt (str): The default value to display in the help text.  Do not include the word 'default: '
+
+        Returns:
+            str: Formatted default text.  i.e. [default: some value] (with color markups)
+        """
+        return f"[grey62]{escape(f'[default: {default_txt}]')}[/grey62]"
 
 if __name__ == "__main__":
     pass
