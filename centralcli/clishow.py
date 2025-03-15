@@ -920,13 +920,14 @@ def swarms(
     cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 class ParsedCombinedResp:
-    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float):
+    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
         self.dev_type = dev_type
         self.passed = passed
         self.failed = failed
         self.output = output
         self.raw = raw
         self.elapsed = elapsed
+        self.verbosity = verbosity
 
     @property
     def to_dict(self) -> dict:
@@ -934,43 +935,31 @@ class ParsedCombinedResp:
 
     @property
     def clean(self):
-        _clean =  [{"device": r.get("_name", r.get("name")), **i} for r in self.output for i in cleaner.show_interfaces(r, dev_type=r.get("_dev_type") or self.dev_type)]
-        if self.dev_type == "gw":
-            _clean = [{k: v for k, v in d.items() if k != "name"} for d in _clean]
+        # _clean =  [{"device": r.get("_name", r.get("name")), **i} for r in self.output for i in cleaner.show_interfaces(r, dev_type=r.get("_dev_type") or self.dev_type, verbosity=self.verbosity)]
+        # _clean = [{"device": i["_name"], **{k: v for k, v in i.items() if k != "_name"}} for r in self.output for i in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)]
+        _clean = sorted(
+            [inner for r in self.output for inner in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)],
+            key=lambda d: d["device"]
+        )
         return cleaner.ensure_common_keys(_clean)
 
     @property
     def response(self):
         return sorted(self.passed or self.failed, key=lambda r: r.rl)[0]
 
-def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response]) -> ParsedCombinedResp:
+def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response], verbosity: int = 0) -> ParsedCombinedResp:
     _failed = [r for r in responses if not r.ok]
     _passed = responses if not _failed else [r for r in responses if r.ok]
 
     if _failed:
         log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.name for r in _failed])}", caption=True)
 
-    output = [i for r in _passed for i in utils.listify(r.output)]
+    # output = [i for r in _passed for i in utils.listify(r.output)]
+    output = [r.output for r in _passed]
     raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
     elapsed = sum(r.elapsed for r in _passed)
 
-    return ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed)
-
-def combine_ap_interface_responses(responses: List[Response]) -> Response:
-    parsed = parse_interface_responses("ap", responses)
-
-    return {**parsed.to_dict}
-
-
-def combine_gw_interface_responses(responses: List[Response]) -> Response:
-    parsed = parse_interface_responses("gw", responses)
-
-    return {**parsed.to_dict}
-
-
-def combine_switch_interface_responses(responses: List[Response]) -> Response:
-    parsed = parse_interface_responses("switch", responses)
-
+    parsed = ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed, verbosity=verbosity)
     return {**parsed.to_dict}
 
 
@@ -981,7 +970,7 @@ def interfaces(
         "all",
         metavar=f"{iden_meta.dev.replace(']', '|\"all\"]')}",
         autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
-        help="",
+        help=f"Device to fetch interfaces from {cli.help_default('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
     ),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
@@ -1000,6 +989,7 @@ def interfaces(
     do_yaml: bool = cli.options.do_yaml,
     do_csv: bool = cli.options.do_csv,
     do_table: bool = cli.options.do_table,
+    yes: bool = cli.options.yes,
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1007,7 +997,11 @@ def interfaces(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ):
-    """Show interfaces/details"""
+    """Show interfaces/details
+
+    Show interfaces for a device, or show interfaces for all devices (default if no device is specified) of a provided device type.
+    --site & --group filters only apply when listing all interfaces of a given device type.
+    """
     do_switch = do_switch or _do_switch
     title_sfx = ""
     filters = {
@@ -1038,7 +1032,8 @@ def interfaces(
             cli.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
 
         # Update cache basesd on provided filters
-        dev_resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, group=group, site=site)
+        kwargs = {"site": site} if site else {"group": group}  # monitoring API only allows 1 filter
+        dev_resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
         if not dev_resp:
             cli.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
 
@@ -1057,12 +1052,11 @@ def interfaces(
             cli.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
 
     if dev_type == "gw":
-        batch_resp = cli.central.batch_request([BatchRequest(cli.central.get_gateway_ports, d.serial) for d in dev])
+        batch_reqs = [BatchRequest(cli.central.get_gateway_ports, d.serial) for d in dev]
     elif dev_type == "ap":
-        batch_resp = cli.central.batch_request([BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in dev])  # We extract the wired interface details from /monitoring/v2/aps
+        batch_reqs = [BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in dev]
     else:
-        batch_resp = cli.central.batch_request(
-            [
+        batch_reqs = [
                 BatchRequest(
                     cli.central.get_switch_ports,
                     d.swack_id or d.serial,
@@ -1071,21 +1065,19 @@ def interfaces(
                     aos_sw=d.type == "sw"
                 ) for d in dev
             ]
-        )
 
-    if len(batch_resp) > 1 and dev_type in ["gw", "switch"]:  # We need to append name to ap/switch for multi-device listings
+    if len(batch_reqs) > 15:
+        cli.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
+        cli.confirm(yes)
+
+    batch_resp = cli.central.batch_request(batch_reqs)
+
+    if len(batch_resp) > 1:  # and dev_type in ["gw", "switch"]:  # We need to append name to ap/switch for multi-device listings
             for d, r in zip(dev, batch_resp):
                 if r.ok:
-                    r.output = [{"_name": d.name, "_dev_type": d.type, **i} for i in r.output]
+                    r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in utils.listify(r.output)]
 
-
-    combiner_func = {
-        "ap": combine_ap_interface_responses,
-        "gw": combine_gw_interface_responses,
-        "switch": combine_switch_interface_responses
-    }
-
-    resp = CombinedResponse(batch_resp, combiner_func[dev_type]) if len(batch_resp) > 1 else batch_resp[0]
+    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose))
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(dev) > 1 else f"{dev[0].name} Interfaces"
@@ -1113,6 +1105,7 @@ def interfaces(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        output_by_key=None,
         cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,
         verbosity=verbose,
         dev_type=dev_type
