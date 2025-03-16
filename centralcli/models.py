@@ -114,7 +114,7 @@ class Device(BaseModel):
     group: str = Field(alias="group_name")
     site: Optional[str] = Field(None, alias=AliasChoices("site", "site_name"))
     version: str = Field(alias="firmware_version")
-    swack_id: Optional[str] = Field(None, alias=AliasChoices("stack_id", "swarm_id"))
+    swack_id: Optional[str] = Field(None, alias=AliasChoices("swack_id", "stack_id", "swarm_id"))
     switch_role: Optional[int] = Field(None)
 
     @field_validator("type", mode="before")
