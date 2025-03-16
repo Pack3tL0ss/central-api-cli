@@ -962,7 +962,7 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
     _passed = responses if not _failed else [r for r in responses if r.ok]
 
     if _failed:
-        log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.name for r in _failed])}", caption=True)
+        log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split("/")[-1] for r in _failed])}", caption=True)
 
     # output = [i for r in _passed for i in utils.listify(r.output)]
     output = [r.output for r in _passed]
