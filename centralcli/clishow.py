@@ -962,7 +962,11 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
     _passed = responses if not _failed else [r for r in responses if r.ok]
 
     if _failed:
-        log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split("/")[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
+        try:
+            log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
+        except Exception:
+            log.warning("Incomplete output, failures occured, see log")
+
 
     # output = [i for r in _passed for i in utils.listify(r.output)]
     output = [r.output for r in _passed]
@@ -1132,10 +1136,10 @@ def interfaces(
 
     caption = []
     if dev_type == "switch":
-        if "sw" in [d.type for d in devs]:
+        if "sw" in [d.type for d in devs] and resp.ok:
             dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
             caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by the API", emoji=True)]
-        if "cx" in [d.type for d in devs]:
+        if "cx" in [d.type for d in devs] and resp.ok:
             caption = [render.rich_capture(":information:  L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API", emoji=True)]
 
     if resp:
