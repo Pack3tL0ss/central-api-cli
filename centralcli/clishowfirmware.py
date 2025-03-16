@@ -120,6 +120,10 @@ def swarms(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
+    """Show firmware details for swarm by specifying any AP in the swarm
+
+    Multiple devices can be specified.  Output will include details for each unique swarm.
+    """
     central = cli.central
 
     if device:

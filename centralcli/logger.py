@@ -101,7 +101,7 @@ class MyLogger:
         if not self._caption:
             return
         else:
-            return "\n".join([f'  {msg}' for msg in self._caption])
+            return "\n".join([f' {msg}' for msg in self._caption])
 
     @staticmethod
     def _remove_rich_markups(log_msg: str) -> str:

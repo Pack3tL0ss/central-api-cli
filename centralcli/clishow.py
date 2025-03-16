@@ -50,7 +50,7 @@ from centralcli.constants import (
     DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
-from centralcli.objects import DateTime
+from .objects import DateTime, ShowInterfaceFilters
 from .strings import cron_weekly
 from .cache import CacheDevice
 from .response import CombinedResponse
@@ -947,8 +947,6 @@ class ParsedCombinedResp:
 
     @property
     def clean(self):
-        # _clean =  [{"device": r.get("_name", r.get("name")), **i} for r in self.output for i in cleaner.show_interfaces(r, dev_type=r.get("_dev_type") or self.dev_type, verbosity=self.verbosity)]
-        # _clean = [{"device": i["_name"], **{k: v for k, v in i.items() if k != "_name"}} for r in self.output for i in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)]
         _clean = sorted(
             [inner for r in self.output for inner in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)],
             key=lambda d: d["device"]
@@ -974,6 +972,37 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
     parsed = ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed, verbosity=verbosity)
     return {**parsed.to_dict}
 
+def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str]]:
+    if isinstance(data, dict) and "ethernets" in data:  # single AP output
+        data = data["ethernets"]
+
+    try:
+        filtered = data
+        filter_caption = None
+        if filters.slow:
+            filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) < 1000]
+            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [bright_magenta]{len(filtered)}[/]"
+        elif filters.fast:
+            filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) >= 2500]
+            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [bright_magenta]{len(filtered)}[/]"
+        elif filters.up:
+            filtered = [d for d in data if d.get("status", "") == "Up"]
+        elif filters.down:
+            filtered = [d for d in data if d.get("status", "") == "Down"]
+
+        if not filtered:
+            log.warning("Filters resulted in no results. Showing unfiltered output", caption=True)
+        else:
+            data = filtered
+        if filter_caption:
+            caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
+
+    except Exception as e:
+        log.exception(f"{e.__class__.__name__} in do_interface_filters\n{e}")
+        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub", caption=True)
+
+    return data, caption
+
 
 # TODO define sort_by fields
 @app.command()
@@ -994,6 +1023,10 @@ def interfaces(
     _do_switch: bool = typer.Option(False, "--cx", "--sw", hidden=True,),  # hidden support common alternative switch flags
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
+    up: bool = typer.Option(False, "--up", help="Filter by interfaces that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by interfaces that are Down", show_default=False),
+    slow: bool = typer.Option(False, "-s", "--slow", help="Filter by Up interfaces that have negotiated a speed below 1Gbps", show_default=False),
+    fast: bool = typer.Option(False, "-f", "--fast", help="Filter by Up interfaces that have negotiated a speed at or above 2.5Gbps (Smart Rate)", show_default=False),
     verbose: int = cli.options.verbose,
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -1016,23 +1049,25 @@ def interfaces(
     """
     do_switch = do_switch or _do_switch
     title_sfx = ""
-    filters = {
+    context_filters = {
         "group": group,
         "site": site
     }
 
+    filters = ShowInterfaceFilters(up=up, down=down, slow=slow, fast=fast)
+    if not filters.ok:
+        log.warning(f"Contradictory flags! {filters.error} together don't make sense.  Ignoring.", caption=True)
+
     if device != "all":
         if any([site, group]):
-            warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in filters.items() if v])
+            warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in context_filters.items() if v])
             log.warning(f"{warn_msg} ignored as the option does not apply when a specific device is provided.", caption=True)
         dev: CacheDevice = cli.cache.get_dev_identifier(device, conductor_only=True,)
         dev_type = dev.generic_type
-        dev = [dev]
+        devs = [dev]
     else:
         if [do_ap, do_gw, do_switch].count(True) > 1:
             cli.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
-        if verbose:
-            log.warning("[cyan]-v[/] (verbose) option only supported on single device output.", caption=True)
 
         if do_ap:
             dev_type = "ap"
@@ -1052,21 +1087,21 @@ def interfaces(
         site: CacheSite = site if not site else cli.cache.get_site_identifier(site)
         group: CacheGroup = group if not group else cli.cache.get_group_identifier(group)
 
-        dev: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in cli.cache.devices] if cd.generic_type == dev_type]
+        devs: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in cli.cache.devices] if cd.generic_type == dev_type]
         if site:
-            dev = [d for d in dev if d.site == site.name]
+            devs = [d for d in devs if d.site == site.name]
             title_sfx = f" in site {site.name}"
         if group:
-            dev = [d for d in dev if d.group == group.name]
+            devs = [d for d in devs if d.group == group.name]
             title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
 
-        if not dev:
+        if not devs:
             cli.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
 
     if dev_type == "gw":
-        batch_reqs = [BatchRequest(cli.central.get_gateway_ports, d.serial) for d in dev]
+        batch_reqs = [BatchRequest(cli.central.get_gateway_ports, d.serial) for d in devs]
     elif dev_type == "ap":
-        batch_reqs = [BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in dev]
+        batch_reqs = [BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in devs]
     else:
         batch_reqs = [
                 BatchRequest(
@@ -1075,7 +1110,7 @@ def interfaces(
                     slot=slot,
                     stack=d.swack_id is not None,
                     aos_sw=d.type == "sw"
-                ) for d in dev
+                ) for d in devs
             ]
 
     if len(batch_reqs) > 15:
@@ -1084,28 +1119,36 @@ def interfaces(
 
     batch_resp = cli.central.batch_request(batch_reqs)
 
-    if len(batch_resp) > 1:  # and dev_type in ["gw", "switch"]:  # We need to append name to ap/switch for multi-device listings
-            for d, r in zip(dev, batch_resp):
+    # We need to include name and dev_type from cache for multi-device listings (not included in payload of all the interface endpoints)
+    if len(batch_resp) > 1:
+            for d, r in zip(devs, batch_resp):
                 if r.ok:
                     r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in utils.listify(r.output)]
 
-    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose))
+    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose,))
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
-    title = f"Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(dev) > 1 else f"{dev[0].name} Interfaces"
+    title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
 
     caption = []
-    if dev_type == "switch" and "sw" in [d.type for d in dev]:
-        dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
-        caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by API", emoji=True)]
+    if dev_type == "switch":
+        if "sw" in [d.type for d in devs]:
+            dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
+            caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by the API", emoji=True)]
+        if "cx" in [d.type for d in devs]:
+            caption = [render.rich_capture(":information:  L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API", emoji=True)]
 
     if resp:
-        try:  # TODO add --up --down filter
-            up = len([i for i in batch_resp.output if i.get("status").lower() == "up"])
-            down = len(batch_resp.output) - up
-            caption += [f"Counts: Total: [cyan]{len(batch_resp.output)}[/], Up: [bright_green]{up}[/], Down: [bright_red]{down}[/]"]
+        try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
+            ifaces = resp.output if "ethernets" not in resp.output else resp.output["ethernets"]
+            up_ifaces = len([i for i in utils.listify(ifaces) if i.get("status").lower() == "up"])  # listify as individual dev response is a dict, vs List for multi-device
+            down_ifaces = len(utils.listify(ifaces)) - up_ifaces
+            caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
         except Exception as e:
             log.error(f"{e.__class__.__name__} while trying to get counts from interface output")
+
+        if filters:
+            resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
     cli.display_results(
@@ -1118,9 +1161,9 @@ def interfaces(
         sort_by=sort_by,
         reverse=reverse,
         output_by_key=None,
-        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,
+        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
         verbosity=verbose,
-        dev_type=dev_type
+        dev_type=dev_type,
     )
 
 

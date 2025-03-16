@@ -497,6 +497,18 @@ class CLICommon:
 
         return data if not reverse else data[::-1], caption
 
+    @staticmethod
+    def _add_captions_from_cleaner(caption: str) -> str:
+        """Need to append any captions added from cleaners.
+
+        TODO make more elegant.  Redesign to remove the need for this.
+        """
+        caption = caption.splitlines()
+        new_captions = [f" {c.lstrip()}" for c in log._caption if c.strip() not in [cap.strip() for cap in caption]]
+        rl_str = [] if not caption else [caption.pop(-1)]
+        caption = [*caption, *new_captions, *rl_str]
+        return "\n".join(caption)
+
     def _display_results(
         self,
         data: Union[List[dict], List[str], dict, None] = None,
@@ -525,6 +537,7 @@ class CLICommon:
             with clean_console.status("Cleaning Output..."):
                 _start = time.perf_counter()
                 data = cleaner(data, **cleaner_kwargs)
+                caption = self._add_captions_from_cleaner(caption)
                 data = utils.listify(data)
                 _duration = time.perf_counter() - _start
                 log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
