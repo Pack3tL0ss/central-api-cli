@@ -12,8 +12,6 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 
 ![centralcli Animated Demo](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/cencli-demo.gif)
 
-## Known Issues
-When running with Python 3.12 it's possible to see a number of SyntaxWarning messages regarding "invaslid escape sequence".  This is due to a change in behavior in 3.12.  This will be resolved in an upcoming release.  The warnings do not impact functionality.
 
 ## Features
 
@@ -23,11 +21,14 @@ When running with Python 3.12 it's possible to see a number of SyntaxWarning mes
 - Multiple output formats
 - Output to file
 - Numerous import formats (csv, yaml, json, etc.)
-- Multiple account support (easily switch between different central accounts `--account myotheraccount`)
+- Multiple workspace support (easily switch between different central workspaces `--account myotheraccount`)
+  > What is now called a workspace was formerly referred to as an account.  `--account` will likely change to `--workspace` in a future release.
 - Batch Operation based on data from input file.  i.e. Add sites in batch based on data from a csv.
+- Mass AP rename, that automatically constructs the name based on whatever format specifier you provide.  This can use portions or all of the AP model / MAC / serial, the upstream switch hostname / port, switch port, AP MAC, and the site name.
 - Automatic Token refresh.  With prompt to paste in a new token if it becomes invalid.
   > If using Tokens, dedicate the token to the CLI alone, using it in swagger or on another system, will eventually lead to a refresh that invalidates the tokens on the other systems using it.
 - You can also use username/Password Auth. which will facilitate automatic retrieval of new Tokens even if they do become invalid.
+  > This option is only possible with a non SSO account.
 
 ## Installation
 
