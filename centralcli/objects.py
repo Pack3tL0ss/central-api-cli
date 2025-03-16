@@ -208,3 +208,57 @@ class Encoder(JSONEncoder):
     def default(self, obj):
         return obj if not isinstance(obj, DateTime) and not isinstance(obj, Path) else str(obj)
 
+class ShowInterfaceFilters:
+    def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):
+        self.up = up
+        self.down = down
+        self.slow = slow
+        self.fast = fast
+        self._error = []
+        self._title_sfx = []
+
+    def __bool__(self) -> bool:
+        """Returns a bool indicating if *any* filters are True
+        """
+        return any([self.up, self.down, self.slow, self.fast])
+
+    @property
+    def error(self) -> str:
+        return ",".join(self._error)
+
+    @property
+    def title_sfx(self) -> str:
+        if self.slow:
+            return "[bright_red]Slow[/] "
+        elif self.fast:
+            return "[bright_magenta]Fast[/] "
+        elif self.up:
+            return "[bright_green]Up[/] "
+        elif self.down:
+            return "[bright_red]Down[/] "
+        else:
+            return ""
+
+    @property
+    def ok(self) -> bool:
+        """Returns a bool indicating if filters are valid
+        """
+        valid=True
+        if all([self.up, self.down]):
+            valid = False
+            self._error += ["[cyan]--up[/] & [cyan]--down[/]"]
+            self.up = False
+            self.down = False
+
+        if all([self.slow, self.fast]):
+            valid = False
+            self._error += ["[cyan]--fast[/]|[cyan]-f[/] & [cyan]--slow[/]|[cyan]-s[/]"]
+            self.slow = False
+            self.fast = False
+
+        if any([self.slow, self.fast]) and self.down:
+            valid = False
+            self._error += ["[cyan]--down[/] & [cyan]--fast[/]|[cyan]-f[/] or [cyan]--slow[/]|[cyan]-s[/]"]
+
+        return valid
+

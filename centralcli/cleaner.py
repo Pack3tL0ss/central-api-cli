@@ -32,7 +32,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes
-from centralcli.objects import DateTime
+from .objects import DateTime, ShowInterfaceFilters
 from .models import CloudAuthUploadResponse, Sites
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
@@ -1567,7 +1567,7 @@ def sort_interfaces(interfaces: List[Dict[str, Any]], interface_key: str= "port_
         return interfaces
 
 
-def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", by_interface: bool = None) -> List[dict] | dict:
+def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", filters: ShowInterfaceFilters = None, by_interface: bool = None) -> List[dict] | dict:
     """Clean Output of interface endpoints for each device type.
 
     Args:
@@ -1586,6 +1586,8 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
         data = sort_interfaces([*normal_ports, *stack_ports])
     else:
         data = utils.listify(data)
+
+    filters = filters if filters is not None else ShowInterfaceFilters()
 
     # TODO verbose and non-verbose
     # TODO determine if "mode" has any value, appears to always be Access on SW
@@ -1654,8 +1656,8 @@ def show_interfaces(data: List[dict] | dict, verbosity: int = 0, dev_type: DevTy
     elif dev_type == "ap" and data:
         if "device" in data[0]:
             data = [{"device": d["device"], **iface} for d in data for iface in d.get("ethernets", [])]
-        else:
-            data = data[0].get("ethernets", [])
+        elif "ethernets" in data[0]:
+            data = data[0]["ethernets"]
         verbosity_keys[0].insert(3, "macaddr")
         verbosity_keys[0].insert(11, "duplex_mode")
         for iface in data:
