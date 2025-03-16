@@ -228,6 +228,15 @@ class CacheDevice(CentralObject):
         self.swack_id: str | None = data["swack_id"]
         self.switch_role: str | None = data["switch_role"]
 
+    def __bool__(self):
+        return True if self.status == "Up" else False
+
+    @property
+    def is_aos10(self) -> bool:
+        if self.type != "ap":
+            return False
+        return True if self.version.startswith("10.") else False
+
     @classmethod
     def set_db(cls, db: Table):
         cls.db: Table = db
@@ -2503,7 +2512,7 @@ class Cache:
                 raw_data = await self.format_raw_devices_for_cache(resp)
                 devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
 
-                _ret = [d.dict() for d in devices]
+                _ret = [d.model_dump() for d in devices]
                 log.debug(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
         except Exception as e:
             log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")

@@ -257,7 +257,7 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
 
 def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[CacheDevice]):
     try:
-        data = [{**r.output, "type": d.type, "switch_role": d.switch_role} for r, d in zip(batch_res, devs) if r.ok]
+        data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
         model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
         cli.central.request(cli.cache.update_dev_db, model_data)
     except Exception as e:
