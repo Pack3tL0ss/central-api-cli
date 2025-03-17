@@ -170,12 +170,12 @@ def do_pretty(key: str, value: str) -> str:
     value = "" if value is None else value  # testing error on cop
     return value if key != "status" else f'[b {color}]{value.title()}[/b {color}]'
 
-def _do_subtables(data: List[dict], tablefmt: str = "rich") -> List[dict]:
+def _do_subtables(data: List[dict], *, tablefmt: str = "rich") -> List[dict]:
     """Parse data and format any values that are dict, list, tuple
 
     Args:
         data (list): The data
-        tablefmt (str, optional): table format. Defaults to "rich".
+        tablefmt (str, optional): table format. Defaults to "rich"
 
     Returns:
         List[dict]: Original dict with any inner (dict/list/tuples)
@@ -250,11 +250,35 @@ def tabulate_output(outdata: List[dict]) -> tuple:
 
     return raw_data, table_data
 
+def build_rich_table_rows(data: List[Dict[str, Text | str]], table: Table, group_by: str) -> Table:
+    if not group_by:
+        [table.add_row(*list(in_dict.values())) for in_dict in data]
+        return table
+
+    if not isinstance(data, list) or group_by not in data[0]:
+        log.error(f"Error in render.do_group_by_table invalid type {type(data)} or {group_by} not found in header.")
+        [table.add_row(*list(in_dict.values())) for in_dict in data]
+        return table
+
+    field_idx = list(data[0].keys()).index(group_by)
+    this = "_start_"
+    for in_dict in data:
+        if in_dict[group_by] == this:
+            table.add_row(*[v if idx != field_idx else "" for idx, v in enumerate(in_dict.values())])  # only  show value for first entry in group
+        else:
+            this = in_dict[group_by]  # first entry in group
+            table.add_section()
+            table.add_row(*list(in_dict.values()))
+
+    return table
+
+
 def rich_output(
     outdata: List[dict],
     title: str = None,
     caption: str = None,
     account: str = None,
+    group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -266,6 +290,7 @@ def rich_output(
         title (str, optional): Table Title. Defaults to None.
         caption (str, optional): Table Caption. Defaults to None.
         account (str, optional): The account (displayed in caption if not the default). Defaults to None.
+        group_by (str, optional): Group output by the value of the provided field.  Results in special formatting.  Defaults to None.
         set_width_cols (dict, optional): cols that need to be rendered with a specific width. Defaults to None.
         full_cols (Union[List[str], str], optional): cols that should not be truncated. Defaults to [].
         fold_cols (Union[List[str], str], optional): cols that can be folded (wrapped). Defaults to [].
@@ -324,7 +349,7 @@ def rich_output(
         formatted = _do_subtables(outdata)
         log.debug(f"render.rich_output.do_subtables took {time.perf_counter() - _start:.2f} to process {len(outdata)} records")
 
-        [table.add_row(*list(in_dict.values())) for in_dict in formatted]
+        table = build_rich_table_rows(formatted, table=table, group_by=group_by)
 
         if title:
             table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
@@ -360,6 +385,7 @@ def output(
     account: str = None,
     config: Config = None,
     output_by_key: str | List[str] = "name",
+    group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -368,6 +394,7 @@ def output(
     raw_data = outdata
     _lexer = table_data = None
 
+    # sanitize output for demos
     if config and config.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
         outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]
 
@@ -445,8 +472,7 @@ def output(
         table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
-        raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
-        ...
+        raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by)
 
     elif tablefmt == "tabulate":
         raw_data, table_data = tabulate_output(outdata)

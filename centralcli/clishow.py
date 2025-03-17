@@ -1165,6 +1165,7 @@ def interfaces(
         sort_by=sort_by,
         reverse=reverse,
         output_by_key=None,
+        group_by=None if len(batch_resp) <= 1 else "device",
         cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
         verbosity=verbose,
         dev_type=dev_type,
@@ -3205,22 +3206,24 @@ def radios(
             resp = sorted(passed, key=lambda ap: ap.rl)[0]
             resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
         if failed:
-            cli.display_results(failed)
+            cli.display_results(failed, tablefmt="action")
     else:
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
             resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
 
     if resp.ok:
+        # We sort before sending data to renderer to keep groupings by AP name
         if sort_by and resp.output and sort_by in resp.output[0].keys():
             resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap[sort_by])))
         else:
             resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap["radio_name"])))
+
+        caption = _build_radio_caption(resp.output)
         if status:
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
-        caption = _build_radio_caption(resp.output)
 
-    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, cleaner=cleaner.show_radios)
+    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
 
 
 @app.command()

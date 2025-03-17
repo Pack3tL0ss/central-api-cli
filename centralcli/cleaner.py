@@ -2069,14 +2069,7 @@ def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any
     return simple_kv_formatter(data, key_order=key_order)
 
 def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
-    def by_name_blocks(name: str, exist_names=[]) -> str:
-        if name not in exist_names:
-            exist_names += [name]
-            return name
-        return ''
-
     key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
-    data = [{k: v if k != "name" else by_name_blocks(v) for k, v in inner.items()} for inner in data]
     data = simple_kv_formatter(data, key_order=key_order)
 
     return data

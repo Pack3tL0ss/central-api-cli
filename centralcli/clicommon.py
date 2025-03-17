@@ -521,6 +521,7 @@ class CLICommon:
         reverse: bool = False,
         stash: bool = True,
         output_by_key: str | List[str] = "name",
+        group_by: str = None,
         set_width_cols: dict = None,
         full_cols: Union[List[str], str] = [],
         fold_cols: Union[List[str], str] = [],
@@ -555,6 +556,7 @@ class CLICommon:
             "account": None if config.account in ["central_info", "default"] else config.account,
             "config": config,
             "output_by_key": output_by_key,
+            "group_by": group_by,
             "set_width_cols": set_width_cols,
             "full_cols": full_cols,
             "fold_cols": fold_cols,
@@ -592,6 +594,7 @@ class CLICommon:
         reverse: bool = False,
         stash: bool = True,
         output_by_key: str | List[str] = "name",
+        group_by: str = None,
         exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
         cache_update_pending: bool = False,
         set_width_cols: dict = None,
@@ -625,6 +628,8 @@ class CLICommon:
                 show last.  Default: True
             output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
                 the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
+            group_by: When provided output will be grouped by this key.  For outputs where multiple entries relate to a common device, and multiple devices exist in the output.
+                i.e. interfaces for a device when the output contains multiple devices.  Results in special formatting.  Defaults to None
             exit_on_fail: (bool, optional): If provided resp indicates a failure exit after display.  Defaults to False
             cache_update_pending: (bool, optional): If a cache update is to be performed if resp is success.
                 Results in a warning before exit if failure. Defaults to False
@@ -753,6 +758,7 @@ class CLICommon:
                         reverse=reverse,
                         stash=stash,
                         output_by_key=output_by_key,
+                        group_by=group_by,
                         set_width_cols=set_width_cols,
                         full_cols=full_cols,
                         fold_cols=fold_cols,
