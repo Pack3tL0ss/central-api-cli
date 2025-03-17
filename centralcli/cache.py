@@ -2599,7 +2599,6 @@ class Cache:
             "group": group
         }
         filter_msg = ", ".join([f"{k}: {v if k != 'dev_type' else utils.unlistify(v)}" for k, v in filters.items() if v])
-        cache_devices = deepcopy(new_by_serial)
 
         if dev_type:
             switch_types = ["cx", "sw"] if "switch" in dev_type else []
