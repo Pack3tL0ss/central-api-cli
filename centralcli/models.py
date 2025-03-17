@@ -233,7 +233,7 @@ class ImportSites(RootModel):
 
     @staticmethod
     def _convert_site_key(_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        def auto_usa(data: Dict[str, str | int | float]) -> str:
+        def auto_usa(data: Dict[str, str | int | float]) -> str | None:
             _country = data.get("country", "")
             if _country.isdigit():  # Data from large customer had country as '1' for some sites
                 _country = ""
@@ -243,7 +243,7 @@ class ImportSites(RootModel):
             if _country.upper() in ["USA", "US"]:
                 return "United States"
 
-            return _country
+            return _country or None
 
         _data = [
             {

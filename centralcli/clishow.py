@@ -962,7 +962,11 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
     _passed = responses if not _failed else [r for r in responses if r.ok]
 
     if _failed:
-        log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split("/")[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
+        try:
+            log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
+        except Exception:
+            log.warning("Incomplete output, failures occured, see log")
+
 
     # output = [i for r in _passed for i in utils.listify(r.output)]
     output = [r.output for r in _passed]
@@ -1132,10 +1136,10 @@ def interfaces(
 
     caption = []
     if dev_type == "switch":
-        if "sw" in [d.type for d in devs]:
+        if "sw" in [d.type for d in devs] and resp.ok:
             dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
             caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by the API", emoji=True)]
-        if "cx" in [d.type for d in devs]:
+        if "cx" in [d.type for d in devs] and resp.ok:
             caption = [render.rich_capture(":information:  L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API", emoji=True)]
 
     if resp:
@@ -1161,6 +1165,7 @@ def interfaces(
         sort_by=sort_by,
         reverse=reverse,
         output_by_key=None,
+        group_by=None if len(batch_resp) <= 1 else "device",
         cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
         verbosity=verbose,
         dev_type=dev_type,
@@ -3201,22 +3206,24 @@ def radios(
             resp = sorted(passed, key=lambda ap: ap.rl)[0]
             resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
         if failed:
-            cli.display_results(failed)
+            cli.display_results(failed, tablefmt="action")
     else:
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
             resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
 
     if resp.ok:
+        # We sort before sending data to renderer to keep groupings by AP name
         if sort_by and resp.output and sort_by in resp.output[0].keys():
             resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap[sort_by])))
         else:
             resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap["radio_name"])))
+
+        caption = _build_radio_caption(resp.output)
         if status:
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
-        caption = _build_radio_caption(resp.output)
 
-    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, cleaner=cleaner.show_radios)
+    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
 
 
 @app.command()

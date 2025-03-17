@@ -170,12 +170,12 @@ def do_pretty(key: str, value: str) -> str:
     value = "" if value is None else value  # testing error on cop
     return value if key != "status" else f'[b {color}]{value.title()}[/b {color}]'
 
-def _do_subtables(data: List[dict], tablefmt: str = "rich") -> List[dict]:
+def _do_subtables(data: List[dict], *, tablefmt: str = "rich") -> List[dict]:
     """Parse data and format any values that are dict, list, tuple
 
     Args:
         data (list): The data
-        tablefmt (str, optional): table format. Defaults to "rich".
+        tablefmt (str, optional): table format. Defaults to "rich"
 
     Returns:
         List[dict]: Original dict with any inner (dict/list/tuples)
@@ -250,11 +250,35 @@ def tabulate_output(outdata: List[dict]) -> tuple:
 
     return raw_data, table_data
 
+def build_rich_table_rows(data: List[Dict[str, Text | str]], table: Table, group_by: str) -> Table:
+    if not group_by:
+        [table.add_row(*list(in_dict.values())) for in_dict in data]
+        return table
+
+    if not isinstance(data, list) or group_by not in data[0]:
+        log.error(f"Error in render.do_group_by_table invalid type {type(data)} or {group_by} not found in header.")
+        [table.add_row(*list(in_dict.values())) for in_dict in data]
+        return table
+
+    field_idx = list(data[0].keys()).index(group_by)
+    this = "_start_"
+    for in_dict in data:
+        if in_dict[group_by] == this:
+            table.add_row(*[v if idx != field_idx else "" for idx, v in enumerate(in_dict.values())])  # only  show value for first entry in group
+        else:
+            this = in_dict[group_by]  # first entry in group
+            table.add_section()
+            table.add_row(*list(in_dict.values()))
+
+    return table
+
+
 def rich_output(
     outdata: List[dict],
     title: str = None,
     caption: str = None,
     account: str = None,
+    group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -266,6 +290,7 @@ def rich_output(
         title (str, optional): Table Title. Defaults to None.
         caption (str, optional): Table Caption. Defaults to None.
         account (str, optional): The account (displayed in caption if not the default). Defaults to None.
+        group_by (str, optional): Group output by the value of the provided field.  Results in special formatting.  Defaults to None.
         set_width_cols (dict, optional): cols that need to be rendered with a specific width. Defaults to None.
         full_cols (Union[List[str], str], optional): cols that should not be truncated. Defaults to [].
         fold_cols (Union[List[str], str], optional): cols that can be folded (wrapped). Defaults to [].
@@ -324,7 +349,7 @@ def rich_output(
         formatted = _do_subtables(outdata)
         log.debug(f"render.rich_output.do_subtables took {time.perf_counter() - _start:.2f} to process {len(outdata)} records")
 
-        [table.add_row(*list(in_dict.values())) for in_dict in formatted]
+        table = build_rich_table_rows(formatted, table=table, group_by=group_by)
 
         if title:
             table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
@@ -352,6 +377,32 @@ def rich_output(
 
     return outdata, outdata
 
+
+def format_data_by_key(data: List[Dict[str, Any]], output_by_key: str) -> Dict[str, Any]:
+    # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
+    data = utils.listify(data)
+    if isinstance(data[0], dict) and all([isinstance(k, str) for k in list(data[0].keys())]):
+        data = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in d.items()} for d in data]
+
+    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
+    if output_by_key and data and isinstance(data[0], dict):
+        if len(output_by_key) == 1 and "+" in output_by_key[0]:
+            found_keys = [k for k in output_by_key[0].split("+") if k in data[0]]
+            if len(found_keys) == len(output_by_key[0].split("+")):
+                data: Dict[dict] = {
+                    f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in data
+                }
+        else:
+            _output_key = [k for k in output_by_key if k in data[0]]
+            if _output_key:
+                _output_key = _output_key[0]
+                data: Dict[dict] = {
+                    item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                    for item in data
+                }
+    return data
+
+
 def output(
     outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any],
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
@@ -360,6 +411,7 @@ def output(
     account: str = None,
     config: Config = None,
     output_by_key: str | List[str] = "name",
+    group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -368,6 +420,7 @@ def output(
     raw_data = outdata
     _lexer = table_data = None
 
+    # sanitize output for demos
     if config and config.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
         outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]
 
@@ -376,27 +429,7 @@ def output(
         tablefmt = "simple"
 
     if tablefmt in ['json', 'yaml', 'yml']:
-        # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
-        outdata = utils.listify(outdata)
-        if isinstance(outdata[0], dict) and all([isinstance(k, str) for k in list(outdata[0].keys())]):
-            outdata = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in data.items()} for data in outdata]
-
-        # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
-        if output_by_key and outdata and isinstance(outdata[0], dict):
-            if len(output_by_key) == 1 and "+" in output_by_key[0]:
-                found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
-                if len(found_keys) == len(output_by_key[0].split("+")):
-                    outdata: Dict[dict] = {
-                        f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in outdata
-                    }
-            else:
-                _output_key = [k for k in output_by_key if k in outdata[0]]
-                if _output_key:
-                    _output_key = _output_key[0]
-                    outdata: Dict[dict] = {
-                        item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
-                        for item in outdata
-                    }
+        outdata = format_data_by_key(outdata, output_by_key)
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)
@@ -445,8 +478,7 @@ def output(
         table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
-        raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols)
-        ...
+        raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by)
 
     elif tablefmt == "tabulate":
         raw_data, table_data = tabulate_output(outdata)

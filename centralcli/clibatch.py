@@ -378,7 +378,7 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     address_fields = {"site_name": "bright_green", "name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green3", "country": "magenta", "zipcode": "blue", "zip": "blue"}
     confirm_msg = utils.summarize_list(
         [
-            "|".join([f'[{address_fields[k]}]{v}[/]' for k, v in site.items() if v and k in address_fields]) for site in verified_sites.model_dump()
+            "|".join([f'[{address_fields[k]}]{v}[/]' for k, v in site.model_dump().items() if v and k in address_fields]) for site in list(verified_sites)
         ],
         max=7
     )
@@ -974,8 +974,12 @@ def add(
     caption, tablefmt = None, "action"
     if what == "sites":
         resp = batch_add_sites(import_file, yes=yes)
+        if resp.ok:
+            try:
+                resp.output = cleaner.sites(resp.output)
+            except Exception as e:
+                log.error(f"Error cleaning output of batch site addition {repr(e)}", caption=True, log=True)
         tablefmt = "rich"
-        # TODO should re-order columns so output is more consistent with show sites (i.e. site_name is not guaranteed to be first col in output of these calls)
     elif what == "groups":
         resp = batch_add_groups(import_file, yes=yes)
     elif what == "devices":
@@ -1004,7 +1008,7 @@ def add(
             "Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import."
         )
 
-    cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what}", caption=caption)
+    cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what.value}", caption=caption)
 
 
 # TODO archive and unarchive have the same block this is used by batch delete

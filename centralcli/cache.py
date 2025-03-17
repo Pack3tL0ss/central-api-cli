@@ -2537,14 +2537,16 @@ class Cache:
         return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
 
 
-    async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, doc_ids: List[int] | int = None, truncate: bool = True) -> bool:
+    async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, *, doc_ids: List[int] | int = None, dev_types: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None, truncate: bool = True,) -> bool:
         """Update Local Cache DB
 
         Args:
             db (Table): TinyDB Table object to be updated.
             data (List[Dict[str, Any]] | Dict[str, Any], optional): Data to be added to database. Defaults to None.
-            truncate (bool, optional): Existing DB data will be discarded, and all data in DB will be replaced with provided. Defaults to True.
             doc_ids (List[int] | int, optional): doc_ids to be deleted from the DB. Defaults to None.
+            dev_types (Literal["ap", "gw", "cx", "sw", "switch"] | List["ap", "gw" ...], optional): List of dev_types the data represents as current for those types.
+                This will result in any devices of the specified types that do not exist in the provided data being removed from cache. Defaults to None.
+            truncate (bool, optional): Existing DB data will be discarded, and all data in DB will be replaced with provided. Defaults to True.
 
         Returns:
             bool: _description_
@@ -2588,6 +2590,43 @@ class Cache:
             return await self._add_update_devices(data)
         else:
             return await self.update_db(self.DevDB, doc_ids=data)
+
+    async def prep_filtered_devs_for_cache(self, raw_models: List[models.Device], dev_type: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None, site: str = None, group: str = None) -> List[dict]:
+        new_by_serial = {d.serial: d.model_dump() for d in raw_models}
+        filters = {
+            "dev_type": dev_type,
+            "site": site,
+            "group": group
+        }
+        filter_msg = ", ".join([f"{k}: {v if k != 'dev_type' else utils.unlistify(v)}" for k, v in filters.items() if v])
+
+        if dev_type:
+            switch_types = ["cx", "sw"] if "switch" in dev_type else []
+            cache_type = [*[t for t in dev_type if t != "switch"], *switch_types]
+        else:
+            cache_type = []
+
+        def include_device(dev: dict) -> bool:
+            criteria = []
+            if cache_type:
+                criteria += [dev["type"] in cache_type]
+            if site:
+                criteria += [dev["site"] == site]
+            if group:
+                criteria += [dev["group"] == group]
+
+            if all(criteria):
+                if dev["serial"] not in new_by_serial:
+                    return False
+
+            return True
+
+        cache_devices = {cd["serial"]: cd for cd in self.devices if include_device(cd)}
+
+        update_data = {**cache_devices, **new_by_serial}
+        log.info(f"Data prepared for device cache update.  Filters: {filter_msg}. Add/update {len(new_by_serial)} devices.  Devices in cache: Now: {len(self.devices)}, After Update: {len(update_data)}.")
+
+        return list(update_data.values())
 
     async def refresh_dev_db(
             self,
@@ -2657,7 +2696,9 @@ class Cache:
             offset=offset,
             limit=limit,
         )
-        if isinstance(resp, CombinedResponse) and resp.ok:
+        if isinstance(resp, CombinedResponse) and resp.ok:  # Can be Response | List[Response] if get_all_devices aborted due to failures
+            # Any filters not in list below do not result in a cache update
+            filtered_resonse = True if any([label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
             raw_data = await self.format_raw_devices_for_cache(resp)
             with console.status(f"preparing {len(resp)} records for cache update"):
                 _start_time = time.perf_counter()
@@ -2665,13 +2706,18 @@ class Cache:
                 raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
                 log.debug(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
 
-            filtered_resonse = True if any([dev_type, group, site, label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
+            if dev_type:
+                update_data = await self.prep_filtered_devs_for_cache(raw_models=raw_models, dev_type=dev_type, site=site, group=group)
+            else:
+                update_data = [dev.model_dump() for dev in raw_models]
+
             if resp.all_ok and not filtered_resonse:
-                self.updated.append(self.central.get_all_devices)
-                self.responses.dev = resp
-                _ = await self.update_db(self.DevDB, data=[dev.model_dump() for dev in raw_models], truncate=True)
+                if not dev_type:
+                    self.updated.append(self.central.get_all_devices)
+                    self.responses.dev = resp
+                _ = await self.update_db(self.DevDB, data=update_data, truncate=True)
             else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
-                _ = await self._add_update_devices([dev.model_dump() for dev in raw_models])
+                _ = await self._add_update_devices(update_data)
 
         return resp
 
