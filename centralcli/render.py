@@ -377,6 +377,32 @@ def rich_output(
 
     return outdata, outdata
 
+
+def format_data_by_key(data: List[Dict[str, Any]], output_by_key: str) -> Dict[str, Any]:
+    # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
+    data = utils.listify(data)
+    if isinstance(data[0], dict) and all([isinstance(k, str) for k in list(data[0].keys())]):
+        data = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in d.items()} for d in data]
+
+    # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
+    if output_by_key and data and isinstance(data[0], dict):
+        if len(output_by_key) == 1 and "+" in output_by_key[0]:
+            found_keys = [k for k in output_by_key[0].split("+") if k in data[0]]
+            if len(found_keys) == len(output_by_key[0].split("+")):
+                data: Dict[dict] = {
+                    f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in data
+                }
+        else:
+            _output_key = [k for k in output_by_key if k in data[0]]
+            if _output_key:
+                _output_key = _output_key[0]
+                data: Dict[dict] = {
+                    item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                    for item in data
+                }
+    return data
+
+
 def output(
     outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any],
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
@@ -403,27 +429,7 @@ def output(
         tablefmt = "simple"
 
     if tablefmt in ['json', 'yaml', 'yml']:
-        # -- modify keys potentially formatted with \n for narrower rich output to format appropriate for json/yaml
-        outdata = utils.listify(outdata)
-        if isinstance(outdata[0], dict) and all([isinstance(k, str) for k in list(outdata[0].keys())]):
-            outdata = [{k.replace(" ", "_").replace("\n", "_"): v for k, v in data.items()} for data in outdata]
-
-        # -- convert List[dict] --> Dict[dev_name: dict] for yaml/json outputs unless output_dict_by_key is specified, then use the provided key(s) rather than name
-        if output_by_key and outdata and isinstance(outdata[0], dict):
-            if len(output_by_key) == 1 and "+" in output_by_key[0]:
-                found_keys = [k for k in output_by_key[0].split("+") if k in outdata[0]]
-                if len(found_keys) == len(output_by_key[0].split("+")):
-                    outdata: Dict[dict] = {
-                        f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in outdata
-                    }
-            else:
-                _output_key = [k for k in output_by_key if k in outdata[0]]
-                if _output_key:
-                    _output_key = _output_key[0]
-                    outdata: Dict[dict] = {
-                        item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
-                        for item in outdata
-                    }
+        outdata = format_data_by_key(outdata, output_by_key)
 
     if tablefmt == "json":
         outdata = utils.unlistify(outdata)
