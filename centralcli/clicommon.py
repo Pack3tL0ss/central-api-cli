@@ -1515,7 +1515,7 @@ class CLICommon:
             cache_devs += [this_dev]
 
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
-        cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+        cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
         cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
 
@@ -1621,6 +1621,96 @@ class CLICommon:
             self.central.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
         if inv_doc_ids:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+
+# Header rows used by CAS
+#DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
+
+    # def batch_update_aps(self, data: List[dict]) -> List[Response]:
+    #         data: List[CacheDevice] = [self.cache.get_dev_identifier(ap, dev_type="ap") for ap in data]
+
+    #         disable_radios = None if not disable_radios else [r.value for r in disable_radios]
+    #         enable_radios = None if not enable_radios else [r.value for r in enable_radios]
+    #         flex_dual_exclude = None if not flex_dual_exclude else flex_dual_exclude.value
+    #         antenna_width = None if not antenna_width else antenna_width.value
+
+    #         radio_24_disable = None if not enable_radios or "2.4" not in enable_radios else False
+    #         radio_5_disable = None if not enable_radios or "5" not in enable_radios else False
+    #         radio_6_disable = None if not enable_radios or "6" not in enable_radios else False
+    #         if disable_radios:
+    #             for radio, var in zip(["2.4", "5", "6"], [radio_24_disable, radio_5_disable, radio_6_disable]):
+    #                 if radio in disable_radios and var is not None:
+    #                     cli.exit(f"Invalid combination you tried to enable and disable the {radio}Ghz radio")
+    #                 # var = None if radio not in disable_radios else True  # doesn't work
+    #             radio_24_disable = None if "2.4" not in disable_radios else True
+    #             radio_5_disable = None if "5" not in disable_radios else True
+    #             radio_6_disable = None if "6" not in disable_radios else True
+
+
+    #         kwargs = {
+    #             "hostname": hostname,
+    #             "ip": ip,
+    #             "mask": mask,
+    #             "gateway": gateway,
+    #             "dns": dns,
+    #             "domain": domain,
+    #             "radio_24_disable": radio_24_disable,
+    #             "radio_5_disable": radio_5_disable,
+    #             "radio_6_disable": radio_6_disable,
+    #             "uplink_vlan": tagged_uplink_vlan,
+    #             "flex_dual_exclude": flex_dual_exclude,
+    #             "dynamic_ant_mode": antenna_width,
+    #         }
+    #         if ip and not all([mask, gateway, dns]):
+    #             cli.exit("[cyan]mask[/], [cyan]gateway[/], and [cyan]--dns[/] are required when [cyan]--ip[/] is provided.")
+    #         if len(data) > 1 and hostname or ip:
+    #             cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
+
+    #         print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in data], color=None, pad=10).lstrip()}")
+    #         print("\n[green italic]With the following per-ap-settings[/]:")
+    #         _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
+    #         skip_flex = [ap for ap in data if ap.model not in flex_dual_models]
+    #         skip_width = [ap for ap in data if ap.model not in ["679"]]
+
+    #         warnings = []
+    #         if flex_dual_exclude is not None and skip_flex:
+    #             warnings += [f"[yellow]:information:[/]  Flexible dual radio [red]will be ignored[/] for {len(skip_flex)} AP, as the setting doesn't apply to those models."]
+    #         if antenna_width is not None and skip_width:
+    #             warnings += [f"[yellow]:information:[/]  Dynamic antenna width [red]will be ignored[/] for {len(skip_width)} AP, as the setting doesn't apply to those models."]
+    #         if warnings:
+    #             warn_text = '\n'.join(warnings)
+    #             print(f"\n{warn_text}")
+
+    #         # determine if any effective changes after skips for settings on invalid AP models
+    #         changes = 2
+    #         if not list(filter(None, list(kwargs.values())[0:-2])):
+    #             if not flex_dual_exclude or (flex_dual_exclude and not [ap for ap in data if ap not in skip_flex]):
+    #                 changes -= 1
+    #             if not antenna_width or (antenna_width and not [ap for ap in data if ap not in skip_width]):
+    #                 changes -= 1
+    #         if not changes:
+    #             cli.exit("No valid updates provided for the selected AP models... Nothing to do.")
+
+    #         self.confirm(yes)  # exits here if they abort
+    #         batch_resp = cli.central.batch_request(
+    #             [
+    #                 BatchRequest(
+    #                     cli.central.update_per_ap_settings,
+    #                     ap.serial,
+    #                     hostname=hostname,
+    #                     ip=ip,
+    #                     mask=mask,
+    #                     gateway=gateway,
+    #                     dns=dns,
+    #                     domain=domain,
+    #                     radio_24_disable=radio_24_disable,
+    #                     radio_5_disable=radio_5_disable,
+    #                     radio_6_disable=radio_6_disable,
+    #                     uplink_vlan=tagged_uplink_vlan,
+    #                     flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
+    #                     dynamic_ant_mode=None if ap.model != "679" else antenna_width,
+    #                 ) for ap in data
+    #             ]
+    #         )
 
     def help_default(self, default_txt: str) -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
