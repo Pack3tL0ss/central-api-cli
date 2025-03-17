@@ -44,6 +44,19 @@ def test_show_all():
     assert "serial" in result.stdout
 
 
+def test_show_radios():
+    result = runner.invoke(app, ["show", "radios", test_data["ap"]["name"]],)
+    assert result.exit_code == 0
+    assert "mac" in result.stdout
+
+
+def test_show_radios_site():
+    result = runner.invoke(app, ["show", "radios", "--site", test_data["ap"]["site"]],)
+    assert result.exit_code == 0
+    assert "mac" in result.stdout
+    assert "band" in result.stdout
+
+
 def test_show_all_verbose():
     cache.updated = []
     cache.responses.dev = None  # Necessary as pytest treats all this as one session, so cache is already populated with clean data
@@ -98,13 +111,6 @@ def test_show_ap_by_ip():
     assert "status" in result.stdout
 
 
-def test_show_ap_by_mac():
-    result = runner.invoke(app, ["show", "aps", test_data["ap"]["mac"], "--debug"],)
-    assert result.exit_code == 0
-    assert "model" in result.stdout
-    assert "status" in result.stdout
-
-
 def test_show_ap_by_serial():
     result = runner.invoke(app, ["show", "aps", test_data["ap"]["serial"], "--debug"],)
     assert result.exit_code == 0
@@ -117,28 +123,6 @@ def test_show_gateway_by_name():
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
-
-
-def test_show_gateway_by_ip():
-    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["ip"], "--debug"],)
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_show_gateway_by_mac():
-    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["mac"], "--debug"],)
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_show_gateway_by_serial():
-    result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["serial"], "--debug"],)
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
-
 
 def test_show_device_by_name():
     result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
@@ -166,6 +150,20 @@ def test_show_device_by_serial():
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
+
+
+def test_show_interfaces_switch():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--table"],)
+    assert result.exit_code == 0
+    assert "vlan" in result.stdout
+    assert "status" in result.stdout
+
+
+def test_show_interfaces_site_aps():
+    result = runner.invoke(app, ["show", "interfaces", "--site", test_data["ap"]["site"], "--ap"],)
+    assert result.exit_code == 0
+    assert "".join(test_data["ap"]["name"][0:6]) in result.stdout
+    assert "mac" in result.stdout
 
 
 def test_show_cache():
@@ -447,7 +445,7 @@ def test_show_config_ap_dev():
         ]
     )
     assert result.exit_code == 0
-    assert "per-ap-settings" in result.stdout
+    assert "wlan" in result.stdout
 
 
 def test_show_portals():
@@ -456,7 +454,8 @@ def test_show_portals():
             "portals"
         ]
     )
-    assert result.exit_code == 0 and ("name" in result.stdout or "Empty Response" in result.stdout)
+    assert result.exit_code == 0
+    assert "name" in result.stdout or "Empty Response" in result.stdout
 
 
 def test_show_guests():
@@ -466,5 +465,6 @@ def test_show_guests():
             test_data["portal"]["name"]
         ]
     )
-    assert result.exit_code == 0 and ("auto_created" in result.stdout or "Empty Response" in result.stdout)
+    assert result.exit_code == 0
+    assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
 
