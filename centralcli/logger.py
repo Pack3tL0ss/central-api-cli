@@ -33,6 +33,16 @@ DEBUG_ONLY_MSGS = [
     "Loaded token from storage from file"
 ]
 
+# pycentral has a number of sys.exit that are logged, but not displayed.  So it's a silent exit for cencli.  log_print will change the log to show=True so they display
+PYCENTRAL_SILENT_EXIT = [
+    "OAUTH2.0 Step1 login API call failed",
+    "OAUTH2.0 Step1 failed",
+    "OAUTH2.0 Step2 obtaining Auth code API call failed",
+    "Central Login Step2 failed with error",
+    "OAUTH2.0 Step3 creating access token API call failed",
+    "Central Login Step3 failed with error"
+]
+
 
 class MyLogger:
     def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False):
@@ -121,6 +131,8 @@ class MyLogger:
         _logged = []
         for i in msgs:
             i = str(i)
+            if not show and any([i.startswith(silent_exit) for silent_exit in PYCENTRAL_SILENT_EXIT]):
+                show = True
             if not self.DEBUG and [i for d in DEBUG_ONLY_MSGS if d in i]:  # messages we ignore if debug is not enabled.
                 continue
 
