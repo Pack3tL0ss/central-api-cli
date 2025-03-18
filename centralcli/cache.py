@@ -3476,6 +3476,9 @@ class Cache:
                 | (self.Q.mac == utils.Mac(query_str).cols)
                 | (self.Q.serial == query_str)
             )
+            if match:
+                Model = CacheDevice
+
             # Inventory must be exact match expecting full serial numbers but will allow MAC if exact match
             if not match and include_inventory:
                 match = self.InvDB.search(
@@ -3520,12 +3523,13 @@ class Cache:
 
 
             # no match found initiate cache update
-            if retry and not match and self.responses.dev is None:
+            if retry and (not match or Model == CacheInvDevice) and self.responses.dev is None:
                 if dev_type and cache_updated:
                     ...  # self.responses.dev is not currently updated if dev_type provided, but cache update may have already occured in this session.
                 else:
+                    _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
-                    econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/]{dev_type_sfx}.")
+                    econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
                     if FUZZ:
                         if dev_type:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
@@ -3534,9 +3538,11 @@ class Cache:
                         confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                             match = self.DevDB.search(self.Q.name == fuzz_match)
-                    if not match:
+
+                    # If there is an inventory only match we still update monitoring cache (to see if device came online since it was added. Otherwise commands like move will reject due to only being in Inventory)
+                    if not match or Model == CacheInvDevice:
                         kwargs = {"dev_db": True}
-                        if include_inventory:
+                        if include_inventory and Model != CacheInvDevice:
                             _word = " & Inventory "
                             kwargs["inv_db"] = True
                         else:
@@ -3544,6 +3550,8 @@ class Cache:
                         econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
                         self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
                         cache_updated = True  # Need this for scenario when dev_type is the only thing refreshed, as that does not update self.responses.dev
+                        if Model == CacheInvDevice:
+                            continue
 
             if match:
                 match = [Model(dev) for dev in match]

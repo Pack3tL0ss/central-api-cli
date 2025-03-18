@@ -1233,7 +1233,7 @@ class CLICommon:
         # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
         cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True, silent=True, exit_on_fail=False) for d in dev_idens]
         not_found_devs: List[str] = [s for s, c in zip(dev_idens, cache_devs) if c is None]
-        cache_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d]
+        cache_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
 
         if not_found_devs:
             not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
