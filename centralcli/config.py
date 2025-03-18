@@ -407,11 +407,11 @@ class Config:
                 last_account, timestamp of last cmd using this account, if initial will_forget_msg has been displayed, if account is expired
         """
         if self.sticky_account_file.is_file():
-            last_account_data = self.sticky_account_file.read_text().split("\n")
+            last_account_data = [row for row in self.sticky_account_file.read_text().split("\n") if row != ""]  # we don't add \n at end of file, but to handle it just in case
             if last_account_data:
                 last_account = last_account_data[0]
-                last_cmd_ts = float(last_account_data[1])
-                big_msg_displayed = bool(int(last_account_data[2]))
+                last_cmd_ts = self.sticky_account_file.stat().st_mtime if len(last_account_data) < 2 else float(last_account_data[1])
+                big_msg_displayed = False if len(last_account_data) < 3 else bool(int(last_account_data[2]))
                 expired = True if self.forget is not None and time.time() > last_cmd_ts + (self.forget * 60) else False
                 return last_account, last_cmd_ts, big_msg_displayed, expired
         return None, None, False, None
