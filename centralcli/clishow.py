@@ -550,6 +550,12 @@ def aps(
 
     Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
     """
+    if not status:
+        if up and down:
+                ...  # They used both flags.  ignore
+        elif up or down:
+                status = "down" if down else "up"
+
     if dirty:
         if not group:
             cli.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
@@ -566,18 +572,9 @@ def aps(
         resp: Response = cli.central.request(cli.central.get_topo_for_site, site.id, )
         tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-        cleaner_kwargs = {}
-        if up and down:
-            ...  # They used both flags.  ignore
-        elif up or down:
-            cleaner_kwargs["filter"] = "down" if down else "up"
+        cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
         cli.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
     else:
-        if up and down:
-            ...  # They used both flags.  ignore
-        elif up or down:
-            status = "down" if down else "up"
-
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
@@ -3170,12 +3167,13 @@ def radios(
 ) -> None:
     """Show details for Radios
     """
-    if up and down:
-        ...  # They used both flags.  ignore
-    elif up or down:
-        status = "Down" if down else "Up"
-
+    if not status:
+        if up and down:
+            ...  # They used both flags.  ignore
+        elif up or down:
+            status = "Down" if down else "Up"
     status = None if not status else status.title()
+
     group: CacheGroup = None if not group else cli.cache.get_group_identifier(group)
     site: CacheSite = None if not site else cli.cache.get_site_identifier(site)
     label: CacheLabel = None if not label else cli.cache.get_label_identifier(label)
