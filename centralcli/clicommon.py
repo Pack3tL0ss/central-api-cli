@@ -1521,7 +1521,7 @@ class CLICommon:
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
             this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only)
-            if this_dev:
+            if this_dev is not None:
                 serial_updates[idx] = this_dev.serial
             cache_devs += [this_dev]
 
