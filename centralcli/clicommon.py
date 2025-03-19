@@ -14,7 +14,8 @@ from rich.progress import track
 from rich.markup import escape
 from rich import print
 import json
-from importlib.metadata import version
+from importlib.metadata import version, PackageNotFoundError
+from importlib.util import find_spec
 import os
 import pendulum
 from datetime import datetime
@@ -299,7 +300,11 @@ class CLICommon:
         if ctx is not None and ctx.resilient_parsing:  # tab completion, return without validating
             return
 
-        current = version("centralcli")
+        try:
+            current = version("centralcli")
+        except PackageNotFoundError as e:
+            self.exit(str(e))
+
         resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
         if not resp:
             print(current)
@@ -317,6 +322,12 @@ class CLICommon:
                 msg += " [italic green3]You are on the latest version.[reset]"
             else:
                 msg += f'\nLatest Available Version: {latest}'
+
+                try:
+                    if "/uv/" in find_spec("centralcli").origin:
+                        msg += "\n\nUse [cyan]uv tool upgrade centralcli[/] to upgrade"
+                except Exception as e:
+                    log.error(f"{e.__class__.__name__} clicommon.version_callback Failed to find centralcli package path")
 
             print(msg)
 
@@ -1510,7 +1521,7 @@ class CLICommon:
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
             this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only)
-            if this_dev:
+            if this_dev is not None:
                 serial_updates[idx] = this_dev.serial
             cache_devs += [this_dev]
 

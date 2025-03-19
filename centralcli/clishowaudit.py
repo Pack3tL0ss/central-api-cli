@@ -214,11 +214,11 @@ def logs(
     dev_id = None
     if device:
         if utils.is_serial(device):
-            dev_id = device
+            dev_id = device  # if the input looks like a serial... it could be an incomplete serial, but rare someone would do such a thing.
             title = f"{title} related to device with serial [cyan]{device}[/]"
         else:
             dev: CacheDevice = cli.cache.get_dev_identifier(device)
-            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
+            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial / AOS8 swack_id is swarm
             title = f"{title} related to {dev.summary_text}"
 
         if group:
@@ -242,10 +242,12 @@ def logs(
 
     if log_id is not None:
         if resp and "body" in resp.output:
-            body = utils.unlistify(resp.output["body"]).replace("\t", "  ")
-            body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'
-            other = "\n".join([f"{k}: {str(v)}" for k, v in resp.output.items() if k != "body"])
-            resp.output = f"{other}\n{body}"
+            body = utils.unlistify(resp.output["body"])
+            if body:
+                body = body.replace("\t", "  ")
+                body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'
+                other = "\n".join([f"{k}: {str(v)}" for k, v in resp.output.items() if k != "body"])
+                resp.output = f"{other}\n{body}"
         cli.display_results(resp, tablefmt="action")
     else:
         tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
