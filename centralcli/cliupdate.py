@@ -3,7 +3,7 @@
 
 from pathlib import Path
 import sys
-from typing import TYPE_CHECKING, List, Union
+from typing import List, Union
 # from typing import List
 import typer
 from rich import print
@@ -27,11 +27,8 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, flex_dual_models
 from . import render
-from .cache import CacheTemplate
+from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal
 from .caas import CaasAPI
-
-if TYPE_CHECKING:
-    from .cache import CacheDevice, CacheGroup, CachePortal
 
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -281,7 +278,6 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
     return group_dev
 
 
-
 @app.command("config")
 def config_(
     group_dev: str = cli.arguments.group_dev,
@@ -320,24 +316,72 @@ def config_(
         if device and device.generic_type != "ap":
             cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
         use_caas = False
-        node_iden = group_dev.name if group_dev.is_group else group_dev.serial
+        node_iden = group_dev.name if group_dev.is_group else group_dev.swack_id  # cache is populated with serial for swack_id for aos_10 so this works for both aos8 and aos10
 
     cli.console.rule("Configuration to be sent")
     cli.console.print(output, emoji=False)
     cli.console.rule()
-    cli.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
+    if not group_dev.is_group and not group_dev.is_aos10:
+        cli.console.print(f"\nUpdating Swarm associted with {group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
+    else:
+        cli.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     if cli.confirm(yes):
         if use_caas:
             resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         else:
-            # FIXME this is OK for group level ap config , for AP this method is not valid
-            if group_dev.is_dev:
-                cli.exit("Not Implemented yet for AP device level updates")
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
-# TODO Add access spectrum monitor mode support, move logic to clicommon, and build batch update
+def _add_altitude_to_config(data: List[str], altitude: int | float) -> List[str]:
+        """Adds GPS altitude (meters from ground) to existing AP or swarm config
+
+        Args:
+            data (str): str representing the current configuration.
+            altitude (int | float): The ap-altitude to add to the provided config.
+
+        Raises:
+            typer.Exit: If no commands remain after stripping empty lines.
+
+        Returns:
+            List[str] Original config with 2 additional lines to define ap-altitude for gps
+        """
+        cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+
+        if not cli_cmds:
+            print(":x: [bright_red]Error:[/] No cli commands.")
+            raise typer.Exit(1)
+
+        # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
+        # sending value as int initially is OK, but float to int it doesn't like so just always send float
+        # this may have been because group level had ap-altitude as 2, dunno
+        if "gps" not in cli_cmds:
+            cli_cmds += ["gps", f"  ap-altitude {altitude}"]
+        else:
+            cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
+            cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {altitude}")
+
+        return cli_cmds
+
+def _build_altitude_reqs(aps: List[CacheDevice], altitude: int | float = None) -> List[BatchRequest]:
+    iden_config_mapping = {ap.swack_id: BatchRequest(cli.central.get_ap_config, ap.swack_id) for ap in aps}  # swack_id is serial for AOS10
+    get_configs_resp = cli.central.batch_request(list(iden_config_mapping.values()))
+    now_configs = [r.output for r in get_configs_resp if r.ok]
+    if len(iden_config_mapping) > len(now_configs):
+        cli.exit(f"{len(iden_config_mapping) - len(now_configs)} failures occured while attempting to fetch existing configs, check logs.")
+
+    updated_configs = [_add_altitude_to_config(cfg, altitude=altitude) for cfg in now_configs]
+    if len(list(iden_config_mapping.keys())) !=  len(updated_configs):  # Should not happen at this point, making sure as sending wrong config to wrong AP would be nasty
+        cli.exit("Unexpected mismatch in length |b| idens and validated configs")
+
+    update_reqs = [
+        BatchRequest(cli.central.replace_ap_config, iden, cfg)
+        for iden, cfg in zip(list(iden_config_mapping.keys()), updated_configs)
+    ]
+
+    return update_reqs
+
+# TODO Add access spectrum monitor mode support, altitude (get config and add gps\n  ap-altitude #), move logic to clicommon, and build batch update
 @app.command()
 def ap(
     aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
@@ -356,6 +400,7 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
+    gps_meters_off_ground: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [grey62 italic]Must be set for 6Ghz SP[/]", show_default=False,),
     access_mode: List[RadioBandOptions] = typer.Option(None, "-A", "--access", help="Space seperated list of radio(s) to set to [cyan]access mode[/]", show_default=False, hidden=True),
     spectrum_mode: List[RadioBandOptions] = typer.Option(None, "-S", "--spectrum", help="Space seperated list of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, hidden=True),
     monitor_mode: List[RadioBandOptions] = typer.Option(None, "-M", "--monitor", help="Space seperated list of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, hidden=True),
@@ -368,6 +413,7 @@ def ap(
 ) -> None:
     """Update per-ap-settings (ap env)"""
     aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+    altitude_updates = None if not gps_meters_off_ground else _build_altitude_reqs(aps, altitude=gps_meters_off_ground)
 
     disable_radios = None if not disable_radios else [r.value for r in disable_radios]
     enable_radios = None if not enable_radios else [r.value for r in enable_radios]
@@ -381,7 +427,7 @@ def ap(
         for radio, var in zip(["2.4", "5", "6"], [radio_24_disable, radio_5_disable, radio_6_disable]):
             if radio in disable_radios and var is not None:
                 cli.exit(f"Invalid combination you tried to enable and disable the {radio}Ghz radio")
-            # var = None if radio not in disable_radios else True  # doesn't work
+
         radio_24_disable = None if "2.4" not in disable_radios else True
         radio_5_disable = None if "5" not in disable_radios else True
         radio_6_disable = None if "6" not in disable_radios else True
@@ -406,9 +452,6 @@ def ap(
     if len(aps) > 1 and hostname or ip:
         cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
 
-    print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in aps], color=None, pad=10).lstrip()}")
-    print("\n[green italic]With the following per-ap-settings[/]:")
-    _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
     skip_flex = [ap for ap in aps if ap.model not in flex_dual_models]
     skip_width = [ap for ap in aps if ap.model not in ["679"]]
 
@@ -428,30 +471,43 @@ def ap(
             changes -= 1
         if not antenna_width or (antenna_width and not [ap for ap in aps if ap not in skip_width]):
             changes -= 1
-    if not changes:
+    if not changes and not altitude_updates:
         cli.exit("No valid updates provided for the selected AP models... Nothing to do.")
 
+    print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in aps], color=None, pad=10).lstrip()}")
+    if changes:
+        print("\n[green italic]With the following per-ap-settings[/]:")
+        _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
+    if gps_meters_off_ground:
+        print("\n[green italic]The following gps/altitude update is applied to the AP level config (AOS10) or swarm config (AOS8)[/]")
+        print(f"  gps / ap-altitude: {gps_meters_off_ground}")
+
     cli.confirm(yes)  # exits here if they abort
-    batch_resp = cli.central.batch_request(
-        [
-            BatchRequest(
-                cli.central.update_per_ap_settings,
-                ap.serial,
-                hostname=hostname,
-                ip=ip,
-                mask=mask,
-                gateway=gateway,
-                dns=dns,
-                domain=domain,
-                radio_24_disable=radio_24_disable,
-                radio_5_disable=radio_5_disable,
-                radio_6_disable=radio_6_disable,
-                uplink_vlan=tagged_uplink_vlan,
-                flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
-                dynamic_ant_mode=None if ap.model != "679" else antenna_width,
-            ) for ap in aps
-        ]
-    )
+    batch_resp = []
+    if changes:
+        batch_resp += cli.central.batch_request(
+            [
+                BatchRequest(
+                    cli.central.update_per_ap_settings,
+                    ap.serial,
+                    hostname=hostname,
+                    ip=ip,
+                    mask=mask,
+                    gateway=gateway,
+                    dns=dns,
+                    domain=domain,
+                    radio_24_disable=radio_24_disable,
+                    radio_5_disable=radio_5_disable,
+                    radio_6_disable=radio_6_disable,
+                    uplink_vlan=tagged_uplink_vlan,
+                    flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
+                    dynamic_ant_mode=None if ap.model != "679" else antenna_width,
+                ) for ap in aps
+            ]
+        )
+
+    if altitude_updates:
+        batch_resp += cli.central.batch_request(altitude_updates)
 
     cli.display_results(batch_resp, tablefmt="action")
 

@@ -5379,7 +5379,7 @@ class CentralApi(Session):
 
     async def replace_ap_config(
         self,
-        group_name_or_guid: str,
+        iden: str,
         clis: List[str],
     ) -> Response:
         """Replace AP Group Level configuration for UI group.
@@ -5388,14 +5388,14 @@ class CentralApi(Session):
         a line from the config.  Requires all lines of the config, not a partial update.
 
         Args:
-            group_name_or_guid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            iden (str): Group name swarm id or serial # (AOS10 AP)
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1.
             clis (List[str]): Whole configuration List in CLI format.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/ap_cli/{group_name_or_guid}"
+        url = f"/configuration/v1/ap_cli/{iden}"
 
         json_data = {
             'clis': clis

@@ -1778,33 +1778,48 @@ def lldp(
 ) -> None:
     """Show lldp neighbor information
 
-    Valid on APs and CX switches
+    Valid on APs and switches
 
     NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
     central = cli.central
 
-    devs: List[CentralObject] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
-    batch_reqs = [BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"]
-    batch_reqs += [BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id]
-    unique_stack_ids = set([dev.swack_id for dev in devs if dev.generic_type == "switch" and dev.swack_id])
-    batch_reqs += [BatchRequest(central.get_cx_switch_stack_neighbors, swack_id) for swack_id in unique_stack_ids]
-    batch_resp = central.batch_request(batch_reqs)
+    _devs: List[CacheDevice] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+
+    # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
+    stack_ids, devs = [], []
+    for dev in _devs:
+        if dev.swack_id and dev.swack_id not in stack_ids:
+            stack_ids.append(dev.swack_id)
+            devs.append(dev)
+
+    reqs = {dev: BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
+    reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
+    reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
+
+
+    batch_resp = central.batch_request(list(reqs.values()))
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
     console = Console()
-    for dev, r in zip(devs, batch_resp):
-        title = f"{dev.name} LLDP Neighbor information"
+    last_resp = sorted(batch_resp, key=lambda r: r.rl)
+    rl = last_resp[0].rl
+    for idx, (dev, r) in enumerate(zip(list(reqs.keys()), batch_resp), start=1):
+        title = f"{dev.summary_text} [cyan bold]LLDP Neighbor information[/]"
         if tablefmt not in ["table", "rich"]:
-            console.print(f'[green]{"-" * 5}[/] [cyan bold]{title}[/] [green]{"-" * 5}[/]')
+            console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
+
+        if idx == len(reqs):  # ensure rate limit caption reflects last call made.
+            r.rl = rl
 
         cli.display_results(
             r,
             tablefmt=tablefmt,
             title=title,
-            caption = "  :warning:  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]" if dev.type == "sw" else None,
+            caption = None if dev.type != "sw" else "  [dark_orange3]\u26a0[/]  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]",
             pager=pager,
             outfile=outfile,
+            suppress_rl=idx != len(reqs),
             output_by_key=["port", "localPort"],
             cleaner=cleaner.get_lldp_neighbor,
         )
@@ -1934,7 +1949,7 @@ def config_(
 
     Group level configs are available for APs or GWs.
     Device level configs are available for all device types, however
-    AP and GW, show what Aruba Central has configured at the group or device level.
+    AP and GW, show what Aruba Central has configured at the device level.
     Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
     \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
 
@@ -1963,7 +1978,7 @@ def config_(
     if group_dev.is_group:
         group = group_dev
         if device:
-            device = cli.cache.get_dev_identifier(device)
+            device: CacheDevice = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
             cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
     else:  # group_dev is a device iden
@@ -1988,7 +2003,7 @@ def config_(
         func = cli.central.get_ap_config
         if device:
             if device.generic_type == "ap":
-                args = [device.serial]
+                args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
                     func = cli.central.get_per_ap_config
             else:
@@ -2002,8 +2017,9 @@ def config_(
     # Build arguments cli.central method associated with each device type supported.
     if device:
         if device.generic_type == "ap" or status:
-            args = [device.serial]
-        else:
+            args = [device.swack_id]
+            if not device.is_aos10:
+                cli.econsole.print(f"Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             args = [group.name, device.mac]
     else:
         args = [group.name]
