@@ -604,6 +604,7 @@ class CLICommon:
         sort_by: str = None,
         reverse: bool = False,
         stash: bool = True,
+        suppress_rl: bool = False,
         output_by_key: str | List[str] = "name",
         group_by: str = None,
         exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
@@ -637,6 +638,7 @@ class CLICommon:
             reverse (bool, optional): reverse the output.
             stash (bool, optional): stash (cache) the output of the command.  The CLI can re-display with
                 show last.  Default: True
+            suppress_rl (bool, optional): Suppress the rate limit caption. Default: False
             output_by_key: For json or yaml output, if any of the provided keys are foound in the List of dicts
                 the List will be converted to a Dict[value of provided key, original_inner_dict].  Defaults to name.
             group_by: When provided output will be grouped by this key.  For outputs where multiple entries relate to a common device, and multiple devices exist in the output.
@@ -659,14 +661,15 @@ class CLICommon:
                 tablefmt = "raw"
 
             # update caption with rate limit
-            try:
-                last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
-                if last_rl:
-                    rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
-                    caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
-            except Exception as e:
-                rl_str = ""
-                log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
+            if not suppress_rl:
+                try:
+                    last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
+                    if last_rl:
+                        rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
+                        caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
+                except Exception as e:
+                    rl_str = ""
+                    log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
             caption = caption or ""
             if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
@@ -1236,7 +1239,7 @@ class CLICommon:
             self.exit(f"Exception gathering devices from [cyan]{import_file.name}[/]\n[red]AttributeError:[/] {e.args[0]}\nUse [cyan]cencli batch move --example[/] for example import format.)")
         if "INVALID" in dev_idens:
             self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
-        if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries
+        if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries  # TODO make seperate function and leverage in all batch_xxx_devices
             filtered_count = len(dev_idens) - len(set(dev_idens))
             dev_idens = set(dev_idens)
             err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")

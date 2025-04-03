@@ -1949,7 +1949,7 @@ def config_(
 
     Group level configs are available for APs or GWs.
     Device level configs are available for all device types, however
-    AP and GW, show what Aruba Central has configured at the group or device level.
+    AP and GW, show what Aruba Central has configured at the device level.
     Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
     \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
 
@@ -1978,7 +1978,7 @@ def config_(
     if group_dev.is_group:
         group = group_dev
         if device:
-            device = cli.cache.get_dev_identifier(device)
+            device: CacheDevice = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
             cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
     else:  # group_dev is a device iden
@@ -2003,7 +2003,7 @@ def config_(
         func = cli.central.get_ap_config
         if device:
             if device.generic_type == "ap":
-                args = [device.serial]
+                args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
                     func = cli.central.get_per_ap_config
             else:
@@ -2017,8 +2017,9 @@ def config_(
     # Build arguments cli.central method associated with each device type supported.
     if device:
         if device.generic_type == "ap" or status:
-            args = [device.serial]
-        else:
+            args = [device.swack_id]
+            if not device.is_aos10:
+                cli.econsole.print(f"Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             args = [group.name, device.mac]
     else:
         args = [group.name]
