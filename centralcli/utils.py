@@ -768,21 +768,12 @@ class Utils:
             data (str): str representing the final configuration.
 
         Raises:
-            typer.Exit: If masked creds found
+            typer.Exit: If no commands remain after formatting.
 
         Returns:
             Original list of str with each line rstrip.
         """
-        cli_cmds = []
-        for line in data.splitlines():
-            cli_cmds += [line.rstrip()]
-            # if "******" in line:
-            #     typer.secho("Masked credential found in file.", fg="red")
-            #     typer.secho(
-            #         f"Replace:\n{' ':4}{line.strip()}\n    with cleartext{' or actual hash.' if 'hash' in line else '.'}",
-            #         fg="red",
-            #         )
-            #     raise typer.Exit(1)
+        cli_cmds = [out for out in [line.rstrip() for line in data.splitlines()] if out]
 
         if not cli_cmds:
             print(":x: [bright_red]Error:[/] No cli commands.")
