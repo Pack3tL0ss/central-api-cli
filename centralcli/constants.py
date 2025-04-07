@@ -393,6 +393,10 @@ class BatchAddArgs(str, Enum):
     mpsk = "mpsk"
 
 
+class BatchUpdateArgs(str, Enum):
+    aps = "aps"
+
+
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
@@ -839,6 +843,7 @@ class SortDevOptions(str, Enum):
     site = "site"
     status = "status"
     type = "type"
+    clients = "clients"
     labels = "labels"
     version = "version"
     uptime = "uptime"
