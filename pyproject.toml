@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "8.3.1"
+version = "8.3.2"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -28,6 +28,7 @@ dependencies = [
     "levenshtein",
     "click<=7.1.2",
     "uniplot>=0.13.0",
+    "protobuf",
     "eval_type_backport;python_version<'3.10'",
     "colorama;platform_system == 'Windows'"
 ]

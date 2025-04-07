@@ -22,4 +22,5 @@ ipaddress
 fuzzywuzzy
 levenshtein
 uniplot
+protobuf
 eval_type_backport # only necessary if python < 3.10
