@@ -31,6 +31,7 @@ from centralcli.constants import (
     BatchDelArgs,
     BatchRenameArgs,
     IdenMetaVars,
+    BatchUpdateArgs,
     SendConfigTypes,
     CloudAuthUploadTypes,
 )
@@ -1334,6 +1335,21 @@ def rename(
         cache_data = [cli.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
         cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
         cli.central.request(cli.cache.update_dev_db, data=cache_data)
+
+
+@app.command(hidden=True)
+def update(
+    what: BatchUpdateArgs = cli.arguments.what,
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Update per-ap-settings in mass based on settings from import file"""
+    raise NotImplementedError()
 
 
 @app.command()
