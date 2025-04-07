@@ -1,7 +1,7 @@
 import aiohttp
 from . import config, log
 from .objects import DateTime
-from protobuf import monitoring_pb2, streaming_pb2, audit_pb2
+from .protobuf import monitoring_pb2, streaming_pb2, audit_pb2
 # from yarl import URL
 from rich.console import Console
 from typing import Literal
