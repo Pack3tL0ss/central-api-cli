@@ -25,6 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, LogAppArgs, LogSortBy
+from .ws_client import follow_audit_logs
 
 if TYPE_CHECKING:
     from .cache import CacheGroup, CacheDevice
@@ -180,6 +181,7 @@ def logs(
     device: str = cli.options.device,
     _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)", show_default=False,),
     count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True, hidden=True),
     sort_by: LogSortBy = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -203,6 +205,16 @@ def logs(
     :clock2:  Displays prior 2 days if no time options are provided.
     """
     title = "audit event logs"
+    if tail:
+        print(f"Following tail on {title}.  Use CTRL-C to stop.")
+        try:
+            cli.central.request(follow_audit_logs)
+        except KeyboardInterrupt:
+            cli.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
+        except Exception as e:
+            cli.exit(str(e))
+        cli.exit()
+
     start, end = cli.verify_time_range(start, end=end, past=past)
 
     if all(x is None for x in [start, end]):

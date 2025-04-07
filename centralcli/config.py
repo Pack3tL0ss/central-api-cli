@@ -301,6 +301,8 @@ class Config:
         self.last_account, self.last_cmd_ts, self.last_account_msg_shown, self.last_account_expired = self.get_last_account()
         self.account = self.get_account_from_args()
         self.base_url: str = self.data.get(self.account, {}).get("base_url")
+        self.username: str = self.data.get(self.account, {}).get("username")
+        self.wss_key: str = self.data.get(self.account, {}).get("token", {}).get("wss_key")
         self.limit: int | None = self.data.get("limit")  # Allows override of paging limit for pagination testing
         self.cache_client_days: int = self.data.get("cache_client_days", 90)
         try:
