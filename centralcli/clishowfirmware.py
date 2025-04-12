@@ -23,7 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes, FirmwareDeviceType  # noqa
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject, CacheDevice
 
 app = typer.Typer()
 
@@ -244,14 +244,17 @@ def _list(
     """
     caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
 
-    dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
+    dev: CacheDevice = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
     if dev and dev.type == "ap":
         if swarm:
             swarm_id = dev.swack_id
         else:
-            dev_type = "ap"
+            dev_type = DevTypes.ap
+        dev = None
+    elif dev and dev.type == "gw":  # Endpoint now returns "API does not support cluster gateway" so we just use the dev.type.
+        dev_type = DevTypes.gw
         dev = None
 
     kwargs = {
@@ -271,7 +274,7 @@ def _list(
 
     title = f"Available firmware versions for {list(kwargs.keys())[0].replace('_', ' ')}: {list(kwargs.values())[0]}"
     if "device_type" in kwargs:
-        title = f'{title.split(":")[0]} {dev_type}'
+        title = f'{title.split(":")[0]} {dev_type.value}'
     elif dev:
         title = f'{title.split("serial")[0]} device [cyan]{dev.name}[/]'
 
