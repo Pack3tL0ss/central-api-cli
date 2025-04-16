@@ -1991,14 +1991,18 @@ def config_(
 
     _data_key = None
     if do_gw or (device and device.generic_type == "gw"):
-        if device and device.generic_type != "gw":
-            cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+        if device:
+            if device.generic_type != "gw":
+                cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+
         caasapi = caas.CaasAPI(central=cli.central)
         if not status:
             func = caasapi.show_config
+            args = [group.name, device.mac]
             _data_key = "config"
         else:
             func = caasapi.get_config_status
+            args = [device.serial]
     elif do_ap or (device and device.generic_type == "ap"):
         func = cli.central.get_ap_config
         if device:
@@ -2006,22 +2010,14 @@ def config_(
                 args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
                     func = cli.central.get_per_ap_config
+                elif not device.is_aos10:
+                    cli.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             else:
                 cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
-        else:
-            args = [group.name]
     else:
         cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
-        cli.exit()
 
-    # Build arguments cli.central method associated with each device type supported.
-    if device:
-        if device.generic_type == "ap" or status:
-            args = [device.swack_id]
-            if not device.is_aos10:
-                cli.econsole.print(f"Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
-            args = [group.name, device.mac]
-    else:
+    if not device:
         args = [group.name]
 
     resp = cli.central.request(func, *args)
