@@ -2010,6 +2010,7 @@ def config_(
                 args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
                     func = cli.central.get_per_ap_config
+                    args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
                 elif not device.is_aos10:
                     cli.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             else:
