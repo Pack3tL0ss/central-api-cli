@@ -401,16 +401,52 @@ class Response:
             if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
                 r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
 
-        r = r.replace("failed:", "[red]failed[/]:").replace("FAILED", "[red]FAILED[/red]").replace("failed_devices", "[red]failed_devices[/]").replace("INVALID", "[red]INVALID[/]")
-        r = r.replace("SUCCESS", "[bright_green]SUCCESS[/]").replace("Success", "[bright_green]Success[/]").replace("Success[/]fully", "Successfully[/]")
-        r = r.replace("Success", "[bright_green]Success[/]").replace("success", "[bright_green]success[/]").replace("success[/]fully", "successfully[/]").replace("succeeded_devices", "[bright_green]succeeded_devices[/]")
-        r = r.replace("invalid_device", "[red]invalid_device[/]").replace("blocked_device", "[red]blocked_device[/red]").replace("ATHENA_ERROR_DEVICE_ALREADY_EXIST", "[italic dark_orange3]Device already exists[/]")
+        r = self._colorize_output(r)
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
             r = utils.Output().sanitize_strings(r)
 
         return f"{status_code}{r}"
+
+    def _colorize_output(self, output: str) -> str:
+        re_word = {
+            "ATHENA_ERROR_DEVICE_ALREADY_EXIST": "[italic dark_orange3]Device already exists[/]",
+            "[bright_green][bright_green]": "[bright_green]",
+            "[red][red]": "[red]",
+            "[/][/]": "[/]",
+            "[/]fully": "fully",
+            "[/]_": "_"
+        }
+        green_words = [
+            "success_list",
+            "succeeded_devices",
+            "successfully",
+            "success",
+        ]
+        red_words = [
+            "failed_list",
+            "failed_devices",
+            "invalid_device",
+            "blocked_device",
+            "failed",
+            "invalid",
+        ]
+        words_by_color = {
+            "bright_green": green_words,
+            "red": red_words
+        }
+        funcs = [str.lower, str.capitalize, str.upper]
+        for color, words in words_by_color.items():
+            for word in words:
+                for f in funcs:
+                    word = f(word)
+                    output = output.replace(word, f"[{color}]{word}[/]")
+
+        for before, after in re_word.items():
+            output = output.replace(before, after)
+
+        return output
 
     def __str__(self):
         console = Console(force_terminal=False)
