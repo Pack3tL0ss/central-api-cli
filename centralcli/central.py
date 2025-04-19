@@ -5352,9 +5352,10 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
+    # NEXT-MAJOR change group_swarmid to iden so consistent with others
     async def get_ap_config(
         self,
-        group_swarmid: str,
+        iden: str,
         version: str = None,
     ) -> Response:
         """Get AP Group Level configuration for UI group.
@@ -5362,14 +5363,14 @@ class CentralApi(Session):
         // Used by show config <AP MAC for AOS10 AP> //
 
         Args:
-            group_swarmid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            iden (str, optional): Group name swarm id or serial # (AOS10 AP).
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1.
             version (str, optional): Version of AP.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/ap_cli/{group_swarmid}"
+        url = f"/configuration/v1/ap_cli/{iden}"
 
         params = {
             'version': version
@@ -5382,7 +5383,7 @@ class CentralApi(Session):
         iden: str,
         clis: List[str],
     ) -> Response:
-        """Replace AP Group Level configuration for UI group.
+        """Replace AP Group or device Level configuration for UI group.
 
         Send AP configuration in CLI format as a list of strings where each item in the list is
         a line from the config.  Requires all lines of the config, not a partial update.
@@ -5402,6 +5403,95 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def _add_altitude_to_config(self, data: List[str], altitude: int | float) -> List[str]:
+            """Adds GPS altitude (meters from ground) to existing AP or swarm config
+
+            Args:
+                data (str): str representing the current configuration.
+                altitude (int | float): The ap-altitude to add to the provided config.
+
+            Raises:
+                typer.Exit: If no commands remain after stripping empty lines.
+
+            Returns:
+                List[str] Original config with 2 additional lines to define ap-altitude for gps
+            """
+            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+
+            if not cli_cmds:
+                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+
+            # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
+            # sending value as int initially is OK, but float to int it doesn't like so just always send float
+            # this may have been because group level had ap-altitude as 2, dunno
+            if "gps" not in cli_cmds:
+                cli_cmds += ["gps", f"  ap-altitude {float(altitude)}"]
+            else:
+                cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
+                cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {float(altitude)}")
+
+            return cli_cmds
+
+    async def update_ap_altitude(
+        self,
+        iden: str | List[str] = None,
+        altitude: int | float = None,
+        as_dict: Dict[str, int | float] = None,
+    ) -> List[Response] | Response:
+        """Set or Update gps ap-altitude at group or device level for APs (UI group).
+
+        Pulls existing config and adds or updates provided ap-altitude.
+        Performs 2 API calls per AP.
+
+        Multiple APs can be provided using as_dict.
+
+        Args:
+            iden (str, optional): Group name swarm id or serial # (AOS10 AP).
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1.
+            altitude (int | float, optional): The AP installation height represented as meters from the ground.
+                Note: Despite the CLI command being ap-altitude, it is not from sea level, it's from the ground.
+            as_dict: (Dict[str, int | float], optional): A dict providing ap serial numbers and altitudes.
+                i.e.: {"AP1serial": ap1_altitude, AP2serial: ap2_altitude ...}
+
+        Returns:
+            List[Response] | Response: Returns CentralAPI Response object if only one device is being updated.
+                Returns a List of Response objects if multiple APs provided.
+        """
+        base_url = "/configuration/v1/ap_cli"
+        as_dict = as_dict or {}
+        if iden:
+            if not altitude:
+                raise ValueError("altitude is required when iden is provided")
+            as_dict = {**as_dict, **{iden, altitude}}
+        if not as_dict:
+            raise ValueError("Missing required parameter: iden and altitude and/or as_dict is required")
+
+        current_reqs = [self.BatchRequest(self.get, f"{base_url}/{iden}") for iden in as_dict]
+        current_resp = await self._batch_request(current_reqs)
+
+        passed: Dict[str, Response] = {}
+        failed: Dict[str, Response] = {}
+        for iden, resp in zip(as_dict.keys(), current_resp):
+            if resp.ok:
+                passed[iden] = resp
+            else:
+                failed[iden] = resp
+
+        if not passed:
+            return current_resp
+
+        update_reqs = [
+            self.BatchRequest(
+                self.post,
+                f"{base_url}/{iden}",
+                json_data={"clis": await self._add_altitude_to_config(resp.output, altitude=as_dict[iden])}
+            ) for iden, resp in passed.items()
+        ]
+
+        update_resp = await self._batch_request(update_reqs)
+
+        return utils.unlistify([*list(failed.values()), *update_resp])
 
     async def get_per_ap_config(
         self,
@@ -5442,8 +5532,8 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO not used # TODO types for below
-    # FIXME effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
+    # TODO types for below
+    # effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
     async def update_per_ap_settings(
             self,
             serial: str,
@@ -5464,7 +5554,12 @@ class CentralApi(Session):
             zone: str = None,
             dynamic_ant_mode: Literal["narrow", "wide"] = None,
             flex_dual_exclude: Literal["2.4", "5", "6"] = None,
-    ) -> Response:
+    ) -> Response | List[Response]:
+        """Update per AP settings (AP ENV)
+
+        This method performs 2 API calls, the first to pull the existing config,
+        the second to update the config based on the updates provided.
+        """
         url = f"/configuration/v1/ap_settings_cli/{serial}"
 
         now_res = await self.get(url)
@@ -5483,6 +5578,7 @@ class CentralApi(Session):
 
             domain = domain or '""'
             ip_address = f'{ip} {mask} {gateway} {dns} {domain}'.rstrip()
+
         flex_dual = None
         if flex_dual_exclude:
             flex_dual_exclude = str(flex_dual_exclude)
@@ -5492,7 +5588,13 @@ class CentralApi(Session):
                 flex_dual = "2.4GHz-and-6GHz"
             elif flex_dual_exclude.startswith("2.4") or flex_dual_exclude.startswith("24"):
                 flex_dual = "5GHz-and-6GHz"
+            else:
+                raise ValueError(f"Invalid value {flex_dual_exclude} for flex_dual_exclude, valid values: '2.4', '5', '6'")
 
+        old_disable = {
+            "radio-0-disable": "dot11a-radio-disable",
+            "radio-1-disable": "dot11g-radio-disable",
+        }
         cli_items = {
             "hostname": hostname,
             "ip-address": ip_address,
@@ -5514,19 +5616,23 @@ class CentralApi(Session):
         for idx, key in enumerate(cli_items, start=1):
             if cli_items[key] is not None:
                 clis = [item for item in clis if not item.lstrip().startswith(key)]
-                if key.endswith("-disable"):
+                stripped_clis = [item.strip() for item in clis]
+                if key.endswith("-disable"):            # HACK # API-FLAW We need to add both dot11a-radio-disable and radio-0-disable (same for radio-1.../dot11g...) as Some APs don't honor the newer radio-x-disable
+                    old_var = old_disable.get(key)      # in testing AP679 honored the new variables 518 would take the new var format, but wouldn't disable the variable... So just sending both
                     if cli_items[key] is True:
                         clis.insert(idx, f"  {key}")
+                        if old_var and old_var not in stripped_clis:
+                            clis.insert(idx, f"  {old_var}")
+                    elif old_var and old_var in stripped_clis:
+                        _ = clis.pop(stripped_clis.index(old_var))
                 else:
                     clis.insert(idx, f"  {key} {cli_items[key]}")
 
-        json_data = {
-            'clis': clis
-        }
+        if (now_res.output == clis):
+            return Response(error="NO CHANGES", output="The Provided per ap settings match the APs current AP settings.")
 
-        # utils.json_print(json_data)
-        # raise NotImplementedError("This helper function is currently under test, not implemented.")
-        return await self.post(url, json_data=json_data)
+        return await self.post(url, json_data={'clis': clis})
+
 
     async def get_branch_health(
         self,
