@@ -28,6 +28,8 @@ log_colors = {
 # }
 console = Console(emoji=False, markup=False)
 emoji_console = Console(markup=False)
+emoji_econsole = Console(markup=False, stderr=True)
+econsole = Console(stderr=True)
 default_console = Console()
 DEBUG_ONLY_MSGS = [
     "Loaded token from storage from file"
@@ -148,8 +150,8 @@ class MyLogger:
             for m in self.log_msgs:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
                     _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
-                    con = emoji_console if "[/]" not in m else default_console
-                    con.print(f"{_pfx}{':warning:  ' if level not in ['info', 'debug'] else ''}{m}")
+                    con = econsole
+                    con.print(f"{_pfx}{'[dark_orange3]:warning:[/]  ' if level not in ['info', 'debug'] else ''}{m}")
 
             self.log_msgs = []
 
