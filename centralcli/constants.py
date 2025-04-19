@@ -11,6 +11,7 @@ from typing import Literal, Union
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
 generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
 flex_dual_models = ["615", "605H", "605R"]
+dynamic_antenna_models = ["679"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete  # TODO make separate one without sdwan and refactor, won't be valid in most places
@@ -1110,6 +1111,7 @@ class IdenMetaVars:
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
         self.guest = "[name|email|phone|id]"
+        self.ip_dhcp = "[IP_ADDRESS|'dhcp']"
 
 iden_meta = IdenMetaVars()
 
