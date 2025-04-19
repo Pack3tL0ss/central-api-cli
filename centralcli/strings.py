@@ -320,6 +320,66 @@ Where [cyan]serial[/] The serial of the AP to be renamedd
 {example.parent_key_text}
 {generic_end}"""
 
+# -- // UPDATE APs \\ --
+fields = [
+    'serial',
+    'hostname',
+    'ip',
+    'mask',
+    'gateway',
+    'dns',
+    'domain',
+    'disable_radios',
+    'enable_radios',
+    'access_radios',
+    'monitor_radios',
+    'spectrum_radios',
+    'flex_dual_exclude',
+    'antenna_width',
+    'uplink_vlan',
+    'gps_altitude'
+]
+data=f"""
+{','.join(fields)}
+CN12345678,barn.615.ab12,,,,,consolepi.com,2.4,,,,,,,,
+CN12345679,snantx.655.afb1,10.0.31.101,255.255.255.0,10.0.31.1,10.0.30.51 10.0.30.52,consolepi.com,,,,,,6,,,
+CN12345680,ind.755.af9b,,,,,,,,,,2.4 5 6,,,,
+"""
+
+example = Example(data, type="devices", action="update")
+clibatch_update_aps = f"""[italic cyan]cencli batch update aps IMPORT_FILE[/]:
+
+Accepts the following keys (include as header row for csv import):
+    {utils.color(['serial'], "red")}, {utils.color(fields[1:], "cyan")} [italic red](red=required)[/]
+
+Where [cyan]serial[/] The serial of the AP to be updated
+      [cyan]hostname[/] The desired name to be applied if renaming AP
+
+      [italic]The following are only required and only valid if setting static IP[/]
+        [cyan]ip[/] The IP of the AP if setting static IP
+        [cyan]mask[/] The subnet mask (i.e. 255.255.255.0)
+        [cyan]gateway[/] The default gateway
+        [cyan]dns[/] DNS server addresses (space separated)
+        [cyan]domain[/] domain name (dns search suffix)
+
+      [italic]The following radio settings accept a list or a space separated string. valid values: '2.4, 5, 6'[/]
+        [italic][bright_green]i.e.[/]: "2.4 6" or [2.4, 6] or "2.4"[/]
+        [cyan]disable_radios[/] Radio(s) to disable
+        [cyan]enable_radios[/] Radio(s) to enable
+        [cyan]access_radios[/]  Radio(s) to set to access mode (the default)
+        [cyan]monitor_radios[/] Radio(s) to set to monitor mode
+        [cyan]spectrum_radios[/] Radio(s) to set to spectrum mode
+
+      [cyan]flex_dual_exclude[/] Specify the radio to exclude for flex dual radio APs.  i.e. specify 6 to ensure AP always uses [cyan]2.4 and 5Ghz[/] radios
+      [cyan]antenna_width[/] Only valid for APs that support dynamic antenna width (i.e.: 679).  Valid values: [cyan]narrow[/], [cyan]wide[/]
+      [cyan]uplink_vlan[/] Provide PVID for VLAN if AP is to be managed over a [bright_green]tagged[/] VLAN
+      [cyan]gps_altitude[/] For 6Ghz Standard Power: APs installation height / the number of meters from the ground
+
+{example}
+
+{example.parent_key_text}
+{generic_end}"""
+
 # -- // DELETE DEVICES \\ --
 data = """
 serial,license
@@ -590,6 +650,7 @@ class ImportExamples:
         self.unarchive = clibatch_unsubscribe.replace("unsubscribe", "unarchive").replace("any subscriptions associated with the serial will be removed.\n", "")
         self.move_devices = Example(device_move_data, type="devices", action="move").full_text
         self.rename_aps = clibatch_rename_aps
+        self.update_aps = clibatch_update_aps
 
     def __getattr__(self, key: str):
         if key not in self.__dict__.keys():
