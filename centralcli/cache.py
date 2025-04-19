@@ -3193,7 +3193,8 @@ class Cache:
         license_db: bool = False,
         dev_type: constants.AllDevTypes = None
         ):
-        update_funcs, db_res = [], []
+        update_funcs = []
+        db_res: CombinedResponse | List[Response] = []
         dev_update_funcs = ["refresh_inv_db", "refresh_dev_db"]
         if group_db:
             update_funcs += [self.refresh_group_db]
@@ -3213,10 +3214,17 @@ class Cache:
             if update_funcs:
                 kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
                 db_res += [await update_funcs[0](**kwargs)]
+                if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
+                    db_res = utils.unlistify(db_res)
+
                 if not db_res[-1]:
-                    log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
-                    if len(update_funcs) > 1:
+                    _remaining = 0 if len(update_funcs) == 1 else len(update_funcs[1:])
+                    if _remaining:
+                        log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
                         db_res += [Response(error=f"{f.__name__} aborted due to failure in previous cache update call ({update_funcs[0].__name__})") for f in update_funcs[1:]]
+                    else:
+                        log.error(f"Cache Update failure in {update_funcs[0].__name__}: {db_res[0].error}", show=True, caption=True)
+
                 else:
                     if len(update_funcs) > 1:
                         db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
@@ -3227,7 +3235,12 @@ class Cache:
                 br = self.central.BatchRequest
                 db_res += await self.central._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
                 if db_res[-1]:
-                    db_res += await self.central._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
+                    dev_res = await self.central._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
+                    dev_res = utils.unlistify(dev_res)  # should only be an issue when debugging (re-writing responses) in refresh_dev_db
+                    if isinstance(dev_res, list):
+                        db_res = [*db_res, *dev_res]
+                    else:
+                        db_res += [dev_res]
                     if db_res[-1]:
                         batch_reqs = [
                             self.central.BatchRequest(req)
@@ -3273,13 +3286,15 @@ class Cache:
             start = time.perf_counter()
             db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
             elapsed = round(time.perf_counter() - start, 2)
-            passed = [r for r in db_res if r.ok]
-            failed = (update_count or len(db_map)) - len(passed)
+            failed = [r for r in db_res if not r.ok]
             log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
 
             if failed:
-                res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update or update_all and not db_res[idx].ok)
-                err_msg = f"Cache refresh returned an error updating ({res_map})"
+                try:
+                    res_map = ", ".join(db for idx, (db, do_update) in enumerate(db_map.items()) if do_update or update_all and not db_res[idx].ok)
+                    err_msg = f"Cache refresh returned an error updating {res_map}"  # TODO this logic gets screwy because if dev_db all calls fail the return is List[Response] with len 3 rather than  CombinedResponse
+                except IndexError:
+                    err_msg = f"Cache refresh returned an error. {len(failed)} requests failed."
                 log.error(err_msg)
                 self.central.spinner.fail(err_msg)
             else:
