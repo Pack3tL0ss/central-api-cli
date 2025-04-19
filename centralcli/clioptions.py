@@ -38,6 +38,17 @@ class CLIOptions:
         self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
         self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
         self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
+        self.yes_int = typer.Option(
+            0,
+            "-Y",
+            "-y",
+            "--yes",
+            count=True,
+            metavar="",
+            help="Bypass confirmation prompts - Assume Yes, this command has potential for multiple confirmation prompts -YY to bypass all",
+            rich_help_panel="Common Options",
+            show_default=False,
+        )
         self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.swarm_device = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
