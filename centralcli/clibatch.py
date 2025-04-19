@@ -322,7 +322,7 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
             except typer.Abort:
                 fstr = _lldp_rename_get_fstr()
             except Exception as e:
-                log.exception(f"LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
+                log.exception(f"Auto/LLDP rename exception while parsing {fstr}\n{e}", show=log.DEBUG)
                 print(f"\nThere Appears to be a problem with [red]{fstr}[/]: {e.__class__.__name__}")
                 if typer.confirm("Do you want to edit the format string and try again?", abort=True):
                     fstr = _lldp_rename_get_fstr()
@@ -1245,21 +1245,21 @@ def rename(
     what: BatchRenameArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
-    lldp: bool = typer.Option(None, "--lldp", help="Automatic AP rename based on lldp info from upstream switch.",),
-    lower: bool = typer.Option(False, "--lower", help="[LLDP rename] Convert LLDP result to all lower case.",),
+    lldp: bool = typer.Option(None, "-A", "--auto", "--lldp", help="Automatic AP rename using all, or portions of, info from upstream switch, site, group, ap model...",),
+    lower: bool = typer.Option(False, "--lower", help="[AUTO RENAME] Convert LLDP result to all lower case.",),
     space: str = typer.Option(
         None,
         "-S",
         "--space",
-        help="[LLDP rename] Replace spaces with provided character (best to wrap in single quotes) [grey42]{}[/]".format(escape("[default: '_']")),
+        help="[AUTO RENAME] Replace spaces with provided character (best to wrap in single quotes) [grey42]{}[/]".format(escape("[default: '_']")),
         show_default=False,
     ),
-    default_only: bool = typer.Option(False, "-D", "--default-only", help="[LLDP rename] Perform only on APs that still have default name.",),
-    ap: str = typer.Option(None, metavar=iden.dev, help="[LLDP rename] Perform on specified AP", show_default=False,),
-    label: str = typer.Option(None, help="[LLDP rename] Perform on APs with specified label", show_default=False,),
-    group: str = typer.Option(None, help="[LLDP rename] Perform on APs in specified group", show_default=False,),
-    site: str = typer.Option(None, metavar=iden.site, help="[LLDP rename] Perform on APs in specified site", show_default=False,),
-    model: str = typer.Option(None, help="[LLDP rename] Perform on APs of specified model", show_default=False,),  # TODO model completion
+    default_only: bool = typer.Option(False, "-D", "--default-only", help="[AUTO RENAME] Perform only on APs that still have default name.",),
+    ap: str = typer.Option(None, metavar=iden.dev, help="[AUTO RENAME] Perform on specified AP", autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    label: str = typer.Option(None, help="[AUTO RENAME] Perform on APs with specified label", autocompletion=cli.cache.label_completion, show_default=False,),
+    group: str = typer.Option(None, help="[AUTO RENAME] Perform on APs in specified group", autocompletion=cli.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, metavar=iden.site, help="[AUTO RENAME] Perform on APs in specified site", autocompletion=cli.cache.site_completion, show_default=False,),
+    model: str = typer.Option(None, help="[AUTO RENAME] Perform on APs of specified model", show_default=False,),  # TODO model completion
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
@@ -1268,7 +1268,7 @@ def rename(
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
     if show_example:
-        print(getattr(examples, f"rename_{what}"))
+        print(getattr(examples, f"rename_{what.value}"))
         return
 
     if str(import_file).lower() == "lldp":
@@ -1337,19 +1337,32 @@ def rename(
         cli.central.request(cli.cache.update_dev_db, data=cache_data)
 
 
-@app.command(hidden=True)
+@app.command()
 def update(
     what: BatchUpdateArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
+    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [grey62]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Update per-ap-settings in mass based on settings from import file"""
-    raise NotImplementedError()
+    """Update per-ap-settings or ap-altitude (at AP level) in mass based on settings from import file
+
+    Use [cyan]--example[/] to see expected import file format and required fields.
+    """
+    if show_example:
+        print(examples.update_aps)
+        return
+
+    if not import_file:
+        cli.exit(_invalid_msg("cencli batch update aps [OPTIONS] [IMPORT_FILE]"))
+
+    if what == BatchUpdateArgs.aps:
+        data = cli._get_import_file(import_file, "devices")
+        cli.batch_update_aps(data, yes=yes, reboot=reboot)
 
 
 @app.command()
@@ -1421,33 +1434,33 @@ def archive(
         print(examples.archive)
         return
 
-    elif not import_file:
+    if not import_file:
         cli.exit(_invalid_msg("cencli batch archive [OPTIONS] [IMPORT_FILE]"))
-    else:
-        data = cli._get_import_file(import_file, "devices", text_ok=True)
-        if data and isinstance(data, list):
-            if all([isinstance(x, dict) for x in data]):
-                serials = [x.get("serial") or x.get("serial_num") for x in data]
-            elif all(isinstance(x, str) for x in data):
-                serials = data if not data[0].lower().startswith("serial") else data[1:]
-        else:
-            print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
-            print("Use [cyan]cencli batch archive --example[/] to see expected format.")
-            raise typer.Exit(1)
 
-        res = cli.central.request(cli.central.archive_devices, serials)
-        if res:
-            caption = res.output.get("message")
-            if res.get("succeeded_devices"):
-                title = "Devices successfully archived."
-                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-            if res.get("failed_devices"):
-                title = "These devices failed to archived."
-                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-                cli.display_results(data=data, title=title, caption=caption)
-        else:
-            cli.display_results(res, tablefmt="action")
+    data = cli._get_import_file(import_file, "devices", text_ok=True)
+    if data and isinstance(data, list):
+        if all([isinstance(x, dict) for x in data]):
+            serials = [x.get("serial") or x.get("serial_num") for x in data]
+        elif all(isinstance(x, str) for x in data):
+            serials = data if not data[0].lower().startswith("serial") else data[1:]
+    else:
+        print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
+        print("Use [cyan]cencli batch archive --example[/] to see expected format.")
+        raise typer.Exit(1)
+
+    res = cli.central.request(cli.central.archive_devices, serials)
+    if res:
+        caption = res.output.get("message")
+        if res.get("succeeded_devices"):
+            title = "Devices successfully archived."
+            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+        if res.get("failed_devices"):
+            title = "These devices failed to archived."
+            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+            cli.display_results(data=data, title=title, caption=caption)
+    else:
+        cli.display_results(res, tablefmt="action")
 
 
 @app.command()

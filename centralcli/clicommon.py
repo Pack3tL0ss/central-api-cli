@@ -21,6 +21,8 @@ import pendulum
 from datetime import datetime
 import time
 import ipaddress
+from pydantic import ValidationError
+from dataclasses import dataclass
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -38,6 +40,9 @@ from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
+from centralcli.constants import flex_dual_models, dynamic_antenna_models
+from .models import APUpdates, APUpdate
+
 
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
@@ -93,6 +98,16 @@ class MoveData:
                 confirm_msgs = [*confirm_msgs, *[f'  {dev}' for dev in v_list]]
 
         return confirm_msgs
+
+@dataclass
+class APRequestInfo:
+    reqs: List[BatchRequest] | None
+    ap_data: APUpdates
+    skipped: List[str] = None
+    requires_reboot: Dict[str, CacheDevice] = None
+    env_update_aps: int = None
+    gps_update_aps: int = None
+
 
     @property
     def serials_by_move_type(self) -> Dict[str, List[str]]:
@@ -1636,95 +1651,131 @@ class CLICommon:
         if inv_doc_ids:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
-# Header rows used by CAS
-#DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
+    def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
+        altitude_by_serial, batch_reqs, skipped, requires_reboot = {}, [], [], {}
 
-    # def batch_update_aps(self, data: List[dict]) -> List[Response]:
-    #         data: List[CacheDevice] = [self.cache.get_dev_identifier(ap, dev_type="ap") for ap in data]
+        try:
+            data: List[APUpdate] = APUpdates(data)
+        except ValidationError as e:
+            self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
 
-    #         disable_radios = None if not disable_radios else [r.value for r in disable_radios]
-    #         enable_radios = None if not enable_radios else [r.value for r in enable_radios]
-    #         flex_dual_exclude = None if not flex_dual_exclude else flex_dual_exclude.value
-    #         antenna_width = None if not antenna_width else antenna_width.value
+        for ap in data:
+            cache_ap: CacheDevice = self.cache.get_dev_identifier(ap.serial, dev_type="ap")
+            ap_iden = utils.color([cache_ap.name, cache_ap.serial], color_str="cyan", sep="|")
 
-    #         radio_24_disable = None if not enable_radios or "2.4" not in enable_radios else False
-    #         radio_5_disable = None if not enable_radios or "5" not in enable_radios else False
-    #         radio_6_disable = None if not enable_radios or "6" not in enable_radios else False
-    #         if disable_radios:
-    #             for radio, var in zip(["2.4", "5", "6"], [radio_24_disable, radio_5_disable, radio_6_disable]):
-    #                 if radio in disable_radios and var is not None:
-    #                     cli.exit(f"Invalid combination you tried to enable and disable the {radio}Ghz radio")
-    #                 # var = None if radio not in disable_radios else True  # doesn't work
-    #             radio_24_disable = None if "2.4" not in disable_radios else True
-    #             radio_5_disable = None if "5" not in disable_radios else True
-    #             radio_6_disable = None if "6" not in disable_radios else True
+            if ap.gps_altitude:
+                altitude_by_serial[cache_ap.swack_id] = ap.gps_altitude  # swack_id is serial for aos10, swarm_id for AOS8
+
+            if ap.flex_dual_exclude and cache_ap.model not in flex_dual_models:
+                log.error(f"Ignoring [cyan]flex_dual_exclude[/] option for {ap_iden}. AP{cache_ap.model} is not a flex_dual radio AP", show=True)
+                ap.flex_dual_exclude = None
+            if ap.dynamic_ant_mode and cache_ap.model not in dynamic_antenna_models:
+                log.error(f"Ignoring [cyan]antenna_width[/] option for {ap_iden}. AP{cache_ap.model} is not a dyanamic antenna AP", show=True)
+                ap.dynamic_ant_mode = None
+            if (ap.ip and ap.ip != cache_ap.ip) or any([ap.mask, ap.gateway, ap.dns, ap.domain]) or ap.uplink_vlan:
+                requires_reboot[ap.serial] = [cache_ap]
 
 
-    #         kwargs = {
-    #             "hostname": hostname,
-    #             "ip": ip,
-    #             "mask": mask,
-    #             "gateway": gateway,
-    #             "dns": dns,
-    #             "domain": domain,
-    #             "radio_24_disable": radio_24_disable,
-    #             "radio_5_disable": radio_5_disable,
-    #             "radio_6_disable": radio_6_disable,
-    #             "uplink_vlan": tagged_uplink_vlan,
-    #             "flex_dual_exclude": flex_dual_exclude,
-    #             "dynamic_ant_mode": antenna_width,
-    #         }
-    #         if ip and not all([mask, gateway, dns]):
-    #             cli.exit("[cyan]mask[/], [cyan]gateway[/], and [cyan]--dns[/] are required when [cyan]--ip[/] is provided.")
-    #         if len(data) > 1 and hostname or ip:
-    #             cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
+            kwargs = ap.api_params
 
-    #         print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in data], color=None, pad=10).lstrip()}")
-    #         print("\n[green italic]With the following per-ap-settings[/]:")
-    #         _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
-    #         skip_flex = [ap for ap in data if ap.model not in flex_dual_models]
-    #         skip_width = [ap for ap in data if ap.model not in ["679"]]
+            if {k: v for k, v in kwargs.items() if k != "serial" and v is not None}:
+                batch_reqs += [
+                    BatchRequest(
+                        self.central.update_per_ap_settings,
+                        **kwargs
+                    )
+               ]
+            elif not ap.gps_altitude:
+                skipped += [ap_iden]
 
-    #         warnings = []
-    #         if flex_dual_exclude is not None and skip_flex:
-    #             warnings += [f"[yellow]:information:[/]  Flexible dual radio [red]will be ignored[/] for {len(skip_flex)} AP, as the setting doesn't apply to those models."]
-    #         if antenna_width is not None and skip_width:
-    #             warnings += [f"[yellow]:information:[/]  Dynamic antenna width [red]will be ignored[/] for {len(skip_width)} AP, as the setting doesn't apply to those models."]
-    #         if warnings:
-    #             warn_text = '\n'.join(warnings)
-    #             print(f"\n{warn_text}")
+        if altitude_by_serial:
+            batch_reqs += [BatchRequest(self.central.update_ap_altitude, as_dict=altitude_by_serial)]
 
-    #         # determine if any effective changes after skips for settings on invalid AP models
-    #         changes = 2
-    #         if not list(filter(None, list(kwargs.values())[0:-2])):
-    #             if not flex_dual_exclude or (flex_dual_exclude and not [ap for ap in data if ap not in skip_flex]):
-    #                 changes -= 1
-    #             if not antenna_width or (antenna_width and not [ap for ap in data if ap not in skip_width]):
-    #                 changes -= 1
-    #         if not changes:
-    #             cli.exit("No valid updates provided for the selected AP models... Nothing to do.")
+        return APRequestInfo(
+            batch_reqs,
+            ap_data=data,
+            skipped=skipped,
+            requires_reboot=requires_reboot,
+            env_update_aps=(len(batch_reqs) - len(altitude_by_serial)),
+            gps_update_aps=len(altitude_by_serial),
+        )
 
-    #         self.confirm(yes)  # exits here if they abort
-    #         batch_resp = cli.central.batch_request(
-    #             [
-    #                 BatchRequest(
-    #                     cli.central.update_per_ap_settings,
-    #                     ap.serial,
-    #                     hostname=hostname,
-    #                     ip=ip,
-    #                     mask=mask,
-    #                     gateway=gateway,
-    #                     dns=dns,
-    #                     domain=domain,
-    #                     radio_24_disable=radio_24_disable,
-    #                     radio_5_disable=radio_5_disable,
-    #                     radio_6_disable=radio_6_disable,
-    #                     uplink_vlan=tagged_uplink_vlan,
-    #                     flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
-    #                     dynamic_ant_mode=None if ap.model != "679" else antenna_width,
-    #                 ) for ap in data
-    #             ]
-    #         )
+    def _reboot_after_changes(self, req_info: APRequestInfo, batch_resp: List[Response]) -> List[Response] | None:
+        reboot_reqs: List[BatchRequest] = []
+        skipped_reboots: List[CacheDevice] = []
+        for req, resp in zip(req_info.reqs, batch_resp):
+            serial = req.kwargs["serial"]
+            if req.func == self.central.update_per_ap_settings and serial in req_info.requires_reboot:
+                if resp.ok:
+                    reboot_reqs += [BatchRequest(self.central.send_command_to_device, serial=serial, command="reboot")]
+                else:
+                    skipped_reboots += [req_info.requires_reboot[serial]]
+
+        if skipped_reboots:
+            log.warning(f"Reboot was not performed on the following APs as the Update call returned an error\n{utils.summarize_list([ap.summary_text for ap in skipped_reboots])}", caption=True)
+
+        if reboot_reqs:
+            return self.central.batch_request(reboot_reqs)
+
+    # Header rows used by CAS
+    #DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
+    # TODO cache update if AP is renamed
+    def batch_update_aps(self, data: list | dict, *, yes: bool = False, reboot: bool = False) -> None:
+        """Update per-ap-settings (ap env) or set gps altitude by updating ap level config"""
+        try:
+            _ = [dev["serial"] for dev in data if dev["serial"]]
+        except KeyError:
+            self.exit("Missing required field: [cyan]serial[/].")
+
+        req_info: APRequestInfo = self._build_update_ap_reqs(data)
+        if not req_info.reqs:
+            self.exit("No valid updates provided... Nothing to do.")
+
+        reboot_msg, reboot_resp = None, []
+        reboot_base = "\n:recycle:  [italic dark_olive_green2]indicates a reboot is required for changes to take effect.[/]"
+        call_cnt = (req_info.env_update_aps + req_info.gps_update_aps) * 2
+        if req_info.requires_reboot and reboot:
+            call_cnt += len(req_info.requires_reboot)
+            reboot_msg = (
+                f"{reboot_base}\n"
+                f"[cyan]--reboot[/]|[cyan]-R[/] Option provided: {len(req_info.requires_reboot)} AP{utils.singular_plural_sfx(req_info.requires_reboot)} will be [bright_red]rebooted[/] after successful update"
+            )
+        elif req_info.requires_reboot:
+            reboot_msg = (
+                f"{reboot_base}\n"
+                f"[dark_orange3]:warning:[/]  {len(req_info.requires_reboot)} AP{utils.singular_plural_sfx(req_info.requires_reboot, singular=' has', plural='s have')} "
+                "changes that require reboot to take effect, but [cyan]--reboot[/]|[cyan]-R[/] options was not provided so [bright_red]no reboot will be performed[/]"
+            )
+
+        ap_update_cnt = len(data) - len(req_info.skipped)
+        self.econsole.print(f"\n[bright_green]Updat{'e' if not yes else 'ing'}[/] {ap_update_cnt} AP{utils.singular_plural_sfx({ap_update_cnt})}")
+        if req_info.env_update_aps:
+            self.econsole.print(f"    Updating [cyan]per AP settings[/] for {req_info.env_update_aps} AP{utils.singular_plural_sfx(req_info.env_update_aps)}")
+        if req_info.gps_update_aps:
+            self.econsole.print(f"    Adding/Updating [cyan]gps-altitude[/] to {req_info.gps_update_aps} AP{utils.singular_plural_sfx(req_info.gps_update_aps)}")
+
+        self.econsole.print("\n[bold magenta]Summary of Changes to be Applied[/]")
+        self.econsole.print(utils.summarize_list([ap.__rich__() for ap in req_info.ap_data], color=None, max=12, pad=4), emoji=False)
+        # if req_info.requires_reboot:
+        #     self.econsole.print(":recycle: [italic dark_olive_green2]reboot required for changes to take effect.[/]")
+
+        if reboot_msg:
+            self.econsole.print(reboot_msg)
+        self.econsole.print(f"\n[yellow]:information:[/]  [italic dark_olive_green2]This operation will result in {call_cnt} API calls[/]")
+
+        if req_info.skipped:
+            self.econsole.print(f"\nThe following {len(req_info.skipped)} APs were skipped as no updates applied to those models:\n{utils.summarize_list(req_info.skipped, max=10)}")
+
+        calls_word = utils.singular_plural_sfx(req_info.reqs, singular=" was", plural="s were")
+        caption = f"[yellow]:information:[/]  [italic cyan]{len(req_info.reqs)}[/] [italic dark_olive_green2]API call{calls_word} performed to get current configuration/settings. These calls are only shown if there was a failure.[/]"
+
+        self.confirm(yes)  # exits here if they abort
+        batch_resp = self.central.batch_request(req_info.reqs)
+        if reboot and req_info.requires_reboot:
+            reboot_resp = self._reboot_after_changes(req_info, batch_resp=batch_resp) or []
+
+        self.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
+
 
     def help_default(self, default_txt: str) -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from __future__ import annotations
+
 from pathlib import Path
 import sys
 from typing import List, Union
@@ -25,7 +27,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, flex_dual_models
+from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode
 from . import render
 from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal
 from .caas import CaasAPI
@@ -333,66 +335,32 @@ def config_(
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
-def _add_altitude_to_config(data: List[str], altitude: int | float) -> List[str]:
-        """Adds GPS altitude (meters from ground) to existing AP or swarm config
 
-        Args:
-            data (str): str representing the current configuration.
-            altitude (int | float): The ap-altitude to add to the provided config.
-
-        Raises:
-            typer.Exit: If no commands remain after stripping empty lines.
-
-        Returns:
-            List[str] Original config with 2 additional lines to define ap-altitude for gps
-        """
-        cli_cmds = [out for out in [line.rstrip() for line in data] if out]
-
-        if not cli_cmds:
-            print(":x: [bright_red]Error:[/] No cli commands.")
-            raise typer.Exit(1)
-
-        # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
-        # sending value as int initially is OK, but float to int it doesn't like so just always send float
-        # this may have been because group level had ap-altitude as 2, dunno
-        if "gps" not in cli_cmds:
-            cli_cmds += ["gps", f"  ap-altitude {altitude}"]
-        else:
-            cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
-            cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {altitude}")
-
-        return cli_cmds
-
-def _build_altitude_reqs(aps: List[CacheDevice], altitude: int | float = None) -> List[BatchRequest]:
-    iden_config_mapping = {ap.swack_id: BatchRequest(cli.central.get_ap_config, ap.swack_id) for ap in aps}  # swack_id is serial for AOS10
-    get_configs_resp = cli.central.batch_request(list(iden_config_mapping.values()))
-    now_configs = [r.output for r in get_configs_resp if r.ok]
-    if len(iden_config_mapping) > len(now_configs):
-        cli.exit(f"{len(iden_config_mapping) - len(now_configs)} failures occured while attempting to fetch existing configs, check logs.")
-
-    updated_configs = [_add_altitude_to_config(cfg, altitude=altitude) for cfg in now_configs]
-    if len(list(iden_config_mapping.keys())) !=  len(updated_configs):  # Should not happen at this point, making sure as sending wrong config to wrong AP would be nasty
-        cli.exit("Unexpected mismatch in length |b| idens and validated configs")
-
-    update_reqs = [
-        BatchRequest(cli.central.replace_ap_config, iden, cfg)
-        for iden, cfg in zip(list(iden_config_mapping.keys()), updated_configs)
-    ]
-
-    return update_reqs
-
-# TODO Add access spectrum monitor mode support, altitude (get config and add gps\n  ap-altitude #), move logic to clicommon, and build batch update
+# FIXME entering more than one DNS results in the 2nd and beyond entry being evaluated as additional aps
+# update ap lwr --dns 10.0.30.51 10.0.30.52 ... results in aps = ['lwr', '10.0.30.52']
+# Any options below that are List[str] will have all items beyond the first evaluated as if it was aps
 @app.command()
 def ap(
-    aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False, lazy=True,),
     hostname: str = typer.Option(None, help="Rename/Set AP hostname", show_default=False),
-    ip: str = typer.Option(None, help=f"Configure Static IP [grey62]{escape('[mask, gateway, and dns must be provided]')}[/]", show_default=False,),
+    ip: str = typer.Option(None, metavar=iden_meta.ip_dhcp, help="Configure Static IP or reset AP to [cyan]dhcp[/] [grey62 italic]--mask, --gateway, and --dns must be provided if configuring static IP[/]", show_default=False,),
     mask: str = typer.Option(None, help="Subnet mask in format 255.255.255.0 [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False,),
     gateway: str = typer.Option(None, help="Default Gateway [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False,),
-    dns: List[str] = typer.Option(None, help="Space seperated list of dns servers. [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False,),
+    dns: str = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
     domain: str = typer.Option(None, help="DNS domain name.  [grey62 italic]Optional/Applies when --ip is provided[/]", show_default=False,),
-    disable_radios: List[RadioBandOptions] = typer.Option(None, "-D", "--disable-radios", help="List of radio(s) to disable.", show_default=False,),
-    enable_radios: List[RadioBandOptions] = typer.Option(None, "-E", "--enable-radios", help="List of radio(s) to enable.", show_default=False,),
+    disable_radios: str = typer.Option(None, "-D", "--disable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to disable.", show_default=False, is_eager=True,),
+    enable_radios: str = typer.Option(None, "-E", "--enable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to enable.", show_default=False, is_eager=True,),
+    access_radios: str = typer.Option(None, "-A", "--access", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]access mode[/]", show_default=False, is_eager=True,),
+    monitor_radios: str = typer.Option(None, "-M", "--monitor", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, is_eager=True,),
+    spectrum_radios: str = typer.Option(None, "-S", "--spectrum", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, is_eager=True,),
+    # TODO FIX This see FIXME above
+    # dns: List[str] = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
+    # domain: str = typer.Option(None, help="DNS domain name.  [grey62 italic]Optional/Applies when --ip is provided[/]", show_default=False,),
+    # disable_radios: List[str] = typer.Option(None, "-D", "--disable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to disable.", show_default=False, is_eager=True,),
+    # enable_radios: List[str] = typer.Option(None, "-E", "--enable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to enable.", show_default=False, is_eager=True,),
+    # access_radios: List[str] = typer.Option(None, "-A", "--access", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]access mode[/]", show_default=False, is_eager=True,),
+    # monitor_radios: List[str] = typer.Option(None, "-M", "--monitor", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, is_eager=True,),
+    # spectrum_radios: List[str] = typer.Option(None, "-S", "--spectrum", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, is_eager=True,),
     flex_dual_exclude: RadioBandOptions = typer.Option(
         None,
         "-e",
@@ -400,38 +368,32 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
-    gps_meters_off_ground: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [grey62 italic]Must be set for 6Ghz SP[/]", show_default=False,),
-    access_mode: List[RadioBandOptions] = typer.Option(None, "-A", "--access", help="Space seperated list of radio(s) to set to [cyan]access mode[/]", show_default=False, hidden=True),
-    spectrum_mode: List[RadioBandOptions] = typer.Option(None, "-S", "--spectrum", help="Space seperated list of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, hidden=True),
-    monitor_mode: List[RadioBandOptions] = typer.Option(None, "-M", "--monitor", help="Space seperated list of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, hidden=True),
     antenna_width: DynamicAntMode = typer.Option(None, "-W", "--antenna-width", help="Dynamic Antenna Width [grey62 italic]Only applies to AP 679[/]", show_default=False,),
-    tagged_uplink_vlan: int = typer.Option(None, "-u", "--tagged-uplink-pvid", help="Configure Uplink VLAN (tagged).", show_default=False,),
+    uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
+    gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [grey62 italic]Must be set for 6Ghz SP[/]", show_default=False,),
+    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [grey62]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Update per-ap-settings (ap env)"""
-    aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
-    altitude_updates = None if not gps_meters_off_ground else _build_altitude_reqs(aps, altitude=gps_meters_off_ground)
+    """Update per-ap-settings (ap env) and/or add/update gps ap-altitude to ap level config
 
-    disable_radios = None if not disable_radios else [r.value for r in disable_radios]
-    enable_radios = None if not enable_radios else [r.value for r in enable_radios]
-    flex_dual_exclude = None if not flex_dual_exclude else flex_dual_exclude.value
-    antenna_width = None if not antenna_width else antenna_width.value
+     Multiple APs can be provided (same settings would apply)
 
-    radio_24_disable = None if not enable_radios or "2.4" not in enable_radios else False
-    radio_5_disable = None if not enable_radios or "5" not in enable_radios else False
-    radio_6_disable = None if not enable_radios or "6" not in enable_radios else False
-    if disable_radios:
-        for radio, var in zip(["2.4", "5", "6"], [radio_24_disable, radio_5_disable, radio_6_disable]):
-            if radio in disable_radios and var is not None:
-                cli.exit(f"Invalid combination you tried to enable and disable the {radio}Ghz radio")
+    :warning:  :warning:  If providing more than one value for the options that support it
+    You currently have to separate with a comma and ensure there are no spaces
+    [bright_green]i.e.[/]: [cyan]-E 2.4,5,6[/]
+    You can also wrap the value in quotes and separate with a space
+    [bright_green]i.e.[/]: [cyan]--dns '10.0.30.51 10.0.30.52'[/]
 
-        radio_24_disable = None if "2.4" not in disable_radios else True
-        radio_5_disable = None if "5" not in disable_radios else True
-        radio_6_disable = None if "6" not in disable_radios else True
+    The current setting is retained for any options that are not provided.
 
+    Use [cyan]--ip dhcp[/] to reset an AP that was previously provisioned with a static address to use DHCP
+        This will clear the ip, mask, gateway, dns, and domain if configured.
+    """
+    if len(aps) > 1 and (hostname or (ip and ip.lower() != "dhcp")):
+        cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
 
     kwargs = {
         "hostname": hostname,
@@ -440,76 +402,23 @@ def ap(
         "gateway": gateway,
         "dns": dns,
         "domain": domain,
-        "radio_24_disable": radio_24_disable,
-        "radio_5_disable": radio_5_disable,
-        "radio_6_disable": radio_6_disable,
-        "uplink_vlan": tagged_uplink_vlan,
+        "disable_radios": disable_radios,
+        "enable_radios": enable_radios,
+        "access_radios": access_radios,
+        "monitor_radios": monitor_radios,
+        "spectrum_radios": spectrum_radios,
         "flex_dual_exclude": flex_dual_exclude,
         "dynamic_ant_mode": antenna_width,
+        "uplink_vlan": uplink_vlan,
+        "gps_altitude": gps_altitude
     }
-    if ip and not all([mask, gateway, dns]):
-        cli.exit("[cyan]mask[/], [cyan]gateway[/], and [cyan]--dns[/] are required when [cyan]--ip[/] is provided.")
-    if len(aps) > 1 and hostname or ip:
-        cli.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
+    kwargs = utils.strip_none(kwargs)
+    if not kwargs:
+        cli.exit("[bright_red]No Changes provided[/]... Nothing to do.  Use [cyan]cencli update ap --help[/] to see available options.")
 
-    skip_flex = [ap for ap in aps if ap.model not in flex_dual_models]
-    skip_width = [ap for ap in aps if ap.model not in ["679"]]
-
-    warnings = []
-    if flex_dual_exclude is not None and skip_flex:
-        warnings += [f"[yellow]:information:[/]  Flexible dual radio [red]will be ignored[/] for {len(skip_flex)} AP, as the setting doesn't apply to those models."]
-    if antenna_width is not None and skip_width:
-        warnings += [f"[yellow]:information:[/]  Dynamic antenna width [red]will be ignored[/] for {len(skip_width)} AP, as the setting doesn't apply to those models."]
-    if warnings:
-        warn_text = '\n'.join(warnings)
-        print(f"\n{warn_text}")
-
-    # determine if any effective changes after skips for settings on invalid AP models
-    changes = 2
-    if not list(filter(None, list(kwargs.values())[0:-2])):
-        if not flex_dual_exclude or (flex_dual_exclude and not [ap for ap in aps if ap not in skip_flex]):
-            changes -= 1
-        if not antenna_width or (antenna_width and not [ap for ap in aps if ap not in skip_width]):
-            changes -= 1
-    if not changes and not altitude_updates:
-        cli.exit("No valid updates provided for the selected AP models... Nothing to do.")
-
-    print(f"[bright_green]Updating[/]: {utils.summarize_list([ap.summary_text for ap in aps], color=None, pad=10).lstrip()}")
-    if changes:
-        print("\n[green italic]With the following per-ap-settings[/]:")
-        _ = [print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
-    if gps_meters_off_ground:
-        print("\n[green italic]The following gps/altitude update is applied to the AP level config (AOS10) or swarm config (AOS8)[/]")
-        print(f"  gps / ap-altitude: {gps_meters_off_ground}")
-
-    cli.confirm(yes)  # exits here if they abort
-    batch_resp = []
-    if changes:
-        batch_resp += cli.central.batch_request(
-            [
-                BatchRequest(
-                    cli.central.update_per_ap_settings,
-                    ap.serial,
-                    hostname=hostname,
-                    ip=ip,
-                    mask=mask,
-                    gateway=gateway,
-                    dns=dns,
-                    domain=domain,
-                    radio_24_disable=radio_24_disable,
-                    radio_5_disable=radio_5_disable,
-                    radio_6_disable=radio_6_disable,
-                    uplink_vlan=tagged_uplink_vlan,
-                    flex_dual_exclude=None if ap.model not in flex_dual_models else flex_dual_exclude,
-                    dynamic_ant_mode=None if ap.model != "679" else antenna_width,
-                ) for ap in aps
-            ]
-        )
-
-    if altitude_updates:
-        batch_resp += cli.central.batch_request(altitude_updates)
-
-    cli.display_results(batch_resp, tablefmt="action")
+    aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+    data = [{"serial": ap.serial, **kwargs} for ap in aps]
+    cli.batch_update_aps(data, yes=yes, reboot=reboot)
 
 @app.command(
     short_help="Update webhook details",
