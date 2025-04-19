@@ -37,15 +37,10 @@ app = typer.Typer()
 
 @app.command()
 def device(
-    device: str = typer.Argument(
-        ...,
-        metavar=iden_meta.dev,
-        autocompletion=cli.cache.dev_completion,
-        show_default=False,
-    ),
+    device: str = cli.arguments.device,
     version: str = typer.Argument(
         None,
-        help="Version to upgrade to [Default: recommended version]",
+        help=f"Version to upgrade to {cli.help_default('recommended version')}",
         show_default=False,
         autocompletion=lambda incomplete: [
             m for m in [
@@ -55,7 +50,7 @@ def device(
         ],
     ),
     at: datetime = cli.options.at,
-    in_: str = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [grey42]{escape('[default: Now]')}[/]", show_default=False,),
+    in_: str = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] {cli.help_default('Now')}", show_default=False,),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](APs will reboot regardless)[/]"),
     yes: int = typer.Option(0, "-Y", "-y", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
