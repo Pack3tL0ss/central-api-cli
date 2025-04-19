@@ -11,7 +11,7 @@ import string
 import sys
 import urllib.parse
 # from pprint import pprint
-from typing import Any, Dict, List, Optional, Tuple, Union, Literal
+from typing import Any, Dict, List, Optional, Tuple, Union, Literal, Iterable
 import typer
 import logging
 
@@ -222,7 +222,7 @@ class Utils:
     def valid_file(self, filepath):
         return os.path.isfile(filepath) and os.stat(filepath).st_size > 0
 
-    def listify(self, var):
+    def listify(self, var) -> Iterable:
         if isinstance(var, tuple):
             return list(var)
         return var if isinstance(var, list) or var is None else [var]
@@ -907,3 +907,9 @@ class Utils:
         diff = pendulum.now(tz=tz) - dt
         return getattr(diff, f'in_{unit}')() > time_frame
 
+    @staticmethod
+    def singular_plural_sfx(items: Iterable | int, singular: str = None, plural: str = None) -> str:
+        cnt = items if isinstance(items, int) else len(items)
+        singular = singular or ''
+        plural = plural or 's'
+        return plural if cnt > 1 else singular
