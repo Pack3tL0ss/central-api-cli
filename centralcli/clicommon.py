@@ -42,11 +42,13 @@ from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
 from centralcli.constants import flex_dual_models, dynamic_antenna_models
 from .models import APUpdates, APUpdate
+from .ws_client import follow_audit_logs, follow_event_logs
 
 
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
     from .typedefs import CacheTableName
+    from .constants import LogType
 
 
 tty = utils.tty
@@ -1652,7 +1654,7 @@ class CLICommon:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
-        altitude_by_serial, batch_reqs, skipped, requires_reboot = {}, [], [], {}
+        altitude_by_serial, ap_env_by_serial, batch_reqs, skipped, requires_reboot = {}, {}, [], [], {}
 
         try:
             data: List[APUpdate] = APUpdates(data)
@@ -1667,27 +1669,22 @@ class CLICommon:
                 altitude_by_serial[cache_ap.swack_id] = ap.gps_altitude  # swack_id is serial for aos10, swarm_id for AOS8
 
             if ap.flex_dual_exclude and cache_ap.model not in flex_dual_models:
-                log.error(f"Ignoring [cyan]flex_dual_exclude[/] option for {ap_iden}. AP{cache_ap.model} is not a flex_dual radio AP", show=True)
+                log.error(f"Ignored [cyan]flex_dual_exclude[/] option for {ap_iden}. AP{cache_ap.model} is not a flex_dual radio AP", caption=True)
                 ap.flex_dual_exclude = None
             if ap.dynamic_ant_mode and cache_ap.model not in dynamic_antenna_models:
-                log.error(f"Ignoring [cyan]antenna_width[/] option for {ap_iden}. AP{cache_ap.model} is not a dyanamic antenna AP", show=True)
+                log.error(f"Ignored [cyan]antenna_width[/] option for {ap_iden}. AP{cache_ap.model} is not a dyanamic antenna AP", caption=True)
                 ap.dynamic_ant_mode = None
             if (ap.ip and ap.ip != cache_ap.ip) or any([ap.mask, ap.gateway, ap.dns, ap.domain]) or ap.uplink_vlan:
                 requires_reboot[ap.serial] = [cache_ap]
 
-
             kwargs = ap.api_params
-
             if {k: v for k, v in kwargs.items() if k != "serial" and v is not None}:
-                batch_reqs += [
-                    BatchRequest(
-                        self.central.update_per_ap_settings,
-                        **kwargs
-                    )
-               ]
+                ap_env_by_serial[ap.serial] = kwargs
             elif not ap.gps_altitude:
                 skipped += [ap_iden]
 
+        if ap_env_by_serial:
+            batch_reqs += [BatchRequest(self.central.update_per_ap_settings, as_dict=ap_env_by_serial)]
         if altitude_by_serial:
             batch_reqs += [BatchRequest(self.central.update_ap_altitude, as_dict=altitude_by_serial)]
 
@@ -1696,7 +1693,8 @@ class CLICommon:
             ap_data=data,
             skipped=skipped,
             requires_reboot=requires_reboot,
-            env_update_aps=(len(batch_reqs) - len(altitude_by_serial)),
+            # env_update_aps=(len(batch_reqs) - len(altitude_by_serial)),
+            env_update_aps=len(ap_env_by_serial),
             gps_update_aps=len(altitude_by_serial),
         )
 
@@ -1748,7 +1746,7 @@ class CLICommon:
             )
 
         ap_update_cnt = len(data) - len(req_info.skipped)
-        self.econsole.print(f"\n[bright_green]Updat{'e' if not yes else 'ing'}[/] {ap_update_cnt} AP{utils.singular_plural_sfx({ap_update_cnt})}")
+        self.econsole.print(f"[bright_green]Updat{'e' if not yes else 'ing'}[/] {ap_update_cnt} AP{utils.singular_plural_sfx({ap_update_cnt})}")
         if req_info.env_update_aps:
             self.econsole.print(f"    Updating [cyan]per AP settings[/] for {req_info.env_update_aps} AP{utils.singular_plural_sfx(req_info.env_update_aps)}")
         if req_info.gps_update_aps:
@@ -1756,8 +1754,6 @@ class CLICommon:
 
         self.econsole.print("\n[bold magenta]Summary of Changes to be Applied[/]")
         self.econsole.print(utils.summarize_list([ap.__rich__() for ap in req_info.ap_data], color=None, max=12, pad=4), emoji=False)
-        # if req_info.requires_reboot:
-        #     self.econsole.print(":recycle: [italic dark_olive_green2]reboot required for changes to take effect.[/]")
 
         if reboot_msg:
             self.econsole.print(reboot_msg)
@@ -1767,10 +1763,14 @@ class CLICommon:
             self.econsole.print(f"\nThe following {len(req_info.skipped)} APs were skipped as no updates applied to those models:\n{utils.summarize_list(req_info.skipped, max=10)}")
 
         calls_word = utils.singular_plural_sfx(req_info.reqs, singular=" was", plural="s were")
-        caption = f"[yellow]:information:[/]  [italic cyan]{len(req_info.reqs)}[/] [italic dark_olive_green2]API call{calls_word} performed to get current configuration/settings. These calls are only shown if there was a failure.[/]"
+        caption = f"[yellow]:information:[/]  [italic cyan]{req_info.env_update_aps + req_info.gps_update_aps}[/] [italic dark_olive_green2]API call{calls_word} performed to get current configuration/settings. These calls are only shown if there was a failure.[/]"
 
         self.confirm(yes)  # exits here if they abort
-        batch_resp = self.central.batch_request(req_info.reqs)
+        _batch_resp = self.central.batch_request(req_info.reqs)
+        # Nested BatchResponse here update_per_ap_settings and update_ap_altitude both return List[Response]
+        batch_resp = []
+        for resp in _batch_resp:
+            batch_resp += resp if isinstance(resp, list) else [resp]
         if reboot and req_info.requires_reboot:
             reboot_resp = self._reboot_after_changes(req_info, batch_resp=batch_resp) or []
 
@@ -1786,7 +1786,23 @@ class CLICommon:
         Returns:
             str: Formatted default text.  i.e. [default: some value] (with color markups)
         """
-        return f"[grey62]{escape(f'[default: {default_txt}]')}[/grey62]"
+        return f"[dim]{escape(f'[default: {default_txt}]')}[/dim]"
+
+    def ws_follow_tail(self, title: str = None, log_type: LogType = "event") -> None:
+        title = title or "Device event Logs"
+        func = follow_event_logs if log_type == "event" else follow_audit_logs
+        print(f"Following tail on {title} (Streaming API).  Use CTRL-C to stop.")
+        if len(sys.argv[1:]) > 3:
+            honored = ['show', 'audit', 'logs', '-f']
+            ignored = [option for option in sys.argv[1:] if option not in honored]
+            self.econsole.print(f"[dark_orange3]:warning:[/]  Provided options {','.join(ignored)} [bright_red]ignored[/].  Not valid with [cyan]-f[/]")
+        try:
+            self.central.request(func)
+        except KeyboardInterrupt:
+            self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
+        except Exception as e:
+            self.exit(str(e))
+        self.exit()
 
 if __name__ == "__main__":
     pass
