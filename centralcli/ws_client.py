@@ -1,4 +1,5 @@
 import aiohttp
+import asyncio
 from . import config, log
 from .objects import DateTime
 from .protobuf import monitoring_pb2, streaming_pb2, audit_pb2
@@ -6,11 +7,17 @@ from .protobuf import monitoring_pb2, streaming_pb2, audit_pb2
 from rich.console import Console
 from typing import Literal
 import base64
+from rich import inspect
+
 
 console = Console(emoji=False)
 econsole = Console(stderr=True)
 
 FieldType = Literal["mac", "ip", "essid"]
+mac_fields = ["macaddr", "peer_mac", "local_mac", "radio_mac", "interface_mac"]
+ip_fields = ["ip_address", "src_ip", "dst_ip"]
+strip_fields = ["customer_id"]
+iden_fields = ["device_id"]
 
 # TODO BASE URL for wss is hard coded
 # TODO need to convert mac / ip / essid fields as described in readme of https://github.com/aruba/central-python-workflows/tree/main/streaming-api-client
@@ -28,7 +35,9 @@ async def _decode(data, field_type: FieldType = "mac"):
         log.exception(f"Exception while attempting to decode {field_type} in wss payload.  \n{e}")
         return data
 
-
+async def _clean_data(data):
+    # [attr for attr in data.__dir__() if not attr.startswith("_") and not callable(getattr(data, attr)) and getattr(data, attr)]
+    inspect(data)
 
 async def follow_event_logs():
     headers = {"Authorization": config.wss_key, "Topic": "monitoring"}
@@ -48,6 +57,7 @@ async def follow_event_logs():
 
                     monitoring_data = monitoring_pb2.MonitoringInformation()
                     monitoring_data.ParseFromString(stream_data.data)
+                    asyncio.create_task(_clean_data(monitoring_data))
                     console.print(f"-- {DateTime(stream_data.timestamp / 1000 / 1000 / 1000)} --\n{monitoring_data}")
                     ...
                 elif msg.type == aiohttp.WSMsgType.ERROR:
