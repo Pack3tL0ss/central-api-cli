@@ -5,69 +5,82 @@ from rich.markup import escape
 
 import typer
 
+from typer.models import ArgumentInfo, OptionInfo
+
 
 class CLIArgs:
     def __init__(self, cache: Cache):
         self.cache = cache
-        self.name = typer.Argument(..., show_default=False,)
-        self.device = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cache.dev_completion)
-        self.devices = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cache.dev_completion, show_default=False,)
-        self.what = typer.Argument(..., show_default=False,)
-        self.group: str = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
-        self.group_dev: str = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
-        self.import_file = typer.Argument(None, exists=True, show_default=False,)
+        self.name: ArgumentInfo = typer.Argument(..., show_default=False,)
+        self.device: ArgumentInfo = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cache.dev_completion)
+        self.devices: ArgumentInfo = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cache.dev_completion, show_default=False,)
+        self.what: ArgumentInfo = typer.Argument(..., show_default=False,)
+        self.group: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
+        self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
+        self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
+        self.version: ArgumentInfo = typer.Argument(
+            None,
+            help=f"Firmware Version [dim]{escape('[default: recommended version]')}",
+            show_default=False,
+            autocompletion=lambda incomplete: [
+                m for m in [
+                    ("<firmware version>", "The version of firmware to upgrade to."),
+                    *[m for m in cache.null_completion(incomplete)]
+                ]
+            ],
+        )
 
 class CLIOptions:
     def __init__(self, cache: Cache, timerange: str = "3h", include_mins: bool = None):
         self.cache = cache
         self.timerange: str = timerange
         self.include_mins: bool = include_mins if include_mins is not None else True
-        self.group = typer.Option(None, help="Filter by Group", metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
-        self.group_many = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
-        self.site = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
-        self.site_many = typer.Option(None, help="Filter by Site(s)", metavar=iden_meta.site_many, autocompletion=cache.site_completion, show_default=False,)
-        self.label = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion,show_default=False,)
-        self.label_many = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion,show_default=False,)
-        self.debug = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
-        self.debugv: bool = typer.Option(False, "--debugv", help="Enable Verbose Debug Logging", rich_help_panel="Common Options",)
-        self.do_json = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",)
-        self.do_yaml = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",)
-        self.do_csv = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",)
-        self.do_table = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",)
-        self.outfile = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",)
-        self.reverse = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
-        self.pager = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
-        self.yes = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
-        self.yes_int = typer.Option(
+        self.group: OptionInfo = typer.Option(None, help="Filter by Group", metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
+        self.group_many: OptionInfo = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
+        self.site: OptionInfo = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
+        self.site_many: OptionInfo = typer.Option(None, help="Filter by Site(s)", metavar=iden_meta.site_many, autocompletion=cache.site_completion, show_default=False,)
+        self.label: OptionInfo = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion,show_default=False,)
+        self.label_many: OptionInfo = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion,show_default=False,)
+        self.debug: OptionInfo = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
+        self.debugv: OptionInfo = typer.Option(False, "--debugv", help="Enable Verbose Debug Logging", rich_help_panel="Common Options",)
+        self.do_json: OptionInfo = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",)
+        self.do_yaml: OptionInfo = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",)
+        self.do_csv: OptionInfo = typer.Option(False, "--csv", is_flag=True, help="Output in CSV", show_default=False, rich_help_panel="Formatting",)
+        self.do_table: OptionInfo = typer.Option(False, "--table", help="Output in table format", show_default=False, rich_help_panel="Formatting",)
+        self.outfile: OptionInfo = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",)
+        self.reverse: OptionInfo = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
+        self.pager: OptionInfo = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
+        self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
+        self.yes_int: OptionInfo = typer.Option(
             0,
             "-Y",
             "-y",
             "--yes",
             count=True,
             metavar="",
-            help="Bypass confirmation prompts - Assume Yes, this command has potential for multiple confirmation prompts -YY to bypass all",
+            help="Bypass confirmation prompts - Assume Yes, this command has potential for multiple confirmation prompts -yy to bypass all",
             rich_help_panel="Common Options",
             show_default=False,
         )
-        self.device_many = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
-        self.device = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
-        self.swarm_device = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
-        self.sort_by = typer.Option(
+        self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
+        self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
+        self.swarm_device: OptionInfo = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
+        self.sort_by: OptionInfo = typer.Option(
             None,
             "--sort",
-            help="Field to sort by [grey42 italic](Some fields may require -v (verbose) option where supported)[/]",
+            help="Field to sort by [dim italic](Some fields may require -v (verbose) option where supported)[/]",
             show_default=False,
             rich_help_panel="Formatting",
         )
-        self.default = typer.Option(False, "-d", help="Use default central account", show_default=False, rich_help_panel="Common Options",)
-        self.account = typer.Option(
+        self.default: OptionInfo = typer.Option(False, "-d", help="Use default central account", show_default=False, rich_help_panel="Common Options",)
+        self.account: OptionInfo = typer.Option(
             "central_info",
             envvar="ARUBACLI_ACCOUNT",
             help="The Aruba Central Account to use (must be defined in the config)",
             rich_help_panel="Common Options",
             autocompletion=cache.account_completion,
         )
-        self.verbose = typer.Option(
+        self.verbose: OptionInfo = typer.Option(
             0,
             "-v",
             count=True,
@@ -76,49 +89,51 @@ class CLIOptions:
             rich_help_panel="Formatting",
             show_default=False,
         )
-        self.raw = typer.Option(
+        self.raw: OptionInfo = typer.Option(
             False,
             "--raw",
             help="Show raw unformatted response from Central API Gateway",
             rich_help_panel="Formatting",
             show_default=False,
         )
-        self.end = typer.Option(
+        self.end: OptionInfo = typer.Option(
             None,
             "-e", "--end",
-            help=f"End of time-range (24hr notation) [grey42]{escape('[default: Now]')}[/]",
+            help=f"End of time-range (24hr notation) [dim]{escape('[default: Now]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
-        self.update_cache = typer.Option(False, "-U", hidden=True)
-        self.show_example = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
-        self.at = typer.Option(
+        self.update_cache: OptionInfo = typer.Option(False, "-U", hidden=True)
+        self.show_example: OptionInfo = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
+        self.at: OptionInfo = typer.Option(
             None,
-            help=f"Perform operation at specified date/time (24hr notation) [grey42]{escape('[default: Now]')}[/]",
+            help=f"Perform operation at specified date/time (24hr notation) [dim]{escape('[default: Now]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M"],
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
+        self.in_: OptionInfo = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [dim]{escape('[default: Now]')}[/]", show_default=False,)
+        self.reboot: OptionInfo = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device after firmware download [dim]{escape('[default: No reboot if not AP')} [green](APs will reboot regardless)[/green]{escape(']')}[/]")
 
     @property
-    def start(self):
+    def start(self) -> OptionInfo:
         return typer.Option(
             None,
             "-s", "--start",
-            help=f"Start of time-range (24hr notation) [grey42]{escape(f'[default: {self.timerange_to_start}]')}[/]",
+            help=f"Start of time-range (24hr notation) [dim]{escape(f'[default: {self.timerange_to_start}]')}[/]",
             formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
 
     @property
-    def past(self):
+    def past(self) -> OptionInfo:
         return typer.Option(
             None,
             "-p",
             "--past",
-            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours{', m=mins' if self.include_mins else ''} i.e.: 3h [grey42]{escape(f'[default: {self.timerange}]')}[/]",
+            help=f"Collect data for last... M=months, w=weeks, d=days, h=hours{', m=mins' if self.include_mins else ''} i.e.: 3h [dim]{escape(f'[default: {self.timerange}]')}[/]",
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
