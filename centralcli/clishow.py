@@ -7,6 +7,8 @@ import pendulum
 import sys
 import json
 import os
+import re
+import ipaddress
 from datetime import datetime
 from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
@@ -55,6 +57,8 @@ from .strings import cron_weekly
 from .cache import CacheDevice
 from .response import CombinedResponse
 from .models import Device
+from .caas import CaasAPI
+
 
 if TYPE_CHECKING:
     from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal
@@ -520,17 +524,17 @@ def devices(
 @app.command()
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [grey42 italic](config items not pushed) {escape('[requires --group]')}[/]"),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim italic](config items not pushed) {escape('[requires --group]')}[/]"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [dim italic]{escape('[requires --site]')}[/]", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [grey42 italic]{escape('[requires --site]')}[/]", show_default=False,),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortDevOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -554,7 +558,7 @@ def aps(
         if up and down:
                 ...  # They used both flags.  ignore
         elif up or down:
-                status = "down" if down else "up"
+                status = StatusOptions.Down if down else StatusOptions.Up
 
     if dirty:
         if not group:
@@ -1296,6 +1300,77 @@ def vlans(
         cleaner=cleaner.get_vlans
     )
 
+def _get_reservation_pool_from_config(cfg_resp: Response, res_by_mac: Dict[str, dict]) -> Dict[str, dict]:
+    dhcp_pools = {}
+    pvids = {}
+    for idx, line in enumerate(cfg_resp.output):
+        if line.lstrip().startswith("ip dhcp pool"):
+            pool = line.removeprefix("ip dhcp pool").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("network")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("network ")
+                network = ipaddress.ip_network("/".join(network_line.split()))
+                dhcp_pools[network] = pool
+        elif line.startswith("interface vlan"):
+            pvid = line.removeprefix("interface vlan").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("ip address")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("ip address ")
+                network = ipaddress.ip_network("/".join(network_line.split()), strict=False)
+                pvids[network] = pvid
+
+    for mac, data in res_by_mac.items():
+        if data.get("ip"):
+            ip = ipaddress.ip_address(data["ip"])
+            matched = [net for net in dhcp_pools if ip in net]
+            if matched:
+                res_by_mac[mac]["pool_name"] = dhcp_pools[matched[0]]
+                res_by_mac[mac]["subnet"] = str(matched[0])
+            pvid_match = [net for net in pvids if ip in net]
+            if pvid_match:
+                res_by_mac[mac]["vlan_id"] = pvids[pvid_match[0]]
+    return res_by_mac
+
+
+def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Response:
+    reservations = [gw for gw in resp.output if gw.get("reserved", False) is True]
+    if not reservations:
+        return resp
+
+    caas = CaasAPI(central=cli.central)
+    cfg_resp = cli.central.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
+    if not cfg_resp.ok:
+        log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
+        return resp
+
+    cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
+    dhcp_res_lines = [line for line in cfg_resp.output if line.lstrip().startswith("ip dhcp reserved hardware-address")]
+    if not dhcp_res_lines:
+        return resp
+
+    res_by_mac = {r["mac"]: r for r in reservations}
+    for line in dhcp_res_lines:
+        match = re.match("ip dhcp reserved hardware-address (.*) ip-address (.*) hostname (.*)", line)
+        if match:
+            mac, ip, hostname = map(str.strip, match.groups())
+            if mac in res_by_mac and res_by_mac[mac].get("ip", "err") == ip:
+                res_by_mac[mac]["client_name"] = hostname
+
+    try:
+        res_by_mac = _get_reservation_pool_from_config(cfg_resp=cfg_resp, res_by_mac=res_by_mac)
+    except Exception as e:
+        msg = f"{e.__class__.__name__} while trying to extract reservation info from config in _get_reservation_pool_from_config."
+        log.exception(f"{msg}\n{e}")
+        log.error(f"{msg}", caption=True)
+
+
+    output_by_mac = {r["mac"]: r for r in resp.output}
+    combined = {**output_by_mac, **res_by_mac}
+    resp.output = list(combined.values())
+    return resp
+
 
 @app.command()
 def dhcp(
@@ -1313,6 +1388,7 @@ def dhcp(
     do_yaml: bool = cli.options.do_yaml,
     do_csv: bool = cli.options.do_csv,
     do_table: bool = cli.options.do_table,
+    verbosity: int = cli.options.verbose,
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1322,14 +1398,18 @@ def dhcp(
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
+
+    -v (verbose) will extract hostnames for defined reservations from GW config
     """
     central = cli.central
     dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
     if what == "pools":
         resp = central.request(central.get_dhcp_pools, dev.serial)
-    else:
+    else:  # clients
         resp = central.request(central.get_dhcp_clients, dev.serial, reservation=not no_res)
+        if resp.ok and not no_res and verbosity:
+            resp = _get_reservation_info_from_config(resp, dev=dev)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -2564,7 +2644,7 @@ def roaming(
     cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
-def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
+def show_logs_cencli_callback(ctx: typer.Context, cencli: bool) -> bool:
     if ctx.resilient_parsing:  # tab completion, return without validating
         return cencli
 
@@ -2587,7 +2667,7 @@ def logs(
         autocompletion=cli.cache.event_log_completion,
         show_default=False,
     ),
-    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs", callback=show_logs_cencli_callback),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),  # callback=show_logs_cencli_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True),
     group: str = cli.options.group,
     site: str = cli.options.site,
@@ -2637,6 +2717,9 @@ def logs(
         log.print_file() if not tail else log.follow()
         cli.exit(code=0)
 
+    if tail:
+        cli.ws_follow_tail(title=title, log_type="event")  # program will exit here
+
     # TODO move to common func for use by show logs and show audit logs
     if event_id:
         event_details = cli.cache.get_event_log_identifier(event_id)
@@ -2645,41 +2728,41 @@ def logs(
             tablefmt="action",
         )
         cli.exit(code=0)
-    else:
-        if (_all or count) and [start, end, past].count(None) != 3:
-            cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
 
-        start, end = cli.verify_time_range(start, end=end, past=past)
-        level = level if level is None else level.name
-        dev_id = None
-        swarm_id = None
-        if device:
-            device = cli.cache.get_dev_identifier(device)
-            if swarm:
-                if device.type != "ap":
-                    log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
-                else:
-                    swarm_id = device.swack_id
+    if (_all or count) and [start, end, past].count(None) != 3:
+        cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+    start, end = cli.verify_time_range(start, end=end, past=past)
+    level = level if level is None else level.name
+    dev_id = None
+    swarm_id = None
+    if device:
+        device = cli.cache.get_dev_identifier(device)
+        if swarm:
+            if device.type != "ap":
+                log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
             else:
-                dev_id = device.serial
+                swarm_id = device.swack_id
+        else:
+            dev_id = device.serial
 
-        client_mac = None
-        if client:
-            if utils.Mac(client).ok:
-                client_mac = client
-            else:
-                _client = cli.cache.get_client_identifier(client)
-                client_mac = _client.mac
+    client_mac = None
+    if client:
+        if utils.Mac(client).ok:
+            client_mac = client
+        else:
+            _client = cli.cache.get_client_identifier(client)
+            client_mac = _client.mac
 
-        if _all:
-            start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves macking this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
-            title = f"All available {title}"
-            count = 10_000
-        elif count:
-            title = f"Last {count} {title}"
-        elif [start, end].count(None) == 2:
-            start = pendulum.now(tz="UTC").subtract(minutes=30)
-            title = f"{title} for last 30 minutes"
+    if _all:
+        start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves making this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
+        title = f"All available {title}"
+        count = 10_000
+    elif count:
+        title = f"Last {count} {title}"
+    elif [start, end].count(None) == 2:
+        start = pendulum.now(tz="UTC").subtract(minutes=30)
+        title = f"{title} for last 30 minutes"
 
     kwargs = {
         "group": group,
