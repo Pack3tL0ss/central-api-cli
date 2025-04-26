@@ -252,13 +252,13 @@ def _list(
     dev: CacheDevice = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
-    if dev and dev.type == "ap":
+    if dev is not None and dev.type == "ap":
         if swarm:
             swarm_id = dev.swack_id
         else:
             dev_type = DevTypes.ap
         dev = None
-    elif dev and dev.type == "gw":  # Endpoint now returns "API does not support cluster gateway" so we just use the dev.type.
+    elif dev is not None and dev.type == "gw":  # Endpoint now returns "API does not support cluster gateway" so we just use the dev.type.
         dev_type = DevTypes.gw
         dev = None
 
