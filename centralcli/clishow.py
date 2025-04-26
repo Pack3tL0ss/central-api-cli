@@ -2082,7 +2082,9 @@ def config_(
         caasapi = caas.CaasAPI(central=cli.central)
         if not status:
             func = caasapi.show_config
-            args = [group.name, device.mac]
+            args = [group.name,]
+            if device:
+                args += [device.mac]
             _data_key = "config"
         else:
             func = caasapi.get_config_status
