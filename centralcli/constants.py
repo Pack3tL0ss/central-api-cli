@@ -310,6 +310,7 @@ class FirmwareDeviceType(str, Enum):
     switch = "switch"
     gw = "gw"
     mas = "mas"
+    ap = "ap"
 
 
 class BlinkArgs(str, Enum):

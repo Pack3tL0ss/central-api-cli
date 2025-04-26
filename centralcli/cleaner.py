@@ -2019,7 +2019,7 @@ def get_device_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, An
     _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
     _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
 
-    return simple_kv_formatter(data, key_order=key_order)
+    return simple_kv_formatter(data, key_order=key_order, strip_null=True)
 
 
 def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

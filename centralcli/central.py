@@ -4093,7 +4093,7 @@ class CentralApi(Session):
 
     async def get_device_firmware_details_by_type(
         self,
-        device_type: Literal["mas", "cx", "sw", "gw"],
+        device_type: Literal["mas", "cx", "sw", "gw", "ap"],
         group: str = None,
         offset: int = 0,
         limit: int = 500,
@@ -4101,7 +4101,7 @@ class CentralApi(Session):
         """List Firmware Details by type for switches or gateways (Not valid for APs).
 
         Args:
-            device_type (str): Specify one of "mas|sw|cx|gw"
+            device_type (str): Specify one of "mas|sw|cx|gw|ap"
             group (str, optional): Group name
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. max 1000, Defaults to 500.

@@ -41,11 +41,13 @@ class ShowFirmwareKwags(str, Enum):
 device_help = f"""Show firmware details for device(s)
 
     Either provide one or more devices as arguments or [cyan]--dev-type[/]
-    [cyan]--dev-type[/] can be one of cx, sw, gw (not supported on APs)
+    [cyan]--dev-type[/] can be one of cx, sw, gw, ap
     [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
 
     [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
     API endpoint treats them all the same and returns all switches.
+
+    :warning:  The APIs used by this command seem to no longer work for Gateways.
     """
 @app.command(help=device_help)
 def device(
@@ -63,7 +65,7 @@ def device(
     account: str = cli.options.account,
 ) -> None:
     if device:
-        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch"], conductor_only=True) for dev in device]
+        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
@@ -71,7 +73,10 @@ def device(
                 caption=True
             )
     elif dev_type:
-        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+        if dev_type != "ap":
+            batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+        else:
+            batch_reqs = [BatchRequest(cli.central.get_all_swarms_firmware_details,)]
     else:
         cli.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
 
