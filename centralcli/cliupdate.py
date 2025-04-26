@@ -368,7 +368,7 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
-    antenna_width: DynamicAntMode = typer.Option(None, "-W", "--antenna-width", help="Dynamic Antenna Width [grey62 italic]Only applies to AP 679[/]", show_default=False,),
+    antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [grey62 italic]Only applies to AP 679[/]", show_default=False,),
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
     gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [grey62 italic]Must be set for 6Ghz SP[/]", show_default=False,),
     reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [grey62]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
