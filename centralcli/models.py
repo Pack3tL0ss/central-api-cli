@@ -1171,7 +1171,7 @@ class APUpdate(BaseModel):
 
     def __rich__(self):
         iden = f"[bright_green]{self.serial}[/]"
-        items = "|".join([f"{field}: {getattr(self, field) if not isinstance(getattr(self, field), list) else ','.join(getattr(self, field))}" for field in self.model_fields_set if field != "serial"])
+        items = "|".join([f"{field}: {getattr(self, field) if not isinstance(getattr(self, field), list) else ','.join(getattr(self, field))}" for field in self.model_fields_set if field != "serial" and getattr(self, field) is not None])
         reboot_msg = '\u267b' if self.ip else ""  # \u267b :recycle: ♻
         return f"{reboot_msg}  {iden}|{items}"
 
