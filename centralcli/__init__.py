@@ -74,15 +74,6 @@ if '--debugv' in str(sys.argv):
 log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
-if config.debugv:
-    _ignore = ["data", "valid_suffix", "debug", "debugv"]
-    _account_data = {k: v for k, v in config.data.get(config.account, {}).items() if k != "token"}  # strip the token from the config, current token is stored in cache.
-    _config = {
-        "current account settings": _account_data or f'{config.account} not found in config',
-        **{k: v if isinstance(v, (str, list, dict, bool, type(None))) else str(v) for k, v in config.__dict__.items() if k not in _ignore}
-    }
-    print(f"config attributes: {yaml.safe_dump(_config, indent=4)}")
-
 
 # HACK Windows completion fix for upstream issue.
 # completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
