@@ -240,6 +240,7 @@ _short_value = {
     "last_state_change":  lambda x: DateTime(x, "log"),
     "graceful_restart_timer": lambda x: DateTime(x, "durwords"),
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    "reserved": lambda v: '✅' if v is True else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
     "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
     "reserved_power_in_watts": lambda v: round(v, 2),
     "speed": lambda v: "1000BaseT FD" if v == "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode" else v,
@@ -1234,6 +1235,7 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "mac",
             "ip",
             "reservation",
+            "reserved",
             # "mask",
             "pool_name",
             "vlan_id",
@@ -1246,6 +1248,8 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
+    # API-FLAW Reservations for APs show nonsense values for lease_ fields, so we strip them.  Most reservations only show ip and mac for reservations.
+    data = [d if not d.get("reserved") else {k: v for k, v in d.items() if not k.startswith("lease")} for d in data]
     data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order)} for d in data]
     data = strip_no_value(data)
     return data
