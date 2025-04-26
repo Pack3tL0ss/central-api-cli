@@ -1869,9 +1869,13 @@ def lldp(
     # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
     stack_ids, devs = [], []
     for dev in _devs:
-        if dev.swack_id and dev.swack_id not in stack_ids:
-            stack_ids.append(dev.swack_id)
+        if dev.swack_id:
+            if dev.swack_id not in stack_ids:
+                stack_ids.append(dev.swack_id)
+                devs.append(dev)
+        else:
             devs.append(dev)
+
 
     reqs = {dev: BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
     reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
