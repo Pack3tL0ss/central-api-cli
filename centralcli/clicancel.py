@@ -28,9 +28,9 @@ app = typer.Typer()
 
 @app.command()
 def upgrade(
-    what: CancelWhat = typer.Argument(...),
+    what: CancelWhat = cli.arguments.what,
     dev_or_group: List[str] = typer.Argument(..., help="device(s) or group(s) to cancel upgrade", autocompletion=cli.cache.group_dev_completion, show_default=False,),
-    dev_type: DevTypes = typer.Option(None, help=f"[red]{escape('[required]')}[/] when Canceling group upgrade.", show_default=False,),
+    dev_type: DevTypes = typer.Option(None, help=f"[dim red]{escape('[required]')}[/] when Canceling group upgrade.", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -41,10 +41,13 @@ def upgrade(
     if what == "device":
         devs = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in dev_or_group]
         confirm_msg = f'Cancel [cyan]Upgrade[/] on [cyan]{utils.color([d.name for d in devs], "cyan")}[/]'
-        reqs = [
-            BatchRequest(cli.central.cancel_upgrade, serial=dev.serial)
-            for dev in devs
-        ]
+        reqs = []
+        for dev in devs:
+            if dev.type == "ap" and dev.is_aos10:
+                kwargs = {"swarm_id": dev.swack_id}
+            else:
+                kwargs = {"serial": dev.serial}
+            reqs += [BatchRequest(cli.central.cancel_upgrade, **kwargs)]
     elif what == "group":
         if not dev_type:
             cli.exit("[cyan]--dev-type must be specified when cancelling group upgrade.")
