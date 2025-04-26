@@ -23,6 +23,7 @@ DeviceStatus = Literal["up", "down"]
 SendConfigTypes = Literal["ap", "gw"]
 CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
+LogType = Literal["event", "audit"]
 
 
 class AllDevTypes(str, Enum):

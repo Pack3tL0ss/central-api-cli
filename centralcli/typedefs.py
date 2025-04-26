@@ -26,3 +26,5 @@ SiteData = Union[
 PortalAuthType = Literal["user/pass", "anon", "self-reg"]
 PortalAuthTypes = List[PortalAuthType]
 CacheTableName = Literal["devices", "sites", "groups", "labels", "macs", "mpsk"]
+DynamicAntenna = Literal["narrow", "wide"]
+RadioType = Literal["2.4", "5", "6"]
