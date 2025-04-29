@@ -181,7 +181,7 @@ cspell.config.json
 # ignoring directory where tokens are stored.
 temp/
 # ignore for now, until dynamic
-tests/__init__.py
+# tests/__init__.py
 tests/test_devices.json
 
 # ignore dashboard module until built out
