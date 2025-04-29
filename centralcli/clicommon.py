@@ -1777,7 +1777,7 @@ class CLICommon:
         self.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
 
 
-    def help_default(self, default_txt: str) -> str:
+    def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
 
         Args:
@@ -1786,7 +1786,8 @@ class CLICommon:
         Returns:
             str: Formatted default text.  i.e. [default: some value] (with color markups)
         """
-        return f"[dim]{escape(f'[default: {default_txt}]')}[/dim]"
+        style = "dim" if help_type == "default" else "dim red"
+        return f"[{style}]{escape(f'[{help_type}: {default_txt}]')}[/{style}]"
 
     def ws_follow_tail(self, title: str = None, log_type: LogType = "event") -> None:
         title = title or "Device event Logs"
