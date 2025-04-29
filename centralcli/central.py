@@ -27,10 +27,6 @@ from .utils import Mac
 from .typedefs import RadioType, DynamicAntenna
 
 # buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
-
-
-
-
 color = utils.color
 
 
@@ -5353,7 +5349,6 @@ class CentralApi(Session):
 
         return await self.get(url, params=params)
 
-    # NEXT-MAJOR change group_swarmid to iden so consistent with others
     async def get_ap_config(
         self,
         iden: str,
