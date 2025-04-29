@@ -473,7 +473,7 @@ def devices(
             m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ],
-        help=f"Show details for a specific device [grey42]{escape('[default: show details for all devices]')}[/]",
+        help=f"Show details for a specific device {cli.help_block('show details for all devices')}",
         show_default=False,
     ),
     group: str = cli.options.group,
@@ -524,8 +524,8 @@ def devices(
 @app.command()
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim italic](config items not pushed) {escape('[requires --group]')}[/]"),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [dim italic]{escape('[requires --site]')}[/]", show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {cli.help_block('--group', help_type='requires')}[/]"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {cli.help_block('--site', help_type='requires')}", show_default=False,),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
     group: str = cli.options.group,
     site: str = cli.options.site,
@@ -774,7 +774,7 @@ def inventory(
     dev_type: ShowInventoryArgs = typer.Argument("all",),
     sub: bool = typer.Option(
         None,
-        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. [grey42]{escape('[default: show all]')}[/]",
+        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {cli.help_block('show all')}",
         show_default=False,
     ),
     verbose: int = cli.options.verbose,
@@ -1016,7 +1016,7 @@ def interfaces(
         "all",
         metavar=f"{iden_meta.dev.replace(']', '|all]')}",
         autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
-        help=f"Device to fetch interfaces from {cli.help_default('ALL (must provide one of --ap, --gw, or --switch)')}",
+        help=f"Device to fetch interfaces from {cli.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
     ),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
@@ -1790,7 +1790,7 @@ def variables(
     device: str = typer.Argument(
         None,
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
-        help=f"[grey42]{escape('[default: all]')}[/]",
+        help=cli.help_block('all'),
         autocompletion=lambda incomplete: [
             m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
@@ -2210,7 +2210,7 @@ def wlans(
     label: str = cli.options.label,
     swarm: str = cli.options.swarm_device,
     verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
-    sort_by: SortWlanOptions = typer.Option(None, "--sort", help=f"Field to sort by [grey42]{escape('[default: SSID]')}[/]", show_default=False),
+    sort_by: SortWlanOptions = typer.Option(None, "--sort", help=f"Field to sort by {cli.help_block('SSID')}", show_default=False),
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -3101,14 +3101,14 @@ def portals(
     portal: List[str] = typer.Argument(
         None,
         metavar="[name|id]",
-        help=f"show details for a specific portal profile [grey42]{escape('[default: show summary for all portals]')}[/]",
+        help=f"show details for a specific portal profile {cli.help_block('show summary for all portals')}",
         autocompletion=cli.cache.portal_completion,
         show_default=False,),
     logo: bool = typer.Option(
         False,
         "-L", "--logo",
         metavar="PATH",
-        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]{escape(f'[default: {Path.cwd()}/<original_logo_filename>]')}[/]",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {cli.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
         show_default = False,
         writable=True,
     ),
@@ -3155,7 +3155,7 @@ def portals(
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(None, help=f"portal name [grey42]{escape('[default: Guests for all defined User/Pass portals]')}[/]", autocompletion=cli.cache.portal_completion, show_default=False,),
+    portal: str = typer.Argument(None, help=f"portal name {cli.help_block('Guests for all defined User/Pass portals')}", autocompletion=cli.cache.portal_completion, show_default=False,),
     refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
