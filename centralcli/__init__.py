@@ -21,7 +21,6 @@ HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
 
-import yaml
 import os
 import typer
 
