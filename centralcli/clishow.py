@@ -2209,8 +2209,8 @@ def wlans(
     site: str = cli.options.site,
     label: str = cli.options.label,
     swarm: str = cli.options.swarm_device,
-    verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
-    sort_by: SortWlanOptions = typer.Option(None, "--sort", help=f"Field to sort by {cli.help_block('SSID')}", show_default=False),
+    verbose: int = cli.options.get("verbose", help="get more details for SSIDs across all AP groups"),
+    sort_by: SortWlanOptions = cli.options.get("sort_by", help=f"Field to sort by {cli.help_block('SSID')}",),
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2279,7 +2279,8 @@ def wlans(
         else:
             resp = group_res
 
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        group_by = "group" if not sort_by else None
+        cli.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
         resp = central.request(central.get_wlans, **params)
         caption = None
