@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
 from rich.markup import escape
+from typing import Optional, Any, Sequence, List, Type
+from collections.abc import Callable
+import click
 
 import typer
 
@@ -153,6 +158,130 @@ class CLIOptions:
             time_word = time_word.rsplit("s")
 
         return f"{self.timerange[0:-1]} {time_word} ago"
+
+    def get(
+        self,
+        option: str,
+        *,
+        default: Optional[Any] = None,
+        param_decls: Optional[Sequence[str]] = None,
+        callback: Optional[Callable[..., Any]] = None,
+        metavar: Optional[str] = None,
+        expose_value: bool = None,
+        is_eager: bool = None,
+        envvar: Optional[str | List[str]] = None,
+        shell_complete: Optional[
+            Callable[
+                [click.Context, click.Parameter, str],
+                List["click.shell_completion.CompletionItem"] | List[str],
+            ]
+        ] = None,
+        autocompletion: Optional[Callable[..., Any]] = None,
+        default_factory: Optional[Callable[[], Any]] = None,
+        # Custom type
+        parser: Optional[Callable[[str], Any]] = None,
+        click_type: Optional[click.ParamType] = None,
+        # Option
+        show_default: bool | str = None,
+        prompt: bool |str = None,
+        confirmation_prompt: bool = None,
+        prompt_required: bool = None,
+        hide_input: bool = None,
+        is_flag: Optional[bool] = None,
+        flag_value: Optional[Any] = None,
+        count: bool = None,
+        allow_from_autoenv: bool = None,
+        help: Optional[str] = None,
+        hidden: bool = None,
+        show_choices: bool = None,
+        show_envvar: bool = None,
+        # Choice
+        case_sensitive: bool = None,
+        # Numbers
+        min: Optional[int | float] = None,
+        max: Optional[int | float] = None,
+        clamp: bool = None,
+        # DateTime
+        formats: Optional[List[str]] = None,
+        # File
+        mode: Optional[str] = None,
+        encoding: Optional[str] = None,
+        errors: Optional[str] = None,
+        lazy: Optional[bool] = None,
+        atomic: bool = None,
+        # Path
+        exists: bool = None,
+        file_okay: bool = None,
+        dir_okay: bool = None,
+        writable: bool = None,
+        readable: bool = None,
+        resolve_path: bool = None,
+        allow_dash: bool = None,
+        path_type: None | Type[str] | Type[bytes] = None,
+        # Rich settings
+        rich_help_panel: str | None = None,
+
+    ):
+        attr = getattr(self, option)
+        kwargs = {
+            "default": default,
+            "param_decls": param_decls,
+            "callback": callback,
+            "metavar": metavar,
+            "expose_value": expose_value,
+            "is_eager": is_eager,
+            "envvar": envvar,
+            "shell_complete": shell_complete,
+            "autocompletion": autocompletion,
+            "default_factory": default_factory,
+            # Custom type
+            "parser": parser,
+            "click_type": click_type,
+            # Option
+            "show_default": show_default,
+            "prompt": prompt,
+            "confirmation_prompt": confirmation_prompt,
+            "prompt_required": prompt_required,
+            "hide_input": hide_input,
+            "is_flag": is_flag,
+            "flag_value": flag_value,
+            "count": count,
+            "allow_from_autoenv": allow_from_autoenv,
+            "help": help,
+            "hidden": hidden,
+            "show_choices": show_choices,
+            "show_envvar": show_envvar,
+            # Choice
+            "case_sensitive": case_sensitive,
+            # Numbers
+            "min": min,
+            "max": max,
+            "clamp": clamp,
+            # DateTime
+            "formats": formats,
+            # File
+            "mode": mode,
+            "encoding": encoding,
+            "errors": errors,
+            "lazy": lazy,
+            "atomic": atomic,
+            # Path
+            "exists": exists,
+            "file_okay": file_okay,
+            "dir_okay": dir_okay,
+            "writable": writable,
+            "readable": readable,
+            "resolve_path": resolve_path,
+            "allow_dash": allow_dash,
+            "path_type": path_type,
+            # Rich settings
+            "rich_help_panel": rich_help_panel,
+        }
+        _ = [setattr(attr, key, value) for key, value in kwargs.items() if value is not None]
+        return attr
+
+
+
 
     def __call__(self, timerange: str = None, include_mins: bool = None):
         if timerange:
