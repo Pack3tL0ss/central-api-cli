@@ -4,7 +4,7 @@ from __future__ import annotations
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
 from rich.markup import escape
-from typing import Optional, Any, Sequence, List, Type
+from typing import Optional, Any, List, Type
 from collections.abc import Callable
 import click
 
@@ -162,9 +162,8 @@ class CLIOptions:
     def get(
         self,
         option: str,
-        *,
         default: Optional[Any] = None,
-        param_decls: Optional[Sequence[str]] = None,
+        *,
         callback: Optional[Callable[..., Any]] = None,
         metavar: Optional[str] = None,
         expose_value: bool = None,
@@ -221,11 +220,10 @@ class CLIOptions:
         # Rich settings
         rich_help_panel: str | None = None,
 
-    ):
+    ) -> OptionInfo:
         attr = getattr(self, option)
         kwargs = {
             "default": default,
-            "param_decls": param_decls,
             "callback": callback,
             "metavar": metavar,
             "expose_value": expose_value,
@@ -279,8 +277,6 @@ class CLIOptions:
         }
         _ = [setattr(attr, key, value) for key, value in kwargs.items() if value is not None]
         return attr
-
-
 
 
     def __call__(self, timerange: str = None, include_mins: bool = None):
