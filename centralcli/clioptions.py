@@ -23,6 +23,7 @@ class CLIArgs:
         self.group: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
         self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
+        self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.version: ArgumentInfo = typer.Argument(
             None,
             help=f"Firmware Version [dim]{escape('[default: recommended version]')}",
@@ -276,8 +277,11 @@ class CLIOptions:
             # Rich settings
             "rich_help_panel": rich_help_panel,
         }
-        _ = [setattr(attr, key, value) for key, value in kwargs.items() if value is not None]
-        return attr
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        combined = {**attr.__dict__, **kwargs}
+        args = (combined["default"], *combined["param_decls"])
+        kwargs_out = {k: v for k, v in combined.items() if k not in ["default", "param_decls"]}
+        return typer.Option(*args, **kwargs_out)
 
 
     def __call__(self, timerange: str = None, include_mins: bool = None):
