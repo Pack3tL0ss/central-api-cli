@@ -3009,11 +3009,15 @@ def webhooks(
         sort_by = sort_by.name
     ...
     resp = cli.central.request(cli.central.get_all_webhooks)
+    caption = None
+    if resp.ok and resp.output:
+        caption = f"Counts: Webhooks: [cyan]{len(resp.output)}[/] | Destination URLs: [cyan]{sum([len(wh['urls']) for wh in resp.output])}[/]"
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title="WebHooks",
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
