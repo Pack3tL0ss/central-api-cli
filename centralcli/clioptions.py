@@ -40,6 +40,7 @@ class CLIOptions:
         self.cache = cache
         self.timerange: str = timerange
         self.include_mins: bool = include_mins if include_mins is not None else True
+        self.client: OptionInfo = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cache.client_completion, show_default=False,)
         self.group: OptionInfo = typer.Option(None, help="Filter by Group", metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.group_many: OptionInfo = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
         self.site: OptionInfo = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
