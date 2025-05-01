@@ -48,8 +48,8 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, DeviceStatus,
-    DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, InsightSeverity,
+    SortInsightOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from .objects import DateTime, ShowInterfaceFilters
@@ -61,7 +61,7 @@ from .caas import CaasAPI
 
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal
+    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
     from tinydb.table import Document
 
 
@@ -2687,7 +2687,7 @@ def logs(
     device: str = cli.options.device,
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
-    client: str = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
+    client: str = cli.options.client,
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
     hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
     dev_type: EventDevTypeArgs = typer.Option(
@@ -3325,6 +3325,75 @@ def radios(
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
     cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+
+@app.command()
+def insights(
+    insight_id: int = typer.Argument(
+        None,
+        help="Show details for a specific insight id.",
+        show_default=False,
+    ),
+    start: datetime = cli.options(timerange="3h").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    site: str = cli.options.site,
+    device: str = cli.options.get("device", help="Show insights related to a specific device"),
+    client: str = cli.options.get("client", help="Show insights related to a specific client"),
+    severity: InsightSeverity = typer.Option(None, "-s", "--severity", help="Filter insights by severity", show_default=False,),
+    sort_by: SortInsightOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Show AI Insights or details for a specific insight
+
+    Shows Global Insights by default, or insights related to a site, device, or client based on provided options.
+    Result of above will include insight id, which can be provided to show details for the insight.
+    """
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not insight_id else "yaml")
+    if not any([past, start]):
+        start = pendulum.now(tz="UTC").subtract(hours=3)
+    start, end = cli.verify_time_range(start, end=end, past=past, max_days=None)  # this endpoint doesn't complain for longer ranges, but appears to only stores insights for a month
+    duration: pendulum.Interval = end - start
+    if duration.in_days() > 31:
+        log.info(f":information:  Specified time range ({duration.in_words()}), exceeds the retention period for AI Insights (1 month).  Showing all available insights.", caption=True)
+
+    if insight_id:
+        resp = cli.central.request(cli.central.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
+        title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
+        cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
+        cli.exit(0)
+
+    site_id, serial, dev_type, client_mac = None, None, None, None
+    if device:
+        device: CacheDevice = cli.cache.get_dev_identifier(device)
+        serial = device.serial
+        dev_type = device.generic_type
+        title = f"AI Insights related to device {device.summary_text}"
+    elif client:
+        client: CacheClient = cli.cache.get_client_identifier(client)
+        client_mac = client.mac
+        title = f"AI Insights related to Client {client.summary_text}"
+    elif site:
+        site: CacheSite = cli.cache.get_site_identifier(site)
+        site_id = site.id
+        title = f"AI Insights related to site {site.name}"
+    else:
+        title = "Global AI Insights"
+    title = f"{title} for past {duration.in_words()}"
+    caption="Use [cyan]show insight <id>[/] to see details for an insight."
+
+    resp = cli.central.request(cli.central.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
+
+    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
 
 
 @app.command()

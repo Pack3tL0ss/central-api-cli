@@ -31,7 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes, InsightSeverityType
 from .objects import DateTime, ShowInterfaceFilters
 from .models import CloudAuthUploadResponse, Sites
 
@@ -457,7 +457,7 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, strip_keys: List[str] = None, strip_null: bool = False, emoji_bools: bool = False) -> List[Dict[str, Any]]:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, strip_keys: List[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True) -> List[Dict[str, Any]]:
     """Default simple formatter
 
     Args:
@@ -467,6 +467,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
         strip_keys (List[str], optional): List of keys to be stripped from output.
         strip_null (bool, optional): Set True to strip keys that have no value for any items.  Defaults to False.
         emoji_bools (bool, optional): Replace boolean values with emoji ✅ for True ❌ for False. Defaults to False.
+        show_false (bool, optional): When emoji_bools is True.  Set this to False to only show ✅ for True items, leave blank for False.
 
     Returns:
         List[Dict[str, Any]]: Formatted data
@@ -479,7 +480,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
         if not emoji_bools or not isinstance(value, bool):
             return value
 
-        return '\u2705' if value is True else '\u274c'  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
+        return '\u2705' if value is True else '\u274c' if show_false else ''  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
 
     strip_keys = strip_keys or []
     if key_order:
@@ -2128,3 +2129,22 @@ def get_guests(data: List[Dict[str, Any]], output_format: TableFormat = "yaml") 
     strip_keys = ["auto_created"] if all([item.get("auto_created") is False for item in data]) else None
 
     return simple_kv_formatter(data, key_order=key_order, strip_keys=strip_keys, strip_null=output_format == "rich", emoji_bools=output_format == "rich")
+
+def show_ai_insights(data: List[Dict[str, str | bool | int]], severity: InsightSeverityType = None):
+    field_order = [
+        "insight_id",
+        "severity",
+        "category",
+        "insight",
+        "impact",
+        "is_config_recommendation_insight"
+    ]
+    all_keys = list(set([key for d in data for key in d.keys()]))
+    field_order = [*field_order, *[k for k in all_keys if k not in field_order]]
+    global _short_key
+    _short_key["is_config_recommendation_insight"] = "config insight"
+    data = [{f: inner.get(f) for f in field_order if f != "description" or inner[f].casefold() != inner.get("insight", "").casefold()} for inner in data]
+    if severity:
+        data = [{k: v for k, v in inner.items() if inner.get("severity") is None or inner["severity"] == severity} for inner in data]
+
+    return simple_kv_formatter(data, key_order=field_order, strip_null=True, emoji_bools=True, show_false=False)

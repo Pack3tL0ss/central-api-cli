@@ -24,6 +24,7 @@ import ipaddress
 from pydantic import ValidationError
 from dataclasses import dataclass
 
+
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
@@ -47,7 +48,7 @@ from .ws_client import follow_audit_logs, follow_event_logs
 
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
-    from .typedefs import CacheTableName
+    from .typedefs import CacheTableName, StrEnum
     from .constants import LogType
 
 
@@ -483,7 +484,7 @@ class CLICommon:
             self,
             data: List[dict] | List[str] | dict | None,
             *,
-            sort_by: str,
+            sort_by: str | StrEnum,
             reverse: bool,
             tablefmt: TableFormat,
             caption: str = None,
@@ -496,7 +497,7 @@ class CLICommon:
             sort_msg = None
             if not all([sort_by in d for d in data]):
                 sort_msg = [
-                        f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
+                        f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by if not hasattr(sort_by, "value") else sort_by.value}[reset] does not appear to be a valid field",
                         "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "-")}' for k in data[0].keys()))
                 ]
             else:
@@ -531,8 +532,12 @@ class CLICommon:
 
         TODO make more elegant.  Redesign to remove the need for this.
         """
+        if not log.caption:
+            return caption
+
         caption = caption.splitlines()
-        new_captions = [f" {c.lstrip()}" for c in log._caption if c.strip() not in [cap.strip() for cap in caption]]
+        _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
+        new_captions = [f" {c.lstrip()}" for c in _log_caption.splitlines() if c.strip() not in [cap.strip() for cap in caption]]
         rl_str = [] if not caption else [caption.pop(-1)]
         caption = [*caption, *new_captions, *rl_str]
         return "\n".join(caption)
@@ -545,7 +550,7 @@ class CLICommon:
         caption: str = None,
         pager: bool = False,
         outfile: Path = None,
-        sort_by: str = None,
+        sort_by: str | StrEnum = None,
         reverse: bool = False,
         stash: bool = True,
         output_by_key: str | List[str] = "name",
@@ -618,7 +623,7 @@ class CLICommon:
         caption: str | List[str] = None,
         pager: bool = False,
         outfile: Path = None,
-        sort_by: str = None,
+        sort_by: str | StrEnum = None,
         reverse: bool = False,
         stash: bool = True,
         suppress_rl: bool = False,
@@ -677,6 +682,16 @@ class CLICommon:
             if self.raw_out:
                 tablefmt = "raw"
 
+
+            caption = "" if not caption else f"{caption}\n"
+            if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
+                # TODO see if table has option to only do emoji in caption
+                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
+                if len(resp) > 1 and ":warning:" in log.caption:
+                    caption = f'{caption}[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
+                else:
+                    caption = f'{caption}{_log_caption}'
+
             # update caption with rate limit
             if not suppress_rl:
                 try:
@@ -687,15 +702,6 @@ class CLICommon:
                 except Exception as e:
                     rl_str = ""
                     log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
-
-            caption = caption or ""
-            if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
-                # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
-                if len(resp) > 1 and ":warning:" in log.caption:
-                    caption = f'{caption}\n[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
-                else:
-                    caption = f'{caption}\n{_log_caption}'
 
             for idx, r in enumerate(resp):
                 try:
@@ -719,7 +725,8 @@ class CLICommon:
                 }
                 fg = "bright_green" if r else "red"
 
-                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
+                # last condition below and after this block is for aiops insight details where raw["success"] is bool, but can't rely on that being the case elsewhere.  So converting to str to avoid potential errors elsewhere.
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")) == "False")]
                 if any(conditions):
                     if isinstance(title, list) and len(title) == len(resp):
                         print(title[idx])
@@ -730,7 +737,7 @@ class CLICommon:
                         print(f" [{fg}]Response[reset]:")
 
 
-                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok]
+                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")) == "False")]
                 if any(conditions):
                     # raw output (unformatted response from Aruba Central API GW)
                     if tablefmt in ["raw", "clean"]:
@@ -866,7 +873,7 @@ class CLICommon:
 
         return start
 
-    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> pendulum.DateTime | None:
+    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> Tuple[pendulum.DateTime | None, pendulum.DateTime | None]:
         if end and past:
             log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
             end = None
@@ -889,12 +896,12 @@ class CLICommon:
 
         delta = _end - start
 
-        if delta.days > max_days:
+        if max_days is not None and delta.days > max_days:
             if end:
                 self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
             else:
                 log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
-                return self.delta_to_start("2_159h"), end  # 89 days and 23 hours to avoid timing issue with API endpoint
+                return self.delta_to_start("2_159h"), _end  # 89 days and 23 hours to avoid timing issue with API endpoint
 
         return start, _end
 

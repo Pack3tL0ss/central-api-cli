@@ -24,6 +24,7 @@ SendConfigTypes = Literal["ap", "gw"]
 CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 LogType = Literal["event", "audit"]
+InsightSeverityType = Literal["high", "med", "low"]
 
 
 class AllDevTypes(str, Enum):
@@ -107,6 +108,16 @@ class ShowInventoryArgs(str, Enum):
     gw = "gw"
     vgw = "vgw"
     switch = "switch"
+
+
+class SortInsightOptions(str, Enum):
+    insight_id = "insight-id"
+    severity = "severity"
+    category = "category"
+    insight = "insight"
+    impact = "impact"
+    config_insight = "config-insight"
+    # description = "description"  # have not seen a scenario where insight and description are not the same (have seen different case, but still same words).  Description filled is stripped from output if it matches insight field.
 
 
 class SortStackOptions(str, Enum):
@@ -355,6 +366,13 @@ class LogLevel(str, Enum):
     LOG_INFO = "info"
     LOG_WARN = "warning"
     LOG_ERR = "error"
+
+
+class InsightSeverity(str, Enum):
+    hight = "high"
+    med = "med"
+    low = "low"
+
 
 class CacheArgs(str, Enum):
     all = "all"
@@ -635,7 +653,8 @@ APIMethodType = Literal[
     "event",
     "tshoot",
     "inventory",
-    "licensing"
+    "licensing",
+    "aiops",
 ]
 
 
@@ -720,6 +739,14 @@ class LibToAPI:
             "controller": "all_controller",
             "gw": "all_controller",
             "vgw": "vgw"
+        }
+        self.aiops_to_api = {
+            "ap": "ap",
+            "cx": "switch",
+            "sw": "switch",
+            "switch": "switch",
+            "gw": "gateway",
+            "vgw": "gateway"
         }
 
     def __call__(self, dev_type: str | Enum, method: APIMethodType = None, default: str = None) -> str:
