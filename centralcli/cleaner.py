@@ -1329,14 +1329,14 @@ def get_all_webhooks(data: List[dict]) -> List[dict]:
         none = 0
         important = 1  # Up to 5 retries over 6 minutes
         critical = 2  # Up to 5 retries over 32 hours
-        notfound = 99  # indicates an error retrieving policy from payload
+        # none = 99  # indicates an error retrieving policy from payload
 
     del_keys = ["retry_policy", "secure_token", "urls"]
     # flatten dict
     data = [
         {**{k: v for k, v in d.items() if k not in del_keys},
          "urls": "\n".join(d.get("urls", [])),
-         "retry_policy": HookRetryPolicy(d.get("retry_policy", {}).get("policy", 99)).name,
+         "retry_policy": HookRetryPolicy(d.get("retry_policy", {}).get("policy", 0)).name,
          "token": d.get("secure_token", {}).get("token", ""), "token_created": d.get("secure_token", {}).get("ts", 0)
          }
          for d in data
