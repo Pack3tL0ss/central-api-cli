@@ -853,12 +853,14 @@ class Utils:
     def parse_time_options(
         from_time: int | float | datetime = None,
         to_time: int | float | datetime = None,
+        in_milliseconds: bool = False,
     ) -> Tuple[int | None, int | None]:
         """parse time options (from_time, to_time) from user if any provided and return int timestamp for each.
 
         Args:
             from_time (int | float | datetime, optional): from time. Defaults to None.
             to_time (int | float | datetime, optional): to time. Defaults to None.
+            in_milliseconds (bool, optional): Convert response timestamps to milliseconds.  Default is Seconds.
 
         Returns:
             Tuple(int | None, int | None): returns Tuple with int timestamps for from_time
@@ -876,6 +878,8 @@ class Utils:
 
         # if to_time and to_time <= from_time:
         #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
+        if in_milliseconds:
+            return from_time * 1000, (to_time or pendulum.now(tz="UTC").int_timestamp) * 1000
 
         return from_time, to_time
 
