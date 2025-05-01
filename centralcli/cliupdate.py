@@ -440,7 +440,8 @@ def webhook(
     So include all urls, even those that are not changing.
     """
     conf_msg = f"[bright_green]Updat{'e' if not yes else 'ing'}[/] [cyan]WebHook[/] with the following:"
-    updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'\n    {url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
+    _pfx = "\n    "
+    updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'{_pfx}{url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
     conf_msg = f"{conf_msg}\n{updates}"
     cli.console.print(conf_msg, overflow="ellipsis")
     if cli.confirm():
