@@ -28,14 +28,12 @@ tty = utils.tty
 
 
 # TODO add cache for webhooks
-@app.command(short_help="Test WebHook")
+@app.command(help="Test WebHook Notifications")
 def webhook(
-    wid: str = typer.Argument(..., help="WebHook ID",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    wid: str = cli.arguments.wid,
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    account: str = cli.options.account,
 ):
     resp = cli.central.request(cli.central.test_webhook, wid)
 

@@ -420,21 +420,30 @@ def ap(
     data = [{"serial": ap.serial, **kwargs} for ap in aps]
     cli.batch_update_aps(data, yes=yes, reboot=reboot)
 
-@app.command(
-    short_help="Update webhook details",
-    help="Update webhook details (name/urls)"
-)
+
+# TODO cache for webhook the API for update reuires the name and urls in the body even if they are not changing.
+@app.command()
 def webhook(
-    wid: str = typer.Argument(..., help="Use show webhooks to get the wid"),  # TODO completion
-    name: str = typer.Argument(...,),
-    urls: List[str] = typer.Argument(..., help="webhook URLs"),
+    wid: str = cli.arguments.wid,
+    name: str = typer.Argument(..., help="Update webhook name", show_default=False,),
+    urls: List[str] = typer.Argument(..., help="Update webhook destination URLs", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    print("Updating WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
-    if yes or typer.confirm("\nProceed?", abort=True):
+    """Update webhook details
+
+    :information:  Use [cyan]show webhooks[/] to get the wid (webhook id)
+
+    This command requires and overwrites the webhook name and destination urls.
+    So include all urls, even those that are not changing.
+    """
+    conf_msg = f"[bright_green]Updat{'e' if not yes else 'ing'}[/] [cyan]WebHook[/] with the following:"
+    updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'\n    {url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
+    conf_msg = f"{conf_msg}\n{updates}"
+    cli.console.print(conf_msg, overflow="ellipsis")
+    if cli.confirm():
         resp = cli.central.request(cli.central.update_webhook, wid, name, urls)
         cli.display_results(resp, tablefmt="action")
 
