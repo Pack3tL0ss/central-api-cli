@@ -152,7 +152,8 @@ class MyLogger:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
                     _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
                     con = econsole
-                    con.print(f"{_pfx}{'[dark_orange3]\u26a0[/]  ' if level not in ['info', 'debug'] else ''}{m}", emoji=":cd:" not in m.lower())  # avoid :cd: emoji common in mac addresses
+                    warning_emoji = "[dark_orange3]\u26a0[/]  "
+                    con.print(f"{_pfx}{warning_emoji if level not in ['info', 'debug'] else ''}{m}", emoji=":cd:" not in m.lower())  # avoid :cd: emoji common in mac addresses
 
             self.log_msgs = []
 
