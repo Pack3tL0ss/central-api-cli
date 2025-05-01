@@ -2390,7 +2390,7 @@ def clients(
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [dim italic](Applies only to wireless clients)[/]", show_default=False,),
     band: RadioBandOptions = typer.Option(None, help="Filter by Band [dim italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {cli.help_block('--dev (AP only)', help_type="requires")}",),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {cli.help_block('--dev (AP only)', help_type='requires')}",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
     device: str = cli.options.device,
     verbose: int = cli.options.verbose,
