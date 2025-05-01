@@ -498,7 +498,7 @@ class CLICommon:
             if not all([sort_by in d for d in data]):
                 sort_msg = [
                         f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by if not hasattr(sort_by, "value") else sort_by.value}[reset] does not appear to be a valid field",
-                        "Valid Fields: {}".format(", ".join(f'{k.replace(" ", "-")}' for k in data[0].keys()))
+                        "Valid Fields: {}".format(", ".join([f'{k.replace(" ", "-")}' for k in data[0].keys()]))
                 ]
             else:
                 try:
