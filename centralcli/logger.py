@@ -6,6 +6,7 @@ from typing import Union, List, Any
 from logging.handlers import RotatingFileHandler
 from time import sleep
 from rich.console import Console
+from rich.markup import escape
 # from rich.logging import RichHandler
 
 import logging
@@ -151,7 +152,7 @@ class MyLogger:
                 if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
                     _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
                     con = econsole
-                    con.print(f"{_pfx}{'[dark_orange3]:warning:[/]  ' if level not in ['info', 'debug'] else ''}{m}")
+                    con.print(f"{_pfx}{'[dark_orange3]\u26a0[/]  ' if level not in ['info', 'debug'] else ''}{m}", emoji=":cd:" not in m.lower())  # avoid :cd: emoji common in mac addresses
 
             self.log_msgs = []
 
